@@ -5,114 +5,189 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  SafeAreaView,
+  ImageBackground,
+  StatusBar,
   Alert,
+  Platform,
+  useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "../theme/colors";
+
+// ✅ SVGs (make sure filenames match exactly in /assets)
+import Logo2 from "../../assets/Logo2.svg";
+import HomeScreenQuote from "../../assets/HomeScreenQuote.svg";
+import ChevronUp from "../../assets/ChevronUp.svg"; // ✅ NEW
 
 export default function HomeScreen({
   onQuickExit,
   onTabChange,
   initialTab = "Home",
 }) {
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+
   const [activeTab, setActiveTab] = useState(initialTab);
+
+  const NAV_BASE_HEIGHT = 78; // bar height (without safe-area)
+  const FAB_SIZE = 62;
+
+  const navHeight = NAV_BASE_HEIGHT + Math.max(insets.bottom, 10);
+
+  // keep quote visually centered even with nav overlay
+  const centerPadBottom = Math.round(navHeight * 0.55);
+
+  /**
+   * ✅ FAB: Lower it a bit more by reducing overlap
+   * In your current: navHeight - FAB/2 - 10
+   * Lower = smaller bottom value
+   */
+  const FAB_LOWER_BY = 10; // tweak 6–14 if you want more/less
+  const fabBottom = navHeight - FAB_SIZE / 2 - 10 - FAB_LOWER_BY;
 
   const handleTab = (key) => {
     setActiveTab(key);
     onTabChange?.(key);
   };
 
-  const isIncidentActive = activeTab === "Incident";
+  const pressInfo = () => Alert.alert("Info", "Welcome to TahananSafe.");
+  const pressFab = () => handleTab("Incident");
+
+  // Quote SVG sizing
+  const quoteW = Math.min(width * 0.82, 380);
+  const quoteH = Math.round(quoteW * 0.40);
+
+  /**
+   * ✅ Chevron position: center above nav like screenshot
+   * place it slightly higher than the nav top edge
+   */
+  const CHEVRON_LIFT = 14; // tweak 10–20 if needed
+  const chevronBottom = navHeight + CHEVRON_LIFT;
 
   return (
-    <SafeAreaView style={styles.safe}>
-      {/* Top blue header */}
-      <View style={styles.header} />
+    // ✅ IMPORTANT: remove bottom edge so we don't double-add bottom safe area
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <StatusBar barStyle="light-content" />
 
-      {/* Main content */}
-      <View style={styles.body}>
-        <View style={styles.card}>
-          <Text style={styles.cardText}>No active incident logs</Text>
-        </View>
-
-        <Pressable
-          onPress={() =>
-            onQuickExit
-              ? onQuickExit()
-              : Alert.alert("Quick Exit", "Hiding the app…")
-          }
-          style={({ pressed }) => [
-            styles.quickExitBtn,
-            pressed && { transform: [{ scale: 0.99 }] },
-          ]}
+      <ImageBackground
+        source={require("../../assets/splash1.png")}
+        style={styles.bg}
+        resizeMode="cover"
+      >
+        <LinearGradient
+          colors={["rgba(11, 94, 155, 0.70)", "rgba(11, 94, 155, 0.92)"]}
+          style={styles.overlay}
         >
-          <Text style={styles.quickExitTitle}>Quick Exit</Text>
-          <Text style={styles.quickExitSub}>Instantly hide the app</Text>
-        </Pressable>
-      </View>
+          {/* Top bar */}
+          <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 10) }]}>
+            <View style={styles.topSide} />
 
-      {/* Bottom navigation (like your screenshot) */}
-      <View style={styles.navWrap}>
-        {/* Home */}
-        <NavItem
-          icon="home-outline"
-          label="Home"
-          active={activeTab === "Home"}
-          onPress={() => handleTab("Home")}
-        />
+            <View style={styles.brandWrap}>
+              <Logo2 width={200} height={44} />
+            </View>
 
-        {/* Inbox */}
-        <NavItem
-          icon="mail-outline"
-          label="Inbox"
-          active={activeTab === "Inbox"}
-          onPress={() => handleTab("Inbox")}
-        />
+            <View style={styles.topSide}>
+              <Pressable
+                onPress={pressInfo}
+                hitSlop={12}
+                style={({ pressed }) => [
+                  styles.infoBtn,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Ionicons
+                  name="information-circle-outline"
+                  size={22}
+                  color="#FFFFFF"
+                />
+              </Pressable>
+            </View>
+          </View>
 
-        {/* Center Incident Log (floating circle) */}
-        <View style={styles.centerNavItem}>
-          <Pressable
-            onPress={() => handleTab("Incident")}
-            style={({ pressed }) => [
-              styles.fab,
-              isIncidentActive && styles.fabActive,
-              pressed && { transform: [{ scale: 0.98 }] },
-            ]}
-          >
-            <Ionicons
-              name="document-text-outline"
-              size={22}
-              color={isIncidentActive ? "#FFFFFF" : Colors.primary}
-            />
-          </Pressable>
+          {/* Center quote */}
+          <View style={[styles.centerContent, { paddingBottom: centerPadBottom }]}>
+            <HomeScreenQuote width={quoteW} height={quoteH} />
+          </View>
 
-          <Text
+          {/* ✅ ChevronUp.svg (centered above nav) */}
+          <View style={[styles.chevronWrap, { bottom: chevronBottom }]} pointerEvents="none">
+            <ChevronUp width={22} height={22} />
+          </View>
+
+          {/* ✅ Nav pinned to bottom */}
+          <View
             style={[
-              styles.centerLabel,
-              isIncidentActive && styles.centerLabelActive,
+              styles.navWrap,
+              {
+                height: navHeight,
+                paddingBottom: Math.max(insets.bottom, 10),
+              },
             ]}
           >
-            Incident Log
-          </Text>
-        </View>
+            <NavItem
+              icon="home-outline"
+              label="Home"
+              active={activeTab === "Home"}
+              onPress={() => handleTab("Home")}
+            />
 
-        {/* Ledger */}
-        <NavItem
-          icon="book-outline"
-          label="Ledger"
-          active={activeTab === "Ledger"}
-          onPress={() => handleTab("Ledger")}
-        />
+            <NavItem
+              icon="mail-outline"
+              label="Inbox"
+              active={activeTab === "Inbox"}
+              onPress={() => handleTab("Inbox")}
+            />
 
-        {/* Profile */}
-        <NavItem
-          icon="person-outline"
-          label="Profile"
-          active={activeTab === "Profile"}
-          onPress={() => handleTab("Profile")}
-        />
-      </View>
+            {/* Center label under FAB */}
+            <View style={styles.centerSlot}>
+              <View style={{ height: 22 }} />
+              <Text style={[styles.label, activeTab === "Incident" && styles.labelActive]}>
+                Incident Log
+              </Text>
+            </View>
+
+            <NavItem
+              icon="book-outline"
+              label="Ledger"
+              active={activeTab === "Ledger"}
+              onPress={() => handleTab("Ledger")}
+            />
+
+            <NavItem
+              icon="settings-outline"
+              label="Settings"
+              active={activeTab === "Settings"}
+              onPress={() => handleTab("Settings")}
+            />
+          </View>
+
+          {/* ✅ FAB centered above “Incident Log” (lowered) */}
+          <View style={[styles.fabWrap, { bottom: fabBottom }]}>
+            <Pressable
+              onPress={pressFab}
+              onLongPress={() =>
+                onQuickExit
+                  ? onQuickExit()
+                  : Alert.alert("Quick Exit", "Instantly hide the app (demo)")
+              }
+              delayLongPress={350}
+              style={({ pressed }) => [
+                styles.fab,
+                {
+                  width: FAB_SIZE,
+                  height: FAB_SIZE,
+                  borderRadius: FAB_SIZE / 2,
+                },
+                pressed && { transform: [{ scale: 0.98 }] },
+              ]}
+            >
+              <Ionicons name="add" size={30} color="#FFFFFF" />
+            </Pressable>
+          </View>
+        </LinearGradient>
+      </ImageBackground>
     </SafeAreaView>
   );
 }
@@ -127,82 +202,75 @@ function NavItem({ icon, label, active, onPress }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#FFFFFF" },
-
-  header: {
-    height: 86,
-    backgroundColor: Colors.primary,
-  },
-
-  body: {
+  safe: {
     flex: 1,
-    backgroundColor: "#F6FAFF",
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 10,
+    backgroundColor: "#0B5E9B",
+  },
+  bg: { flex: 1 },
+  overlay: {
+    flex: 1,
+    position: "relative",
   },
 
-  card: {
-    height: 120,
-    borderRadius: 14,
-    backgroundColor: "#F6FAFF",
-    borderWidth: 1,
-    borderColor: "#E6EEF8",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  cardText: {
-    color: Colors.primary,
-    fontSize: 12.5,
-    fontWeight: "600",
-  },
-
-  quickExitBtn: {
-    marginTop: 18,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: Colors.primary,
-    justifyContent: "center",
-    alignItems: "center",
+  // Top bar
+  topBar: {
     paddingHorizontal: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 5,
+    paddingBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
   },
-  quickExitTitle: {
-    color: "#FFFFFF",
-    fontSize: 13.5,
-    fontWeight: "800",
-    lineHeight: 18,
+  topSide: {
+    width: 48,
+    alignItems: "flex-end",
+    justifyContent: "center",
   },
-  quickExitSub: {
-    marginTop: 2,
-    color: "rgba(255,255,255,0.75)",
-    fontSize: 10.5,
-    fontWeight: "600",
+  brandWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  infoBtn: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
-  /* ✅ NAV BAR MATCHING YOUR SCREENSHOT */
+  // Center quote
+  centerContent: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    marginTop: -10,
+  },
+
+  // Chevron above nav
+  chevronWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // ✅ Nav pinned to bottom
   navWrap: {
-    height: 78,
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: "#FFFFFF",
     borderTopWidth: 1,
     borderTopColor: "#E7EEF7",
     flexDirection: "row",
-    justifyContent: "space-around",
     alignItems: "flex-end",
-    paddingBottom: 8,
+    paddingTop: 10,
   },
 
+  // 5 equal columns
   item: {
-    width: 70,
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -218,43 +286,36 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  // Center item slot (holds the floating circle + label)
-  centerNavItem: {
-    width: 88,
-    alignItems: "center",
-    justifyContent: "flex-end",
-  },
-
-  // The big circle
-  fab: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 2,
-    borderColor: Colors.primary,
+  // Center slot under FAB
+  centerSlot: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
-    marginTop: -24, // ✅ lifts the circle above the bar like your screenshot
-
-    shadowColor: "#000",
-    shadowOpacity: 0.10,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
   },
-  fabActive: {
+
+  // FAB wrapper (full width so it centers)
+  fabWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  fab: {
     backgroundColor: Colors.primary,
-  },
-
-  centerLabel: {
-    fontSize: 10,
-    color: "#9AA4B2",
-    fontWeight: "600",
-  },
-  centerLabelActive: {
-    color: Colors.primary,
-    fontWeight: "800",
+    alignItems: "center",
+    justifyContent: "center",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOpacity: 0.18,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 8 },
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
   },
 });
