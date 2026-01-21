@@ -24,16 +24,9 @@ export default function IncidentLogConfirmedScreen({
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
-      <View
-        style={[styles.page, { paddingBottom: Math.max(insets.bottom, 14) }]}
-      >
+      <View style={[styles.page, { paddingBottom: Math.max(insets.bottom, 14) }]}>
         {/* Title */}
-        <View
-          style={[
-            styles.topTitleWrap,
-            { paddingTop: Math.max(insets.top, 8) },
-          ]}
-        >
+        <View style={[styles.topTitleWrap, { paddingTop: Math.max(insets.top, 8) }]}>
           <Text style={styles.topTitle}>Incident Log Confirmation</Text>
         </View>
 
@@ -43,16 +36,17 @@ export default function IncidentLogConfirmedScreen({
             {/* ✅ no blue circle background */}
             <View style={styles.iconWrap}>
               <ConfirmedCheckSvg
-                width={220}
-                height={390}
+                width={160}
+                height={160}
                 preserveAspectRatio="xMidYMid meet"
               />
             </View>
 
             <Text style={styles.h1}>Submission Confirmed</Text>
+
             <Text style={styles.sub}>
-              Barangay officials will be notified, and you will{"\n"}receive
-              updates accordingly
+              Barangay officials will be notified, and you will{"\n"}
+              receive updates accordingly
             </Text>
 
             <View style={styles.meta}>
@@ -62,7 +56,7 @@ export default function IncidentLogConfirmedScreen({
           </View>
         </View>
 
-       a {/* Bottom button */}
+        {/* Bottom button */}
         <Pressable
           onPress={onGoHome}
           style={({ pressed }) => [
@@ -100,12 +94,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
+  // ✅ taller card box
   card: {
     borderWidth: 1,
     borderColor: BORDER,
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    minHeight: 360,
+    minHeight: 420, // ✅ taller than before
     paddingVertical: 34,
     paddingHorizontal: 18,
     alignItems: "center",
@@ -117,7 +112,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
 
-  // ✅ just centers the SVG
+  // ✅ centers the SVG (no background)
   iconWrap: {
     marginBottom: 14,
     alignItems: "center",

@@ -20,7 +20,7 @@ import { Layout } from "../theme/layout";
 
 type Props = {
   onGoSignup: () => void;
-  onLoginSuccess: () => void;
+  onLoginSuccess: () => void; // ✅ will now go to SecurityQuestionsScreen
 };
 
 export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
@@ -36,7 +36,13 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   }, [email, password]);
 
   const handleLogin = () => {
-    onLoginSuccess();
+    if (!canLogin) {
+      Alert.alert("Invalid", "Please enter a valid email and password.");
+      return;
+    }
+
+    // ✅ TODO: replace this with real login API call later
+    onLoginSuccess(); // ✅ Login → SecurityQuestionsScreen (handled in App.tsx)
   };
 
   const handleForgot = () =>

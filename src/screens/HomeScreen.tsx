@@ -7,17 +7,17 @@ import {
   Pressable,
   StatusBar,
   ScrollView,
-  Image,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../theme/colors";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 
-// ✅ NEW components
 import GreetingCard from "../components/HomeScreen/GreetingCard";
 import RecentLogCard, { LogItem } from "../components/HomeScreen/RecentLogCard";
 import QuickActions from "../components/HomeScreen/QuickActions";
+
+import HomeScreenLogo from "../../assets/HomeScreen/HomeScreenLogo.svg";
 
 type Props = {
   onQuickExit?: () => void;
@@ -33,7 +33,6 @@ export default function HomeScreen({
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // Bottom nav sizing
   const NAV_BASE_HEIGHT = 78;
   const FAB_SIZE = 62;
 
@@ -43,7 +42,6 @@ export default function HomeScreen({
   const chevronBottom = navHeight + 90;
   const fabBottom = navHeight - FAB_SIZE / 2 - 10;
 
-  // ✅ keep content safely above the navbar (less empty space)
   const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + 6;
 
   const handleTab = (key: TabKey) => {
@@ -108,44 +106,52 @@ export default function HomeScreen({
 
       <View style={styles.page}>
         {/* Top header */}
-        <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 8) }]}>
-          <View style={styles.brandRow}>
-            <Image
-              source={require("../../assets/HomeScreen/HomeScreenLogo.png")}
-              style={styles.brandLogo}
-              resizeMode="contain"
-            />
-            <Text style={styles.brandText}>TahananSafe</Text>
+        <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 10) }]}>
+          <View style={styles.logoWrap}>
+            <HomeScreenLogo width="100%" height="100%" />
           </View>
 
-          <Pressable
-            onPress={() => {}}
-            hitSlop={12}
-            style={({ pressed }) => [styles.bellBtn, pressed && { opacity: 0.7 }]}
-          >
-            <Ionicons
-              name="notifications-outline"
-              size={22}
-              color={Colors.primary}
-            />
-            {notifCount > 0 ? (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {notifCount > 99 ? "99+" : String(notifCount)}
-                </Text>
-              </View>
-            ) : null}
-          </Pressable>
+          <View style={styles.rightActions}>
+            <Pressable
+              onPress={() => {}}
+              hitSlop={12}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
+              ]}
+            >
+              <Ionicons name="notifications-outline" size={20} color="#0B2B45" />
+              {notifCount > 0 ? (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {notifCount > 99 ? "99+" : String(notifCount)}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
+
+            <Pressable
+              onPress={() => {}}
+              hitSlop={12}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
+              ]}
+            >
+              <Ionicons name="help-circle-outline" size={22} color="#0B2B45" />
+            </Pressable>
+          </View>
         </View>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: CONTENT_BOTTOM_PAD }}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: CONTENT_BOTTOM_PAD },
+          ]}
         >
-          {/* Greeting card component (SVG-based) */}
           <GreetingCard greeting={greeting} dateLine={dateLine} />
 
-          {/* Recent Logs header */}
           <View style={styles.sectionRow}>
             <Text style={styles.sectionTitle}>Recent Logs</Text>
             <Pressable onPress={() => {}} hitSlop={10}>
@@ -153,14 +159,12 @@ export default function HomeScreen({
             </Pressable>
           </View>
 
-          {/* Recent logs cards */}
           <View style={styles.logsWrap}>
             {logs.map((item) => (
               <RecentLogCard key={item.id} item={item} onPress={() => {}} />
             ))}
           </View>
 
-          {/* ✅ Quick Actions extracted */}
           <QuickActions
             onSignOut={() => onQuickExit?.()}
             onHideApp={() => onQuickExit?.()}
@@ -169,7 +173,6 @@ export default function HomeScreen({
           />
         </ScrollView>
 
-        {/* Bottom nav */}
         <BottomNavBar
           activeTab={activeTab}
           onTabPress={handleTab}
@@ -188,53 +191,86 @@ export default function HomeScreen({
 }
 
 const BG = "#F5FAFE";
+const TEXT_DARK = "#0B2B45";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
   page: { flex: 1, backgroundColor: BG },
 
+  // ✅ More padding = more air
   topBar: {
-    paddingHorizontal: 14,
-    paddingBottom: 50,
+    paddingHorizontal: 16, // was 14
+    paddingBottom: 14, // was 10
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
 
-  brandRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  brandLogo: { width: 18, height: 18 },
-  brandText: { fontSize: 14, fontWeight: "800", color: Colors.primary },
-
-  bellBtn: {
-    width: 36,
+  // ✅ Slightly bigger logo area
+  logoWrap: {
     height: 36,
+    width: 180,
+    justifyContent: "center",
+  },
+
+  // ✅ More spacing between right icons
+  rightActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14, // was 10
+  },
+
+  // ✅ Slightly bigger buttons with breathing space
+  iconBtn: {
+    width: 38, // was 34
+    height: 38, // was 34
+    borderRadius: 999,
+    backgroundColor: "#F0F6FF",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E7EEF7",
   },
 
   badge: {
     position: "absolute",
-    right: 3,
-    top: 4,
-    minWidth: 16,
-    height: 16,
-    paddingHorizontal: 4,
+    right: -3,
+    top: -3,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
     borderRadius: 999,
     backgroundColor: "#EF4444",
     alignItems: "center",
     justifyContent: "center",
   },
-  badgeText: { fontSize: 9, fontWeight: "800", color: "#fff" },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#fff",
+    lineHeight: 12,
+  },
+
+  // ✅ More vertical spacing for whole page content
+  scrollContent: {
+    paddingTop: 10, // was none
+    rowGap: 16, // ✅ adds consistent space between sections
+  },
 
   sectionRow: {
-    marginTop: 14,
-    paddingHorizontal: 14,
+    marginTop: 6,
+    paddingHorizontal: 16, // was 14
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  sectionTitle: { fontSize: 12, fontWeight: "800", color: "#0B2B45" },
+  sectionTitle: { fontSize: 12, fontWeight: "800", color: TEXT_DARK },
   seeMore: { fontSize: 11, fontWeight: "800", color: Colors.link },
 
-  logsWrap: { paddingHorizontal: 14, paddingTop: 10, gap: 10 },
+  // ✅ More spacing between cards
+  logsWrap: {
+    paddingHorizontal: 16, // was 14
+    paddingTop: 10,
+    gap: 12, // was 10
+  },
 });

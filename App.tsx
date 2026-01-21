@@ -6,6 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import AppSplashScreen from "./src/screens/AppSplashScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import SignupScreen from "./src/screens/SignupScreen";
+import SecurityQuestionsScreen from "./src/screens/SecurityQuestionsScreen";
 import PinScreen from "./src/screens/PinScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import InboxScreen from "./src/screens/HotlinesScreen";
@@ -21,7 +22,7 @@ import type { TabKey } from "./src/components/BottomNavBar";
 // ✅ type from your preview card (used by confirmation screen)
 import type { IncidentPreviewData } from "./src/components/IncidentLogConfirmationScreen/IncidentPreviewCard";
 
-type ScreenKey = "splash" | "login" | "signup" | "pin" | "main";
+type ScreenKey = "splash" | "login" | "signup" | "security" | "pin" | "main";
 
 // ✅ Incident flow steps (inside the Incident tab)
 type IncidentStep = "form" | "confirm" | "confirmed";
@@ -37,7 +38,6 @@ export default function App() {
   // ✅ demo values for Confirmed screen
   const alertNo = useMemo(() => "676767", []);
   const confirmedDateLine = useMemo(() => {
-    // You can replace this with your real timestamp later
     const now = new Date();
     const weekday = now.toLocaleDateString(undefined, { weekday: "long" });
     const monthDayYear = now.toLocaleDateString(undefined, {
@@ -123,7 +123,6 @@ export default function App() {
               setIncidentStep("form");
               setIncidentPreview(null);
             }}
-            // ✅ you need to add this prop in IncidentLogScreen
             onProceedConfirm={(previewData: IncidentPreviewData) => {
               setIncidentPreview(previewData);
               setIncidentStep("confirm");
@@ -133,7 +132,6 @@ export default function App() {
       }
 
       if (incidentStep === "confirm") {
-        // If preview is missing for some reason, go back to form
         if (!incidentPreview) {
           setIncidentStep("form");
           return null;
@@ -148,7 +146,6 @@ export default function App() {
         );
       }
 
-      // confirmed
       return (
         <IncidentLogConfirmedScreen
           alertNo={alertNo}
@@ -162,10 +159,7 @@ export default function App() {
       );
     }
 
-    if (activeTab === "Ledger") {
-      return <Placeholder title="Ledger" />;
-    }
-
+    if (activeTab === "Ledger") return <Placeholder title="Ledger" />;
     return <Placeholder title="Settings" />;
   };
 
@@ -175,6 +169,15 @@ export default function App() {
         <AppSplashScreen />
       ) : screen === "signup" ? (
         <SignupScreen onGoLogin={() => setScreen("login")} />
+      ) : screen === "security" ? (
+        <SecurityQuestionsScreen
+          currentIndex={1}
+          totalQuestions={3}
+          onContinue={() => {
+            // After answering the security question, proceed to PIN
+            setScreen("pin");
+          }}
+        />
       ) : screen === "pin" ? (
         <PinScreen
           onVerified={(pin: string) => {
@@ -191,7 +194,7 @@ export default function App() {
       ) : (
         <LoginScreen
           onGoSignup={() => setScreen("signup")}
-          onLoginSuccess={() => setScreen("pin")}
+          onLoginSuccess={() => setScreen("security")} // ✅ Login → Security Questions
         />
       )}
     </SafeAreaProvider>
