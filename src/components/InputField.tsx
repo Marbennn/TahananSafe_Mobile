@@ -1,8 +1,23 @@
-// src/components/InputField.js
+// src/components/InputField.tsx
 import React, { useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, TextInputProps } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../theme/colors";
+
+type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+
+type Props = {
+  label: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string;
+  keyboardType?: TextInputProps["keyboardType"];
+  secureTextEntry?: boolean;
+  autoCapitalize?: TextInputProps["autoCapitalize"];
+  autoCorrect?: boolean;
+  rightIconName?: IoniconName;
+  onPressRightIcon?: () => void;
+};
 
 export default function InputField({
   label,
@@ -15,7 +30,7 @@ export default function InputField({
   autoCorrect = false,
   rightIconName,
   onPressRightIcon,
-}) {
+}: Props) {
   const [focused, setFocused] = useState(false);
 
   return (
@@ -38,7 +53,11 @@ export default function InputField({
         />
 
         {rightIconName ? (
-          <Pressable onPress={onPressRightIcon} hitSlop={12} style={styles.eyeBtn}>
+          <Pressable
+            onPress={onPressRightIcon}
+            hitSlop={12}
+            style={styles.eyeBtn}
+          >
             <Ionicons name={rightIconName} size={20} color="#6B7785" />
           </Pressable>
         ) : null}

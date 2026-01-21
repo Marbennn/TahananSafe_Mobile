@@ -1,4 +1,4 @@
-// src/theme/colors.js
+// src/theme/colors.ts
 export const Colors = {
   primary: "#0B5AA7",
   link: "#2F80ED",
@@ -8,4 +8,4 @@ export const Colors = {
   border: "#E3E8EF",
   inputBg: "#F8FAFC",
   gradient: ["#0B5AA7", "#0A4F94", "#09447F"],
-};
+} as const;

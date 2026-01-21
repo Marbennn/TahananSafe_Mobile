@@ -1,9 +1,15 @@
-// src/components/PrimaryButton.js
+// src/components/PrimaryButton.tsx
 import React from "react";
-import { Pressable, Text, StyleSheet } from "react-native";
+import { Pressable, Text, StyleSheet, GestureResponderEvent } from "react-native";
 import { Colors } from "../theme/colors";
 
-export default function PrimaryButton({ title, onPress, disabled }) {
+type Props = {
+  title: string;
+  onPress: (event?: GestureResponderEvent) => void;
+  disabled?: boolean;
+};
+
+export default function PrimaryButton({ title, onPress, disabled }: Props) {
   return (
     <Pressable
       onPress={onPress}

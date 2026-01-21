@@ -1,10 +1,16 @@
-// src/components/Checkbox.js
+// src/components/Checkbox.tsx
 import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet, GestureResponderEvent } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../theme/colors";
 
-export default function Checkbox({ value, onToggle, label }) {
+type Props = {
+  value: boolean;
+  onToggle: (event?: GestureResponderEvent) => void;
+  label: string;
+};
+
+export default function Checkbox({ value, onToggle, label }: Props) {
   return (
     <Pressable onPress={onToggle} style={styles.wrap} hitSlop={10}>
       <View style={[styles.box, value && styles.boxChecked]}>

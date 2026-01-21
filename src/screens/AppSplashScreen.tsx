@@ -1,4 +1,4 @@
-// src/screens/AppSplashScreen.js
+// src/screens/AppSplashScreen.tsx
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -9,7 +9,7 @@ import {
 } from "react-native";
 
 export default function AppSplashScreen() {
-  const [bgReady, setBgReady] = useState(false);
+  const [bgReady, setBgReady] = useState<boolean>(false);
 
   return (
     <View style={styles.root}>
@@ -22,16 +22,12 @@ export default function AppSplashScreen() {
         {bgReady && (
           <View style={styles.overlay}>
             <Image
-              source={require("../../assets/Logo1.png")} // ✅ PNG logo
+              source={require("../../assets/Logo1.png")}
               style={styles.logo}
               resizeMode="contain"
             />
 
-            <ActivityIndicator
-              size="large"
-              color="#ffffff"
-              style={styles.spinner}
-            />
+            <ActivityIndicator size="large" color="#ffffff" style={styles.spinner} />
           </View>
         )}
       </ImageBackground>
@@ -46,26 +42,16 @@ export default function AppSplashScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  bg: {
-    flex: 1,
-  },
+  root: { flex: 1, backgroundColor: "#000" },
+  bg: { flex: 1 },
   overlay: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
   },
-  logo: {
-    width: 140,
-    height: 140,
-  },
-  spinner: {
-    marginTop: 18,
-  },
+  logo: { width: 140, height: 140 },
+  spinner: { marginTop: 18 },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",

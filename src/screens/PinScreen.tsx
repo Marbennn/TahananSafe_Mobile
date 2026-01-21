@@ -1,26 +1,32 @@
-// src/screens/PinScreen.js
+// src/screens/PinScreen.tsx
 import React, { useMemo, useState } from "react";
 import { View, Text, Pressable, StyleSheet, StatusBar, Alert } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "../theme/colors";
 
-// ✅ MUST match the exact filename inside /assets
 import PinScreenLogo from "../../assets/Logo2.svg";
 
-export default function PinScreen({ onVerified, onForgotPin }) {
+type Props = {
+  onVerified: (pin: string) => void;
+  onForgotPin: () => void;
+};
+
+type KeyVariant = "ghost";
+
+export default function PinScreen({ onVerified, onForgotPin }: Props) {
   const insets = useSafeAreaInsets();
 
-  const [pin, setPin] = useState("");
+  const [pin, setPin] = useState<string>("");
   const PIN_LENGTH = 4;
 
   const masked = useMemo(() => {
-    const arr = new Array(PIN_LENGTH).fill("");
+    const arr = new Array<string>(PIN_LENGTH).fill("");
     for (let i = 0; i < pin.length && i < PIN_LENGTH; i++) arr[i] = "•";
     return arr;
   }, [pin]);
 
-  const addDigit = (d) => {
+  const addDigit = (d: string) => {
     if (pin.length >= PIN_LENGTH) return;
     const next = pin + d;
     setPin(next);
@@ -28,7 +34,7 @@ export default function PinScreen({ onVerified, onForgotPin }) {
     if (next.length === PIN_LENGTH) {
       setTimeout(() => {
         Alert.alert("PIN Entered", next);
-        onVerified?.(next);
+        onVerified(next);
       }, 80);
     }
   };
@@ -44,7 +50,6 @@ export default function PinScreen({ onVerified, onForgotPin }) {
         <StatusBar barStyle="light-content" />
 
         <View style={styles.topBrand}>
-          {/* ✅ SVG used as a component */}
           <PinScreenLogo width={150} height={150} />
         </View>
 
@@ -82,9 +87,7 @@ export default function PinScreen({ onVerified, onForgotPin }) {
             </View>
 
             <Pressable
-              onPress={() =>
-                onForgotPin ? onForgotPin() : Alert.alert("Forgot PIN", "Add reset flow")
-              }
+              onPress={onForgotPin}
               hitSlop={10}
               style={({ pressed }) => [styles.forgotWrap, pressed && { opacity: 0.7 }]}
             >
@@ -97,7 +100,15 @@ export default function PinScreen({ onVerified, onForgotPin }) {
   );
 }
 
-function KeyBtn({ label, onPress, variant }) {
+function KeyBtn({
+  label,
+  onPress,
+  variant,
+}: {
+  label: string;
+  onPress: () => void;
+  variant?: KeyVariant;
+}) {
   const isGhost = variant === "ghost";
   return (
     <Pressable
@@ -120,7 +131,7 @@ const styles = StyleSheet.create({
 
   topBrand: { alignItems: "center", paddingTop: 10, paddingBottom: 6, marginBottom: 28 },
 
-  topArea: { alignItems: "center", justifyContent: "center", paddingTop: 0, paddingBottom: 30 },
+  topArea: { alignItems: "center", justifyContent: "center", paddingBottom: 30 },
 
   title: { fontSize: 22, fontWeight: "800", color: "#FFFFFF", marginBottom: 6 },
   subtitle: { fontSize: 12, color: "rgba(255,255,255,0.8)", marginBottom: 16, fontWeight: "600" },
