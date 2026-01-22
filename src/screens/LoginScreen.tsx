@@ -12,15 +12,20 @@ import {
   Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { SafeAreaView } from "react-native-safe-area-context";
+
 import InputField from "../components/InputField";
 import PrimaryButton from "../components/PrimaryButton";
 import Checkbox from "../components/Checkbox";
 import { Colors } from "../theme/colors";
 import { Layout } from "../theme/layout";
 
+// ✅ same logo
+import LogoSvg from "../../assets/SecurityQuestionsScreen/Logo.svg";
+
 type Props = {
   onGoSignup: () => void;
-  onLoginSuccess: () => void; // ✅ will now go to SecurityQuestionsScreen
+  onLoginSuccess: () => void;
 };
 
 export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
@@ -40,9 +45,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       Alert.alert("Invalid", "Please enter a valid email and password.");
       return;
     }
-
-    // ✅ TODO: replace this with real login API call later
-    onLoginSuccess(); // ✅ Login → SecurityQuestionsScreen (handled in App.tsx)
+    onLoginSuccess();
   };
 
   const handleForgot = () =>
@@ -50,69 +53,76 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
 
   return (
     <LinearGradient colors={Colors.gradient} style={styles.background}>
-      <StatusBar barStyle="light-content" />
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <StatusBar barStyle="light-content" />
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          bounces={false}
+        {/* ✅ Header with safe spacing */}
+        <View style={styles.topBrand}>
+          <LogoSvg width={160} height={34} />
+        </View>
+
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <View style={styles.cardStack}>
-            <View style={styles.cardGhost} />
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+          >
+            <View style={styles.cardStack}>
+              <View style={styles.cardGhost} />
 
-            <View style={styles.card}>
-              <Text style={styles.title}>Login</Text>
+              <View style={styles.card}>
+                <Text style={styles.title}>Login</Text>
 
-              <InputField
-                label="Email"
-                value={email}
-                onChangeText={setEmail}
-                placeholder="johndoe@gmail.com"
-                keyboardType="email-address"
-              />
-
-              <InputField
-                label="Password"
-                value={password}
-                onChangeText={setPassword}
-                placeholder="********"
-                secureTextEntry={!showPassword}
-                rightIconName={showPassword ? "eye-off-outline" : "eye-outline"}
-                onPressRightIcon={() => setShowPassword((v) => !v)}
-              />
-
-              <View style={styles.rowBetween}>
-                <Checkbox
-                  value={rememberMe}
-                  onToggle={() => setRememberMe((v) => !v)}
-                  label="Remember me"
+                <InputField
+                  label="Email"
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="johndoe@gmail.com"
+                  keyboardType="email-address"
                 />
 
-                <Pressable onPress={handleForgot} hitSlop={10}>
-                  <Text style={styles.forgotText}>Forgot Password?</Text>
-                </Pressable>
-              </View>
+                <InputField
+                  label="Password"
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="********"
+                  secureTextEntry={!showPassword}
+                  rightIconName={showPassword ? "eye-off-outline" : "eye-outline"}
+                  onPressRightIcon={() => setShowPassword((v) => !v)}
+                />
 
-              <PrimaryButton
-                title="Login"
-                onPress={handleLogin}
-                disabled={!canLogin}
-              />
+                <View style={styles.rowBetween}>
+                  <Checkbox
+                    value={rememberMe}
+                    onToggle={() => setRememberMe((v) => !v)}
+                    label="Remember me"
+                  />
 
-              <View style={styles.footer}>
-                <Text style={styles.footerText}>Not yet registered? </Text>
-                <Pressable onPress={onGoSignup}>
-                  <Text style={styles.footerLink}>Create an account</Text>
-                </Pressable>
+                  <Pressable onPress={handleForgot} hitSlop={10}>
+                    <Text style={styles.forgotText}>Forgot Password?</Text>
+                  </Pressable>
+                </View>
+
+                <PrimaryButton
+                  title="Login"
+                  onPress={handleLogin}
+                  disabled={!canLogin}
+                />
+
+                <View style={styles.footer}>
+                  <Text style={styles.footerText}>Not yet registered? </Text>
+                  <Pressable onPress={onGoSignup}>
+                    <Text style={styles.footerLink}>Create an account</Text>
+                  </Pressable>
+                </View>
               </View>
             </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </LinearGradient>
   );
 }
@@ -120,6 +130,14 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   background: { flex: 1 },
+  safe: { flex: 1 },
+
+  // ✅ slightly lower so it doesn’t hug the top
+  topBrand: {
+    alignItems: "center",
+    paddingTop: 12,
+    paddingBottom: 10,
+  },
 
   scrollContent: { flexGrow: 1, justifyContent: "flex-end" },
 

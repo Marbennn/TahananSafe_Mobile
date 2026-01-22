@@ -12,16 +12,22 @@ import {
   Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { SafeAreaView } from "react-native-safe-area-context";
+
 import InputField from "../components/InputField";
 import PrimaryButton from "../components/PrimaryButton";
 import { Colors } from "../theme/colors";
 import { Layout } from "../theme/layout";
 
+// ✅ same logo preset as other screens
+import LogoSvg from "../../assets/SecurityQuestionsScreen/Logo.svg";
+
 type Props = {
   onGoLogin: () => void;
+  onSignupSuccess: () => void; // ✅ Sign up → PersonalDetailsScreen
 };
 
-export default function SignupScreen({ onGoLogin }: Props) {
+export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
   const [email, setEmail] = useState<string>("johndoe@gmail.com");
   const [password, setPassword] = useState<string>("password123");
   const [confirmPassword, setConfirmPassword] = useState<string>("password123");
@@ -39,78 +45,106 @@ export default function SignupScreen({ onGoLogin }: Props) {
   }, [email, password, confirmPassword, passwordsMatch]);
 
   const handleSignup = () => {
+    const e = email.trim();
+    const p = password.trim();
+    const c = confirmPassword.trim();
+
+    if (e.length === 0) {
+      Alert.alert("Required", "Please enter your email.");
+      return;
+    }
+
+    if (p.length < 6 || c.length < 6) {
+      Alert.alert("Invalid", "Password must be at least 6 characters.");
+      return;
+    }
+
     if (!passwordsMatch) {
       Alert.alert("Password mismatch", "Passwords do not match.");
       return;
     }
-    Alert.alert("Sign up pressed", `Email: ${email}`);
+
+    // ✅ TODO: replace with real signup API call later
+    // For now, proceed to PersonalDetailsScreen
+    onSignupSuccess();
   };
 
   return (
     <LinearGradient colors={Colors.gradient} style={styles.background}>
-      <StatusBar barStyle="light-content" />
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <StatusBar barStyle="light-content" />
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          bounces={false}
+        {/* ✅ Logo header (same preset as SecurityQuestions/Login) */}
+        <View style={styles.topBrand}>
+          <LogoSvg width={160} height={34} />
+        </View>
+
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <View style={styles.cardStack}>
-            <View style={styles.cardGhost} />
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+          >
+            <View style={styles.cardStack}>
+              <View style={styles.cardGhost} />
 
-            <View style={styles.card}>
-              <Text style={styles.title}>Sign Up</Text>
+              <View style={styles.card}>
+                <Text style={styles.title}>Sign Up</Text>
 
-              <InputField
-                label="Email"
-                value={email}
-                onChangeText={setEmail}
-                placeholder="johndoe@gmail.com"
-                keyboardType="email-address"
-              />
+                <InputField
+                  label="Email"
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="johndoe@gmail.com"
+                  keyboardType="email-address"
+                />
 
-              <InputField
-                label="Password"
-                value={password}
-                onChangeText={setPassword}
-                placeholder="********"
-                secureTextEntry={!showPassword}
-                rightIconName={showPassword ? "eye-off-outline" : "eye-outline"}
-                onPressRightIcon={() => setShowPassword((v) => !v)}
-              />
+                <InputField
+                  label="Password"
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="********"
+                  secureTextEntry={!showPassword}
+                  rightIconName={showPassword ? "eye-off-outline" : "eye-outline"}
+                  onPressRightIcon={() => setShowPassword((v) => !v)}
+                />
 
-              <InputField
-                label="Confirm Password"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                placeholder="********"
-                secureTextEntry={!showConfirm}
-                rightIconName={showConfirm ? "eye-off-outline" : "eye-outline"}
-                onPressRightIcon={() => setShowConfirm((v) => !v)}
-              />
+                <InputField
+                  label="Confirm Password"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="********"
+                  secureTextEntry={!showConfirm}
+                  rightIconName={showConfirm ? "eye-off-outline" : "eye-outline"}
+                  onPressRightIcon={() => setShowConfirm((v) => !v)}
+                />
 
-              {!passwordsMatch ? (
-                <Text style={styles.errorText}>Passwords do not match.</Text>
-              ) : (
-                <View style={{ height: 14 }} />
-              )}
+                {!passwordsMatch ? (
+                  <Text style={styles.errorText}>Passwords do not match.</Text>
+                ) : (
+                  <View style={{ height: 14 }} />
+                )}
 
-              <PrimaryButton title="Sign up" onPress={handleSignup} disabled={!canSignup} />
+                <PrimaryButton
+                  title="Sign up"
+                  onPress={handleSignup}
+                  disabled={!canSignup}
+                />
 
-              <View style={styles.footer}>
-                <Text style={styles.footerText}>Already registered? </Text>
-                <Pressable onPress={onGoLogin}>
-                  <Text style={styles.footerLink}>Login</Text>
-                </Pressable>
+                <View style={styles.footer}>
+                  <Text style={styles.footerText}>Already registered? </Text>
+                  <Pressable onPress={onGoLogin}>
+                    <Text style={styles.footerLink}>Login</Text>
+                  </Pressable>
+                </View>
               </View>
             </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </LinearGradient>
   );
 }
@@ -118,6 +152,14 @@ export default function SignupScreen({ onGoLogin }: Props) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   background: { flex: 1 },
+  safe: { flex: 1 },
+
+  // ✅ same logo preset
+  topBrand: {
+    alignItems: "center",
+    paddingTop: 10,
+    paddingBottom: 8,
+  },
 
   scrollContent: { flexGrow: 1, justifyContent: "flex-end" },
 

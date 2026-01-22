@@ -7,6 +7,7 @@ import AppSplashScreen from "./src/screens/AppSplashScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import SignupScreen from "./src/screens/SignupScreen";
 import SecurityQuestionsScreen from "./src/screens/SecurityQuestionsScreen";
+import PersonalDetailsScreen from "./src/screens/PersonalDetailsScreen";
 import PinScreen from "./src/screens/PinScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import InboxScreen from "./src/screens/HotlinesScreen";
@@ -22,7 +23,14 @@ import type { TabKey } from "./src/components/BottomNavBar";
 // ✅ type from your preview card (used by confirmation screen)
 import type { IncidentPreviewData } from "./src/components/IncidentLogConfirmationScreen/IncidentPreviewCard";
 
-type ScreenKey = "splash" | "login" | "signup" | "security" | "pin" | "main";
+type ScreenKey =
+  | "splash"
+  | "login"
+  | "signup"
+  | "personalDetails"
+  | "security"
+  | "pin"
+  | "main";
 
 // ✅ Incident flow steps (inside the Incident tab)
 type IncidentStep = "form" | "confirm" | "confirmed";
@@ -33,7 +41,8 @@ export default function App() {
 
   // ✅ Incident flow state
   const [incidentStep, setIncidentStep] = useState<IncidentStep>("form");
-  const [incidentPreview, setIncidentPreview] = useState<IncidentPreviewData | null>(null);
+  const [incidentPreview, setIncidentPreview] =
+    useState<IncidentPreviewData | null>(null);
 
   // ✅ demo values for Confirmed screen
   const alertNo = useMemo(() => "676767", []);
@@ -168,13 +177,22 @@ export default function App() {
       {screen === "splash" ? (
         <AppSplashScreen />
       ) : screen === "signup" ? (
-        <SignupScreen onGoLogin={() => setScreen("login")} />
+        <SignupScreen
+          onGoLogin={() => setScreen("login")}
+          onSignupSuccess={() => setScreen("personalDetails")}
+        />
+      ) : screen === "personalDetails" ? (
+        <PersonalDetailsScreen
+          onSubmit={() => {
+            // ✅ After personal details, go back to Login
+            setScreen("login");
+          }}
+        />
       ) : screen === "security" ? (
         <SecurityQuestionsScreen
           currentIndex={1}
           totalQuestions={3}
           onContinue={() => {
-            // After answering the security question, proceed to PIN
             setScreen("pin");
           }}
         />
@@ -194,7 +212,7 @@ export default function App() {
       ) : (
         <LoginScreen
           onGoSignup={() => setScreen("signup")}
-          onLoginSuccess={() => setScreen("security")} // ✅ Login → Security Questions
+          onLoginSuccess={() => setScreen("security")}
         />
       )}
     </SafeAreaProvider>

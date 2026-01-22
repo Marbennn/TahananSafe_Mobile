@@ -6,7 +6,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -16,8 +15,13 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
+
 import { Colors } from "../theme/colors";
 import { Layout } from "../theme/layout";
+
+// ✅ Use your SVG logo
+import LogoSvg from "../../assets/SecurityQuestionsScreen/Logo.svg";
 
 type SecurityQuestionOption = {
   id: string;
@@ -79,12 +83,9 @@ export default function SecurityQuestionsScreen({
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <StatusBar barStyle="light-content" />
 
-        {/* Header title like your screenshot */}
+        {/* ✅ Logo header */}
         <View style={styles.topBrand}>
-          <View style={styles.brandRow}>
-            <Ionicons name="home-outline" size={18} color="#FFFFFF" />
-            <Text style={styles.brandText}>TahananSafe</Text>
-          </View>
+          <LogoSvg width={160} height={34} />
         </View>
 
         <KeyboardAvoidingView
@@ -96,7 +97,6 @@ export default function SecurityQuestionsScreen({
             keyboardShouldPersistTaps="handled"
             bounces={false}
           >
-            {/* ✅ Same layout pattern as LoginScreen */}
             <View style={styles.cardStack}>
               <View style={styles.cardGhost} />
 
@@ -214,26 +214,17 @@ const styles = StyleSheet.create({
   background: { flex: 1 },
   safe: { flex: 1 },
 
-  // Keeps the card pushed down like LoginScreen
   scrollContent: { flexGrow: 1, justifyContent: "flex-end" },
 
+  // ✅ centered logo like your screenshot
   topBrand: {
     alignItems: "center",
-    paddingTop: 8,
-    paddingBottom: 6,
-  },
-  brandRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  brandText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 15,
-    letterSpacing: 0.2,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
 
-  // Same as LoginScreen stack
   cardStack: { width: "100%", position: "relative" },
 
-  // Ghost overlay like LoginScreen
   cardGhost: {
     position: "absolute",
     left: 16,
@@ -244,8 +235,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.16)",
   },
 
-  // ✅ Height matches LoginScreen via Layout.cardMinHeight
-  // ✅ Edge-to-edge sides
   card: {
     width: "100%",
     backgroundColor: "#fff",
