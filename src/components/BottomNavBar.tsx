@@ -4,7 +4,13 @@ import { View, Text, StyleSheet, Pressable, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../theme/colors";
 
-export type TabKey = "Home" | "Inbox" | "Incident" | "Ledger" | "Settings";
+export type TabKey =
+  | "Home"
+  | "Inbox"
+  | "Incident"
+  | "Reports"
+  | "Ledger"
+  | "Settings";
 
 type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -60,7 +66,7 @@ export default function BottomNavBar({
   const HALO_SIZE = fabSize + 18;
 
   // ✅ Increase this to reduce the visible “cap” above the bar
-  const HALO_DOWN_BY = 22; // <- try 18–28
+  const HALO_DOWN_BY = 22;
   const haloBottom =
     fabAnchorBottom - (HALO_SIZE - fabSize) / 2 - HALO_DOWN_BY;
 
@@ -136,12 +142,12 @@ export default function BottomNavBar({
           </Text>
         </View>
 
-        {/* ✅ UI label becomes Reports, but key remains "Ledger" */}
+        {/* ✅ REAL Reports tab key */}
         <NavItem
           icon="stats-chart-outline"
           label="Reports"
-          active={activeTab === "Ledger"}
-          onPress={() => onTabPress("Ledger")}
+          active={activeTab === "Reports"}
+          onPress={() => onTabPress("Reports")}
         />
 
         <NavItem
@@ -230,7 +236,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
 
-  // split border row
   topBorderRow: {
     position: "absolute",
     left: 0,
@@ -299,7 +304,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  // ✅ fully blended (same as navbar)
   fabHalo: {
     backgroundColor: NAV_BG,
     borderWidth: 0,

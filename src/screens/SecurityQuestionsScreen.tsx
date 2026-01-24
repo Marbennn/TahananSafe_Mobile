@@ -6,7 +6,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -74,12 +73,17 @@ export default function SecurityQuestionsScreen({
       Alert.alert("Required", "Please choose a question and enter your answer.");
       return;
     }
+
     onContinue?.({ selectedId, answer: answer.trim() });
-    if (!onContinue) Alert.alert("Saved", "Security question saved (demo).");
+
+    if (!onContinue) {
+      Alert.alert("Saved", "Security question saved (demo).");
+    }
   };
 
   return (
     <LinearGradient colors={Colors.gradient} style={styles.background}>
+      {/* ✅ keep bottom edge OFF so keyboard doesn't expose background gap */}
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <StatusBar barStyle="light-content" />
 
@@ -88,15 +92,13 @@ export default function SecurityQuestionsScreen({
           <LogoSvg width={160} height={34} />
         </View>
 
+        {/* ✅ Use padding (not height) so it doesn't create the blue gap */}
         <KeyboardAvoidingView
           style={styles.flex}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior={Platform.OS === "ios" ? "padding" : "padding"}
+          keyboardVerticalOffset={0}
         >
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            bounces={false}
-          >
+          <View style={styles.contentBottom}>
             <View style={styles.cardStack}>
               <View style={styles.cardGhost} />
 
@@ -161,7 +163,7 @@ export default function SecurityQuestionsScreen({
                 </Pressable>
               </View>
             </View>
-          </ScrollView>
+          </View>
         </KeyboardAvoidingView>
 
         {/* Dropdown modal */}
@@ -190,7 +192,12 @@ export default function SecurityQuestionsScreen({
                       pressed ? { opacity: 0.92 } : null,
                     ]}
                   >
-                    <Text style={[styles.modalItemText, active ? styles.modalItemTextActive : null]}>
+                    <Text
+                      style={[
+                        styles.modalItemText,
+                        active ? styles.modalItemTextActive : null,
+                      ]}
+                    >
                       {opt.label}
                     </Text>
                     {active ? <Ionicons name="checkmark" size={18} color="#0B4B86" /> : null}
@@ -214,9 +221,11 @@ const styles = StyleSheet.create({
   background: { flex: 1 },
   safe: { flex: 1 },
 
-  scrollContent: { flexGrow: 1, justifyContent: "flex-end" },
+  contentBottom: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
 
-  // ✅ centered logo like your screenshot
   topBrand: {
     alignItems: "center",
     paddingTop: 10,

@@ -1,50 +1,59 @@
 // App.tsx
-import React, { useEffect, useMemo, useState } from "react";
-import { Alert, View, Text, StyleSheet } from "react-native";
+import "react-native-gesture-handler";
+import React, { useMemo, useState } from "react";
+import { Alert, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { enableScreens } from "react-native-screens";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
+import { NavigationContainer } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+
+// Screens
 import AppSplashScreen from "./src/screens/AppSplashScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import SignupScreen from "./src/screens/SignupScreen";
-import SecurityQuestionsScreen from "./src/screens/SecurityQuestionsScreen";
 import PersonalDetailsScreen from "./src/screens/PersonalDetailsScreen";
+import SecurityQuestionsScreen from "./src/screens/SecurityQuestionsScreen";
+import VerifyAccountScreen from "./src/screens/VerifyAccountScreen";
 import PinScreen from "./src/screens/PinScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import InboxScreen from "./src/screens/HotlinesScreen";
+import ReportScreen from "./src/screens/ReportScreen";
 
-// ✅ Incident flow screens
+// Incident flow screens (inside Main)
 import IncidentLogScreen from "./src/screens/IncidentLogScreen";
 import IncidentLogConfirmationScreen from "./src/screens/IncidentLogConfirmationScreen";
 import IncidentLogConfirmedScreen from "./src/screens/IncidentLogConfirmedScreen";
 
-// ✅ type for bottom tabs
+// Types
 import type { TabKey } from "./src/components/BottomNavBar";
-
-// ✅ type from your preview card (used by confirmation screen)
 import type { IncidentPreviewData } from "./src/components/IncidentLogConfirmationScreen/IncidentPreviewCard";
 
-type ScreenKey =
-  | "splash"
-  | "login"
-  | "signup"
-  | "personalDetails"
-  | "security"
-  | "pin"
-  | "main";
+enableScreens(true);
 
-// ✅ Incident flow steps (inside the Incident tab)
+type RootStackParamList = {
+  Splash: undefined;
+  Login: undefined;
+  Signup: undefined;
+  PersonalDetails: undefined;
+  Security: undefined;
+  Verify: { email?: string } | undefined;
+  Pin: undefined;
+  Main: undefined;
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
 type IncidentStep = "form" | "confirm" | "confirmed";
 
-export default function App() {
-  const [screen, setScreen] = useState<ScreenKey>("splash");
+function MainShell({ onLogout }: { onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState<TabKey>("Home");
 
-  // ✅ Incident flow state
   const [incidentStep, setIncidentStep] = useState<IncidentStep>("form");
   const [incidentPreview, setIncidentPreview] =
     useState<IncidentPreviewData | null>(null);
 
-  // ✅ demo values for Confirmed screen
   const alertNo = useMemo(() => "676767", []);
   const confirmedDateLine = useMemo(() => {
     const now = new Date();
@@ -61,22 +70,15 @@ export default function App() {
     return `${weekday} | ${monthDayYear} | ${time}`;
   }, []);
 
-  const SPLASH_MS = 5000;
-
-  useEffect(() => {
-    const t = setTimeout(() => setScreen("login"), SPLASH_MS);
-    return () => clearTimeout(t);
-  }, []);
-
   const handleQuickExit = () => {
     Alert.alert("Quick Exit", "Returning to Login", [
       {
         text: "OK",
         onPress: () => {
-          setScreen("login");
           setActiveTab("Home");
           setIncidentStep("form");
           setIncidentPreview(null);
+          onLogout();
         },
       },
     ]);
@@ -85,14 +87,12 @@ export default function App() {
   const handleTabChange = (tab: TabKey) => {
     setActiveTab(tab);
 
-    // ✅ if user leaves Incident tab, reset its flow so it starts fresh next time
     if (tab !== "Incident") {
       setIncidentStep("form");
       setIncidentPreview(null);
     }
   };
 
-  // --- Simple placeholder screens for tabs you haven't built yet ---
   const Placeholder = ({ title }: { title: string }) => (
     <View style={styles.placeholder}>
       <Text style={styles.placeholderTitle}>{title}</Text>
@@ -100,123 +100,198 @@ export default function App() {
     </View>
   );
 
-  // --- Render MAIN tab screens ---
-  const renderMain = () => {
-    if (activeTab === "Home") {
+  if (activeTab === "Home") {
+    return (
+      <HomeScreen
+        initialTab="Home"
+        onQuickExit={handleQuickExit}
+        onTabChange={handleTabChange}
+      />
+    );
+  }
+
+  if (activeTab === "Inbox") {
+    return (
+      <InboxScreen
+        initialTab="Inbox"
+        onQuickExit={handleQuickExit}
+        onTabChange={handleTabChange}
+      />
+    );
+  }
+
+  // ✅ NEW: Reports tab opens ReportScreen
+  if (activeTab === "Reports") {
+    return (
+      <ReportScreen
+        initialTab="Reports"
+        onQuickExit={handleQuickExit}
+        onTabChange={handleTabChange}
+      />
+    );
+  }
+
+  if (activeTab === "Incident") {
+    if (incidentStep === "form") {
       return (
-        <HomeScreen
-          initialTab="Home"
-          onQuickExit={handleQuickExit}
-          onTabChange={handleTabChange}
+        <IncidentLogScreen
+          onBack={() => {
+            setActiveTab("Home");
+            setIncidentStep("form");
+            setIncidentPreview(null);
+          }}
+          onProceedConfirm={(previewData: IncidentPreviewData) => {
+            setIncidentPreview(previewData);
+            setIncidentStep("confirm");
+          }}
         />
       );
     }
 
-    if (activeTab === "Inbox") {
-      return (
-        <InboxScreen
-          initialTab="Inbox"
-          onQuickExit={handleQuickExit}
-          onTabChange={handleTabChange}
-        />
-      );
-    }
-
-    // ✅ Incident tab now has a 3-step flow
-    if (activeTab === "Incident") {
-      if (incidentStep === "form") {
-        return (
-          <IncidentLogScreen
-            onBack={() => {
-              setActiveTab("Home");
-              setIncidentStep("form");
-              setIncidentPreview(null);
-            }}
-            onProceedConfirm={(previewData: IncidentPreviewData) => {
-              setIncidentPreview(previewData);
-              setIncidentStep("confirm");
-            }}
-          />
-        );
+    if (incidentStep === "confirm") {
+      if (!incidentPreview) {
+        setIncidentStep("form");
+        return null;
       }
 
-      if (incidentStep === "confirm") {
-        if (!incidentPreview) {
+      return (
+        <IncidentLogConfirmationScreen
+          data={incidentPreview}
+          onBack={() => setIncidentStep("form")}
+          onConfirm={() => setIncidentStep("confirmed")}
+        />
+      );
+    }
+
+    return (
+      <IncidentLogConfirmedScreen
+        alertNo={alertNo}
+        dateLine={confirmedDateLine}
+        onGoHome={() => {
           setIncidentStep("form");
-          return null;
-        }
+          setIncidentPreview(null);
+          setActiveTab("Home");
+        }}
+      />
+    );
+  }
 
-        return (
-          <IncidentLogConfirmationScreen
-            data={incidentPreview}
-            onBack={() => setIncidentStep("form")}
-            onConfirm={() => setIncidentStep("confirmed")}
-          />
-        );
-      }
+  if (activeTab === "Ledger") return <Placeholder title="Ledger" />;
+  return <Placeholder title="Settings" />;
+}
 
-      return (
-        <IncidentLogConfirmedScreen
-          alertNo={alertNo}
-          dateLine={confirmedDateLine}
-          onGoHome={() => {
-            setIncidentStep("form");
-            setIncidentPreview(null);
-            setActiveTab("Home");
-          }}
-        />
-      );
-    }
-
-    if (activeTab === "Ledger") return <Placeholder title="Ledger" />;
-    return <Placeholder title="Settings" />;
-  };
-
+export default function App() {
   return (
-    <SafeAreaProvider>
-      {screen === "splash" ? (
-        <AppSplashScreen />
-      ) : screen === "signup" ? (
-        <SignupScreen
-          onGoLogin={() => setScreen("login")}
-          onSignupSuccess={() => setScreen("personalDetails")}
-        />
-      ) : screen === "personalDetails" ? (
-        <PersonalDetailsScreen
-          onSubmit={() => {
-            // ✅ After personal details, go back to Login
-            setScreen("login");
-          }}
-        />
-      ) : screen === "security" ? (
-        <SecurityQuestionsScreen
-          currentIndex={1}
-          totalQuestions={3}
-          onContinue={() => {
-            setScreen("pin");
-          }}
-        />
-      ) : screen === "pin" ? (
-        <PinScreen
-          onVerified={(pin: string) => {
-            Alert.alert("Verified!", `PIN: ${pin}`);
-            setActiveTab("Home");
-            setIncidentStep("form");
-            setIncidentPreview(null);
-            setScreen("main");
-          }}
-          onForgotPin={() => Alert.alert("Forgot PIN", "Go to reset PIN flow")}
-        />
-      ) : screen === "main" ? (
-        renderMain()
-      ) : (
-        <LoginScreen
-          onGoSignup={() => setScreen("signup")}
-          onLoginSuccess={() => setScreen("security")}
-        />
-      )}
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <NavigationContainer>
+          <Stack.Navigator
+            id="root-stack"
+            initialRouteName="Splash"
+            screenOptions={{
+              headerShown: false,
+              gestureEnabled: true,
+            }}
+          >
+            <Stack.Screen name="Splash">
+              {({ navigation }) => (
+                <AppSplashScreenWrapper
+                  onDone={() => navigation.replace("Login")}
+                />
+              )}
+            </Stack.Screen>
+
+            <Stack.Screen name="Login">
+              {({ navigation }) => (
+                <LoginScreen
+                  onGoSignup={() => navigation.navigate("Signup")}
+                  onLoginSuccess={() => navigation.navigate("Security")}
+                />
+              )}
+            </Stack.Screen>
+
+            <Stack.Screen name="Signup">
+              {({ navigation }) => (
+                <SignupScreen
+                  onGoLogin={() => navigation.navigate("Login")}
+                  onSignupSuccess={() => navigation.navigate("PersonalDetails")}
+                />
+              )}
+            </Stack.Screen>
+
+            <Stack.Screen name="PersonalDetails">
+              {({ navigation }) => (
+                <PersonalDetailsScreen onSubmit={() => navigation.replace("Login")} />
+              )}
+            </Stack.Screen>
+
+            <Stack.Screen name="Security">
+              {({ navigation }) => (
+                <SecurityQuestionsScreen
+                  currentIndex={1}
+                  totalQuestions={3}
+                  onContinue={() =>
+                    navigation.navigate("Verify", { email: "johndoe@gmail.com" })
+                  }
+                />
+              )}
+            </Stack.Screen>
+
+            <Stack.Screen name="Verify">
+              {({ navigation, route }) => (
+                <VerifyAccountScreen
+                  email={route.params?.email ?? "johndoe@gmail.com"}
+                  onVerify={() => navigation.navigate("Pin")}
+                  onResendCode={() =>
+                    Alert.alert("Resent", "Verification code resent (demo).")
+                  }
+                />
+              )}
+            </Stack.Screen>
+
+            <Stack.Screen name="Pin">
+              {({ navigation }) => (
+                <PinScreen
+                  onVerified={(pin: string) => {
+                    Alert.alert("Verified!", `PIN: ${pin}`);
+                    navigation.reset({
+                      index: 0,
+                      routes: [{ name: "Main" }],
+                    });
+                  }}
+                  onForgotPin={() =>
+                    Alert.alert("Forgot PIN", "Go to reset PIN flow")
+                  }
+                />
+              )}
+            </Stack.Screen>
+
+            <Stack.Screen name="Main">
+              {({ navigation }) => (
+                <MainShell
+                  onLogout={() => {
+                    navigation.reset({
+                      index: 0,
+                      routes: [{ name: "Login" }],
+                    });
+                  }}
+                />
+              )}
+            </Stack.Screen>
+          </Stack.Navigator>
+        </NavigationContainer>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
+}
+
+function AppSplashScreenWrapper({ onDone }: { onDone: () => void }) {
+  React.useEffect(() => {
+    const t = setTimeout(onDone, 5000);
+    return () => clearTimeout(t);
+  }, [onDone]);
+
+  return <AppSplashScreen />;
 }
 
 const styles = StyleSheet.create({

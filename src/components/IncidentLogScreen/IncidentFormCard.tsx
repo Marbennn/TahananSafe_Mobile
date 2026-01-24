@@ -4,7 +4,12 @@ import { View, Text, StyleSheet, Pressable, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../theme/colors";
 
+type Mode = "complain" | "emergency";
+
 type Props = {
+  mode?: Mode; // kept (so IncidentLogScreen won't error), but UI is the same either way
+  detailsLabel?: string;
+
   incidentType: string;
   details: string;
   witnessName: string;
@@ -23,6 +28,8 @@ type Props = {
 };
 
 export default function IncidentFormCard({
+  detailsLabel,
+
   incidentType,
   details,
   witnessName,
@@ -36,13 +43,16 @@ export default function IncidentFormCard({
   setWitnessName,
   setWitnessType,
 }: Props) {
+  // ✅ Always keep same label (unless parent passes a custom label)
+  const finalDetailsLabel = detailsLabel ?? "Incident Detail";
+
   return (
     <View style={styles.card}>
       <Text style={styles.sectionLabel}>
-        Incident Detail <Text style={styles.req}>*</Text>
+        {finalDetailsLabel} <Text style={styles.req}>*</Text>
       </Text>
 
-      {/* Dropdown */}
+      {/* Dropdown (same for both modes) */}
       <Pressable
         onPress={onPickIncidentType}
         style={({ pressed }) => [
@@ -60,7 +70,7 @@ export default function IncidentFormCard({
         <Ionicons name="chevron-down" size={18} color="#9AA4B2" />
       </Pressable>
 
-      {/* Description */}
+      {/* Description (same for both modes) */}
       <TextInput
         value={details}
         onChangeText={setDetails}
@@ -71,7 +81,7 @@ export default function IncidentFormCard({
         textAlignVertical="top"
       />
 
-      {/* ✅ Add photo row (LEFT) */}
+      {/* Add photo row */}
       <View style={styles.photoRow}>
         <Pressable
           onPress={onAddPhoto}
@@ -84,11 +94,10 @@ export default function IncidentFormCard({
           <Text style={styles.photoText}>Add Photo</Text>
         </Pressable>
 
-        {/* ✅ stays beside the button */}
         <Text style={styles.photoLimit}>(Max 3)</Text>
       </View>
 
-      {/* Witness */}
+      {/* Witness (same for both modes) */}
       <Text style={[styles.sectionLabel, { marginTop: 14 }]}>Witness</Text>
 
       <TextInput
@@ -113,7 +122,6 @@ export default function IncidentFormCard({
           <Text style={styles.metaLabel}>Date:</Text>
           <Text style={styles.metaValue}>{dateStr}</Text>
 
-          {/* push Time a bit right */}
           <View style={{ width: 28 }} />
 
           <Text style={styles.metaLabel}>Time:</Text>
@@ -192,12 +200,11 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
 
-  // ✅ LEFT aligned and close spacing
   photoRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start", // ✅ keep left
-    gap: 10, // ✅ controls distance between button and (Max 3)
+    justifyContent: "flex-start",
+    gap: 10,
     marginTop: 4,
     marginBottom: 8,
   },

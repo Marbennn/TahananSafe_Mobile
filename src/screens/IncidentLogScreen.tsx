@@ -104,14 +104,23 @@ export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
   };
 
   const onSubmit = () => {
-    if (!incidentType.trim() || !details.trim()) {
-      Alert.alert("Incomplete", "Please fill in the required fields.");
+    // ✅ Validation changes:
+    // - Emergency: require only details
+    // - Complaint: require incidentType + details
+    if (mode === "emergency") {
+      if (!details.trim()) {
+        Alert.alert("Incomplete", "Please fill in the required fields.");
+        return;
+      }
+
+      Alert.alert("Emergency Sent", "Your emergency report has been submitted.");
+      resetForm();
       return;
     }
 
-    if (mode === "emergency") {
-      Alert.alert("Emergency Sent", "Your emergency report has been submitted.");
-      resetForm();
+    // complain mode
+    if (!incidentType.trim() || !details.trim()) {
+      Alert.alert("Incomplete", "Please fill in the required fields.");
       return;
     }
 
@@ -134,6 +143,11 @@ export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
 
   const actionText = useMemo(() => {
     return mode === "emergency" ? "Send Emergency" : "Secure Complaint";
+  }, [mode]);
+
+  // ✅ This is what changes the label inside the form card
+  const detailsLabel = useMemo(() => {
+    return mode === "emergency" ? "Emergency Detail *" : "Incident Detail *";
   }, [mode]);
 
   // ✅ Show preview screen (fallback local)
@@ -195,14 +209,14 @@ export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
               onPress={() => setMode("emergency")}
               style={({ pressed }) => [
                 styles.segmentBtn,
-                mode === "emergency" && styles.segmentBtnActiveLight,
+                mode === "emergency" && styles.segmentBtnActive,
                 pressed && { transform: [{ scale: 0.99 }] },
               ]}
             >
               <Text
                 style={[
                   styles.segmentText,
-                  mode === "emergency" && styles.segmentTextActiveLight,
+                  mode === "emergency" && styles.segmentTextActive,
                 ]}
               >
                 Emergency
@@ -221,6 +235,10 @@ export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
         >
           <View style={styles.bodyFill}>
             <IncidentFormCard
+              // ✅ NEW PROP (you will add this in IncidentFormCard)
+              detailsLabel={detailsLabel}
+              // ✅ optional if you want the card to know the mode
+              mode={mode}
               incidentType={incidentType}
               details={details}
               witnessName={witnessName}
@@ -298,22 +316,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
+  // ✅ Active tab highlight (both Complain & Emergency)
   segmentBtnActive: {
     backgroundColor: Colors.primary,
   },
-  segmentBtnActiveLight: {
-    backgroundColor: "#F2F6FF",
-  },
+
   segmentText: {
     fontSize: 11,
     fontWeight: "800",
     color: "#6B7280",
   },
+  // ✅ Active text is white (both tabs)
   segmentTextActive: {
     color: "#FFFFFF",
-  },
-  segmentTextActiveLight: {
-    color: Colors.primary,
   },
 
   scrollContent: {
