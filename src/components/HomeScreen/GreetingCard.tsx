@@ -6,6 +6,7 @@ import {
   LayoutChangeEvent,
   PanResponder,
   Animated,
+  useWindowDimensions,
 } from "react-native";
 
 import GreetingCardSvg from "../../../assets/HomeScreen/GreetingCard.svg";
@@ -15,16 +16,31 @@ type Props = {
   greeting: string;
   dateLine: string;
   userName?: string;
-  onGridPress?: () => void; // kept for compatibility (not used now)
+  onGridPress?: () => void;
 };
 
 const SLIDE_COUNT = 2;
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
 
 export default function GreetingCard({
   greeting,
   dateLine,
   userName = "User",
 }: Props) {
+  const { width } = useWindowDimensions();
+
+  // ✅ scale based on common mobile width (375)
+  const s = useMemo(() => clamp(width / 375, 0.9, 1.25), [width]);
+
+  const CARD_H = useMemo(
+    () => clamp(Math.round(142 * s), 130, 180),
+    [s]
+  );
+  const MH = useMemo(() => clamp(Math.round(14 * s), 12, 18), [s]);
+
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -34,15 +50,15 @@ export default function GreetingCard({
   const activeIndexRef = useRef(0);
   activeIndexRef.current = activeIndex;
 
-  const clamp = (v: number, min: number, max: number) =>
+  const clampX = (v: number, min: number, max: number) =>
     Math.max(min, Math.min(max, v));
 
   const onLayout = useCallback(
     (e: LayoutChangeEvent) => {
-      const { width, height } = e.nativeEvent.layout;
+      const { width: w0, height: h0 } = e.nativeEvent.layout;
 
-      const w = Math.round(width);
-      const h = Math.round(height);
+      const w = Math.round(w0);
+      const h = Math.round(h0);
 
       setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
 
@@ -76,7 +92,7 @@ export default function GreetingCard({
           const minX = -(SLIDE_COUNT - 1) * w - 40;
           const maxX = 40;
 
-          translateX.setValue(clamp(baseXRef.current + g.dx, minX, maxX));
+          translateX.setValue(clampX(baseXRef.current + g.dx, minX, maxX));
         },
         onPanResponderRelease: (_evt, g) => {
           const w = widthRef.current;
@@ -112,7 +128,6 @@ export default function GreetingCard({
     [translateX]
   );
 
-  // Fade greeting texts when swiping to slide 2 (avoid overlap)
   const w = Math.max(size.w, 1);
   const greetingOpacity = useMemo(
     () =>
@@ -122,6 +137,83 @@ export default function GreetingCard({
         extrapolate: "clamp",
       }),
     [translateX, w]
+  );
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        card: {
+          marginHorizontal: MH,
+          marginTop: clamp(Math.round(6 * s), 4, 10),
+          height: CARD_H,
+          borderRadius: clamp(Math.round(16 * s), 14, 18),
+          overflow: "hidden",
+          position: "relative",
+          backgroundColor: "#0B3A5A",
+        },
+
+        bgTrack: {
+          position: "absolute",
+          left: 0,
+          top: 0,
+          flexDirection: "row",
+        },
+
+        fallbackBg: {
+          ...StyleSheet.absoluteFillObject,
+          backgroundColor: "#0B3A5A",
+        },
+
+        overlay: {
+          ...StyleSheet.absoluteFillObject,
+          paddingHorizontal: clamp(Math.round(14 * s), 12, 18),
+          paddingTop: clamp(Math.round(14 * s), 12, 18),
+          paddingBottom: clamp(Math.round(16 * s), 12, 18),
+        },
+
+        left: {
+          paddingRight: clamp(Math.round(110 * s), 90, 140),
+          marginTop: clamp(Math.round(18 * s), 12, 22),
+        },
+
+        title: {
+          color: "#fff",
+          fontSize: clamp(Math.round(16 * s), 14, 18),
+          fontWeight: "900",
+          marginBottom: clamp(Math.round(4 * s), 3, 6),
+          lineHeight: clamp(Math.round(20 * s), 18, 22),
+        },
+
+        sub: {
+          color: "rgba(255,255,255,0.85)",
+          fontSize: clamp(Math.round(11 * s), 10, 13),
+          fontWeight: "700",
+          lineHeight: clamp(Math.round(14 * s), 12, 16),
+        },
+
+        dotsRow: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: clamp(Math.round(18 * s), 14, 20),
+          flexDirection: "row",
+          justifyContent: "center",
+          gap: clamp(Math.round(6 * s), 5, 8),
+          alignItems: "center",
+        },
+
+        dot: {
+          width: clamp(Math.round(6 * s), 5, 7),
+          height: clamp(Math.round(6 * s), 5, 7),
+          borderRadius: 999,
+          backgroundColor: "rgba(255,255,255,0.35)",
+        },
+
+        dotActive: {
+          backgroundColor: "#FFFFFF",
+        },
+      }),
+    [s, CARD_H, MH]
   );
 
   return (
@@ -137,7 +229,6 @@ export default function GreetingCard({
             },
           ]}
         >
-          {/* Slide 1 */}
           <View style={{ width: size.w, height: size.h }}>
             <GreetingCardSvg
               width={size.w}
@@ -146,7 +237,6 @@ export default function GreetingCard({
             />
           </View>
 
-          {/* Slide 2 */}
           <View style={{ width: size.w, height: size.h }}>
             <Carousel2Svg
               width={size.w}
@@ -159,7 +249,6 @@ export default function GreetingCard({
         <View style={styles.fallbackBg} />
       )}
 
-      {/* Foreground content */}
       <View style={styles.overlay}>
         <Animated.View style={[styles.left, { opacity: greetingOpacity }]}>
           <Text style={styles.title} numberOfLines={1}>
@@ -183,76 +272,3 @@ export default function GreetingCard({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    marginHorizontal: 14,
-    marginTop: 6,
-    height: 142,
-    borderRadius: 16,
-    overflow: "hidden",
-    position: "relative",
-    backgroundColor: "#0B3A5A",
-  },
-
-  bgTrack: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    flexDirection: "row",
-  },
-
-  fallbackBg: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#0B3A5A",
-  },
-
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 16,
-  },
-
-  left: {
-    paddingRight: 110,
-    marginTop: 18,
-  },
-
-  title: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "900",
-    marginBottom: 4,
-    lineHeight: 20,
-  },
-
-  sub: {
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 11,
-    fontWeight: "700",
-    lineHeight: 14,
-  },
-
-  dotsRow: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 18,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 6,
-    alignItems: "center",
-  },
-
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.35)",
-  },
-
-  dotActive: {
-    backgroundColor: "#FFFFFF",
-  },
-});

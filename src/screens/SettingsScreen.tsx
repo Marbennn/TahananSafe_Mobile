@@ -61,7 +61,7 @@ export default function SettingsScreen({
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [query, setQuery] = useState("");
 
-  // ✅ MATCH Hotlines/Reports sizing exactly
+  // ✅ MATCH Hotlines/Reports sizing
   const NAV_BASE_HEIGHT = 78;
   const FAB_SIZE = 62;
 
@@ -71,7 +71,6 @@ export default function SettingsScreen({
   const chevronBottom = navHeight + 90;
   const fabBottom = navHeight - FAB_SIZE / 2 - 10;
 
-  // ✅ same concept as other screens so content sits above navbar
   const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + 6;
 
   const group1: SettingItem[] = useMemo(
@@ -103,9 +102,9 @@ export default function SettingsScreen({
     [group2, q]
   );
 
-  const screenBg = C.screenBg ?? C.background ?? "#F5FAFE"; // match other screens
+  const screenBg = C.screenBg ?? C.background ?? "#F5FAFE";
   const surface = C.surface ?? C.card ?? "#FFFFFF";
-  const textDark = "#1F2A37"; // match Hotlines title color
+  const textDark = "#1F2A37"; // same as Hotlines
   const muted = C.mutedText ?? C.muted ?? "#9AA4B2";
   const primary = C.primary ?? Colors.primary ?? "#1E63D0";
   const divider = C.divider ?? "#E7EEF7";
@@ -116,14 +115,16 @@ export default function SettingsScreen({
   };
 
   return (
-    // ✅ MATCH Hotlines/Reports: only top safe area; navbar handles bottom inset
-    <SafeAreaView style={[styles.safe, { backgroundColor: screenBg }]} edges={["top"]}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: screenBg }]}
+      edges={["top"]}
+    >
       <StatusBar barStyle="dark-content" />
 
       <View style={[styles.page, { backgroundColor: screenBg }]}>
-        {/* ✅ Header copied from Hotlines/Reports */}
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>
-          <Text style={[styles.title, { color: textDark }]}>Settings</Text>
+        {/* ✅ Header now matches ReportScreen top bar spacing + title weight */}
+        <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 8) }]}>
+          <Text style={[styles.topTitle, { color: textDark }]}>Settings</Text>
 
           {onQuickExit ? (
             <Pressable
@@ -131,6 +132,7 @@ export default function SettingsScreen({
               hitSlop={10}
               style={({ pressed }) => [
                 styles.quickExitBtn,
+                { borderColor: divider, backgroundColor: surface },
                 pressed && { transform: [{ scale: 0.98 }] },
               ]}
             >
@@ -139,9 +141,14 @@ export default function SettingsScreen({
           ) : null}
         </View>
 
-        {/* Search row (same spacing feel as Hotlines) */}
+        {/* Search row */}
         <View style={styles.searchRow}>
-          <View style={[styles.searchBox, { borderColor: divider, backgroundColor: surface }]}>
+          <View
+            style={[
+              styles.searchBox,
+              { borderColor: divider, backgroundColor: surface },
+            ]}
+          >
             <Ionicons name="search-outline" size={18} color={muted} />
             <TextInput
               value={query}
@@ -156,12 +163,20 @@ export default function SettingsScreen({
 
         {/* Content */}
         <ScrollView
-          contentContainerStyle={[styles.content, { paddingBottom: CONTENT_BOTTOM_PAD }]}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: CONTENT_BOTTOM_PAD },
+          ]}
           showsVerticalScrollIndicator={false}
         >
           {/* Group 1 */}
           {filtered1.length > 0 && (
-            <View style={[styles.card, { borderColor: divider, backgroundColor: surface }]}>
+            <View
+              style={[
+                styles.card,
+                { borderColor: divider, backgroundColor: surface },
+              ]}
+            >
               {filtered1.map((item, idx) => (
                 <React.Fragment key={item.key}>
                   <Pressable
@@ -169,11 +184,16 @@ export default function SettingsScreen({
                     android_ripple={{ color: "rgba(0,0,0,0.06)" }}
                     style={styles.row}
                   >
-                    <Text style={[styles.rowText, { color: primary }]}>{item.label}</Text>
+                    <Text style={[styles.rowText, { color: primary }]}>
+                      {item.label}
+                    </Text>
                     <Ionicons name="chevron-forward" size={18} color={primary} />
                   </Pressable>
+
                   {idx !== filtered1.length - 1 && (
-                    <View style={[styles.divider, { backgroundColor: divider }]} />
+                    <View
+                      style={[styles.divider, { backgroundColor: divider }]}
+                    />
                   )}
                 </React.Fragment>
               ))}
@@ -182,7 +202,12 @@ export default function SettingsScreen({
 
           {/* Group 2 */}
           {filtered2.length > 0 && (
-            <View style={[styles.card, { borderColor: divider, backgroundColor: surface }]}>
+            <View
+              style={[
+                styles.card,
+                { borderColor: divider, backgroundColor: surface },
+              ]}
+            >
               {filtered2.map((item, idx) => (
                 <React.Fragment key={item.key}>
                   <Pressable
@@ -190,11 +215,16 @@ export default function SettingsScreen({
                     android_ripple={{ color: "rgba(0,0,0,0.06)" }}
                     style={styles.row}
                   >
-                    <Text style={[styles.rowText, { color: primary }]}>{item.label}</Text>
+                    <Text style={[styles.rowText, { color: primary }]}>
+                      {item.label}
+                    </Text>
                     <Ionicons name="chevron-forward" size={18} color={primary} />
                   </Pressable>
+
                   {idx !== filtered2.length - 1 && (
-                    <View style={[styles.divider, { backgroundColor: divider }]} />
+                    <View
+                      style={[styles.divider, { backgroundColor: divider }]}
+                    />
                   )}
                 </React.Fragment>
               ))}
@@ -205,16 +235,21 @@ export default function SettingsScreen({
           <View style={{ alignItems: "center", marginTop: 14 }}>
             <Pressable
               onPress={onLogout}
-              style={[styles.logoutBtn, { borderColor: divider, backgroundColor: surface }]}
+              style={[
+                styles.logoutBtn,
+                { borderColor: divider, backgroundColor: surface },
+              ]}
               android_ripple={{ color: "rgba(0,0,0,0.06)" }}
             >
               <Ionicons name="log-out-outline" size={18} color={primary} />
-              <Text style={[styles.logoutText, { color: primary }]}>Log out</Text>
+              <Text style={[styles.logoutText, { color: primary }]}>
+                Log out
+              </Text>
             </Pressable>
           </View>
         </ScrollView>
 
-        {/* Bottom nav (same config as Hotlines/Reports) */}
+        {/* Bottom nav */}
         <BottomNavBar
           activeTab={activeTab}
           onTabPress={handleTab}
@@ -238,25 +273,25 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
   page: { flex: 1, backgroundColor: BG },
 
-  // ✅ copied pattern
-  header: {
-    paddingHorizontal: 16,
-    paddingBottom: 6,
+  // ✅ Now matches ReportScreen's top bar feel
+  topBar: {
+    paddingHorizontal: 14, // ReportScreen uses 14
+    paddingBottom: 10, // ReportScreen uses 10
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  title: {
-    fontSize: 22, // ✅ same as Hotlines + Reports
-    fontWeight: "800", // ✅ Hotlines uses 800, Reports uses 900 (800 matches both visually)
+  // ✅ Same size + “font” feel (bold like Reports)
+  topTitle: {
+    fontSize: 22,
+    fontWeight: "900",
   },
+
   quickExitBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: BORDER,
     alignItems: "center",
     justifyContent: "center",
     ...Platform.select({
@@ -270,7 +305,6 @@ const styles = StyleSheet.create({
     }),
   },
 
-  // ✅ spacing similar to Hotlines search row
   searchRow: {
     paddingHorizontal: 16,
     paddingTop: 6,
@@ -287,7 +321,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 13, // ✅ match Hotlines
+    fontSize: 13,
     color: "#111827",
     paddingVertical: 0,
     fontWeight: "600",

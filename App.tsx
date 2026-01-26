@@ -19,8 +19,13 @@ import VerifyAccountScreen from "./src/screens/VerifyAccountScreen";
 import PinScreen from "./src/screens/PinScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import InboxScreen from "./src/screens/HotlinesScreen";
+
 import ReportScreen from "./src/screens/ReportScreen";
-import SettingsScreen from "./src/screens/SettingsScreen"; // ✅ ADD
+import ReportDetailScreen from "./src/screens/ReportDetailScreen"; // ✅ clicked report screen
+import SettingsScreen from "./src/screens/SettingsScreen";
+
+// ✅ NEW: Notifications screen
+import NotificationsScreen from "./src/screens/NotificationsScreen";
 
 // Incident flow screens (inside Main)
 import IncidentLogScreen from "./src/screens/IncidentLogScreen";
@@ -30,6 +35,7 @@ import IncidentLogConfirmedScreen from "./src/screens/IncidentLogConfirmedScreen
 // Types
 import type { TabKey } from "./src/components/BottomNavBar";
 import type { IncidentPreviewData } from "./src/components/IncidentLogConfirmationScreen/IncidentPreviewCard";
+import type { ReportItem } from "./src/screens/ReportScreen"; // ✅ type exported from ReportScreen
 
 enableScreens(true);
 
@@ -42,17 +48,33 @@ type RootStackParamList = {
   Verify: { email?: string } | undefined;
   Pin: undefined;
   Main: undefined;
+
+  // ✅ NEW
+  Notifications: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 type IncidentStep = "form" | "confirm" | "confirmed";
+type ReportStep = "list" | "detail";
 
-function MainShell({ onLogout }: { onLogout: () => void }) {
+function MainShell({
+  onLogout,
+  onOpenNotifications,
+}: {
+  onLogout: () => void;
+  onOpenNotifications: () => void;
+}) {
   const [activeTab, setActiveTab] = useState<TabKey>("Home");
 
+  // Incident flow state
   const [incidentStep, setIncidentStep] = useState<IncidentStep>("form");
-  const [incidentPreview, setIncidentPreview] = useState<IncidentPreviewData | null>(null);
+  const [incidentPreview, setIncidentPreview] =
+    useState<IncidentPreviewData | null>(null);
+
+  // Reports flow state
+  const [reportStep, setReportStep] = useState<ReportStep>("list");
+  const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
 
   const alertNo = useMemo(() => "676767", []);
   const confirmedDateLine = useMemo(() => {
@@ -76,8 +98,15 @@ function MainShell({ onLogout }: { onLogout: () => void }) {
         text: "OK",
         onPress: () => {
           setActiveTab("Home");
+
+          // reset incident flow
           setIncidentStep("form");
           setIncidentPreview(null);
+
+          // reset reports flow
+          setReportStep("list");
+          setSelectedReport(null);
+
           onLogout();
         },
       },
@@ -87,9 +116,16 @@ function MainShell({ onLogout }: { onLogout: () => void }) {
   const handleTabChange = (tab: TabKey) => {
     setActiveTab(tab);
 
+    // leaving Incident tab resets incident flow
     if (tab !== "Incident") {
       setIncidentStep("form");
       setIncidentPreview(null);
+    }
+
+    // leaving Reports tab resets reports flow
+    if (tab !== "Reports") {
+      setReportStep("list");
+      setSelectedReport(null);
     }
   };
 
@@ -100,29 +136,64 @@ function MainShell({ onLogout }: { onLogout: () => void }) {
     </View>
   );
 
+  // HOME
   if (activeTab === "Home") {
     return (
-      <HomeScreen initialTab="Home" onQuickExit={handleQuickExit} onTabChange={handleTabChange} />
+      <HomeScreen
+        initialTab="Home"
+        onQuickExit={handleQuickExit}
+        onTabChange={handleTabChange}
+        // ✅ NEW: bell icon will open notifications
+        onOpenNotifications={onOpenNotifications}
+      />
     );
   }
 
+  // HOTLINES (Inbox key)
   if (activeTab === "Inbox") {
     return (
-      <InboxScreen initialTab="Inbox" onQuickExit={handleQuickExit} onTabChange={handleTabChange} />
-    );
-  }
-
-  if (activeTab === "Reports") {
-    return (
-      <ReportScreen
-        initialTab="Reports"
+      <InboxScreen
+        initialTab="Inbox"
         onQuickExit={handleQuickExit}
         onTabChange={handleTabChange}
       />
     );
   }
 
-  // ✅ THIS is what makes BottomNavBar "Settings" open SettingsScreen.tsx
+  // REPORTS (LIST -> DETAIL)
+  if (activeTab === "Reports") {
+    if (reportStep === "list") {
+      return (
+        <ReportScreen
+          initialTab="Reports"
+          onQuickExit={handleQuickExit}
+          onTabChange={handleTabChange}
+          onOpenReport={(item) => {
+            setSelectedReport(item);
+            setReportStep("detail");
+          }}
+        />
+      );
+    }
+
+    // detail
+    if (!selectedReport) {
+      setReportStep("list");
+      return null;
+    }
+
+    return (
+      <ReportDetailScreen
+        initialTab="Reports"
+        report={selectedReport}
+        onBack={() => setReportStep("list")}
+        onQuickExit={handleQuickExit}
+        onTabChange={handleTabChange}
+      />
+    );
+  }
+
+  // SETTINGS
   if (activeTab === "Settings") {
     return (
       <SettingsScreen
@@ -134,6 +205,7 @@ function MainShell({ onLogout }: { onLogout: () => void }) {
     );
   }
 
+  // INCIDENT FLOW
   if (activeTab === "Incident") {
     if (incidentStep === "form") {
       return (
@@ -179,6 +251,7 @@ function MainShell({ onLogout }: { onLogout: () => void }) {
     );
   }
 
+  // fallback
   if (activeTab === "Ledger") return <Placeholder title="Ledger" />;
   return <Placeholder title="Unknown" />;
 }
@@ -195,7 +268,9 @@ export default function App() {
           >
             <Stack.Screen name="Splash">
               {({ navigation }) => (
-                <AppSplashScreenWrapper onDone={() => navigation.replace("Login")} />
+                <AppSplashScreenWrapper
+                  onDone={() => navigation.replace("Login")}
+                />
               )}
             </Stack.Screen>
 
@@ -219,7 +294,9 @@ export default function App() {
 
             <Stack.Screen name="PersonalDetails">
               {({ navigation }) => (
-                <PersonalDetailsScreen onSubmit={() => navigation.replace("Login")} />
+                <PersonalDetailsScreen
+                  onSubmit={() => navigation.replace("Login")}
+                />
               )}
             </Stack.Screen>
 
@@ -228,7 +305,9 @@ export default function App() {
                 <SecurityQuestionsScreen
                   currentIndex={1}
                   totalQuestions={3}
-                  onContinue={() => navigation.navigate("Verify", { email: "johndoe@gmail.com" })}
+                  onContinue={() =>
+                    navigation.navigate("Verify", { email: "johndoe@gmail.com" })
+                  }
                 />
               )}
             </Stack.Screen>
@@ -238,7 +317,9 @@ export default function App() {
                 <VerifyAccountScreen
                   email={route.params?.email ?? "johndoe@gmail.com"}
                   onVerify={() => navigation.navigate("Pin")}
-                  onResendCode={() => Alert.alert("Resent", "Verification code resent (demo).")}
+                  onResendCode={() =>
+                    Alert.alert("Resent", "Verification code resent (demo).")
+                  }
                 />
               )}
             </Stack.Screen>
@@ -250,7 +331,9 @@ export default function App() {
                     Alert.alert("Verified!", `PIN: ${pin}`);
                     navigation.reset({ index: 0, routes: [{ name: "Main" }] });
                   }}
-                  onForgotPin={() => Alert.alert("Forgot PIN", "Go to reset PIN flow")}
+                  onForgotPin={() =>
+                    Alert.alert("Forgot PIN", "Go to reset PIN flow")
+                  }
                 />
               )}
             </Stack.Screen>
@@ -261,7 +344,16 @@ export default function App() {
                   onLogout={() => {
                     navigation.reset({ index: 0, routes: [{ name: "Login" }] });
                   }}
+                  // ✅ NEW: open notifications from Home bell icon
+                  onOpenNotifications={() => navigation.navigate("Notifications")}
                 />
+              )}
+            </Stack.Screen>
+
+            {/* ✅ NEW Notifications route */}
+            <Stack.Screen name="Notifications">
+              {({ navigation }) => (
+                <NotificationsScreen onBack={() => navigation.goBack()} />
               )}
             </Stack.Screen>
           </Stack.Navigator>

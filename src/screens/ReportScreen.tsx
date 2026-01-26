@@ -15,8 +15,10 @@ import { Colors } from "../theme/colors";
 
 type FilterKey = "Pending" | "On going" | "Cancelled" | "Resolved";
 
-type ReportItem = {
+export type ReportItem = {
   id: string;
+
+  // list fields
   title: string;
   detail: string;
   dateLeft: string;
@@ -24,6 +26,14 @@ type ReportItem = {
   dateRight: string;
   timeRight: string;
   groupLabel?: string;
+
+  // detail fields (for clicked report screen)
+  status?: "PENDING" | "ONGOING" | "CANCELLED" | "RESOLVED";
+  witnessName?: string;
+  witnessType?: string;
+  location?: string;
+  incidentTypeLabel?: string; // e.g. "Sinipa ng tatay"
+  alertNo?: string; // e.g. 676767
 };
 
 type Props = {
@@ -31,8 +41,8 @@ type Props = {
   onTabChange?: (tab: TabKey) => void;
   initialTab?: TabKey;
 
-  // optional: if you want a back button like IncidentLogScreen
-  onBack?: () => void;
+  // ✅ new: open clicked report screen
+  onOpenReport?: (item: ReportItem) => void;
 };
 
 function ReportCard({
@@ -84,11 +94,12 @@ export default function ReportScreen({
   onQuickExit,
   onTabChange,
   initialTab,
-  onBack,
+  onOpenReport,
 }: Props) {
   const insets = useSafeAreaInsets();
 
-  const [activeTab, setActiveTab] = useState<TabKey>(initialTab ?? "Reports");
+  // ✅ Reports tab key in your BottomNavBar is "Ledger"
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab ?? "Ledger");
   const [filter, setFilter] = useState<FilterKey>("Pending");
 
   const NAV_BASE_HEIGHT = 78;
@@ -122,6 +133,13 @@ export default function ReportScreen({
         timeLeft: "8:30 PM",
         dateRight: "January 20, 2026",
         timeRight: "12:00 PM",
+
+        status: "PENDING",
+        witnessName: "John Dela Cruz",
+        witnessType: "Neighbor",
+        location: "Brgy. 12",
+        incidentTypeLabel: "Sinipa ng tatay",
+        alertNo: "676767",
       },
       {
         id: "r2",
@@ -132,6 +150,13 @@ export default function ReportScreen({
         timeLeft: "8:30 PM",
         dateRight: "January 20, 2026",
         timeRight: "12:00 PM",
+
+        status: "PENDING",
+        witnessName: "John Dela Cruz",
+        witnessType: "Neighbor",
+        location: "Brgy. 12",
+        incidentTypeLabel: "Sinipa ng tatay",
+        alertNo: "676767",
       },
       {
         id: "r3",
@@ -142,6 +167,13 @@ export default function ReportScreen({
         timeLeft: "8:30 PM",
         dateRight: "January 20, 2026",
         timeRight: "12:00 PM",
+
+        status: "PENDING",
+        witnessName: "John Dela Cruz",
+        witnessType: "Neighbor",
+        location: "Brgy. 12",
+        incidentTypeLabel: "Sinipa ng tatay",
+        alertNo: "676767",
       },
       {
         id: "r4",
@@ -152,6 +184,13 @@ export default function ReportScreen({
         timeLeft: "8:30 PM",
         dateRight: "January 20, 2026",
         timeRight: "12:00 PM",
+
+        status: "PENDING",
+        witnessName: "John Dela Cruz",
+        witnessType: "Neighbor",
+        location: "Brgy. 12",
+        incidentTypeLabel: "Sinipa ng tatay",
+        alertNo: "676767",
       },
       {
         id: "r5",
@@ -162,33 +201,30 @@ export default function ReportScreen({
         timeLeft: "8:30 PM",
         dateRight: "January 20, 2026",
         timeRight: "12:00 PM",
+
+        status: "PENDING",
+        witnessName: "John Dela Cruz",
+        witnessType: "Neighbor",
+        location: "Brgy. 12",
+        incidentTypeLabel: "Sinipa ng tatay",
+        alertNo: "676767",
       },
     ],
     []
   );
 
-  const filtered = useMemo(() => data, [data, filter]);
+  const filtered = useMemo(() => {
+    // placeholder filtering (wire real status later)
+    return data;
+  }, [data, filter]);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.page}>
-        {/* ✅ Header: TITLE ON THE LEFT */}
+        {/* ✅ LEFT title */}
         <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 8) }]}>
-          {onBack ? (
-            <Pressable
-              onPress={onBack}
-              hitSlop={12}
-              style={({ pressed }) => [
-                styles.backBtn,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Ionicons name="chevron-back" size={22} color={Colors.primary} />
-            </Pressable>
-          ) : null}
-
           <Text style={styles.topTitle}>Reports</Text>
         </View>
 
@@ -243,7 +279,8 @@ export default function ReportScreen({
                   {showGroup ? (
                     <Text style={styles.groupLabel}>{item.groupLabel}</Text>
                   ) : null}
-                  <ReportCard item={item} onPress={() => {}} />
+
+                  <ReportCard item={item} onPress={() => onOpenReport?.(item)} />
                 </View>
               );
             });
@@ -276,24 +313,13 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
   page: { flex: 1, backgroundColor: BG },
 
-  // ✅ Left-aligned header row
   topBar: {
     paddingHorizontal: 14,
     paddingBottom: 10,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start", // ✅ left align
-    gap: 10, // ✅ space between back button and title
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  // ✅ bigger title (you asked "make it more big")
+  // ✅ make it bigger
   topTitle: {
     fontSize: 22,
     fontWeight: "900",
@@ -349,7 +375,6 @@ const styles = StyleSheet.create({
     paddingLeft: 2,
   },
 
-  // Card
   card: {
     flexDirection: "row",
     alignItems: "stretch",

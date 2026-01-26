@@ -1,11 +1,9 @@
-import React from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import React, { useMemo } from "react";
+import { View, Text, StyleSheet, Pressable, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-// ✅ Background tile SVG
 import BlueBoxSvg from "../../../assets/HomeScreen/BlueBox.svg";
 
-// ✅ Icons
 import AlertSvg from "../../../assets/HomeScreen/AlertIcon.svg";
 import ProfileIconSvg from "../../../assets/HomeScreen/ProfileIcon.svg";
 
@@ -16,7 +14,11 @@ type Props = {
   onProfile?: () => void;
 };
 
-const TILE_SIZE = 64;
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+type IconRenderer = (size: number) => React.ReactElement;
 
 export default function QuickActions({
   onSignOut,
@@ -24,36 +26,122 @@ export default function QuickActions({
   onAlert,
   onProfile,
 }: Props) {
+  const { width } = useWindowDimensions();
+
+  const s = useMemo(() => clamp(width / 375, 0.9, 1.25), [width]);
+
+  const PAD = useMemo(() => clamp(Math.round(14 * s), 12, 18), [s]);
+  const GAP = useMemo(() => clamp(Math.round(10 * s), 8, 14), [s]);
+
+  const available = useMemo(() => width - PAD * 2, [width, PAD]);
+  const itemW = useMemo(() => (available - GAP * 3) / 4, [available, GAP]);
+  const btnSize = useMemo(() => clamp(Math.round(itemW), 62, 88), [itemW]);
+
+  const iconSizeSvg = useMemo(() => clamp(Math.round(btnSize * 0.48), 26, 40), [btnSize]);
+  const iconSizeIon = useMemo(() => clamp(Math.round(btnSize * 0.42), 24, 38), [btnSize]);
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        wrap: { marginTop: clamp(Math.round(14 * s), 10, 18) },
+
+        title: {
+          paddingHorizontal: PAD,
+          fontSize: clamp(Math.round(12 * s), 11, 14),
+          fontWeight: "800",
+          color: "#0B2B45",
+        },
+
+        row: {
+          paddingHorizontal: PAD,
+          paddingTop: clamp(Math.round(12 * s), 10, 16),
+          flexDirection: "row",
+          gap: GAP,
+        },
+
+        item: {
+          width: btnSize,
+          alignItems: "center",
+        },
+
+        btn: {
+          width: btnSize,
+          height: btnSize,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+
+        iconOverlay: {
+          ...StyleSheet.absoluteFillObject,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+
+        label: {
+          marginTop: clamp(Math.round(8 * s), 6, 10),
+          fontSize: clamp(Math.round(11 * s), 10, 13),
+          fontWeight: "800",
+          color: "#0B2B45",
+        },
+      }),
+    [s, PAD, GAP, btnSize]
+  );
+
   return (
     <View style={styles.wrap}>
       <Text style={styles.title}>Quick Actions</Text>
 
       <View style={styles.row}>
         <QuickAction
+          itemStyle={styles.item}
+          btnStyle={styles.btn}
           label="Alert"
           onPress={onAlert ?? (() => {})}
-          // 🔧 Nudge alert slightly down-right (tweak if needed)
           iconNudge={{ x: 0, y: -4 }}
-          Icon={() => <AlertSvg width={34} height={34} />}
+          Icon={(sz) => <AlertSvg width={sz} height={sz} />}
+          tileSize={btnSize}
+          iconOverlayStyle={styles.iconOverlay}
+          labelStyle={styles.label}
+          iconSize={iconSizeSvg}
         />
+
         <QuickAction
+          itemStyle={styles.item}
+          btnStyle={styles.btn}
           label="Profile"
           onPress={onProfile ?? (() => {})}
-          // 🔧 Nudge profile slightly down (tweak if needed)
           iconNudge={{ x: 0, y: -4 }}
-          Icon={() => <ProfileIconSvg width={34} height={34} />}
+          Icon={(sz) => <ProfileIconSvg width={sz} height={sz} />}
+          tileSize={btnSize}
+          iconOverlayStyle={styles.iconOverlay}
+          labelStyle={styles.label}
+          iconSize={iconSizeSvg}
         />
+
         <QuickAction
+          itemStyle={styles.item}
+          btnStyle={styles.btn}
           label="Sign out"
           onPress={onSignOut ?? (() => {})}
           iconNudge={{ x: 0, y: -4 }}
-          Icon={() => <Ionicons name="log-out-outline" size={30} color="#fff" />}
+          Icon={(sz) => <Ionicons name="log-out-outline" size={sz} color="#fff" />}
+          tileSize={btnSize}
+          iconOverlayStyle={styles.iconOverlay}
+          labelStyle={styles.label}
+          iconSize={iconSizeIon}
         />
+
         <QuickAction
+          itemStyle={styles.item}
+          btnStyle={styles.btn}
           label="Hide App"
           onPress={onHideApp ?? (() => {})}
           iconNudge={{ x: 0, y: -4 }}
-          Icon={() => <Ionicons name="eye-off-outline" size={30} color="#fff" />}
+          Icon={(sz) => <Ionicons name="eye-off-outline" size={sz} color="#fff" />}
+          tileSize={btnSize}
+          iconOverlayStyle={styles.iconOverlay}
+          labelStyle={styles.label}
+          iconSize={iconSizeIon}
         />
       </View>
     </View>
@@ -65,83 +153,53 @@ function QuickAction({
   onPress,
   Icon,
   iconNudge = { x: 0, y: 0 },
+  tileSize,
+  iconSize,
+  itemStyle,
+  btnStyle,
+  iconOverlayStyle,
+  labelStyle,
 }: {
   label: string;
   onPress: () => void;
-  Icon: React.ComponentType;
+  Icon: IconRenderer;
   iconNudge?: { x?: number; y?: number };
+  tileSize: number;
+  iconSize: number;
+  itemStyle: any;
+  btnStyle: any;
+  iconOverlayStyle: any;
+  labelStyle: any;
 }) {
   const x = iconNudge.x ?? 0;
   const y = iconNudge.y ?? 0;
 
   return (
-    <View style={styles.item}>
+    <View style={itemStyle}>
       <Pressable
         onPress={onPress}
         hitSlop={12}
         style={({ pressed }) => [
-          styles.btn,
+          btnStyle,
           pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
         ]}
       >
-        <BlueBoxSvg width={TILE_SIZE} height={TILE_SIZE} />
+        <BlueBoxSvg width={tileSize} height={tileSize} />
 
-        {/* ✅ absolute fill + translate nudge */}
         <View
           pointerEvents="none"
           style={[
-            styles.iconOverlay,
+            iconOverlayStyle,
             { transform: [{ translateX: x }, { translateY: y }] },
           ]}
         >
-          <Icon />
+          {Icon(iconSize)}
         </View>
       </Pressable>
 
-      <Text style={styles.label} numberOfLines={1}>
+      <Text style={labelStyle} numberOfLines={1}>
         {label}
       </Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: { marginTop: 14 },
-
-  title: {
-    paddingHorizontal: 14,
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#0B2B45",
-  },
-
-  row: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-
-  item: { width: "24%", alignItems: "center" },
-
-  btn: {
-    width: 72,
-    height: 72,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  // ✅ use absoluteFill so the overlay is exactly the same as the tile area
-  iconOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  label: {
-    marginTop: 8,
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#0B2B45",
-  },
-});

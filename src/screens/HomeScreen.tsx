@@ -7,6 +7,7 @@ import {
   Pressable,
   StatusBar,
   ScrollView,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,15 +24,31 @@ type Props = {
   onQuickExit?: () => void;
   onTabChange?: (tab: TabKey) => void;
   initialTab?: TabKey;
+
+  // ✅ NEW
+  onOpenNotifications?: () => void;
 };
+
+const BG = "#F5FAFE";
+const TEXT_DARK = "#0B2B45";
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
 
 export default function HomeScreen({
   onQuickExit,
   onTabChange,
   initialTab = "Home",
+  onOpenNotifications,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+
+  // ✅ scale based on common mobile width (375)
+  const s = useMemo(() => clamp(width / 375, 0.9, 1.25), [width]);
 
   const NAV_BASE_HEIGHT = 78;
   const FAB_SIZE = 62;
@@ -42,7 +59,11 @@ export default function HomeScreen({
   const chevronBottom = navHeight + 90;
   const fabBottom = navHeight - FAB_SIZE / 2 - 10;
 
-  const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + 6;
+  // ✅ FIX: add enough space so content won't go under the nav + FAB overlap
+  const CONTENT_BOTTOM_PAD = useMemo(() => {
+    const fabOverlapPad = Math.round(FAB_SIZE * 0.55); // extra room for center FAB
+    return navHeight + fabOverlapPad + 16;
+  }, [navHeight]);
 
   const handleTab = (key: TabKey) => {
     setActiveTab(key);
@@ -100,27 +121,125 @@ export default function HomeScreen({
     []
   );
 
+  const PAD = useMemo(() => clamp(Math.round(16 * s), 12, 20), [s]);
+  const GAP = useMemo(() => clamp(Math.round(16 * s), 12, 18), [s]);
+
+  const logoW = clamp(Math.round(width * 0.48), 150, 230);
+  const logoH = clamp(Math.round(36 * s), 30, 42);
+
+  const iconBtnSize = clamp(Math.round(38 * s), 34, 44);
+  const notifIconSize = clamp(Math.round(20 * s), 18, 24);
+  const helpIconSize = clamp(Math.round(22 * s), 20, 26);
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        safe: { flex: 1, backgroundColor: BG },
+        page: { flex: 1, backgroundColor: BG },
+
+        topBar: {
+          paddingHorizontal: PAD,
+          paddingBottom: clamp(Math.round(14 * s), 10, 18),
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        },
+
+        logoWrap: {
+          height: logoH,
+          width: logoW,
+          justifyContent: "center",
+        },
+
+        rightActions: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: clamp(Math.round(14 * s), 10, 16),
+        },
+
+        iconBtn: {
+          width: iconBtnSize,
+          height: iconBtnSize,
+          borderRadius: 999,
+          backgroundColor: "#F0F6FF",
+          alignItems: "center",
+          justifyContent: "center",
+          borderWidth: 1,
+          borderColor: "#E7EEF7",
+        },
+
+        badge: {
+          position: "absolute",
+          right: -3,
+          top: -3,
+          minWidth: clamp(Math.round(20 * s), 18, 22),
+          height: clamp(Math.round(20 * s), 18, 22),
+          paddingHorizontal: clamp(Math.round(6 * s), 5, 7),
+          borderRadius: 999,
+          backgroundColor: "#EF4444",
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        badgeText: {
+          fontSize: clamp(Math.round(10 * s), 9, 12),
+          fontWeight: "900",
+          color: "#fff",
+          lineHeight: clamp(Math.round(12 * s), 10, 14),
+        },
+
+        scrollContent: {
+          paddingTop: clamp(Math.round(10 * s), 8, 12),
+          rowGap: GAP,
+        },
+
+        sectionRow: {
+          marginTop: clamp(Math.round(6 * s), 4, 8),
+          paddingHorizontal: PAD,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        },
+        sectionTitle: {
+          fontSize: clamp(Math.round(12 * s), 11, 14),
+          fontWeight: "800",
+          color: TEXT_DARK,
+        },
+        seeMore: {
+          fontSize: clamp(Math.round(11 * s), 10, 13),
+          fontWeight: "800",
+          color: Colors.link,
+        },
+
+        logsWrap: {
+          paddingHorizontal: PAD,
+          paddingTop: clamp(Math.round(10 * s), 8, 12),
+          gap: clamp(Math.round(12 * s), 10, 14),
+        },
+      }),
+    [PAD, GAP, s, logoW, logoH, iconBtnSize]
+  );
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.page}>
         {/* Top header */}
-        <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 10) }]}>
+        <View style={[styles.topBar, { paddingTop: Math.max(insets.top, clamp(Math.round(10 * s), 8, 14)) }]}>
           <View style={styles.logoWrap}>
-            <HomeScreenLogo width="100%" height="100%" />
+            <HomeScreenLogo width={logoW} height={logoH} />
           </View>
 
           <View style={styles.rightActions}>
             <Pressable
-              onPress={() => {}}
+              onPress={onOpenNotifications ?? (() => {})}
               hitSlop={12}
               style={({ pressed }) => [
                 styles.iconBtn,
                 pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
               ]}
             >
-              <Ionicons name="notifications-outline" size={20} color="#0B2B45" />
+              <Ionicons name="notifications-outline" size={notifIconSize} color={TEXT_DARK} />
               {notifCount > 0 ? (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>
@@ -138,13 +257,15 @@ export default function HomeScreen({
                 pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
               ]}
             >
-              <Ionicons name="help-circle-outline" size={22} color="#0B2B45" />
+              <Ionicons name="help-circle-outline" size={helpIconSize} color={TEXT_DARK} />
             </Pressable>
           </View>
         </View>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
+          // ✅ Optional: keeps the scroll indicator above the nav (nice polish)
+          scrollIndicatorInsets={{ bottom: CONTENT_BOTTOM_PAD }}
           contentContainerStyle={[
             styles.scrollContent,
             { paddingBottom: CONTENT_BOTTOM_PAD },
@@ -189,88 +310,3 @@ export default function HomeScreen({
     </SafeAreaView>
   );
 }
-
-const BG = "#F5FAFE";
-const TEXT_DARK = "#0B2B45";
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: BG },
-  page: { flex: 1, backgroundColor: BG },
-
-  // ✅ More padding = more air
-  topBar: {
-    paddingHorizontal: 16, // was 14
-    paddingBottom: 14, // was 10
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  // ✅ Slightly bigger logo area
-  logoWrap: {
-    height: 36,
-    width: 180,
-    justifyContent: "center",
-  },
-
-  // ✅ More spacing between right icons
-  rightActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14, // was 10
-  },
-
-  // ✅ Slightly bigger buttons with breathing space
-  iconBtn: {
-    width: 38, // was 34
-    height: 38, // was 34
-    borderRadius: 999,
-    backgroundColor: "#F0F6FF",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#E7EEF7",
-  },
-
-  badge: {
-    position: "absolute",
-    right: -3,
-    top: -3,
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 6,
-    borderRadius: 999,
-    backgroundColor: "#EF4444",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: "900",
-    color: "#fff",
-    lineHeight: 12,
-  },
-
-  // ✅ More vertical spacing for whole page content
-  scrollContent: {
-    paddingTop: 10, // was none
-    rowGap: 16, // ✅ adds consistent space between sections
-  },
-
-  sectionRow: {
-    marginTop: 6,
-    paddingHorizontal: 16, // was 14
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  sectionTitle: { fontSize: 12, fontWeight: "800", color: TEXT_DARK },
-  seeMore: { fontSize: 11, fontWeight: "800", color: Colors.link },
-
-  // ✅ More spacing between cards
-  logsWrap: {
-    paddingHorizontal: 16, // was 14
-    paddingTop: 10,
-    gap: 12, // was 10
-  },
-});
