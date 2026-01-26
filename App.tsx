@@ -20,6 +20,7 @@ import PinScreen from "./src/screens/PinScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import InboxScreen from "./src/screens/HotlinesScreen";
 import ReportScreen from "./src/screens/ReportScreen";
+import SettingsScreen from "./src/screens/SettingsScreen"; // ✅ ADD
 
 // Incident flow screens (inside Main)
 import IncidentLogScreen from "./src/screens/IncidentLogScreen";
@@ -51,8 +52,7 @@ function MainShell({ onLogout }: { onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState<TabKey>("Home");
 
   const [incidentStep, setIncidentStep] = useState<IncidentStep>("form");
-  const [incidentPreview, setIncidentPreview] =
-    useState<IncidentPreviewData | null>(null);
+  const [incidentPreview, setIncidentPreview] = useState<IncidentPreviewData | null>(null);
 
   const alertNo = useMemo(() => "676767", []);
   const confirmedDateLine = useMemo(() => {
@@ -102,31 +102,34 @@ function MainShell({ onLogout }: { onLogout: () => void }) {
 
   if (activeTab === "Home") {
     return (
-      <HomeScreen
-        initialTab="Home"
-        onQuickExit={handleQuickExit}
-        onTabChange={handleTabChange}
-      />
+      <HomeScreen initialTab="Home" onQuickExit={handleQuickExit} onTabChange={handleTabChange} />
     );
   }
 
   if (activeTab === "Inbox") {
     return (
-      <InboxScreen
-        initialTab="Inbox"
-        onQuickExit={handleQuickExit}
-        onTabChange={handleTabChange}
-      />
+      <InboxScreen initialTab="Inbox" onQuickExit={handleQuickExit} onTabChange={handleTabChange} />
     );
   }
 
-  // ✅ NEW: Reports tab opens ReportScreen
   if (activeTab === "Reports") {
     return (
       <ReportScreen
         initialTab="Reports"
         onQuickExit={handleQuickExit}
         onTabChange={handleTabChange}
+      />
+    );
+  }
+
+  // ✅ THIS is what makes BottomNavBar "Settings" open SettingsScreen.tsx
+  if (activeTab === "Settings") {
+    return (
+      <SettingsScreen
+        initialTab="Settings"
+        onTabChange={handleTabChange}
+        onQuickExit={handleQuickExit}
+        onLogout={onLogout}
       />
     );
   }
@@ -177,7 +180,7 @@ function MainShell({ onLogout }: { onLogout: () => void }) {
   }
 
   if (activeTab === "Ledger") return <Placeholder title="Ledger" />;
-  return <Placeholder title="Settings" />;
+  return <Placeholder title="Unknown" />;
 }
 
 export default function App() {
@@ -188,16 +191,11 @@ export default function App() {
           <Stack.Navigator
             id="root-stack"
             initialRouteName="Splash"
-            screenOptions={{
-              headerShown: false,
-              gestureEnabled: true,
-            }}
+            screenOptions={{ headerShown: false, gestureEnabled: true }}
           >
             <Stack.Screen name="Splash">
               {({ navigation }) => (
-                <AppSplashScreenWrapper
-                  onDone={() => navigation.replace("Login")}
-                />
+                <AppSplashScreenWrapper onDone={() => navigation.replace("Login")} />
               )}
             </Stack.Screen>
 
@@ -230,9 +228,7 @@ export default function App() {
                 <SecurityQuestionsScreen
                   currentIndex={1}
                   totalQuestions={3}
-                  onContinue={() =>
-                    navigation.navigate("Verify", { email: "johndoe@gmail.com" })
-                  }
+                  onContinue={() => navigation.navigate("Verify", { email: "johndoe@gmail.com" })}
                 />
               )}
             </Stack.Screen>
@@ -242,9 +238,7 @@ export default function App() {
                 <VerifyAccountScreen
                   email={route.params?.email ?? "johndoe@gmail.com"}
                   onVerify={() => navigation.navigate("Pin")}
-                  onResendCode={() =>
-                    Alert.alert("Resent", "Verification code resent (demo).")
-                  }
+                  onResendCode={() => Alert.alert("Resent", "Verification code resent (demo).")}
                 />
               )}
             </Stack.Screen>
@@ -254,14 +248,9 @@ export default function App() {
                 <PinScreen
                   onVerified={(pin: string) => {
                     Alert.alert("Verified!", `PIN: ${pin}`);
-                    navigation.reset({
-                      index: 0,
-                      routes: [{ name: "Main" }],
-                    });
+                    navigation.reset({ index: 0, routes: [{ name: "Main" }] });
                   }}
-                  onForgotPin={() =>
-                    Alert.alert("Forgot PIN", "Go to reset PIN flow")
-                  }
+                  onForgotPin={() => Alert.alert("Forgot PIN", "Go to reset PIN flow")}
                 />
               )}
             </Stack.Screen>
@@ -270,10 +259,7 @@ export default function App() {
               {({ navigation }) => (
                 <MainShell
                   onLogout={() => {
-                    navigation.reset({
-                      index: 0,
-                      routes: [{ name: "Login" }],
-                    });
+                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
                   }}
                 />
               )}

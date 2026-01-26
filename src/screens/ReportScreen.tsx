@@ -30,6 +30,9 @@ type Props = {
   onQuickExit?: () => void;
   onTabChange?: (tab: TabKey) => void;
   initialTab?: TabKey;
+
+  // optional: if you want a back button like IncidentLogScreen
+  onBack?: () => void;
 };
 
 function ReportCard({
@@ -57,12 +60,14 @@ function ReportCard({
 
         <View style={styles.cardMetaRow}>
           <Text style={styles.cardMeta}>
-            {item.dateLeft}{"\n"}
+            {item.dateLeft}
+            {"\n"}
             {item.timeLeft}
           </Text>
 
           <Text style={styles.cardMeta}>
-            {item.dateRight}{"\n"}
+            {item.dateRight}
+            {"\n"}
             {item.timeRight}
           </Text>
         </View>
@@ -75,7 +80,12 @@ function ReportCard({
   );
 }
 
-export default function ReportScreen({ onQuickExit, onTabChange, initialTab }: Props) {
+export default function ReportScreen({
+  onQuickExit,
+  onTabChange,
+  initialTab,
+  onBack,
+}: Props) {
   const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab ?? "Reports");
@@ -90,7 +100,8 @@ export default function ReportScreen({ onQuickExit, onTabChange, initialTab }: P
   const chevronBottom = navHeight + 90;
   const fabBottom = navHeight - FAB_SIZE / 2 - 10;
 
-  const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + 6;
+  const CONTENT_BOTTOM_PAD =
+    Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + 6;
 
   const handleTab = (key: TabKey) => {
     setActiveTab(key);
@@ -163,10 +174,25 @@ export default function ReportScreen({ onQuickExit, onTabChange, initialTab }: P
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.page}>
+        {/* ✅ Header: TITLE ON THE LEFT */}
         <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 8) }]}>
-          <Text style={styles.headerTitle}>Reports</Text>
+          {onBack ? (
+            <Pressable
+              onPress={onBack}
+              hitSlop={12}
+              style={({ pressed }) => [
+                styles.backBtn,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Ionicons name="chevron-back" size={22} color={Colors.primary} />
+            </Pressable>
+          ) : null}
+
+          <Text style={styles.topTitle}>Reports</Text>
         </View>
 
+        {/* Segmented filter */}
         <View style={styles.segmentWrap}>
           <View style={styles.segmentPill}>
             {(["Pending", "On going", "Cancelled", "Resolved"] as FilterKey[]).map(
@@ -198,6 +224,7 @@ export default function ReportScreen({ onQuickExit, onTabChange, initialTab }: P
           </View>
         </View>
 
+        {/* List */}
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
@@ -223,6 +250,7 @@ export default function ReportScreen({ onQuickExit, onTabChange, initialTab }: P
           })()}
         </ScrollView>
 
+        {/* Bottom nav */}
         <BottomNavBar
           activeTab={activeTab}
           onTabPress={handleTab}
@@ -248,14 +276,26 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
   page: { flex: 1, backgroundColor: BG },
 
+  // ✅ Left-aligned header row
   topBar: {
     paddingHorizontal: 14,
-    paddingBottom: 8,
+    paddingBottom: 10,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "flex-start", // ✅ left align
+    gap: 10, // ✅ space between back button and title
   },
-  headerTitle: {
-    fontSize: 16,
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // ✅ bigger title (you asked "make it more big")
+  topTitle: {
+    fontSize: 22,
     fontWeight: "900",
     color: TEXT_DARK,
   },
@@ -309,6 +349,7 @@ const styles = StyleSheet.create({
     paddingLeft: 2,
   },
 
+  // Card
   card: {
     flexDirection: "row",
     alignItems: "stretch",

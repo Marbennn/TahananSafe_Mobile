@@ -1,57 +1,167 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   LayoutChangeEvent,
-  Pressable,
+  PanResponder,
+  Animated,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 
 import GreetingCardSvg from "../../../assets/HomeScreen/GreetingCard.svg";
+import Carousel2Svg from "../../../assets/HomeScreen/Carousel2.svg";
 
 type Props = {
   greeting: string;
   dateLine: string;
   userName?: string;
-  dots?: { count: number; active: number };
-  onGridPress?: () => void;
+  onGridPress?: () => void; // kept for compatibility (not used now)
 };
+
+const SLIDE_COUNT = 2;
 
 export default function GreetingCard({
   greeting,
   dateLine,
   userName = "User",
-  dots = { count: 2, active: 0 },
-  onGridPress,
 }: Props) {
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const [activeIndex, setActiveIndex] = useState(0);
 
-  const onLayout = useCallback((e: LayoutChangeEvent) => {
-    const { width, height } = e.nativeEvent.layout;
-    setSize((prev) =>
-      prev.w === width && prev.h === height ? prev : { w: width, h: height }
-    );
-  }, []);
+  const translateX = useRef(new Animated.Value(0)).current;
+  const widthRef = useRef(0);
+  const baseXRef = useRef(0);
+  const activeIndexRef = useRef(0);
+  activeIndexRef.current = activeIndex;
+
+  const clamp = (v: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, v));
+
+  const onLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      const { width, height } = e.nativeEvent.layout;
+
+      const w = Math.round(width);
+      const h = Math.round(height);
+
+      setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+
+      if (w > 0 && h > 0) {
+        widthRef.current = w;
+
+        const base = -activeIndexRef.current * w;
+        baseXRef.current = base;
+        translateX.setValue(base);
+      }
+    },
+    [translateX]
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_evt, g) => {
+          const dx = Math.abs(g.dx);
+          const dy = Math.abs(g.dy);
+          return dx > 8 && dx > dy;
+        },
+        onPanResponderGrant: () => {
+          translateX.stopAnimation();
+        },
+        onPanResponderMove: (_evt, g) => {
+          const w = widthRef.current;
+          if (!w) return;
+
+          const minX = -(SLIDE_COUNT - 1) * w - 40;
+          const maxX = 40;
+
+          translateX.setValue(clamp(baseXRef.current + g.dx, minX, maxX));
+        },
+        onPanResponderRelease: (_evt, g) => {
+          const w = widthRef.current;
+          if (!w) return;
+
+          const threshold = w * 0.25;
+          let nextIndex = activeIndexRef.current;
+
+          if (g.dx < -threshold && nextIndex < SLIDE_COUNT - 1) nextIndex += 1;
+          if (g.dx > threshold && nextIndex > 0) nextIndex -= 1;
+
+          const toValue = -nextIndex * w;
+
+          Animated.spring(translateX, {
+            toValue,
+            useNativeDriver: true,
+            bounciness: 0,
+            speed: 18,
+          }).start(() => {
+            baseXRef.current = toValue;
+            setActiveIndex(nextIndex);
+          });
+        },
+        onPanResponderTerminate: () => {
+          Animated.spring(translateX, {
+            toValue: baseXRef.current,
+            useNativeDriver: true,
+            bounciness: 0,
+            speed: 18,
+          }).start();
+        },
+      }),
+    [translateX]
+  );
+
+  // Fade greeting texts when swiping to slide 2 (avoid overlap)
+  const w = Math.max(size.w, 1);
+  const greetingOpacity = useMemo(
+    () =>
+      translateX.interpolate({
+        inputRange: [-w, -w * 0.6, -w * 0.4, 0],
+        outputRange: [0, 0, 1, 1],
+        extrapolate: "clamp",
+      }),
+    [translateX, w]
+  );
 
   return (
-    <View style={styles.card} onLayout={onLayout}>
+    <View style={styles.card} onLayout={onLayout} {...panResponder.panHandlers}>
       {size.w > 0 && size.h > 0 ? (
-        <GreetingCardSvg
-          width={size.w}
-          height={size.h}
-          preserveAspectRatio="xMidYMid slice"
-          style={StyleSheet.absoluteFillObject}
-        />
+        <Animated.View
+          style={[
+            styles.bgTrack,
+            {
+              width: size.w * SLIDE_COUNT,
+              height: size.h,
+              transform: [{ translateX }],
+            },
+          ]}
+        >
+          {/* Slide 1 */}
+          <View style={{ width: size.w, height: size.h }}>
+            <GreetingCardSvg
+              width={size.w}
+              height={size.h}
+              preserveAspectRatio="xMidYMid slice"
+            />
+          </View>
+
+          {/* Slide 2 */}
+          <View style={{ width: size.w, height: size.h }}>
+            <Carousel2Svg
+              width={size.w}
+              height={size.h}
+              preserveAspectRatio="xMidYMid slice"
+            />
+          </View>
+        </Animated.View>
       ) : (
         <View style={styles.fallbackBg} />
       )}
 
-      <View pointerEvents="none" style={styles.rightAccent} />
-      <View pointerEvents="none" style={styles.rightAccent2} />
-
+      {/* Foreground content */}
       <View style={styles.overlay}>
-        <View style={styles.left}>
+        <Animated.View style={[styles.left, { opacity: greetingOpacity }]}>
           <Text style={styles.title} numberOfLines={1}>
             {greeting}, {userName}!
           </Text>
@@ -59,26 +169,13 @@ export default function GreetingCard({
           <Text style={styles.sub} numberOfLines={1}>
             {dateLine}
           </Text>
-        </View>
-
-        <View style={styles.gridWrap}>
-          <Pressable
-            onPress={onGridPress}
-            hitSlop={10}
-            style={({ pressed }) => [
-              styles.gridBtn,
-              pressed && { transform: [{ scale: 0.98 }], opacity: 0.95 },
-            ]}
-          >
-            <Ionicons name="grid-outline" size={18} color="#0B2B45" />
-          </Pressable>
-        </View>
+        </Animated.View>
 
         <View style={styles.dotsRow} pointerEvents="none">
-          {Array.from({ length: dots.count }).map((_, i) => {
-            const active = i === dots.active;
+          {Array.from({ length: SLIDE_COUNT }).map((_, i) => {
+            const isActive = i === activeIndex;
             return (
-              <View key={i} style={[styles.dot, active && styles.dotActive]} />
+              <View key={i} style={[styles.dot, isActive && styles.dotActive]} />
             );
           })}
         </View>
@@ -98,30 +195,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#0B3A5A",
   },
 
+  bgTrack: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    flexDirection: "row",
+  },
+
   fallbackBg: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#0B3A5A",
-  },
-
-  rightAccent: {
-    position: "absolute",
-    right: -32,
-    top: -16,
-    width: 155,
-    height: 155,
-    borderRadius: 28,
-    backgroundColor: "rgba(0,0,0,0.18)",
-    transform: [{ rotate: "12deg" }],
-  },
-  rightAccent2: {
-    position: "absolute",
-    right: -20,
-    bottom: -30,
-    width: 140,
-    height: 140,
-    borderRadius: 26,
-    backgroundColor: "rgba(0,0,0,0.10)",
-    transform: [{ rotate: "12deg" }],
   },
 
   overlay: {
@@ -136,7 +219,6 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
 
-  // ✅ bigger like your screenshot
   title: {
     color: "#fff",
     fontSize: 16,
@@ -145,29 +227,11 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // ✅ slightly bigger too
   sub: {
     color: "rgba(255,255,255,0.85)",
     fontSize: 11,
     fontWeight: "700",
     lineHeight: 14,
-  },
-
-  gridWrap: {
-    position: "absolute",
-    right: 12,
-    bottom: 20,
-  },
-
-  gridBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    alignItems: "center",
-    justifyContent: "center",
   },
 
   dotsRow: {
