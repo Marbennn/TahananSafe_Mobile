@@ -10,7 +10,7 @@ export const Colors = {
   // ✅ Text colors (from your Figma "Text Colors")
   heading: "#374151",
   body: "#41546E",
-  muted: "#6B7280", // keep if you still use this
+  muted: "#6B7280",
   timestamp: "#888888",
   placeholder: "#AAAAAA",
   inboxRead: "#666666",
@@ -21,6 +21,6 @@ export const Colors = {
   border: "#E3E8EF",
   inputBg: "#F8FAFC",
 
-  // ✅ Gradient (0% -> 100%)
-  gradient: ["#07519C", "#021C36"],
+  // ✅ Gradient MUST be a tuple (at least 2 colors) for expo-linear-gradient typing
+  gradient: ["#07519C", "#021C36"] as const,
 } as const;

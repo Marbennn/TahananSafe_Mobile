@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
 
 export type TabKey =
@@ -74,13 +75,22 @@ export default function BottomNavBar({
   const labelMarginTop = useMemo(() => clamp(Math.round(4 * s), 3, 6), [s]);
 
   const navPaddingTop = useMemo(() => clamp(Math.round(10 * s), 8, 14), [s]);
-  const navPaddingHorizontal = useMemo(() => clamp(Math.round(4 * s), 2, 10), [s]);
-  const itemPaddingBottom = useMemo(() => clamp(Math.round(6 * s), 4, 10), [s]);
+  const navPaddingHorizontal = useMemo(
+    () => clamp(Math.round(4 * s), 2, 10),
+    [s]
+  );
+  const itemPaddingBottom = useMemo(
+    () => clamp(Math.round(6 * s), 4, 10),
+    [s]
+  );
 
   const centerSpacerH = useMemo(() => clamp(Math.round(26 * s), 22, 32), [s]);
 
   // ✅ Make FAB size responsive too (but respect prop)
-  const fabSize = useMemo(() => clamp(Math.round(fabSizeProp * s), 54, 76), [fabSizeProp, s]);
+  const fabSize = useMemo(
+    () => clamp(Math.round(fabSizeProp * s), 54, 76),
+    [fabSizeProp, s]
+  );
 
   const navBaseHeight = Math.max(0, navHeight - paddingBottom);
 
@@ -202,10 +212,8 @@ export default function BottomNavBar({
           borderWidth: 0,
         },
 
-        fab: {
-          backgroundColor: Colors.primary,
-          alignItems: "center",
-          justifyContent: "center",
+        // ✅ Pressable keeps shadow (do NOT set overflow hidden here)
+        fabPressable: {
           ...Platform.select({
             ios: {
               shadowColor: "#000",
@@ -215,6 +223,14 @@ export default function BottomNavBar({
             },
             android: { elevation: 10 },
           }),
+        },
+
+        // ✅ Inner clips the gradient to a circle
+        fabInner: {
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden",
         },
       }),
     [
@@ -230,7 +246,10 @@ export default function BottomNavBar({
     <>
       {/* Chevron (optional) */}
       {Chevron ? (
-        <View style={[styles.chevronWrap, { bottom: chevronBottom }]} pointerEvents="none">
+        <View
+          style={[styles.chevronWrap, { bottom: chevronBottom }]}
+          pointerEvents="none"
+        >
           <Chevron
             width={clamp(Math.round(22 * s), 18, 26)}
             height={clamp(Math.round(22 * s), 18, 26)}
@@ -249,7 +268,12 @@ export default function BottomNavBar({
 
         {/* Notch curve (blended) */}
         <View pointerEvents="none" style={styles.notchRow}>
-          <View style={[styles.notchMask, { width: NOTCH_DIAMETER, height: NOTCH_RADIUS }]}>
+          <View
+            style={[
+              styles.notchMask,
+              { width: NOTCH_DIAMETER, height: NOTCH_RADIUS },
+            ]}
+          >
             <View
               style={[
                 styles.notchCircle,
@@ -291,7 +315,12 @@ export default function BottomNavBar({
         {/* Center slot under FAB */}
         <View style={styles.centerSlot}>
           <View style={{ height: centerSpacerH }} />
-          <Text style={[styles.label, activeTab === "Incident" && styles.labelActive]}>
+          <Text
+            style={[
+              styles.label,
+              activeTab === "Incident" && styles.labelActive,
+            ]}
+          >
             {centerLabel}
           </Text>
         </View>
@@ -335,19 +364,31 @@ export default function BottomNavBar({
         />
       </View>
 
-      {/* FAB */}
+      {/* FAB (GRADIENT) */}
       <View style={[styles.fabWrap, { bottom: fabBottomFixed }]}>
         <Pressable
           onPress={onFabPress}
           onLongPress={onFabLongPress}
           delayLongPress={350}
           style={({ pressed }) => [
-            styles.fab,
+            styles.fabPressable,
             { width: fabSize, height: fabSize, borderRadius: fabSize / 2 },
             pressed && { transform: [{ scale: 0.98 }] },
           ]}
         >
-          <Ionicons name="add" size={fabIconSize} color="#FFFFFF" />
+          <View style={[styles.fabInner, { borderRadius: fabSize / 2 }]}>
+            <LinearGradient
+              // ✅ FIX: do NOT cast to string[] — this breaks the tuple typing
+              colors={Colors.gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[
+                StyleSheet.absoluteFillObject,
+                { borderRadius: fabSize / 2 },
+              ]}
+            />
+            <Ionicons name="add" size={fabIconSize} color="#FFFFFF" />
+          </View>
         </Pressable>
       </View>
     </>
@@ -375,7 +416,11 @@ function NavItem({
 }) {
   return (
     <Pressable onPress={onPress} style={itemStyle} hitSlop={10}>
-      <Ionicons name={icon} size={iconSize} color={active ? Colors.primary : "#9AA4B2"} />
+      <Ionicons
+        name={icon}
+        size={iconSize}
+        color={active ? Colors.primary : "#9AA4B2"}
+      />
       <Text style={[labelStyle, active && labelActiveStyle]} numberOfLines={1}>
         {label}
       </Text>

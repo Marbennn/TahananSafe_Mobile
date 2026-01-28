@@ -61,7 +61,7 @@ export default function HomeScreen({
 
   // ✅ FIX: add enough space so content won't go under the nav + FAB overlap
   const CONTENT_BOTTOM_PAD = useMemo(() => {
-    const fabOverlapPad = Math.round(FAB_SIZE * 0.55); // extra room for center FAB
+    const fabOverlapPad = Math.round(FAB_SIZE * 0.55);
     return navHeight + fabOverlapPad + 16;
   }, [navHeight]);
 
@@ -131,6 +131,9 @@ export default function HomeScreen({
   const notifIconSize = clamp(Math.round(20 * s), 18, 24);
   const helpIconSize = clamp(Math.round(22 * s), 20, 26);
 
+  // ✅ NEW: small extra top padding only (SafeAreaView already handles insets.top)
+  const HEADER_TOP_PAD = useMemo(() => clamp(Math.round(6 * s), 2, 10), [s]);
+
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -139,7 +142,8 @@ export default function HomeScreen({
 
         topBar: {
           paddingHorizontal: PAD,
-          paddingBottom: clamp(Math.round(14 * s), 10, 18),
+          paddingTop: HEADER_TOP_PAD, // ✅ moved up
+          paddingBottom: clamp(Math.round(10 * s), 6, 14), // ✅ slightly tighter
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
@@ -216,7 +220,7 @@ export default function HomeScreen({
           gap: clamp(Math.round(12 * s), 10, 14),
         },
       }),
-    [PAD, GAP, s, logoW, logoH, iconBtnSize]
+    [PAD, GAP, s, logoW, logoH, iconBtnSize, HEADER_TOP_PAD]
   );
 
   return (
@@ -225,7 +229,7 @@ export default function HomeScreen({
 
       <View style={styles.page}>
         {/* Top header */}
-        <View style={[styles.topBar, { paddingTop: Math.max(insets.top, clamp(Math.round(10 * s), 8, 14)) }]}>
+        <View style={styles.topBar}>
           <View style={styles.logoWrap}>
             <HomeScreenLogo width={logoW} height={logoH} />
           </View>
@@ -239,7 +243,11 @@ export default function HomeScreen({
                 pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
               ]}
             >
-              <Ionicons name="notifications-outline" size={notifIconSize} color={TEXT_DARK} />
+              <Ionicons
+                name="notifications-outline"
+                size={notifIconSize}
+                color={TEXT_DARK}
+              />
               {notifCount > 0 ? (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>
@@ -257,14 +265,17 @@ export default function HomeScreen({
                 pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
               ]}
             >
-              <Ionicons name="help-circle-outline" size={helpIconSize} color={TEXT_DARK} />
+              <Ionicons
+                name="help-circle-outline"
+                size={helpIconSize}
+                color={TEXT_DARK}
+              />
             </Pressable>
           </View>
         </View>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          // ✅ Optional: keeps the scroll indicator above the nav (nice polish)
           scrollIndicatorInsets={{ bottom: CONTENT_BOTTOM_PAD }}
           contentContainerStyle={[
             styles.scrollContent,
