@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, Pressable, useWindowDimensions } from "react-na
 import { Ionicons } from "@expo/vector-icons";
 
 import BlueBoxSvg from "../../../assets/HomeScreen/BlueBox.svg";
-
 import AlertSvg from "../../../assets/HomeScreen/AlertIcon.svg";
 import ProfileIconSvg from "../../../assets/HomeScreen/ProfileIcon.svg";
 
@@ -28,14 +27,26 @@ export default function QuickActions({
 }: Props) {
   const { width } = useWindowDimensions();
 
+  // scale factor
   const s = useMemo(() => clamp(width / 375, 0.9, 1.25), [width]);
 
-  const PAD = useMemo(() => clamp(Math.round(14 * s), 12, 18), [s]);
+  // base spacing
+  const BASE_PAD = useMemo(() => clamp(Math.round(16 * s), 12, 20), [s]);
   const GAP = useMemo(() => clamp(Math.round(10 * s), 8, 14), [s]);
 
-  const available = useMemo(() => width - PAD * 2, [width, PAD]);
-  const itemW = useMemo(() => (available - GAP * 3) / 4, [available, GAP]);
-  const btnSize = useMemo(() => clamp(Math.round(itemW), 62, 88), [itemW]);
+  // available width inside padding
+  const available = useMemo(() => width - BASE_PAD * 2, [width, BASE_PAD]);
+
+  // ideal tile width before rounding/clamping
+  const idealItemW = useMemo(() => (available - GAP * 3) / 4, [available, GAP]);
+
+  // actual tile size (rounded & clamped)
+  const btnSize = useMemo(() => clamp(Math.round(idealItemW), 62, 88), [idealItemW]);
+
+  // ✅ compute leftover and center perfectly
+  const rowContentW = useMemo(() => btnSize * 4 + GAP * 3, [btnSize, GAP]);
+  const extra = useMemo(() => Math.max(0, available - rowContentW), [available, rowContentW]);
+  const sidePad = useMemo(() => BASE_PAD + Math.floor(extra / 2), [BASE_PAD, extra]);
 
   const iconSizeSvg = useMemo(() => clamp(Math.round(btnSize * 0.48), 26, 40), [btnSize]);
   const iconSizeIon = useMemo(() => clamp(Math.round(btnSize * 0.42), 24, 38), [btnSize]);
@@ -46,17 +57,18 @@ export default function QuickActions({
         wrap: { marginTop: clamp(Math.round(14 * s), 10, 18) },
 
         title: {
-          paddingHorizontal: PAD,
+          paddingHorizontal: sidePad,
           fontSize: clamp(Math.round(12 * s), 11, 14),
           fontWeight: "800",
           color: "#0B2B45",
         },
 
         row: {
-          paddingHorizontal: PAD,
+          paddingHorizontal: sidePad,
           paddingTop: clamp(Math.round(12 * s), 10, 16),
           flexDirection: "row",
           gap: GAP,
+          justifyContent: "center", // ✅ keep row centered
         },
 
         item: {
@@ -82,9 +94,10 @@ export default function QuickActions({
           fontSize: clamp(Math.round(11 * s), 10, 13),
           fontWeight: "800",
           color: "#0B2B45",
+          textAlign: "center",
         },
       }),
-    [s, PAD, GAP, btnSize]
+    [s, sidePad, GAP, btnSize]
   );
 
   return (

@@ -3,3 +3,9 @@
 npx expo start -c --tunnel
 "Run on android"
 npx expo start -c
+
+npm install expo
+
+
+npx expo install react-native-safe-area-context expo-linear-gradient react-native-svg @expo/vector-icons react-native-screens react-native-gesture-handler react-native-reanimated
+npm install react-native-svg-transformer @react-navigation/native @react-navigation/native-stack @react-navigation/bottom-tabs
