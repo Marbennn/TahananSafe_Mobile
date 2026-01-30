@@ -27,6 +27,7 @@
   "private": true,
   "devDependencies": {
     "@types/react": "~19.1.10",
+    "babel-preset-expo": "^54.0.10",
     "react-native-svg-transformer": "^1.5.2",
     "typescript": "~5.9.2"
   }

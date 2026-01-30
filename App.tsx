@@ -16,15 +16,14 @@ import SignupScreen from "./src/screens/SignupScreen";
 import PersonalDetailsScreen from "./src/screens/PersonalDetailsScreen";
 import SecurityQuestionsScreen from "./src/screens/SecurityQuestionsScreen";
 import VerifyAccountScreen from "./src/screens/VerifyAccountScreen";
+import CreatePinScreen from "./src/screens/CreatePinScreen";
 import PinScreen from "./src/screens/PinScreen";
+
 import HomeScreen from "./src/screens/HomeScreen";
 import InboxScreen from "./src/screens/HotlinesScreen";
-
 import ReportScreen from "./src/screens/ReportScreen";
-import ReportDetailScreen from "./src/screens/ReportDetailScreen"; // ✅ clicked report screen
+import ReportDetailScreen from "./src/screens/ReportDetailScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
-
-// ✅ NEW: Notifications screen
 import NotificationsScreen from "./src/screens/NotificationsScreen";
 
 // Incident flow screens (inside Main)
@@ -35,21 +34,28 @@ import IncidentLogConfirmedScreen from "./src/screens/IncidentLogConfirmedScreen
 // Types
 import type { TabKey } from "./src/components/BottomNavBar";
 import type { IncidentPreviewData } from "./src/components/IncidentLogConfirmationScreen/IncidentPreviewCard";
-import type { ReportItem } from "./src/screens/ReportScreen"; // ✅ type exported from ReportScreen
+import type { ReportItem } from "./src/screens/ReportScreen";
 
 enableScreens(true);
 
 type RootStackParamList = {
   Splash: undefined;
-  Login: undefined;
+
+  // Onboarding flow
   Signup: undefined;
+  Verify: { email?: string; next: "PersonalDetails" | "Main" };
   PersonalDetails: undefined;
   Security: undefined;
-  Verify: { email?: string } | undefined;
+  CreatePin: undefined;
   Pin: undefined;
+
+  // Login flow
+  Login: undefined;
+
+  // App shell
   Main: undefined;
 
-  // ✅ NEW
+  // Extra
   Notifications: undefined;
 };
 
@@ -116,13 +122,11 @@ function MainShell({
   const handleTabChange = (tab: TabKey) => {
     setActiveTab(tab);
 
-    // leaving Incident tab resets incident flow
     if (tab !== "Incident") {
       setIncidentStep("form");
       setIncidentPreview(null);
     }
 
-    // leaving Reports tab resets reports flow
     if (tab !== "Reports") {
       setReportStep("list");
       setSelectedReport(null);
@@ -136,20 +140,17 @@ function MainShell({
     </View>
   );
 
-  // HOME
   if (activeTab === "Home") {
     return (
       <HomeScreen
         initialTab="Home"
         onQuickExit={handleQuickExit}
         onTabChange={handleTabChange}
-        // ✅ NEW: bell icon will open notifications
         onOpenNotifications={onOpenNotifications}
       />
     );
   }
 
-  // HOTLINES (Inbox key)
   if (activeTab === "Inbox") {
     return (
       <InboxScreen
@@ -160,7 +161,6 @@ function MainShell({
     );
   }
 
-  // REPORTS (LIST -> DETAIL)
   if (activeTab === "Reports") {
     if (reportStep === "list") {
       return (
@@ -176,7 +176,6 @@ function MainShell({
       );
     }
 
-    // detail
     if (!selectedReport) {
       setReportStep("list");
       return null;
@@ -193,7 +192,6 @@ function MainShell({
     );
   }
 
-  // SETTINGS
   if (activeTab === "Settings") {
     return (
       <SettingsScreen
@@ -205,7 +203,6 @@ function MainShell({
     );
   }
 
-  // INCIDENT FLOW
   if (activeTab === "Incident") {
     if (incidentStep === "form") {
       return (
@@ -251,7 +248,6 @@ function MainShell({
     );
   }
 
-  // fallback
   if (activeTab === "Ledger") return <Placeholder title="Ledger" />;
   return <Placeholder title="Unknown" />;
 }
@@ -266,47 +262,25 @@ export default function App() {
             initialRouteName="Splash"
             screenOptions={{ headerShown: false, gestureEnabled: true }}
           >
+            {/* ✅ Splash -> Signup */}
             <Stack.Screen name="Splash">
               {({ navigation }) => (
                 <AppSplashScreenWrapper
-                  onDone={() => navigation.replace("Login")}
+                  onDone={() => navigation.replace("Signup")}
                 />
               )}
             </Stack.Screen>
 
-            <Stack.Screen name="Login">
-              {({ navigation }) => (
-                <LoginScreen
-                  onGoSignup={() => navigation.navigate("Signup")}
-                  onLoginSuccess={() => navigation.navigate("Security")}
-                />
-              )}
-            </Stack.Screen>
-
+            {/* ✅ Signup -> Verify -> PersonalDetails */}
             <Stack.Screen name="Signup">
               {({ navigation }) => (
                 <SignupScreen
-                  onGoLogin={() => navigation.navigate("Login")}
-                  onSignupSuccess={() => navigation.navigate("PersonalDetails")}
-                />
-              )}
-            </Stack.Screen>
-
-            <Stack.Screen name="PersonalDetails">
-              {({ navigation }) => (
-                <PersonalDetailsScreen
-                  onSubmit={() => navigation.replace("Login")}
-                />
-              )}
-            </Stack.Screen>
-
-            <Stack.Screen name="Security">
-              {({ navigation }) => (
-                <SecurityQuestionsScreen
-                  currentIndex={1}
-                  totalQuestions={3}
-                  onContinue={() =>
-                    navigation.navigate("Verify", { email: "johndoe@gmail.com" })
+                  onGoLogin={() => navigation.replace("Login")}
+                  onSignupSuccess={() =>
+                    navigation.navigate("Verify", {
+                      email: "johndoe@gmail.com",
+                      next: "PersonalDetails",
+                    })
                   }
                 />
               )}
@@ -316,7 +290,15 @@ export default function App() {
               {({ navigation, route }) => (
                 <VerifyAccountScreen
                   email={route.params?.email ?? "johndoe@gmail.com"}
-                  onVerify={() => navigation.navigate("Pin")}
+                  onVerify={() => {
+                    const next = route.params?.next ?? "PersonalDetails";
+
+                    if (next === "Main") {
+                      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+                    } else {
+                      navigation.replace("PersonalDetails");
+                    }
+                  }}
                   onResendCode={() =>
                     Alert.alert("Resent", "Verification code resent (demo).")
                   }
@@ -324,12 +306,46 @@ export default function App() {
               )}
             </Stack.Screen>
 
+            {/* ✅ PersonalDetails -> Security */}
+            <Stack.Screen name="PersonalDetails">
+              {({ navigation }) => (
+                <PersonalDetailsScreen
+                  onSubmit={() => navigation.navigate("Security")}
+                />
+              )}
+            </Stack.Screen>
+
+            {/* ✅ Security -> CreatePin */}
+            <Stack.Screen name="Security">
+              {({ navigation }) => (
+                <SecurityQuestionsScreen
+                  currentIndex={1}
+                  totalQuestions={3}
+                  onContinue={() => navigation.navigate("CreatePin")}
+                />
+              )}
+            </Stack.Screen>
+
+            {/* ✅ CreatePin -> Pin */}
+            <Stack.Screen name="CreatePin">
+              {({ navigation }) => {
+                const CreatePinAny = CreatePinScreen as unknown as React.ComponentType<any>;
+                return (
+                  <CreatePinAny
+                    onContinue={() => navigation.navigate("Pin")}
+                    onBack={() => navigation.goBack()}
+                  />
+                );
+              }}
+            </Stack.Screen>
+
+            {/* ✅ Pin -> Login */}
             <Stack.Screen name="Pin">
               {({ navigation }) => (
                 <PinScreen
                   onVerified={(pin: string) => {
-                    Alert.alert("Verified!", `PIN: ${pin}`);
-                    navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+                    Alert.alert("PIN Saved!", `PIN: ${pin}`);
+                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
                   }}
                   onForgotPin={() =>
                     Alert.alert("Forgot PIN", "Go to reset PIN flow")
@@ -338,19 +354,33 @@ export default function App() {
               )}
             </Stack.Screen>
 
+            {/* ✅ Login -> Verify -> Home(Main) */}
+            <Stack.Screen name="Login">
+              {({ navigation }) => (
+                <LoginScreen
+                  onGoSignup={() => navigation.replace("Signup")}
+                  onLoginSuccess={() =>
+                    navigation.navigate("Verify", {
+                      email: "johndoe@gmail.com",
+                      next: "Main",
+                    })
+                  }
+                />
+              )}
+            </Stack.Screen>
+
+            {/* ✅ Main (Home lives inside this shell) */}
             <Stack.Screen name="Main">
               {({ navigation }) => (
                 <MainShell
-                  onLogout={() => {
-                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
-                  }}
-                  // ✅ NEW: open notifications from Home bell icon
+                  onLogout={() =>
+                    navigation.reset({ index: 0, routes: [{ name: "Login" }] })
+                  }
                   onOpenNotifications={() => navigation.navigate("Notifications")}
                 />
               )}
             </Stack.Screen>
 
-            {/* ✅ NEW Notifications route */}
             <Stack.Screen name="Notifications">
               {({ navigation }) => (
                 <NotificationsScreen onBack={() => navigation.goBack()} />
