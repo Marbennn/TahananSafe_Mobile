@@ -1,5 +1,5 @@
 // src/screens/IncidentLogScreen.tsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ScrollView,
   StatusBar,
   Alert,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,6 +24,9 @@ import type { IncidentPreviewData } from "../components/IncidentLogConfirmationS
 
 // ✅ (optional) if you want to keep App.tsx passing tabs without errors:
 import type { TabKey } from "../components/BottomNavBar";
+
+// ✅ NEW: separated tutorial overlay
+import IncidentSubmitTutorialOverlay from "../components/Tutorial/IncidentSubmitTutorialOverlay";
 
 type Props = {
   onBack?: () => void;
@@ -46,8 +50,13 @@ const INCIDENT_TYPES = [
   "Other",
 ];
 
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
 export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
 
   const [mode, setMode] = useState<Mode>("complain");
 
@@ -67,6 +76,24 @@ export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
 
   // (optional) photo count placeholder
   const [photoCount] = useState<number>(3);
+
+  // ✅ Tutorial state
+  const [showSubmitTutorial, setShowSubmitTutorial] = useState(false);
+
+  // ✅ measure target (ABSOLUTE screen coords)
+  const [target, setTarget] = useState({
+    x: 0,
+    y: 0,
+    w: 0,
+    h: 0,
+    ready: false,
+  });
+
+  // ✅ ref for measureInWindow()
+  const submitBtnRef = useRef<View>(null);
+
+  // ✅ scale (simple, responsive-ish)
+  const s = useMemo(() => clamp(screenWidth / 375, 0.9, 1.2), [screenWidth]);
 
   // ✅ keep small bottom padding only (safe area + a bit)
   const CONTENT_BOTTOM_PAD = Math.max(insets.bottom, 10) + 10;
@@ -125,7 +152,6 @@ export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
     }
 
     // ✅ Complaint flow:
-    // If App.tsx provided onProceedConfirm, use that (App will route to confirmation screen)
     if (onProceedConfirm) {
       onProceedConfirm(buildPreviewData());
       return;
@@ -145,7 +171,6 @@ export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
     return mode === "emergency" ? "Send Emergency" : "Secure Complaint";
   }, [mode]);
 
-  // ✅ This is what changes the label inside the form card
   const detailsLabel = useMemo(() => {
     return mode === "emergency" ? "Emergency Detail *" : "Incident Detail *";
   }, [mode]);
@@ -161,6 +186,32 @@ export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
     );
   }
 
+  // ✅ helper: measure submit button absolute position
+  const measureSubmitButton = () => {
+    // measureInWindow gives absolute coords (screen)
+    submitBtnRef.current?.measureInWindow((x, y, w, h) => {
+      // Sometimes measure gives 0 when not ready; guard it
+      if (w > 0 && h > 0) {
+        setTarget({ x, y, w, h, ready: true });
+      }
+    });
+  };
+
+  // ✅ Auto-show tutorial (after first render + measure)
+  useEffect(() => {
+    // small delay lets layout settle
+    const t = setTimeout(() => {
+      measureSubmitButton();
+    }, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ✅ show tutorial once target is ready
+  useEffect(() => {
+    if (target.ready) setShowSubmitTutorial(true);
+  }, [target.ready]);
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
@@ -169,9 +220,7 @@ export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
         {/* Top bar */}
         <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 8) }]}>
           <Pressable
-            onPress={
-              onBack ?? (() => Alert.alert("Back", "Wire onBack() to navigation"))
-            }
+            onPress={onBack ?? (() => Alert.alert("Back", "Wire onBack() to navigation"))}
             hitSlop={12}
             style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
           >
@@ -195,12 +244,7 @@ export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
                 pressed && { transform: [{ scale: 0.99 }] },
               ]}
             >
-              <Text
-                style={[
-                  styles.segmentText,
-                  mode === "complain" && styles.segmentTextActive,
-                ]}
-              >
+              <Text style={[styles.segmentText, mode === "complain" && styles.segmentTextActive]}>
                 Complain
               </Text>
             </Pressable>
@@ -213,12 +257,7 @@ export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
                 pressed && { transform: [{ scale: 0.99 }] },
               ]}
             >
-              <Text
-                style={[
-                  styles.segmentText,
-                  mode === "emergency" && styles.segmentTextActive,
-                ]}
-              >
+              <Text style={[styles.segmentText, mode === "emergency" && styles.segmentTextActive]}>
                 Emergency
               </Text>
             </Pressable>
@@ -232,12 +271,15 @@ export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
             styles.scrollContent,
             { paddingBottom: CONTENT_BOTTOM_PAD },
           ]}
+          // ✅ if user scrolls, re-measure so overlay stays accurate
+          onScrollBeginDrag={() => {
+            if (showSubmitTutorial) setShowSubmitTutorial(false);
+          }}
+          scrollEventThrottle={16}
         >
           <View style={styles.bodyFill}>
             <IncidentFormCard
-              // ✅ NEW PROP (you will add this in IncidentFormCard)
               detailsLabel={detailsLabel}
-              // ✅ optional if you want the card to know the mode
               mode={mode}
               incidentType={incidentType}
               details={details}
@@ -253,17 +295,48 @@ export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
               setWitnessType={setWitnessType}
             />
 
-            <Pressable
-              onPress={onSubmit}
-              style={({ pressed }) => [
-                styles.submitBtn,
-                pressed && { transform: [{ scale: 0.99 }], opacity: 0.95 },
-              ]}
+            {/* ✅ Submit Button (wrapped so we can measure it) */}
+            <View
+              ref={submitBtnRef}
+              collapsable={false}
+              onLayout={() => {
+                // When layout changes (rotation, text size, etc.), re-measure
+                measureSubmitButton();
+              }}
             >
-              <Text style={styles.submitText}>{actionText}</Text>
-            </Pressable>
+              <Pressable
+                onPress={() => {
+                  if (showSubmitTutorial) setShowSubmitTutorial(false);
+                  onSubmit();
+                }}
+                style={({ pressed }) => [
+                  styles.submitBtn,
+                  pressed && { transform: [{ scale: 0.99 }], opacity: 0.95 },
+                ]}
+              >
+                <Text style={styles.submitText}>{actionText}</Text>
+              </Pressable>
+            </View>
           </View>
         </ScrollView>
+
+        {/* ✅ Tutorial overlay for the submit button */}
+        <IncidentSubmitTutorialOverlay
+          visible={showSubmitTutorial && target.ready}
+          onClose={() => setShowSubmitTutorial(false)}
+          screenWidth={screenWidth} // ✅ FIXED: correct prop name
+          s={s}
+          targetX={target.x}
+          targetY={target.y}
+          targetW={target.w}
+          targetH={target.h}
+          title="Submit your report"
+          message={
+            mode === "emergency"
+              ? "Tap Send Emergency to submit your emergency report."
+              : "Tap Secure Complaint to submit your complaint securely."
+          }
+        />
       </View>
     </SafeAreaView>
   );
@@ -316,18 +389,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
-  // ✅ Active tab highlight (both Complain & Emergency)
   segmentBtnActive: {
     backgroundColor: Colors.primary,
   },
-
   segmentText: {
     fontSize: 11,
     fontWeight: "800",
     color: "#6B7280",
   },
-  // ✅ Active text is white (both tabs)
   segmentTextActive: {
     color: "#FFFFFF",
   },
