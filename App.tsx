@@ -1,4 +1,3 @@
-// App.tsx
 import "react-native-gesture-handler";
 import React, { useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
@@ -276,9 +275,11 @@ export default function App() {
               {({ navigation }) => (
                 <SignupScreen
                   onGoLogin={() => navigation.replace("Login")}
-                  onSignupSuccess={() =>
+                  onSignupSuccess={(
+                    registeredEmail, // <-- receive actual email
+                  ) =>
                     navigation.navigate("Verify", {
-                      email: "johndoe@gmail.com",
+                      email: registeredEmail, // <-- pass the real email here
                       next: "PersonalDetails",
                     })
                   }
@@ -294,7 +295,10 @@ export default function App() {
                     const next = route.params?.next ?? "PersonalDetails";
 
                     if (next === "Main") {
-                      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+                      navigation.reset({
+                        index: 0,
+                        routes: [{ name: "Main" }],
+                      });
                     } else {
                       navigation.replace("PersonalDetails");
                     }
@@ -329,7 +333,8 @@ export default function App() {
             {/* ✅ CreatePin -> Pin */}
             <Stack.Screen name="CreatePin">
               {({ navigation }) => {
-                const CreatePinAny = CreatePinScreen as unknown as React.ComponentType<any>;
+                const CreatePinAny =
+                  CreatePinScreen as unknown as React.ComponentType<any>;
                 return (
                   <CreatePinAny
                     onContinue={() => navigation.navigate("Pin")}
@@ -376,7 +381,9 @@ export default function App() {
                   onLogout={() =>
                     navigation.reset({ index: 0, routes: [{ name: "Login" }] })
                   }
-                  onOpenNotifications={() => navigation.navigate("Notifications")}
+                  onOpenNotifications={() =>
+                    navigation.navigate("Notifications")
+                  }
                 />
               )}
             </Stack.Screen>

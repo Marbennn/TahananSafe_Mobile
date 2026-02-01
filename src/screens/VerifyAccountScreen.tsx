@@ -1,5 +1,5 @@
 // src/screens/VerifyAccountScreen.tsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -18,44 +18,71 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors } from "../theme/colors";
 import { Layout } from "../theme/layout";
 
-// ✅ Reuse your logo (same placement as other screens)
+import { useAuthStore } from "../../store/authStore.js";
+
 import LogoSvg from "../../assets/SecurityQuestionsScreen/Logo.svg";
 
 type Props = {
-  email?: string; // used for masking in the message
-  onVerify?: (code: string) => void;
+  email: string; // used for masking in the message
+  onVerify?: () => void; 
   onResendCode?: () => void;
 };
 
 export default function VerifyAccountScreen({
-  email = "johndoe@gmail.com",
+  email,
   onVerify,
   onResendCode,
 }: Props) {
+  const verifyRegistrationOtp = useAuthStore(
+    (state) => state.verifyRegistrationOtp,
+  );
+  const isLoading = useAuthStore((state) => state.isLoading);
+
   const [code, setCode] = useState<string>("");
 
+  useEffect(() => {
+    if (!email) {
+      Alert.alert(
+        "Error",
+        "No email provided for verification. Cannot proceed.",
+      );
+    }
+  }, [email]);
+
   const maskedEmail = useMemo(() => maskEmail(email), [email]);
-
   const normalizedCode = useMemo(() => code.replace(/[^\d]/g, ""), [code]);
-
   const canVerify = normalizedCode.length === 6;
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     if (!canVerify) {
-      Alert.alert("Invalid code", "Please enter the 6-digit verification code.");
+      Alert.alert(
+        "Invalid code",
+        "Please enter the 6-digit verification code.",
+      );
       return;
     }
 
-    // ✅ Let App.tsx control navigation via callback
-    if (onVerify) {
-      onVerify(normalizedCode);
-      return;
-    }
+    try {
+      const result = await verifyRegistrationOtp(email, normalizedCode);
 
-    Alert.alert("Verified", "Account verified (demo).");
+      if (!result.success) {
+        setCode(""); // clear input on failure
+        Alert.alert(
+          "Verification failed",
+          result.error || "Invalid or expired code",
+        );
+        return;
+      }
+
+      Alert.alert("Verified", "Your account has been verified.");
+
+      onVerify?.();
+    } catch (err) {
+      Alert.alert("Error", "Something went wrong during verification.");
+    }
   };
 
-  const handleResend = () => {
+  const handleResend = async () => {
     if (onResendCode) {
       onResendCode();
       return;
@@ -68,7 +95,6 @@ export default function VerifyAccountScreen({
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <StatusBar barStyle="light-content" />
 
-        {/* Header (same placement as your other screens) */}
         <View style={styles.topBrand}>
           <LogoSvg width={160} height={34} />
         </View>
@@ -90,13 +116,14 @@ export default function VerifyAccountScreen({
 
                 <Text style={styles.subtitle}>
                   Enter the verification code sent to{"\n"}
-                  <Text style={styles.emailStrong}>{maskedEmail}</Text>. If it
-                  doesn’t appear within a few minutes, check your spam folder.
+                  <Text style={styles.emailStrong}>{maskedEmail}</Text>
                 </Text>
 
                 <TextInput
                   value={code}
-                  onChangeText={(t) => setCode(t.replace(/[^\d]/g, ""))}
+                  onChangeText={(t) => {
+                    setCode(t.replace(/[^\d]/g, ""));
+                  }}
                   placeholder="XXXXXX"
                   placeholderTextColor="#9AA6B2"
                   style={styles.input}
@@ -108,10 +135,10 @@ export default function VerifyAccountScreen({
 
                 <Pressable
                   onPress={handleVerify}
-                  disabled={!canVerify}
+                  disabled={!canVerify || isLoading}
                   style={({ pressed }) => [
                     styles.btnOuter,
-                    !canVerify ? styles.btnOuterDisabled : null,
+                    !canVerify || isLoading ? styles.btnOuterDisabled : null,
                     pressed && canVerify ? { opacity: 0.92 } : null,
                   ]}
                 >
@@ -121,11 +148,11 @@ export default function VerifyAccountScreen({
                         ? ["#0E5FA8", "#0B4B86", "#083A69"]
                         : ["#9FB2C6", "#8FA4B9", "#8299AF"]
                     }
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
                     style={styles.btn}
                   >
-                    <Text style={styles.btnText}>Verify</Text>
+                    <Text style={styles.btnText}>
+                      {isLoading ? "Verifying..." : "Verify"}
+                    </Text>
                   </LinearGradient>
                 </Pressable>
 
@@ -137,8 +164,7 @@ export default function VerifyAccountScreen({
                 </View>
 
                 <Text style={styles.finePrint}>
-                  By verifying your account, you agree to our Terms and
-                  Conditions and acknowledge that you have read our Privacy
+                  By verifying your account, you agree to our Terms and Privacy
                   Policy.
                 </Text>
               </View>
@@ -150,7 +176,6 @@ export default function VerifyAccountScreen({
   );
 }
 
-/** Mask email like u************@gmail.com */
 function maskEmail(email: string) {
   const clean = (email || "").trim();
   const at = clean.indexOf("@");
@@ -158,9 +183,9 @@ function maskEmail(email: string) {
 
   const name = clean.slice(0, at);
   const domain = clean.slice(at + 1);
-
   const first = name[0] ?? "u";
-  const stars = "*".repeat(Math.min(Math.max(name.length - 1, 6), 18)); // nice-looking mask
+  const stars = "*".repeat(Math.min(Math.max(name.length - 1, 6), 18));
+
   return `${first}${stars}@${domain}`;
 }
 
@@ -199,8 +224,6 @@ const styles = StyleSheet.create({
 
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
 
     shadowColor: "#000",
     shadowOpacity: 0.1,
@@ -220,7 +243,6 @@ const styles = StyleSheet.create({
   subtitle: {
     textAlign: "center",
     fontSize: 12,
-    lineHeight: 17,
     fontWeight: "600",
     color: "#4B5563",
     marginBottom: 12,
@@ -239,23 +261,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
     paddingHorizontal: 12,
     fontSize: 13,
-    color: "#111827",
     letterSpacing: 1.5,
-    textAlign: "left",
     marginBottom: 14,
   },
 
   btnOuter: {
     borderRadius: 999,
     overflow: "hidden",
-    shadowColor: "#083A69",
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
     marginTop: 4,
   },
-  btnOuterDisabled: { shadowOpacity: 0, elevation: 0 },
+  btnOuterDisabled: { opacity: 0.7 },
   btn: {
     height: 46,
     borderRadius: 999,
@@ -267,11 +282,9 @@ const styles = StyleSheet.create({
   resendRow: {
     flexDirection: "row",
     justifyContent: "center",
-    alignItems: "center",
     marginTop: 12,
-    marginBottom: 10,
   },
-  resendText: { color: "#6B7280", fontSize: 11.5, fontWeight: "600" },
+  resendText: { color: "#6B7280", fontSize: 11.5 },
   resendLink: {
     color: Colors.link,
     fontSize: 11.5,
@@ -282,9 +295,7 @@ const styles = StyleSheet.create({
   finePrint: {
     textAlign: "center",
     fontSize: 9.5,
-    lineHeight: 13,
     color: "#9AA6B2",
-    fontWeight: "600",
-    paddingHorizontal: 6,
+    marginTop: 8,
   },
 });

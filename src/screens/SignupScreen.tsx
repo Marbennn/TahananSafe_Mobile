@@ -19,24 +19,31 @@ import PrimaryButton from "../components/PrimaryButton";
 import { Colors } from "../theme/colors";
 import { Layout } from "../theme/layout";
 
+import { useAuthStore } from "../../store/authStore.js";
+
 // ✅ same logo preset as other screens
+
 import LogoSvg from "../../assets/SecurityQuestionsScreen/Logo.svg";
 
 type Props = {
   onGoLogin: () => void;
-  onSignupSuccess: () => void; // ✅ Sign up → PersonalDetailsScreen
+  onSignupSuccess: (email: string) => void;
 };
 
 export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
-  const [email, setEmail] = useState<string>("johndoe@gmail.com");
-  const [password, setPassword] = useState<string>("password123");
-  const [confirmPassword, setConfirmPassword] = useState<string>("password123");
+  const register = useAuthStore((state) => state.register);
+  const isLoading = useAuthStore((state) => state.isLoading);
+
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+  const [confirmPassword, setConfirmPassword] = useState<string>("");
 
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [showConfirm, setShowConfirm] = useState<boolean>(false);
 
   const passwordsMatch = password === confirmPassword;
 
+  // ✅ Enable signup button only if email + passwords are valid
   const canSignup = useMemo(() => {
     const e = email.trim();
     const p = password.trim();
@@ -44,7 +51,7 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
     return e.length > 0 && p.length >= 6 && c.length >= 6 && passwordsMatch;
   }, [email, password, confirmPassword, passwordsMatch]);
 
-  const handleSignup = () => {
+  const handleSignup = async () => {
     const e = email.trim();
     const p = password.trim();
     const c = confirmPassword.trim();
@@ -64,9 +71,19 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
       return;
     }
 
-    // ✅ TODO: replace with real signup API call later
-    // For now, proceed to PersonalDetailsScreen
-    onSignupSuccess();
+    const result = await register(e, p);
+
+    if (!result.success) {
+      Alert.alert("Signup failed", result.error || "Unable to register");
+      return;
+    }
+
+    Alert.alert(
+      "Verification Required",
+      "We sent a verification code to your email.",
+    );
+
+    onSignupSuccess(e);
   };
 
   return (
@@ -98,7 +115,7 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
                   label="Email"
                   value={email}
                   onChangeText={setEmail}
-                  placeholder="johndoe@gmail.com"
+                  placeholder="your.email@example.com"
                   keyboardType="email-address"
                 />
 
@@ -108,7 +125,9 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
                   onChangeText={setPassword}
                   placeholder="********"
                   secureTextEntry={!showPassword}
-                  rightIconName={showPassword ? "eye-off-outline" : "eye-outline"}
+                  rightIconName={
+                    showPassword ? "eye-off-outline" : "eye-outline"
+                  }
                   onPressRightIcon={() => setShowPassword((v) => !v)}
                 />
 
@@ -118,7 +137,9 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
                   onChangeText={setConfirmPassword}
                   placeholder="********"
                   secureTextEntry={!showConfirm}
-                  rightIconName={showConfirm ? "eye-off-outline" : "eye-outline"}
+                  rightIconName={
+                    showConfirm ? "eye-off-outline" : "eye-outline"
+                  }
                   onPressRightIcon={() => setShowConfirm((v) => !v)}
                 />
 
@@ -129,9 +150,9 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
                 )}
 
                 <PrimaryButton
-                  title="Sign up"
+                  title={isLoading ? "Sending OTP..." : "Sign up"}
                   onPress={handleSignup}
-                  disabled={!canSignup}
+                  disabled={!canSignup || isLoading}
                 />
 
                 <View style={styles.footer}>
@@ -154,7 +175,6 @@ const styles = StyleSheet.create({
   background: { flex: 1 },
   safe: { flex: 1 },
 
-  // ✅ same logo preset
   topBrand: {
     alignItems: "center",
     paddingTop: 10,
@@ -185,8 +205,6 @@ const styles = StyleSheet.create({
 
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
 
     shadowColor: "#000",
     shadowOpacity: 0.1,
@@ -211,7 +229,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  footer: { flexDirection: "row", justifyContent: "center", marginTop: 18 },
+  footer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 18,
+  },
   footerText: { color: Colors.muted, fontSize: 12.5 },
-  footerLink: { color: Colors.link, fontSize: 12.5, fontWeight: "700" },
+  footerLink: {
+    color: Colors.link,
+    fontSize: 12.5,
+    fontWeight: "700",
+  },
 });
