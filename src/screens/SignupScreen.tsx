@@ -19,7 +19,7 @@ import PrimaryButton from "../components/PrimaryButton";
 import { Colors } from "../theme/colors";
 import { Layout } from "../theme/layout";
 
-import { useAuthStore } from "../../store/authStore.js";
+import { useAuthStore } from "../../store/authStore";
 
 // ✅ same logo preset as other screens
 

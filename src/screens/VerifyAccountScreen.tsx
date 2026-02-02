@@ -18,7 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors } from "../theme/colors";
 import { Layout } from "../theme/layout";
 
-import { useAuthStore } from "../../store/authStore.js";
+import { useAuthStore } from "../../store/authStore";
 
 import LogoSvg from "../../assets/SecurityQuestionsScreen/Logo.svg";
 

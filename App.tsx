@@ -312,11 +312,7 @@ export default function App() {
 
             {/* ✅ PersonalDetails -> Security */}
             <Stack.Screen name="PersonalDetails">
-              {({ navigation }) => (
-                <PersonalDetailsScreen
-                  onSubmit={() => navigation.navigate("Security")}
-                />
-              )}
+              {() => <PersonalDetailsScreen />}
             </Stack.Screen>
 
             {/* ✅ Security -> CreatePin */}
