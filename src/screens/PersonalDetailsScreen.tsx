@@ -23,50 +23,40 @@ import { Layout } from "../theme/layout";
 // ✅ Reuse your logo (same as Login/SecurityQuestions)
 import LogoSvg from "../../assets/SecurityQuestionsScreen/Logo.svg";
 
+import { useAuthStore, PersonalInfoPayload } from "../../store/authStore";
+
+import { useNavigation } from "@react-navigation/native";
+
 type GenderOption = {
   id: "male" | "female";
   label: string;
 };
 
-type SubmitPayload = {
-  firstName: string;
-  lastName: string;
-  middleName: string;
-  suffix?: string;
-  age: string;
-  gender: "male" | "female";
-  phoneNumber: string; // store digits only
-};
+export default function PersonalDetailsScreen() {
+  const navigation = useNavigation<any>();
 
-type Props = {
-  initialValues?: Partial<SubmitPayload>;
-  onSubmit?: (payload: SubmitPayload) => void;
-};
-
-export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props) {
   const genderOptions: GenderOption[] = useMemo(
     () => [
       { id: "male", label: "Male" },
       { id: "female", label: "Female" },
     ],
-    []
+    [],
   );
 
-  const [firstName, setFirstName] = useState(initialValues?.firstName ?? "John");
-  const [lastName, setLastName] = useState(initialValues?.lastName ?? "John");
-  const [middleName, setMiddleName] = useState(
-    initialValues?.middleName ?? "V."
-  );
-  const [suffix, setSuffix] = useState(initialValues?.suffix ?? "Jr");
-  const [age, setAge] = useState(initialValues?.age ?? "20");
+  const { user, updatePersonalInfo, token } = useAuthStore();
+  const [loading, setLoading] = useState(false);
+
+  const [firstName, setFirstName] = useState(user?.firstName ?? "");
+  const [lastName, setLastName] = useState(user?.lastName ?? "");
+  const [middleName, setMiddleName] = useState(user?.middleName ?? "");
+  const [suffix, setSuffix] = useState(user?.suffix ?? "");
+  const [age, setAge] = useState(user?.age ?? "");
   const [gender, setGender] = useState<"male" | "female">(
-    initialValues?.gender ?? "male"
+    user?.gender ?? "male",
   );
 
   // ✅ IMPORTANT: don't use "09*********" if you're validating digits
-  const [phoneNumber, setPhoneNumber] = useState(
-    initialValues?.phoneNumber ?? "" // you can use "09" if you want a starter
-  );
+  const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber ?? "");
 
   const [genderOpen, setGenderOpen] = useState(false);
 
@@ -79,11 +69,9 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
   // 09xxxxxxxxx (11 digits) OR 63xxxxxxxxxx (12 digits) OR 9xxxxxxxxx (10 digits)
   const isPhoneValid = (value: string) => {
     const digits = toDigits(value);
-
     if (digits.startsWith("09")) return digits.length === 11;
     if (digits.startsWith("63")) return digits.length === 12;
     if (digits.startsWith("9")) return digits.length === 10;
-
     return false;
   };
 
@@ -95,30 +83,46 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
     isPhoneValid(phoneNumber) &&
     (gender === "male" || gender === "female");
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit) {
       Alert.alert("Required", "Please complete all required fields.");
       return;
     }
 
-    const payload: SubmitPayload = {
+    if (!token) {
+      Alert.alert("Error", "User not authenticated.");
+      return;
+    }
+
+    const payload: PersonalInfoPayload = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       middleName: middleName.trim(),
-      suffix: suffix.trim().length ? suffix.trim() : undefined,
+      suffix: suffix.trim() || undefined,
       age: age.trim(),
       gender,
       phoneNumber: toDigits(phoneNumber), // ✅ digits only
     };
 
     // ✅ Let App.tsx decide where to go next
-    if (onSubmit) {
-      onSubmit(payload);
-      return;
-    }
+    setLoading(true);
+    const {
+      success,
+      user: updatedUser,
+      error,
+    } = await updatePersonalInfo(payload);
+    setLoading(false);
 
-    // Demo fallback if no onSubmit passed
-    Alert.alert("Submitted", "Personal details saved (demo).");
+    if (success) {
+      Alert.alert("Success", "Personal details updated successfully.", [
+        {
+          text: "OK",
+          onPress: () => navigation.navigate("Security"),
+        },
+      ]);
+    } else {
+      Alert.alert("Error", error || "Failed to update personal details.");
+    }
   };
 
   return (
@@ -158,7 +162,6 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
                   style={styles.input}
                   autoCapitalize="words"
                 />
-
                 {/* Last Name */}
                 <Text style={styles.label}>
                   Last Name <Text style={styles.req}>*</Text>
@@ -224,7 +227,6 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
                     <Text style={styles.label}>
                       Gender <Text style={styles.req}>*</Text>
                     </Text>
-
                     <Pressable
                       onPress={() => setGenderOpen(true)}
                       style={({ pressed }) => [
@@ -257,7 +259,7 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
                 {/* Submit */}
                 <Pressable
                   onPress={handleSubmit}
-                  disabled={!canSubmit}
+                  disabled={!canSubmit || loading}
                   style={({ pressed }) => [
                     styles.btnOuter,
                     !canSubmit ? styles.btnOuterDisabled : null,
@@ -274,7 +276,9 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
                     end={{ x: 1, y: 1 }}
                     style={styles.btn}
                   >
-                    <Text style={styles.btnText}>Submit</Text>
+                    <Text style={styles.btnText}>
+                      {loading ? "Submitting..." : "Submit"}
+                    </Text>
                   </LinearGradient>
                 </Pressable>
               </View>
@@ -319,9 +323,9 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
                     >
                       {opt.label}
                     </Text>
-                    {active ? (
+                    {active && (
                       <Ionicons name="checkmark" size={18} color="#0B4B86" />
-                    ) : null}
+                    )}
                   </Pressable>
                 );
               })}
@@ -344,17 +348,9 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   background: { flex: 1 },
   safe: { flex: 1 },
-
   scrollContent: { flexGrow: 1, justifyContent: "flex-end" },
-
-  topBrand: {
-    alignItems: "center",
-    paddingTop: 10,
-    paddingBottom: 8,
-  },
-
+  topBrand: { alignItems: "center", paddingTop: 10, paddingBottom: 8 },
   cardStack: { width: "100%", position: "relative" },
-
   cardGhost: {
     position: "absolute",
     left: 16,
@@ -364,7 +360,6 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     backgroundColor: "rgba(255,255,255,0.16)",
   },
-
   card: {
     width: "100%",
     backgroundColor: "#fff",
@@ -372,19 +367,16 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 22,
     minHeight: Layout.cardMinHeight,
-
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
-
     shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
     elevation: 10,
   },
-
   title: {
     textAlign: "center",
     fontSize: 16,
@@ -392,7 +384,6 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: 16,
   },
-
   label: {
     fontSize: 12,
     fontWeight: "600",
@@ -401,7 +392,6 @@ const styles = StyleSheet.create({
   },
   req: { color: "#EF4444", fontWeight: "800" },
   optional: { color: "#9AA6B2", fontWeight: "700" },
-
   input: {
     height: 42,
     borderRadius: 10,
@@ -413,15 +403,8 @@ const styles = StyleSheet.create({
     color: "#111827",
     marginBottom: 12,
   },
-
-  row: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  col: {
-    flex: 1,
-  },
-
+  row: { flexDirection: "row", gap: 12 },
+  col: { flex: 1 },
   select: {
     height: 42,
     borderRadius: 10,
@@ -434,13 +417,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 12,
   },
-  selectText: {
-    flex: 1,
-    paddingRight: 10,
-    fontSize: 12.5,
-    color: "#4B5563",
-  },
-
+  selectText: { flex: 1, paddingRight: 10, fontSize: 12.5, color: "#4B5563" },
   btnOuter: {
     marginTop: 6,
     borderRadius: 999,
@@ -459,8 +436,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   btnText: { color: "#fff", fontWeight: "800", fontSize: 13.5 },
-
-  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
