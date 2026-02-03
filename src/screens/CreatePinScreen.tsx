@@ -10,11 +10,15 @@ import {
   Alert,
   Platform,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
 
 import PinScreenLogo from "../../assets/Logo2.svg";
+import { useAuthStore } from "../../store/authStore";
 
 type Props = {
   onContinue: (pin: string) => void;
@@ -29,20 +33,38 @@ export default function CreatePinScreen({ onContinue, onBack }: Props) {
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
 
+  // Grab setPin method and isLoading state from your auth store
+  const { setPin: savePin, isLoading } = useAuthStore();
+
   const canContinue = useMemo(() => {
     return pin.length === PIN_LENGTH && confirmPin.length === PIN_LENGTH;
   }, [pin, confirmPin]);
 
-  const submit = () => {
+  // submit handler
+  const submit = async () => {
     if (pin.length !== PIN_LENGTH || confirmPin.length !== PIN_LENGTH) {
       Alert.alert("Incomplete", `PIN must be ${PIN_LENGTH} digits.`);
       return;
     }
+
     if (pin !== confirmPin) {
       Alert.alert("PIN mismatch", "Your PIN and Confirm PIN do not match.");
       return;
     }
-    onContinue(pin);
+
+    try {
+      const result = await savePin(pin);
+
+      if (!result.success) {
+        Alert.alert("Error", result.error || "Failed to save PIN");
+        return;
+      }
+
+      // PIN saved to database successfully
+      onContinue(pin);
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Something went wrong");
+    }
   };
 
   return (
@@ -50,13 +72,18 @@ export default function CreatePinScreen({ onContinue, onBack }: Props) {
       <LinearGradient colors={Colors.gradient} style={styles.background}>
         <StatusBar barStyle="light-content" />
 
-        {/* ✅ SAME LOGO POSITION AS PinScreen.tsx */}
+        {/* Logo */}
         <View style={styles.topBrand}>
           <PinScreenLogo width={150} height={150} />
         </View>
 
         {/* Card */}
-        <View style={[styles.cardWrap, { paddingBottom: Math.max(insets.bottom, 18) }]}>
+        <View
+          style={[
+            styles.cardWrap,
+            { paddingBottom: Math.max(insets.bottom, 18) },
+          ]}
+        >
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Create your Pin</Text>
 
@@ -66,7 +93,9 @@ export default function CreatePinScreen({ onContinue, onBack }: Props) {
             </Text>
             <TextInput
               value={pin}
-              onChangeText={(t) => setPin(t.replace(/\D/g, "").slice(0, PIN_LENGTH))}
+              onChangeText={(t) =>
+                setPin(t.replace(/\D/g, "").slice(0, PIN_LENGTH))
+              }
               placeholder={"X ".repeat(PIN_LENGTH).trim()}
               placeholderTextColor="#9AA4B2"
               keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
@@ -98,10 +127,10 @@ export default function CreatePinScreen({ onContinue, onBack }: Props) {
             {/* Continue button */}
             <Pressable
               onPress={submit}
-              disabled={!canContinue}
+              disabled={!canContinue || isLoading}
               style={({ pressed }) => [
                 styles.btnOuter,
-                !canContinue && { opacity: 0.55 },
+                (!canContinue || isLoading) && { opacity: 0.55 },
                 pressed && canContinue && { transform: [{ scale: 0.99 }] },
               ]}
             >
@@ -109,7 +138,9 @@ export default function CreatePinScreen({ onContinue, onBack }: Props) {
                 colors={["#0B5E9B", "#083B6B"]}
                 style={styles.btnInner}
               >
-                <Text style={styles.btnText}>Continue</Text>
+                <Text style={styles.btnText}>
+                  {isLoading ? "Saving..." : "Continue"}
+                </Text>
               </LinearGradient>
             </Pressable>
 
@@ -117,7 +148,10 @@ export default function CreatePinScreen({ onContinue, onBack }: Props) {
               <Pressable
                 onPress={onBack}
                 hitSlop={10}
-                style={({ pressed }) => [styles.backWrap, pressed && { opacity: 0.7 }]}
+                style={({ pressed }) => [
+                  styles.backWrap,
+                  pressed && { opacity: 0.7 },
+                ]}
               >
                 <Text style={styles.backText}>Back</Text>
               </Pressable>
@@ -133,7 +167,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#0B5E9B" },
   background: { flex: 1 },
 
-  // ✅ Copied from your PinScreen.tsx (logo position)
   topBrand: {
     alignItems: "center",
     paddingTop: 10,
@@ -149,10 +182,7 @@ const styles = StyleSheet.create({
 
   card: {
     backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
+    borderRadius: 16,
     paddingHorizontal: 18,
     paddingTop: 18,
     paddingBottom: 18,

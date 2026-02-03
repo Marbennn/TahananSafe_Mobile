@@ -25,16 +25,16 @@ import LogoSvg from "../../assets/SecurityQuestionsScreen/Logo.svg";
 
 import { useAuthStore, PersonalInfoPayload } from "../../store/authStore";
 
-import { useNavigation } from "@react-navigation/native";
-
 type GenderOption = {
   id: "male" | "female" | "other";
   label: string;
 };
 
-export default function PersonalDetailsScreen() {
-  const navigation = useNavigation<any>();
+type Props = {
+  onContinue: () => void;
+};
 
+export default function PersonalDetailsScreen({ onContinue }: Props) {
   const genderOptions: GenderOption[] = useMemo(
     () => [
       { id: "male", label: "Male" },
@@ -118,7 +118,7 @@ export default function PersonalDetailsScreen() {
       Alert.alert("Success", "Personal details updated successfully.", [
         {
           text: "OK",
-          onPress: () => navigation.navigate("Security"),
+          onPress: onContinue,
         },
       ]);
     } else {
@@ -163,6 +163,7 @@ export default function PersonalDetailsScreen() {
                   style={styles.input}
                   autoCapitalize="words"
                 />
+
                 {/* Last Name */}
                 <Text style={styles.label}>
                   Last Name <Text style={styles.req}>*</Text>
