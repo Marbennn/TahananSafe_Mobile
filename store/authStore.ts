@@ -1,6 +1,24 @@
-// src/store/authStore.ts
 import { create } from "zustand";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
+// security questions
+export const SECURITY_QUESTIONS = [
+  { id: "first_school", label: "What was the name of your first school?" },
+  { id: "first_pet", label: "What was the name of your first pet?" },
+  { id: "birth_city", label: "In what city were you born?" },
+  {
+    id: "best_friend",
+    label: "What is the name of your childhood best friend?",
+  },
+  {
+    id: "favorite_teacher",
+    label: "What is the name of your favorite teacher?",
+  },
+  { id: "mother_maiden", label: "What is your mother’s maiden name?" },
+  { id: "first_car", label: "What was your first car?" },
+] as const;
+
+export type SecurityQuestionId = (typeof SECURITY_QUESTIONS)[number]["id"];
 
 export type User = {
   id: string;
@@ -11,18 +29,24 @@ export type User = {
   middleName?: string;
   suffix?: string;
   age?: string;
-  gender?: "male" | "female";
+  gender?: "male" | "female" | "other";
   phoneNumber?: string;
 };
 
+// payload
 export type PersonalInfoPayload = {
   firstName: string;
   lastName: string;
   middleName: string;
   suffix?: string;
   age: string;
-  gender: "male" | "female";
+  gender: "male" | "female" | "other";
   phoneNumber: string;
+};
+
+export type SecurityQuestionPayload = {
+  securityQuestion: SecurityQuestionId;
+  securityAnswer: string;
 };
 
 type AuthStore = {
@@ -31,11 +55,44 @@ type AuthStore = {
   refreshToken: string | null;
   isLoading: boolean;
 
-  register: (email: string, password: string) => Promise<{ success: boolean; message?: string; error?: string }>;
-  verifyRegistrationOtp: (email: string, otp: string) => Promise<{ success: boolean; user?: User; token?: string; error?: string }>;
-  login: (email: string, password: string) => Promise<{ success: boolean; message?: string; error?: string }>;
-  verifyLoginOtp: (email: string, otp: string) => Promise<{ success: boolean; user?: User; token?: string; error?: string }>;
-  updatePersonalInfo: (payload: PersonalInfoPayload) => Promise<{ success: boolean; user?: User; error?: string }>;
+  register: (
+    email: string,
+    password: string,
+  ) => Promise<{ success: boolean; message?: string; error?: string }>;
+
+  verifyRegistrationOtp: (
+    email: string,
+    otp: string,
+  ) => Promise<{
+    success: boolean;
+    user?: User;
+    token?: string;
+    error?: string;
+  }>;
+
+  login: (
+    email: string,
+    password: string,
+  ) => Promise<{ success: boolean; message?: string; error?: string }>;
+
+  verifyLoginOtp: (
+    email: string,
+    otp: string,
+  ) => Promise<{
+    success: boolean;
+    user?: User;
+    token?: string;
+    error?: string;
+  }>;
+
+  updatePersonalInfo: (
+    payload: PersonalInfoPayload,
+  ) => Promise<{ success: boolean; user?: User; error?: string }>;
+
+  setSecurityQuestion: (
+    payload: SecurityQuestionPayload,
+  ) => Promise<{ success: boolean; error?: string }>;
+
   logout: () => Promise<void>;
 };
 
@@ -55,7 +112,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password }),
-        }
+        },
       );
 
       const data = await response.json();
@@ -80,11 +137,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, otp }),
-        }
+        },
       );
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "OTP verification failed");
+      if (!response.ok)
+        throw new Error(data.message || "OTP verification failed");
 
       // store tokens and user
       await AsyncStorage.setItem("user", JSON.stringify(data.user));
@@ -115,7 +173,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password }),
-        }
+        },
       );
 
       const data = await response.json();
@@ -140,11 +198,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, otp }),
-        }
+        },
       );
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "OTP verification failed");
+      if (!response.ok)
+        throw new Error(data.message || "OTP verification failed");
 
       await AsyncStorage.setItem("user", JSON.stringify(data.user));
       await AsyncStorage.setItem("token", data.accessToken);
@@ -165,7 +224,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   // update personal info
-  updatePersonalInfo: async (payload: PersonalInfoPayload) => {
+  updatePersonalInfo: async (payload) => {
     set({ isLoading: true });
     try {
       const token = get().token;
@@ -180,16 +239,48 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(payload),
-        }
+        },
       );
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "Failed to update info");
+      if (!response.ok)
+        throw new Error(data.message || "Failed to update info");
 
       await AsyncStorage.setItem("user", JSON.stringify(data.user));
       set({ user: data.user, isLoading: false });
 
       return { success: true, user: data.user };
+    } catch (error: any) {
+      set({ isLoading: false });
+      return { success: false, error: error.message };
+    }
+  },
+
+  // set security question
+  setSecurityQuestion: async (payload) => {
+    set({ isLoading: true });
+    try {
+      const token = get().token;
+      if (!token) throw new Error("User not authenticated");
+
+      const response = await fetch(
+        "http://192.168.5.137:5000/api/mobile/v1/security-question",
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      const data = await response.json();
+      if (!response.ok)
+        throw new Error(data.message || "Failed to save security question");
+
+      set({ isLoading: false });
+      return { success: true };
     } catch (error: any) {
       set({ isLoading: false });
       return { success: false, error: error.message };

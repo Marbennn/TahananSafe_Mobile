@@ -28,7 +28,7 @@ import { useAuthStore, PersonalInfoPayload } from "../../store/authStore";
 import { useNavigation } from "@react-navigation/native";
 
 type GenderOption = {
-  id: "male" | "female";
+  id: "male" | "female" | "other";
   label: string;
 };
 
@@ -39,6 +39,7 @@ export default function PersonalDetailsScreen() {
     () => [
       { id: "male", label: "Male" },
       { id: "female", label: "Female" },
+      { id: "other", label: "Other" },
     ],
     [],
   );
@@ -51,7 +52,7 @@ export default function PersonalDetailsScreen() {
   const [middleName, setMiddleName] = useState(user?.middleName ?? "");
   const [suffix, setSuffix] = useState(user?.suffix ?? "");
   const [age, setAge] = useState(user?.age ?? "");
-  const [gender, setGender] = useState<"male" | "female">(
+  const [gender, setGender] = useState<"male" | "female" | "other">(
     user?.gender ?? "male",
   );
 
@@ -81,7 +82,7 @@ export default function PersonalDetailsScreen() {
     middleName.trim().length > 0 &&
     age.trim().length > 0 &&
     isPhoneValid(phoneNumber) &&
-    (gender === "male" || gender === "female");
+    !!gender;
 
   const handleSubmit = async () => {
     if (!canSubmit) {

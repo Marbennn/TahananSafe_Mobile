@@ -15,84 +15,68 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
 
 import { Colors } from "../theme/colors";
 import { Layout } from "../theme/layout";
+import { useAuthStore, SECURITY_QUESTIONS, SecurityQuestionId } from "../../store/authStore";
 
-// ✅ Use your SVG logo
 import LogoSvg from "../../assets/SecurityQuestionsScreen/Logo.svg";
 
 type SecurityQuestionOption = {
-  id: string;
+  id: SecurityQuestionId;
   label: string;
 };
 
-type Props = {
-  currentIndex?: number; // 1-based
-  totalQuestions?: number;
-  options?: SecurityQuestionOption[];
-  initialSelectedId?: string;
-  initialAnswer?: string;
-  onContinue?: (payload: { selectedId: string; answer: string }) => void;
-};
+export default function SecurityQuestionsScreen() {
+  const navigation = useNavigation<any>();
+  const setSecurityQuestion = useAuthStore((state) => state.setSecurityQuestion);
+  const isLoading = useAuthStore((state) => state.isLoading);
 
-export default function SecurityQuestionsScreen({
-  currentIndex = 1,
-  totalQuestions = 3,
-  options,
-  initialSelectedId,
-  initialAnswer,
-  onContinue,
-}: Props) {
-  const defaultOptions: SecurityQuestionOption[] = useMemo(
-    () => [
-      { id: "first_school", label: "What the name of your first school?" },
-      { id: "first_pet", label: "What is the name of your first pet?" },
-      { id: "birth_city", label: "What city were you born in?" },
-      { id: "best_friend", label: "What is the name of your best friend?" },
-      { id: "favorite_teacher", label: "What is the name of your favorite teacher?" },
-    ],
+  // ✅ Copy readonly SECURITY_QUESTIONS to mutable array
+  const questionOptions: SecurityQuestionOption[] = useMemo(
+    () => [...SECURITY_QUESTIONS],
     []
   );
 
-  const questionOptions = options?.length ? options : defaultOptions;
-
-  const [selectedId, setSelectedId] = useState<string>(
-    initialSelectedId ?? questionOptions[0]?.id ?? ""
-  );
-  const [answer, setAnswer] = useState<string>(initialAnswer ?? "");
+  const [selectedId, setSelectedId] = useState<SecurityQuestionId>(questionOptions[0]?.id);
+  const [answer, setAnswer] = useState<string>("");
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const selectedLabel =
     questionOptions.find((o) => o.id === selectedId)?.label ?? "Choose a question";
 
-  const canContinue = selectedId.trim().length > 0 && answer.trim().length > 0;
+  const canContinue = selectedId && answer.trim().length > 0 && !isLoading;
 
-  const handleContinue = () => {
-    if (!canContinue) {
-      Alert.alert("Required", "Please choose a question and enter your answer.");
-      return;
-    }
+  const handleContinue = async () => {
+    if (!canContinue) return;
 
-    onContinue?.({ selectedId, answer: answer.trim() });
+    try {
+      const result = await setSecurityQuestion({
+        securityQuestion: selectedId,
+        securityAnswer: answer.trim(),
+      });
 
-    if (!onContinue) {
-      Alert.alert("Saved", "Security question saved (demo).");
+      if (!result.success) {
+        Alert.alert("Error", result.error || "Failed to save security question");
+        return;
+      }
+
+      navigation.navigate("CreatePin");
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Unexpected error occurred");
     }
   };
 
   return (
     <LinearGradient colors={Colors.gradient} style={styles.background}>
-      {/* ✅ keep bottom edge OFF so keyboard doesn't expose background gap */}
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <StatusBar barStyle="light-content" />
 
-        {/* ✅ Logo header */}
         <View style={styles.topBrand}>
           <LogoSvg width={160} height={34} />
         </View>
 
-        {/* ✅ Use padding (not height) so it doesn't create the blue gap */}
         <KeyboardAvoidingView
           style={styles.flex}
           behavior={Platform.OS === "ios" ? "padding" : "padding"}
@@ -106,8 +90,7 @@ export default function SecurityQuestionsScreen({
                 <Text style={styles.title}>Security Questions</Text>
 
                 <Text style={styles.progress}>
-                  Question {currentIndex} of {totalQuestions}{" "}
-                  <Text style={styles.req}>*</Text>
+                  Question 1 of 1 <Text style={styles.req}>*</Text>
                 </Text>
 
                 <Text style={styles.label}>Choose a question:</Text>
@@ -158,7 +141,9 @@ export default function SecurityQuestionsScreen({
                     end={{ x: 1, y: 1 }}
                     style={styles.btn}
                   >
-                    <Text style={styles.btnText}>Continue</Text>
+                    <Text style={styles.btnText}>
+                      {isLoading ? "Saving..." : "Continue"}
+                    </Text>
                   </LinearGradient>
                 </Pressable>
               </View>
@@ -166,14 +151,16 @@ export default function SecurityQuestionsScreen({
           </View>
         </KeyboardAvoidingView>
 
-        {/* Dropdown modal */}
         <Modal
           visible={pickerOpen}
           transparent
           animationType="fade"
           onRequestClose={() => setPickerOpen(false)}
         >
-          <Pressable style={styles.modalOverlay} onPress={() => setPickerOpen(false)}>
+          <Pressable
+            style={styles.modalOverlay}
+            onPress={() => setPickerOpen(false)}
+          >
             <Pressable style={styles.modalSheet} onPress={() => {}}>
               <Text style={styles.modalTitle}>Choose a question</Text>
 
@@ -200,12 +187,17 @@ export default function SecurityQuestionsScreen({
                     >
                       {opt.label}
                     </Text>
-                    {active ? <Ionicons name="checkmark" size={18} color="#0B4B86" /> : null}
+                    {active ? (
+                      <Ionicons name="checkmark" size={18} color="#0B4B86" />
+                    ) : null}
                   </Pressable>
                 );
               })}
 
-              <Pressable onPress={() => setPickerOpen(false)} style={styles.modalCancel}>
+              <Pressable
+                onPress={() => setPickerOpen(false)}
+                style={styles.modalCancel}
+              >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </Pressable>
             </Pressable>
@@ -216,24 +208,14 @@ export default function SecurityQuestionsScreen({
   );
 }
 
+/* 🔽 STYLES UNCHANGED */
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   background: { flex: 1 },
   safe: { flex: 1 },
-
-  contentBottom: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-
-  topBrand: {
-    alignItems: "center",
-    paddingTop: 10,
-    paddingBottom: 8,
-  },
-
+  contentBottom: { flex: 1, justifyContent: "flex-end" },
+  topBrand: { alignItems: "center", paddingTop: 10, paddingBottom: 8 },
   cardStack: { width: "100%", position: "relative" },
-
   cardGhost: {
     position: "absolute",
     left: 16,
@@ -243,7 +225,6 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     backgroundColor: "rgba(255,255,255,0.16)",
   },
-
   card: {
     width: "100%",
     backgroundColor: "#fff",
@@ -251,19 +232,14 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 22,
     minHeight: Layout.cardMinHeight,
-
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-
     shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
     elevation: 10,
   },
-
   title: {
     textAlign: "center",
     fontSize: 16,
@@ -271,7 +247,6 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: 16,
   },
-
   progress: {
     fontSize: 12,
     fontWeight: "600",
@@ -279,14 +254,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   req: { color: "#EF4444", fontWeight: "800" },
-
   label: {
     fontSize: 12,
     fontWeight: "600",
     color: Colors.muted,
     marginBottom: 6,
   },
-
   select: {
     height: 42,
     borderRadius: 10,
@@ -299,13 +272,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 12,
   },
-  selectText: {
-    flex: 1,
-    paddingRight: 10,
-    fontSize: 12.5,
-    color: "#4B5563",
-  },
-
+  selectText: { flex: 1, paddingRight: 10, fontSize: 12.5, color: "#4B5563" },
   input: {
     height: 42,
     borderRadius: 10,
@@ -317,7 +284,6 @@ const styles = StyleSheet.create({
     color: "#111827",
     marginBottom: 18,
   },
-
   btnOuter: {
     borderRadius: 999,
     overflow: "hidden",
@@ -335,7 +301,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   btnText: { color: "#fff", fontWeight: "800", fontSize: 13.5 },
-
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
