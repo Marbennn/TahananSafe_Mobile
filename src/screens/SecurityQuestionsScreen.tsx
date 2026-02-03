@@ -28,7 +28,17 @@ type SecurityQuestionOption = {
   label: string;
 };
 
-export default function SecurityQuestionsScreen() {
+type SecurityQuestionsScreenProps = {
+  currentIndex?: number;
+  totalQuestions?: number;
+  onContinue?: () => void;
+};
+
+export default function SecurityQuestionsScreen({
+  currentIndex = 1,
+  totalQuestions = 1,
+  onContinue,
+}: SecurityQuestionsScreenProps) {
   const navigation = useNavigation<any>();
   const setSecurityQuestion = useAuthStore((state) => state.setSecurityQuestion);
   const isLoading = useAuthStore((state) => state.isLoading);
@@ -62,7 +72,11 @@ export default function SecurityQuestionsScreen() {
         return;
       }
 
-      navigation.navigate("CreatePin");
+      if (onContinue) {
+        onContinue();
+      } else {
+        navigation.navigate("CreatePin");
+      }
     } catch (e: any) {
       Alert.alert("Error", e.message || "Unexpected error occurred");
     }
@@ -90,7 +104,7 @@ export default function SecurityQuestionsScreen() {
                 <Text style={styles.title}>Security Questions</Text>
 
                 <Text style={styles.progress}>
-                  Question 1 of 1 <Text style={styles.req}>*</Text>
+                  Question {currentIndex} of {totalQuestions} <Text style={styles.req}>*</Text>
                 </Text>
 
                 <Text style={styles.label}>Choose a question:</Text>

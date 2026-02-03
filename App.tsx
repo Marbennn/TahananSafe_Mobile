@@ -312,7 +312,11 @@ export default function App() {
 
             {/* ✅ PersonalDetails -> Security */}
             <Stack.Screen name="PersonalDetails">
-              {() => <PersonalDetailsScreen />}
+              {({ navigation }) => (
+                <PersonalDetailsScreen
+                  onContinue={() => navigation.navigate("Security")}
+                />
+              )}
             </Stack.Screen>
 
             {/* ✅ Security -> CreatePin */}
@@ -331,9 +335,13 @@ export default function App() {
               {({ navigation }) => {
                 const CreatePinAny =
                   CreatePinScreen as unknown as React.ComponentType<any>;
+
                 return (
                   <CreatePinAny
-                    onContinue={() => navigation.navigate("Pin")}
+                    onContinue={(pin: string) => {
+                      // ✅ pin exists, no crash
+                      navigation.navigate("Pin", { pin });
+                    }}
                     onBack={() => navigation.goBack()}
                   />
                 );

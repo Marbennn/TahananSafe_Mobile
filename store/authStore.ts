@@ -93,6 +93,8 @@ type AuthStore = {
     payload: SecurityQuestionPayload,
   ) => Promise<{ success: boolean; error?: string }>;
 
+  setPin: (pin: string) => Promise<{ success: boolean; error?: string }>; // ✅ new method
+
   logout: () => Promise<void>;
 };
 
@@ -280,6 +282,37 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         throw new Error(data.message || "Failed to save security question");
 
       set({ isLoading: false });
+      return { success: true };
+    } catch (error: any) {
+      set({ isLoading: false });
+      return { success: false, error: error.message };
+    }
+  },
+
+  // set PIN
+  setPin: async (pin) => {
+    set({ isLoading: true });
+    try {
+      const token = get().token;
+      if (!token) throw new Error("User not authenticated");
+
+      const response = await fetch(
+        "http://192.168.5.137:5000/api/mobile/v1/set-pin",
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ pin }),
+        },
+      );
+
+      const data = await response.json();
+      set({ isLoading: false });
+
+      if (!response.ok) throw new Error(data.message || "Failed to set PIN");
+
       return { success: true };
     } catch (error: any) {
       set({ isLoading: false });
