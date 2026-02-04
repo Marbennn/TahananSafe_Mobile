@@ -5,11 +5,10 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  StatusBar,
   Platform,
   useWindowDimensions,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
@@ -18,7 +17,7 @@ type Props = {
   onContinue: (pin: string) => void;
   onBack?: () => void;
   onSkip?: () => void;
-  progressActiveCount?: 1 | 2 | 3;
+  progressActiveCount?: 1 | 2 | 3; // kept for compatibility (shell controls header)
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -27,32 +26,28 @@ function clamp(n: number, min: number, max: number) {
 
 const BLUE = "#1D4ED8";
 const BORDER = "#93C5FD";
-const BORDER_IDLE = "#E5E7EB";
 
 export default function CreatePinScreen({
   onContinue,
-  onBack,
   onSkip,
-  progressActiveCount = 3,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
-  // ✅ same responsiveness pattern as SignupScreen
   const s = clamp(width / 375, 0.95, 1.45);
   const vs = clamp(height / 812, 0.95, 1.25);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
-  const backIconSize = scale(22);
   const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
 
   const PIN_LENGTH = 4;
   const [pin, setPin] = useState("");
 
-  const dots = useMemo(() => {
-    return Array.from({ length: PIN_LENGTH }).map((_, i) => i < pin.length);
-  }, [pin]);
+  const dots = useMemo(
+    () => Array.from({ length: PIN_LENGTH }).map((_, i) => i < pin.length),
+    [pin]
+  );
 
   const canSignup = pin.length === PIN_LENGTH;
 
@@ -72,41 +67,13 @@ export default function CreatePinScreen({
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-
-      {/* ✅ Header EXACT like SignupScreen (back arrow position matches) */}
-      <View style={styles.header}>
-        <Pressable
-          onPress={onBack}
-          hitSlop={12}
-          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
-        >
-          <Ionicons name="chevron-back" size={backIconSize} color="#111827" />
-        </Pressable>
-
-        <View style={styles.progressRow}>
-          {[1, 2, 3].map((i) => (
-            <View
-              key={i}
-              style={[
-                styles.progressSeg,
-                i <= progressActiveCount ? styles.progressActive : null,
-              ]}
-            />
-          ))}
-        </View>
-
-        <View style={styles.headerSpacer} />
-      </View>
-
+    <View style={styles.safe}>
       <View
         style={[
           styles.container,
           { paddingBottom: Math.max(insets.bottom, vscale(12)) },
         ]}
       >
-        {/* ✅ Title block EXACT like SignupScreen */}
         <View style={styles.titleBlock}>
           <Text style={styles.screenTitle}>Enter Your Pin</Text>
           <Text style={styles.screenSub}>
@@ -115,7 +82,6 @@ export default function CreatePinScreen({
           </Text>
         </View>
 
-        {/* Dots */}
         <View style={styles.dotsRow}>
           {dots.map((filled, idx) => (
             <View
@@ -125,7 +91,6 @@ export default function CreatePinScreen({
           ))}
         </View>
 
-        {/* Keypad */}
         <View style={styles.keypad}>
           <View style={styles.keypadGrid}>
             {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
@@ -149,7 +114,6 @@ export default function CreatePinScreen({
           </View>
         </View>
 
-        {/* Bottom Actions */}
         <View style={styles.bottomArea}>
           <Pressable
             onPress={handleSignup}
@@ -182,7 +146,7 @@ export default function CreatePinScreen({
           </Pressable>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -223,42 +187,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: "#FFFFFF" },
 
-    // ✅ header EXACT like SignupScreen
-    header: {
-      paddingHorizontal: scale(18),
-      paddingTop: vscale(6),
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      backgroundColor: "#FFFFFF",
-    },
-
-    backBtn: {
-      width: scale(36),
-      height: scale(36),
-      alignItems: "flex-start",
-      justifyContent: "center",
-    },
-
-    headerSpacer: { width: scale(36), height: scale(36) },
-
-    progressRow: {
-      flex: 1,
-      flexDirection: "row",
-      justifyContent: "center",
-      gap: scale(8),
-      marginTop: vscale(2),
-    },
-
-    progressSeg: {
-      width: scale(46),
-      height: scale(3),
-      borderRadius: 999,
-      backgroundColor: BORDER_IDLE,
-    },
-
-    progressActive: { backgroundColor: BLUE },
-
     container: {
       flex: 1,
       backgroundColor: "#FFFFFF",
@@ -266,7 +194,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingTop: vscale(6),
     },
 
-    // ✅ title block EXACT like SignupScreen
     titleBlock: {
       marginTop: vscale(18),
       marginBottom: vscale(22),

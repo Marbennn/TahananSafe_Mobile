@@ -3,40 +3,33 @@ import React, { useMemo, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
 
-type GenderOption = {
-  id: "male" | "female";
-  label: string;
-};
+import PersonalDetailsForm from "../components/PersonalDetailsScreen/PersonalDetailsForm";
 
 type SubmitPayload = {
   firstName: string;
   lastName: string;
-  dob: string; // MM / DD / YYYY
+  dob: string; // MM / DD / YYYY (or whatever your form uses)
   contactNumber: string;
   gender: "male" | "female";
 };
 
 type Props = {
   initialValues?: Partial<SubmitPayload>;
-  onBack?: () => void;
+  onBack?: () => void; // handled by AuthFlowShell header, but keep prop
   onSubmit?: (payload: SubmitPayload) => void;
-  progressActiveCount?: 1 | 2 | 3; // default 2
+  progressActiveCount?: 1 | 2 | 3; // handled by AuthFlowShell header, but keep prop
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -44,33 +37,20 @@ function clamp(n: number, min: number, max: number) {
 }
 
 const BLUE = "#1D4ED8";
-const BORDER_IDLE = "#E5E7EB";
 
 export default function PersonalDetailsScreen({
   initialValues,
-  onBack,
   onSubmit,
-  progressActiveCount = 2,
 }: Props) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
-  // ✅ same responsiveness pattern as SignupScreen
   const s = clamp(width / 375, 0.95, 1.45);
   const vs = clamp(height / 812, 0.95, 1.25);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
-  const backIconSize = scale(22);
   const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
-
-  const genderOptions: GenderOption[] = useMemo(
-    () => [
-      { id: "male", label: "Male" },
-      { id: "female", label: "Female" },
-    ],
-    []
-  );
 
   const [firstName, setFirstName] = useState(initialValues?.firstName ?? "");
   const [lastName, setLastName] = useState(initialValues?.lastName ?? "");
@@ -81,17 +61,6 @@ export default function PersonalDetailsScreen({
   const [gender, setGender] = useState<"male" | "female">(
     initialValues?.gender ?? "male"
   );
-
-  // focus states
-  const [firstFocused, setFirstFocused] = useState(false);
-  const [lastFocused, setLastFocused] = useState(false);
-  const [dobFocused, setDobFocused] = useState(false);
-  const [contactFocused, setContactFocused] = useState(false);
-
-  const [genderOpen, setGenderOpen] = useState(false);
-
-  const selectedGenderLabel =
-    genderOptions.find((g) => g.id === gender)?.label ?? "Select your gender";
 
   const canContinue =
     firstName.trim().length > 0 &&
@@ -114,39 +83,13 @@ export default function PersonalDetailsScreen({
       gender,
     };
 
-    if (onSubmit) {
-      onSubmit(payload);
-      return;
-    }
+    if (onSubmit) return onSubmit(payload);
 
     Alert.alert("Saved", "Personal details saved (demo).");
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-
-      {/* ✅ Header EXACT like SignupScreen (back arrow position matches) */}
-      <View style={styles.header}>
-        <Pressable onPress={onBack} hitSlop={12} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={backIconSize} color="#111827" />
-        </Pressable>
-
-        <View style={styles.progressRow}>
-          {[1, 2, 3].map((i) => (
-            <View
-              key={i}
-              style={[
-                styles.progressSeg,
-                i <= progressActiveCount ? styles.progressActive : null,
-              ]}
-            />
-          ))}
-        </View>
-
-        <View style={styles.headerSpacer} />
-      </View>
-
+    <View style={styles.safe}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -159,7 +102,6 @@ export default function PersonalDetailsScreen({
             contentContainerStyle={styles.scrollContent}
           >
             <View style={styles.page}>
-              {/* ✅ Title block EXACT like SignupScreen */}
               <View style={styles.titleBlock}>
                 <Text style={styles.screenTitle}>Enter Your Details</Text>
                 <Text style={styles.screenSub}>
@@ -168,94 +110,22 @@ export default function PersonalDetailsScreen({
                 </Text>
               </View>
 
-              <View style={styles.form}>
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>First Name</Text>
-                  <TextInput
-                    value={firstName}
-                    onChangeText={setFirstName}
-                    placeholder="Enter your legal first name"
-                    placeholderTextColor={Colors.placeholder}
-                    autoCapitalize="words"
-                    style={[
-                      styles.input,
-                      firstFocused ? styles.inputFocused : styles.inputIdle,
-                    ]}
-                    onFocus={() => setFirstFocused(true)}
-                    onBlur={() => setFirstFocused(false)}
-                  />
-                </View>
-
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Last Name</Text>
-                  <TextInput
-                    value={lastName}
-                    onChangeText={setLastName}
-                    placeholder="Enter your legal last name"
-                    placeholderTextColor={Colors.placeholder}
-                    autoCapitalize="words"
-                    style={[
-                      styles.input,
-                      lastFocused ? styles.inputFocused : styles.inputIdle,
-                    ]}
-                    onFocus={() => setLastFocused(true)}
-                    onBlur={() => setLastFocused(false)}
-                  />
-                </View>
-
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Date of Birth</Text>
-                  <TextInput
-                    value={dob}
-                    onChangeText={setDob}
-                    placeholder="02 / 24 / 2000"
-                    placeholderTextColor={Colors.placeholder}
-                    keyboardType="numbers-and-punctuation"
-                    style={[
-                      styles.input,
-                      dobFocused ? styles.inputFocused : styles.inputIdle,
-                    ]}
-                    onFocus={() => setDobFocused(true)}
-                    onBlur={() => setDobFocused(false)}
-                  />
-                </View>
-
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Contact Number</Text>
-                  <TextInput
-                    value={contactNumber}
-                    onChangeText={setContactNumber}
-                    placeholder="+63 909 000 0000"
-                    placeholderTextColor={Colors.placeholder}
-                    keyboardType="phone-pad"
-                    style={[
-                      styles.input,
-                      contactFocused ? styles.inputFocused : styles.inputIdle,
-                    ]}
-                    onFocus={() => setContactFocused(true)}
-                    onBlur={() => setContactFocused(false)}
-                  />
-                </View>
-
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Gender</Text>
-                  <Pressable
-                    onPress={() => setGenderOpen(true)}
-                    hitSlop={10}
-                    style={({ pressed }) => [
-                      styles.select,
-                      pressed ? { opacity: 0.95 } : null,
-                    ]}
-                  >
-                    <Text style={styles.selectText} numberOfLines={1}>
-                      {selectedGenderLabel}
-                    </Text>
-                    <Ionicons name="chevron-down" size={scale(18)} color="#6B7280" />
-                  </Pressable>
-                </View>
-
-                <View style={{ height: vscale(80) }} />
-              </View>
+              <PersonalDetailsForm
+                scale={scale}
+                vscale={vscale}
+                styles={styles}
+                firstName={firstName}
+                lastName={lastName}
+                dob={dob}
+                contactNumber={contactNumber}
+                gender={gender}
+                setFirstName={setFirstName}
+                setLastName={setLastName}
+                setDob={setDob}
+                setContactNumber={setContactNumber}
+                setGender={setGender}
+                activeBlue={BLUE}
+              />
             </View>
           </ScrollView>
 
@@ -289,54 +159,7 @@ export default function PersonalDetailsScreen({
           </View>
         </View>
       </KeyboardAvoidingView>
-
-      <Modal
-        visible={genderOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setGenderOpen(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setGenderOpen(false)}>
-          <Pressable style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Select Gender</Text>
-
-            {genderOptions.map((opt) => {
-              const active = opt.id === gender;
-              return (
-                <Pressable
-                  key={opt.id}
-                  onPress={() => {
-                    setGender(opt.id);
-                    setGenderOpen(false);
-                  }}
-                  style={({ pressed }) => [
-                    styles.modalItem,
-                    active ? styles.modalItemActive : null,
-                    pressed ? { opacity: 0.92 } : null,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.modalItemText,
-                      active ? styles.modalItemTextActive : null,
-                    ]}
-                  >
-                    {opt.label}
-                  </Text>
-                  {active ? (
-                    <Ionicons name="checkmark" size={scale(18)} color={BLUE} />
-                  ) : null}
-                </Pressable>
-              );
-            })}
-
-            <Pressable onPress={() => setGenderOpen(false)} style={styles.modalCancel}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -344,41 +167,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
   return StyleSheet.create({
     flex: { flex: 1 },
     safe: { flex: 1, backgroundColor: "#FFFFFF" },
-
-    // ✅ header EXACT like SignupScreen
-    header: {
-      paddingHorizontal: scale(18),
-      paddingTop: vscale(6),
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-    },
-
-    backBtn: {
-      width: scale(36),
-      height: scale(36),
-      alignItems: "flex-start",
-      justifyContent: "center",
-    },
-
-    headerSpacer: { width: scale(36), height: scale(36) },
-
-    progressRow: {
-      flex: 1,
-      flexDirection: "row",
-      justifyContent: "center",
-      gap: scale(8),
-      marginTop: vscale(2),
-    },
-
-    progressSeg: {
-      width: scale(46),
-      height: scale(3),
-      borderRadius: 999,
-      backgroundColor: BORDER_IDLE,
-    },
-
-    progressActive: { backgroundColor: BLUE },
 
     body: { flex: 1 },
 
@@ -391,7 +179,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
 
     page: { flexGrow: 1 },
 
-    // ✅ title block EXACT like SignupScreen
     titleBlock: {
       marginTop: vscale(18),
       marginBottom: vscale(22),
@@ -412,7 +199,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     form: {},
-
     fieldBlock: { marginBottom: vscale(14) },
 
     label: {
@@ -432,15 +218,15 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       color: Colors.text,
     },
 
-    inputIdle: { borderColor: BORDER_IDLE },
-    inputFocused: { borderColor: BLUE },
+    inputIdle: { borderColor: "#E5E7EB" },
+    inputFocused: { borderColor: "#1D4ED8" },
 
     select: {
       height: vscale(50),
       borderRadius: scale(14),
       paddingHorizontal: scale(14),
       borderWidth: 1.4,
-      borderColor: BORDER_IDLE,
+      borderColor: "#E5E7EB",
       backgroundColor: "#FFFFFF",
       flexDirection: "row",
       alignItems: "center",
@@ -474,10 +260,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       }),
     },
 
-    ctaInnerClip: {
-      borderRadius: scale(14),
-      overflow: "hidden",
-    },
+    ctaInnerClip: { borderRadius: scale(14), overflow: "hidden" },
 
     ctaGradient: {
       height: vscale(52),
@@ -491,6 +274,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       fontWeight: "800",
     },
 
+    // If your PersonalDetailsForm uses a modal picker, keep these:
     modalOverlay: {
       flex: 1,
       backgroundColor: "rgba(0,0,0,0.35)",
@@ -530,7 +314,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingRight: scale(10),
     },
 
-    modalItemTextActive: { fontWeight: "800", color: BLUE },
+    modalItemTextActive: { fontWeight: "800", color: "#1D4ED8" },
 
     modalCancel: {
       marginTop: vscale(10),

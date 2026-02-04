@@ -12,9 +12,9 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 // Screens
 import AppSplashScreen from "./src/screens/AppSplashScreen";
 import LoginScreen from "./src/screens/LoginScreen";
-import SignupScreen from "./src/screens/SignupScreen";
-import PersonalDetailsScreen from "./src/screens/PersonalDetailsScreen";
-import CreatePinScreen from "./src/screens/CreatePinScreen";
+
+// ✅ New: Stationary header auth shell
+import AuthFlowShell from "./src/screens/AuthFlowShell";
 
 import HomeScreen from "./src/screens/HomeScreen";
 import InboxScreen from "./src/screens/HotlinesScreen";
@@ -44,10 +44,8 @@ type RootStackParamList = {
   // ✅ Onboarding
   OnboardingPager: undefined;
 
-  // ✅ New flow after onboarding
-  Signup: undefined;
-  PersonalDetails: undefined;
-  CreatePin: undefined;
+  // ✅ Stationary auth flow wrapper
+  AuthFlow: undefined;
 
   // Login flow (optional)
   Login: undefined;
@@ -271,59 +269,33 @@ export default function App() {
               )}
             </Stack.Screen>
 
-            {/* ✅ Onboarding -> Signup (IMPORTANT: navigate, not replace) */}
+            {/* ✅ Onboarding -> AuthFlow */}
             <Stack.Screen name="OnboardingPager">
               {({ navigation }) => (
-                <OnboardingPagerScreen onDone={() => navigation.navigate("Signup")} />
+                <OnboardingPagerScreen
+                  onDone={() => navigation.navigate("AuthFlow")}
+                />
               )}
             </Stack.Screen>
 
-            {/* ✅ Signup -> PersonalDetails */}
-            <Stack.Screen name="Signup">
+            {/* ✅ AuthFlow (stationary header + internal transitions) */}
+            <Stack.Screen name="AuthFlow">
               {({ navigation }) => (
-                <SignupScreen
-                  onBack={() => navigation.goBack()} // ✅ now this will go back to onboarding
+                <AuthFlowShell
+                  onExitToOnboarding={() => navigation.goBack()}
                   onGoLogin={() => navigation.navigate("Login")}
-                  onSignupSuccess={() => navigation.navigate("PersonalDetails")}
+                  onAuthDone={() =>
+                    navigation.reset({ index: 0, routes: [{ name: "Main" }] })
+                  }
                 />
               )}
-            </Stack.Screen>
-
-            {/* ✅ PersonalDetails -> CreatePin */}
-            <Stack.Screen name="PersonalDetails">
-              {({ navigation }) => (
-                <PersonalDetailsScreen
-                  onSubmit={() => navigation.navigate("CreatePin")}
-                />
-              )}
-            </Stack.Screen>
-
-            {/* ✅ CreatePin -> Main (HomeScreen) */}
-            <Stack.Screen name="CreatePin">
-              {({ navigation }) => {
-                const CreatePinAny =
-                  CreatePinScreen as unknown as React.ComponentType<any>;
-
-                return (
-                  <CreatePinAny
-                    onContinue={() =>
-                      navigation.reset({ index: 0, routes: [{ name: "Main" }] })
-                    }
-                    onBack={() => navigation.goBack()}
-                  />
-                );
-              }}
             </Stack.Screen>
 
             {/* Optional login */}
             <Stack.Screen name="Login">
               {({ navigation }) => (
                 <LoginScreen
-                  onGoSignup={() =>
-                    navigation.canGoBack()
-                      ? navigation.goBack()
-                      : navigation.replace("Signup")
-                  }
+                  onGoSignup={() => navigation.replace("AuthFlow")}
                   onLoginSuccess={() =>
                     navigation.reset({ index: 0, routes: [{ name: "Main" }] })
                   }
