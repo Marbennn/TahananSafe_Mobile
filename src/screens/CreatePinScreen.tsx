@@ -4,222 +4,398 @@ import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   Pressable,
   StatusBar,
-  Alert,
   Platform,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
-
-import PinScreenLogo from "../../assets/Logo2.svg";
 
 type Props = {
   onContinue: (pin: string) => void;
   onBack?: () => void;
+  onSkip?: () => void;
+  progressActiveCount?: 1 | 2 | 3;
 };
 
-export default function CreatePinScreen({ onContinue, onBack }: Props) {
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+const BLUE = "#1D4ED8";
+const BORDER = "#93C5FD";
+const BORDER_IDLE = "#E5E7EB";
+
+export default function CreatePinScreen({
+  onContinue,
+  onBack,
+  onSkip,
+  progressActiveCount = 3,
+}: Props) {
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+
+  // ✅ same responsiveness pattern as SignupScreen
+  const s = clamp(width / 375, 0.95, 1.45);
+  const vs = clamp(height / 812, 0.95, 1.25);
+  const scale = (n: number) => Math.round(n * s);
+  const vscale = (n: number) => Math.round(n * vs);
+
+  const backIconSize = scale(22);
+  const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
 
   const PIN_LENGTH = 4;
-
   const [pin, setPin] = useState("");
-  const [confirmPin, setConfirmPin] = useState("");
 
-  const canContinue = useMemo(() => {
-    return pin.length === PIN_LENGTH && confirmPin.length === PIN_LENGTH;
-  }, [pin, confirmPin]);
+  const dots = useMemo(() => {
+    return Array.from({ length: PIN_LENGTH }).map((_, i) => i < pin.length);
+  }, [pin]);
 
-  const submit = () => {
-    if (pin.length !== PIN_LENGTH || confirmPin.length !== PIN_LENGTH) {
-      Alert.alert("Incomplete", `PIN must be ${PIN_LENGTH} digits.`);
-      return;
-    }
-    if (pin !== confirmPin) {
-      Alert.alert("PIN mismatch", "Your PIN and Confirm PIN do not match.");
-      return;
-    }
+  const canSignup = pin.length === PIN_LENGTH;
+
+  const addDigit = (d: string) => {
+    if (pin.length >= PIN_LENGTH) return;
+    setPin((p) => (p + d).slice(0, PIN_LENGTH));
+  };
+
+  const backspace = () => {
+    if (!pin.length) return;
+    setPin((p) => p.slice(0, -1));
+  };
+
+  const handleSignup = () => {
+    if (!canSignup) return;
     onContinue(pin);
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <LinearGradient colors={Colors.gradient} style={styles.background}>
-        <StatusBar barStyle="light-content" />
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-        {/* ✅ SAME LOGO POSITION AS PinScreen.tsx */}
-        <View style={styles.topBrand}>
-          <PinScreenLogo width={150} height={150} />
+      {/* ✅ Header EXACT like SignupScreen (back arrow position matches) */}
+      <View style={styles.header}>
+        <Pressable
+          onPress={onBack}
+          hitSlop={12}
+          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
+        >
+          <Ionicons name="chevron-back" size={backIconSize} color="#111827" />
+        </Pressable>
+
+        <View style={styles.progressRow}>
+          {[1, 2, 3].map((i) => (
+            <View
+              key={i}
+              style={[
+                styles.progressSeg,
+                i <= progressActiveCount ? styles.progressActive : null,
+              ]}
+            />
+          ))}
         </View>
 
-        {/* Card */}
-        <View style={[styles.cardWrap, { paddingBottom: Math.max(insets.bottom, 18) }]}>
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Create your Pin</Text>
+        <View style={styles.headerSpacer} />
+      </View>
 
-            {/* Enter PIN */}
-            <Text style={styles.label}>
-              Enter your Pin <Text style={styles.req}>*</Text>
-            </Text>
-            <TextInput
-              value={pin}
-              onChangeText={(t) => setPin(t.replace(/\D/g, "").slice(0, PIN_LENGTH))}
-              placeholder={"X ".repeat(PIN_LENGTH).trim()}
-              placeholderTextColor="#9AA4B2"
-              keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-              secureTextEntry
-              maxLength={PIN_LENGTH}
-              style={styles.input}
-              returnKeyType="next"
+      <View
+        style={[
+          styles.container,
+          { paddingBottom: Math.max(insets.bottom, vscale(12)) },
+        ]}
+      >
+        {/* ✅ Title block EXACT like SignupScreen */}
+        <View style={styles.titleBlock}>
+          <Text style={styles.screenTitle}>Enter Your Pin</Text>
+          <Text style={styles.screenSub}>
+            Set up an app PIN to protect your access and keep{"\n"}
+            your information private.
+          </Text>
+        </View>
+
+        {/* Dots */}
+        <View style={styles.dotsRow}>
+          {dots.map((filled, idx) => (
+            <View
+              key={idx}
+              style={[styles.dot, filled ? styles.dotFilled : styles.dotEmpty]}
             />
+          ))}
+        </View>
 
-            {/* Confirm PIN */}
-            <Text style={[styles.label, { marginTop: 12 }]}>
-              Confirm your Pin <Text style={styles.req}>*</Text>
-            </Text>
-            <TextInput
-              value={confirmPin}
-              onChangeText={(t) =>
-                setConfirmPin(t.replace(/\D/g, "").slice(0, PIN_LENGTH))
-              }
-              placeholder={"X ".repeat(PIN_LENGTH).trim()}
-              placeholderTextColor="#9AA4B2"
-              keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-              secureTextEntry
-              maxLength={PIN_LENGTH}
-              style={styles.input}
-              returnKeyType="done"
-              onSubmitEditing={submit}
-            />
+        {/* Keypad */}
+        <View style={styles.keypad}>
+          <View style={styles.keypadGrid}>
+            {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+              <KeyButton key={d} label={d} onPress={() => addDigit(d)} styles={styles} />
+            ))}
 
-            {/* Continue button */}
+            <View style={styles.keySpacer} />
+
+            <KeyButton label="0" onPress={() => addDigit("0")} styles={styles} />
+
             <Pressable
-              onPress={submit}
-              disabled={!canContinue}
+              onPress={backspace}
+              hitSlop={14}
               style={({ pressed }) => [
-                styles.btnOuter,
-                !canContinue && { opacity: 0.55 },
-                pressed && canContinue && { transform: [{ scale: 0.99 }] },
+                styles.iconBtn,
+                pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 },
               ]}
             >
-              <LinearGradient
-                colors={["#0B5E9B", "#083B6B"]}
-                style={styles.btnInner}
-              >
-                <Text style={styles.btnText}>Continue</Text>
-              </LinearGradient>
+              <Ionicons name="backspace-outline" size={scale(26)} color={BLUE} />
             </Pressable>
-
-            {onBack ? (
-              <Pressable
-                onPress={onBack}
-                hitSlop={10}
-                style={({ pressed }) => [styles.backWrap, pressed && { opacity: 0.7 }]}
-              >
-                <Text style={styles.backText}>Back</Text>
-              </Pressable>
-            ) : null}
           </View>
         </View>
-      </LinearGradient>
+
+        {/* Bottom Actions */}
+        <View style={styles.bottomArea}>
+          <Pressable
+            onPress={handleSignup}
+            disabled={!canSignup}
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.ctaOuter,
+              !canSignup && { opacity: 0.55 },
+              pressed && canSignup ? { transform: [{ scale: 0.99 }] } : null,
+            ]}
+          >
+            <View style={styles.ctaInnerClip}>
+              <LinearGradient
+                colors={Colors.gradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.ctaGradient}
+              >
+                <Text style={styles.ctaText}>Signup</Text>
+              </LinearGradient>
+            </View>
+          </Pressable>
+
+          <Pressable
+            onPress={onSkip}
+            hitSlop={10}
+            style={({ pressed }) => [styles.skipWrap, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={styles.skipText}>Skip</Text>
+          </Pressable>
+        </View>
+      </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#0B5E9B" },
-  background: { flex: 1 },
+function KeyButton({
+  label,
+  onPress,
+  styles,
+}: {
+  label: string;
+  onPress: () => void;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={10}
+      style={({ pressed }) => [
+        styles.keyBtn,
+        pressed && { transform: [{ scale: 0.98 }], opacity: 0.95 },
+      ]}
+    >
+      <Text style={styles.keyText}>{label}</Text>
+    </Pressable>
+  );
+}
 
-  // ✅ Copied from your PinScreen.tsx (logo position)
-  topBrand: {
-    alignItems: "center",
-    paddingTop: 10,
-    paddingBottom: 6,
-    marginBottom: 28,
-  },
+function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+  const dotSize = clamp(scale(18), 16, 26);
+  const dotBorder = clamp(Math.round(dotSize * 0.1), 1, 2);
+  const dotGap = clamp(scale(14), 12, 18);
 
-  cardWrap: {
-    flex: 1,
-    paddingHorizontal: 18,
-    justifyContent: "flex-start",
-  },
+  const spaceTitleToDots = clamp(vscale(26), 20, 34);
+  const spaceDotsToKeypad = clamp(vscale(26), 18, 34);
 
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 18,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.55)",
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
-  },
+  const keypadWidth = clamp(scale(300), 250, 340);
+  const keyW = Math.floor((keypadWidth - scale(16) * 2) / 3);
 
-  cardTitle: {
-    textAlign: "center",
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#111827",
-    marginBottom: 14,
-  },
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: "#FFFFFF" },
 
-  label: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 6,
-  },
-  req: { color: "#EF4444", fontWeight: "900" },
+    // ✅ header EXACT like SignupScreen
+    header: {
+      paddingHorizontal: scale(18),
+      paddingTop: vscale(6),
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      backgroundColor: "#FFFFFF",
+    },
 
-  input: {
-    height: 44,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#BFD3EA",
-    paddingHorizontal: 12,
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#111827",
-    backgroundColor: "#FFFFFF",
-  },
+    backBtn: {
+      width: scale(36),
+      height: scale(36),
+      alignItems: "flex-start",
+      justifyContent: "center",
+    },
 
-  btnOuter: {
-    marginTop: 16,
-    borderRadius: 999,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(11,94,155,0.35)",
-  },
-  btnInner: {
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 999,
-  },
-  btnText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.2,
-  },
+    headerSpacer: { width: scale(36), height: scale(36) },
 
-  backWrap: {
-    marginTop: 10,
-    alignItems: "center",
-  },
-  backText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#0B5E9B",
-  },
-});
+    progressRow: {
+      flex: 1,
+      flexDirection: "row",
+      justifyContent: "center",
+      gap: scale(8),
+      marginTop: vscale(2),
+    },
+
+    progressSeg: {
+      width: scale(46),
+      height: scale(3),
+      borderRadius: 999,
+      backgroundColor: BORDER_IDLE,
+    },
+
+    progressActive: { backgroundColor: BLUE },
+
+    container: {
+      flex: 1,
+      backgroundColor: "#FFFFFF",
+      paddingHorizontal: scale(22),
+      paddingTop: vscale(6),
+    },
+
+    // ✅ title block EXACT like SignupScreen
+    titleBlock: {
+      marginTop: vscale(18),
+      marginBottom: vscale(22),
+    },
+
+    screenTitle: {
+      fontSize: scale(26),
+      fontWeight: "800",
+      color: Colors.text,
+    },
+
+    screenSub: {
+      marginTop: vscale(8),
+      fontSize: scale(13),
+      lineHeight: scale(18),
+      color: Colors.muted,
+      maxWidth: scale(360),
+    },
+
+    dotsRow: {
+      flexDirection: "row",
+      justifyContent: "center",
+      alignItems: "center",
+      gap: dotGap,
+      marginTop: spaceTitleToDots,
+      marginBottom: spaceDotsToKeypad,
+    },
+
+    dot: {
+      width: dotSize,
+      height: dotSize,
+      borderRadius: 999,
+      borderWidth: dotBorder,
+    },
+
+    dotEmpty: { borderColor: "#CBD5E1", backgroundColor: "transparent" },
+    dotFilled: { borderColor: BLUE, backgroundColor: BLUE },
+
+    keypad: { alignItems: "center" },
+
+    keypadGrid: {
+      width: keypadWidth,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      rowGap: vscale(14),
+      paddingHorizontal: scale(16),
+    },
+
+    keyBtn: {
+      width: keyW,
+      height: vscale(54),
+      borderRadius: scale(10),
+      borderWidth: scale(1.6),
+      borderColor: BORDER,
+      backgroundColor: "#FFFFFF",
+      alignItems: "center",
+      justifyContent: "center",
+      ...Platform.select({
+        android: { elevation: 0 },
+        ios: { shadowOpacity: 0 },
+      }),
+    },
+
+    keyText: {
+      fontSize: scale(16),
+      fontWeight: "800",
+      color: BLUE,
+    },
+
+    keySpacer: { width: keyW, height: vscale(54) },
+
+    iconBtn: {
+      width: keyW,
+      height: vscale(54),
+      borderRadius: scale(10),
+      backgroundColor: "transparent",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    bottomArea: {
+      marginTop: "auto",
+      paddingTop: vscale(26),
+      paddingBottom: vscale(6),
+      alignItems: "center",
+      width: "100%",
+    },
+
+    ctaOuter: {
+      width: "100%",
+      marginTop: vscale(4),
+      borderRadius: scale(14),
+      ...Platform.select({
+        ios: {
+          shadowColor: "#000",
+          shadowOpacity: 0.16,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 7 },
+        },
+        android: { elevation: 7 },
+      }),
+    },
+
+    ctaInnerClip: {
+      width: "100%",
+      borderRadius: scale(14),
+      overflow: "hidden",
+    },
+
+    ctaGradient: {
+      width: "100%",
+      height: vscale(52),
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    ctaText: {
+      color: "#FFFFFF",
+      fontSize: scale(14),
+      fontWeight: "800",
+    },
+
+    skipWrap: { marginTop: vscale(10) },
+
+    skipText: {
+      fontSize: scale(12),
+      fontWeight: "700",
+      color: "#111827",
+    },
+  });
+}

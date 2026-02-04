@@ -1,5 +1,5 @@
 // src/screens/LoginScreen.tsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import {
   View,
   Text,
@@ -10,188 +10,163 @@ import {
   ScrollView,
   StatusBar,
   Alert,
+  useWindowDimensions,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 
-import InputField from "../components/InputField";
-import PrimaryButton from "../components/PrimaryButton";
-import Checkbox from "../components/Checkbox";
-import { Colors } from "../theme/colors";
-import { Layout } from "../theme/layout";
+// ✅ React Navigation
+import { useNavigation } from "@react-navigation/native";
+import type { NavigationProp, ParamListBase } from "@react-navigation/native";
 
-// ✅ same logo
-import LogoSvg from "../../assets/SecurityQuestionsScreen/Logo.svg";
+import LoginCard from "../components/LoginScreen/LoginCard";
 
 type Props = {
   onGoSignup: () => void;
   onLoginSuccess: () => void;
 };
 
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
 export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
-  const [email, setEmail] = useState<string>("johndoe@gmail.com");
-  const [password, setPassword] = useState<string>("password123");
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [rememberMe, setRememberMe] = useState<boolean>(false);
+  const navigation = useNavigation<NavigationProp<ParamListBase>>();
+  const { width, height } = useWindowDimensions();
 
-  const canLogin = useMemo(() => {
-    const e = email.trim();
-    const p = password.trim();
-    return e.length > 0 && p.length >= 6;
-  }, [email, password]);
+  // ✅ responsive
+  const s = clamp(width / 375, 0.95, 1.45);
+  const vs = clamp(height / 812, 0.95, 1.25);
+  const scale = (n: number) => Math.round(n * s);
+  const vscale = (n: number) => Math.round(n * vs);
 
-  const handleLogin = () => {
-    if (!canLogin) {
-      Alert.alert("Invalid", "Please enter a valid email and password.");
+  const backIconSize = scale(22);
+  const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
+
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
       return;
     }
-    onLoginSuccess();
+    // fallback when Login was opened via reset/replace
+    onGoSignup();
   };
 
-  const handleForgot = () =>
-    Alert.alert("Forgot Password", "Go to Forgot screen.");
+  const handleForgotPassword = () => {
+    Alert.alert("Forgot Password", "Go to Forgot Password screen.");
+  };
+
+  const handleTerms = () =>
+    Alert.alert("Terms of use", "Open Terms of use screen/link.");
+  const handlePrivacy = () =>
+    Alert.alert("Privacy Policy", "Open Privacy Policy screen/link.");
 
   return (
-    <LinearGradient colors={Colors.gradient} style={styles.background}>
-      <SafeAreaView style={styles.safe} edges={["top"]}>
-        <StatusBar barStyle="light-content" />
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-        {/* ✅ Header with safe spacing */}
-        <View style={styles.topBrand}>
-          <LogoSvg width={160} height={34} />
-        </View>
+      {/* Back Arrow */}
+      <View style={styles.header}>
+        <Pressable onPress={handleBack} hitSlop={12} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={backIconSize} color="#111827" />
+        </Pressable>
+      </View>
 
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          bounces={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scrollContent}
         >
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            bounces={false}
-          >
-            <View style={styles.cardStack}>
-              <View style={styles.cardGhost} />
+          <View style={styles.page}>
+            <LoginCard
+              onLoginSuccess={onLoginSuccess}
+              onGoSignup={onGoSignup}
+              onForgotPassword={handleForgotPassword}
+            />
 
-              <View style={styles.card}>
-                <Text style={styles.title}>Login</Text>
+            <View style={styles.termsWrap}>
+              <Text style={styles.termsText}>
+                By clicking create account you agree to recognizes
+              </Text>
 
-                <InputField
-                  label="Email"
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="johndoe@gmail.com"
-                  keyboardType="email-address"
-                />
-
-                <InputField
-                  label="Password"
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="********"
-                  secureTextEntry={!showPassword}
-                  rightIconName={showPassword ? "eye-off-outline" : "eye-outline"}
-                  onPressRightIcon={() => setShowPassword((v) => !v)}
-                />
-
-                <View style={styles.rowBetween}>
-                  <Checkbox
-                    value={rememberMe}
-                    onToggle={() => setRememberMe((v) => !v)}
-                    label="Remember me"
-                  />
-
-                  <Pressable onPress={handleForgot} hitSlop={10}>
-                    <Text style={styles.forgotText}>Forgot Password?</Text>
-                  </Pressable>
-                </View>
-
-                <PrimaryButton
-                  title="Login"
-                  onPress={handleLogin}
-                  disabled={!canLogin}
-                />
-
-                <View style={styles.footer}>
-                  <Text style={styles.footerText}>Not yet registered? </Text>
-                  <Pressable onPress={onGoSignup}>
-                    <Text style={styles.footerLink}>Create an account</Text>
-                  </Pressable>
-                </View>
+              <View style={styles.termsRow}>
+                <Pressable onPress={handleTerms} hitSlop={8}>
+                  <Text style={styles.termsLink}>Terms of use</Text>
+                </Pressable>
+                <Text style={styles.termsText}> and </Text>
+                <Pressable onPress={handlePrivacy} hitSlop={8}>
+                  <Text style={styles.termsLink}>Privacy Policy</Text>
+                </Pressable>
               </View>
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </LinearGradient>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  background: { flex: 1 },
-  safe: { flex: 1 },
+function createStyles(
+  scale: (n: number) => number,
+  vscale: (n: number) => number
+) {
+  return StyleSheet.create({
+    flex: { flex: 1 },
+    safe: { flex: 1, backgroundColor: "#FFFFFF" },
 
-  // ✅ slightly lower so it doesn’t hug the top
-  topBrand: {
-    alignItems: "center",
-    paddingTop: 12,
-    paddingBottom: 10,
-  },
+    header: {
+      paddingHorizontal: scale(18),
+      paddingTop: vscale(6),
+    },
 
-  scrollContent: { flexGrow: 1, justifyContent: "flex-end" },
+    backBtn: {
+      width: scale(36),
+      height: scale(36),
+      alignItems: "flex-start",
+      justifyContent: "center",
+    },
 
-  cardStack: { width: "100%", position: "relative" },
+    scrollContent: {
+      flexGrow: 1,
+      paddingHorizontal: scale(22),
+      paddingTop: vscale(6),
+      paddingBottom: vscale(14),
+    },
 
-  cardGhost: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    top: -14,
-    bottom: 14,
-    borderRadius: 28,
-    backgroundColor: "rgba(255,255,255,0.16)",
-  },
+    page: {
+      flexGrow: 1,
+    },
 
-  card: {
-    width: "100%",
-    backgroundColor: "#fff",
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 22,
-    minHeight: Layout.cardMinHeight,
+    termsWrap: {
+      marginTop: "auto",
+      alignItems: "center",
+      paddingTop: vscale(18),
+      paddingBottom: vscale(6),
+    },
 
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
+    termsText: {
+      fontSize: scale(11),
+      color: "#6B7280",
+      textAlign: "center",
+      lineHeight: scale(14),
+    },
 
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 10,
-  },
+    termsRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: vscale(2),
+    },
 
-  title: {
-    textAlign: "center",
-    fontSize: 16,
-    fontWeight: "700",
-    color: Colors.text,
-    marginBottom: 16,
-  },
-
-  rowBetween: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 6,
-    marginBottom: 18,
-  },
-
-  forgotText: { color: Colors.link, fontSize: 12, fontWeight: "600" },
-
-  footer: { flexDirection: "row", justifyContent: "center", marginTop: 18 },
-  footerText: { color: Colors.muted, fontSize: 12.5 },
-  footerLink: { color: Colors.link, fontSize: 12.5, fontWeight: "700" },
-});
+    termsLink: {
+      fontSize: scale(11),
+      color: "#1D4ED8",
+      fontWeight: "700",
+      textDecorationLine: "underline",
+      lineHeight: scale(14),
+    },
+  });
+}

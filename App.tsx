@@ -14,10 +14,7 @@ import AppSplashScreen from "./src/screens/AppSplashScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import SignupScreen from "./src/screens/SignupScreen";
 import PersonalDetailsScreen from "./src/screens/PersonalDetailsScreen";
-import SecurityQuestionsScreen from "./src/screens/SecurityQuestionsScreen";
-import VerifyAccountScreen from "./src/screens/VerifyAccountScreen";
 import CreatePinScreen from "./src/screens/CreatePinScreen";
-import PinScreen from "./src/screens/PinScreen";
 
 import HomeScreen from "./src/screens/HomeScreen";
 import InboxScreen from "./src/screens/HotlinesScreen";
@@ -25,6 +22,9 @@ import ReportScreen from "./src/screens/ReportScreen";
 import ReportDetailScreen from "./src/screens/ReportDetailScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
+
+// ✅ Onboarding pager screen
+import OnboardingPagerScreen from "./src/screens/OnboardingPagerScreen";
 
 // Incident flow screens (inside Main)
 import IncidentLogScreen from "./src/screens/IncidentLogScreen";
@@ -41,18 +41,18 @@ enableScreens(true);
 type RootStackParamList = {
   Splash: undefined;
 
-  // Onboarding flow
-  Signup: undefined;
-  Verify: { email?: string; next: "PersonalDetails" | "Main" };
-  PersonalDetails: undefined;
-  Security: undefined;
-  CreatePin: undefined;
-  Pin: undefined;
+  // ✅ Onboarding
+  OnboardingPager: undefined;
 
-  // Login flow
+  // ✅ New flow after onboarding
+  Signup: undefined;
+  PersonalDetails: undefined;
+  CreatePin: undefined;
+
+  // Login flow (optional)
   Login: undefined;
 
-  // App shell
+  // App shell (HomeScreen is inside MainShell)
   Main: undefined;
 
   // Extra
@@ -262,114 +262,76 @@ export default function App() {
             initialRouteName="Splash"
             screenOptions={{ headerShown: false, gestureEnabled: true }}
           >
-            {/* ✅ Splash -> Signup */}
+            {/* ✅ Splash -> OnboardingPager */}
             <Stack.Screen name="Splash">
               {({ navigation }) => (
                 <AppSplashScreenWrapper
-                  onDone={() => navigation.replace("Signup")}
+                  onDone={() => navigation.replace("OnboardingPager")}
                 />
               )}
             </Stack.Screen>
 
-            {/* ✅ Signup -> Verify -> PersonalDetails */}
+            {/* ✅ Onboarding -> Signup (IMPORTANT: navigate, not replace) */}
+            <Stack.Screen name="OnboardingPager">
+              {({ navigation }) => (
+                <OnboardingPagerScreen onDone={() => navigation.navigate("Signup")} />
+              )}
+            </Stack.Screen>
+
+            {/* ✅ Signup -> PersonalDetails */}
             <Stack.Screen name="Signup">
               {({ navigation }) => (
                 <SignupScreen
-                  onGoLogin={() => navigation.replace("Login")}
-                  onSignupSuccess={() =>
-                    navigation.navigate("Verify", {
-                      email: "johndoe@gmail.com",
-                      next: "PersonalDetails",
-                    })
-                  }
+                  onBack={() => navigation.goBack()} // ✅ now this will go back to onboarding
+                  onGoLogin={() => navigation.navigate("Login")}
+                  onSignupSuccess={() => navigation.navigate("PersonalDetails")}
                 />
               )}
             </Stack.Screen>
 
-            <Stack.Screen name="Verify">
-              {({ navigation, route }) => (
-                <VerifyAccountScreen
-                  email={route.params?.email ?? "johndoe@gmail.com"}
-                  onVerify={() => {
-                    const next = route.params?.next ?? "PersonalDetails";
-
-                    if (next === "Main") {
-                      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
-                    } else {
-                      navigation.replace("PersonalDetails");
-                    }
-                  }}
-                  onResendCode={() =>
-                    Alert.alert("Resent", "Verification code resent (demo).")
-                  }
-                />
-              )}
-            </Stack.Screen>
-
-            {/* ✅ PersonalDetails -> Security */}
+            {/* ✅ PersonalDetails -> CreatePin */}
             <Stack.Screen name="PersonalDetails">
               {({ navigation }) => (
                 <PersonalDetailsScreen
-                  onSubmit={() => navigation.navigate("Security")}
+                  onSubmit={() => navigation.navigate("CreatePin")}
                 />
               )}
             </Stack.Screen>
 
-            {/* ✅ Security -> CreatePin */}
-            <Stack.Screen name="Security">
-              {({ navigation }) => (
-                <SecurityQuestionsScreen
-                  currentIndex={1}
-                  totalQuestions={3}
-                  onContinue={() => navigation.navigate("CreatePin")}
-                />
-              )}
-            </Stack.Screen>
-
-            {/* ✅ CreatePin -> Pin */}
+            {/* ✅ CreatePin -> Main (HomeScreen) */}
             <Stack.Screen name="CreatePin">
               {({ navigation }) => {
-                const CreatePinAny = CreatePinScreen as unknown as React.ComponentType<any>;
+                const CreatePinAny =
+                  CreatePinScreen as unknown as React.ComponentType<any>;
+
                 return (
                   <CreatePinAny
-                    onContinue={() => navigation.navigate("Pin")}
+                    onContinue={() =>
+                      navigation.reset({ index: 0, routes: [{ name: "Main" }] })
+                    }
                     onBack={() => navigation.goBack()}
                   />
                 );
               }}
             </Stack.Screen>
 
-            {/* ✅ Pin -> Login */}
-            <Stack.Screen name="Pin">
-              {({ navigation }) => (
-                <PinScreen
-                  onVerified={(pin: string) => {
-                    Alert.alert("PIN Saved!", `PIN: ${pin}`);
-                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
-                  }}
-                  onForgotPin={() =>
-                    Alert.alert("Forgot PIN", "Go to reset PIN flow")
-                  }
-                />
-              )}
-            </Stack.Screen>
-
-            {/* ✅ Login -> Verify -> Home(Main) */}
+            {/* Optional login */}
             <Stack.Screen name="Login">
               {({ navigation }) => (
                 <LoginScreen
-                  onGoSignup={() => navigation.replace("Signup")}
+                  onGoSignup={() =>
+                    navigation.canGoBack()
+                      ? navigation.goBack()
+                      : navigation.replace("Signup")
+                  }
                   onLoginSuccess={() =>
-                    navigation.navigate("Verify", {
-                      email: "johndoe@gmail.com",
-                      next: "Main",
-                    })
+                    navigation.reset({ index: 0, routes: [{ name: "Main" }] })
                   }
                 />
               )}
             </Stack.Screen>
 
-            {/* ✅ Main (Home lives inside this shell) */}
+            {/* ✅ Main */}
             <Stack.Screen name="Main">
               {({ navigation }) => (
                 <MainShell
