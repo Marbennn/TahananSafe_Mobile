@@ -1,12 +1,6 @@
 // src/components/SignupScreen/SignupCard.tsx
 import React from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  TextInput,
-  Platform,
-} from "react-native";
+import { View, Text, Pressable, TextInput, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../../theme/colors";
@@ -39,6 +33,7 @@ type Props = {
   passwordsMatch: boolean;
   canContinue: boolean;
   onContinue: () => void;
+  loading?: boolean; // support loading state
 
   // footer + links
   onGoLogin: () => void;
@@ -66,6 +61,7 @@ export default function SignupCard({
   passwordsMatch,
   canContinue,
   onContinue,
+  loading = false,
 
   onGoLogin,
   onTerms,
@@ -158,12 +154,14 @@ export default function SignupCard({
 
         <Pressable
           onPress={onContinue}
-          disabled={!canContinue}
+          disabled={!canContinue || loading} // disable if loading
           hitSlop={10}
           style={({ pressed }) => [
             styles.ctaOuter,
-            !canContinue && { opacity: 0.55 },
-            pressed && canContinue ? { transform: [{ scale: 0.99 }] } : null,
+            (!canContinue || loading) && { opacity: 0.55 },
+            pressed && canContinue && !loading
+              ? { transform: [{ scale: 0.99 }] }
+              : null,
           ]}
         >
           <View style={styles.ctaInnerClip}>
@@ -173,7 +171,9 @@ export default function SignupCard({
               end={{ x: 1, y: 1 }}
               style={styles.ctaGradient}
             >
-              <Text style={styles.ctaText}>Continue</Text>
+              <Text style={styles.ctaText}>
+                {loading ? "Please wait..." : "Continue"}{" "}
+              </Text>
             </LinearGradient>
           </View>
         </Pressable>

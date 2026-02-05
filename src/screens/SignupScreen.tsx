@@ -11,11 +11,13 @@ import {
 } from "react-native";
 import { Colors } from "../theme/colors";
 
-// ✅ popup
+// ✅ Popup for OTP verification
 import EnterVerificationModal from "../components/SignupScreen/EnterVerificationModal";
 
-// ✅ Signup card component
+// ✅ Signup card UI component
 import SignupCard from "../components/SignupScreen/SignupCard";
+
+import { useAuthStore } from "../store/authStore";
 
 type Props = {
   onGoLogin: () => void;
@@ -46,7 +48,9 @@ export default function SignupScreen({
 
   const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
 
-  const [email, setEmail] = useState("JohnDoe@gmail.com");
+  const { register, verifyRegistrationOtp, isLoading } = useAuthStore();
+
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
@@ -58,10 +62,12 @@ export default function SignupScreen({
   const passwordsMatch = password === confirmPassword;
 
   const canContinue = useMemo(() => {
-    const e = email.trim();
-    const p = password.trim();
-    const c = confirmPassword.trim();
-    return e.length > 0 && p.length >= 6 && c.length >= 6 && passwordsMatch;
+    return (
+      email.trim().length > 0 &&
+      password.length >= 6 &&
+      confirmPassword.length >= 6 &&
+      passwordsMatch
+    );
   }, [email, password, confirmPassword, passwordsMatch]);
 
   const handleBack = () => {
@@ -69,7 +75,7 @@ export default function SignupScreen({
     else onGoLogin();
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     const e = email.trim();
     const p = password.trim();
     const c = confirmPassword.trim();
@@ -78,23 +84,54 @@ export default function SignupScreen({
     if (!isValidEmail(e)) return Alert.alert("Invalid", "Please enter a valid email.");
     if (p.length < 6)
       return Alert.alert("Invalid", "Password must be at least 6 characters.");
-    if (c.length < 6)
-      return Alert.alert("Invalid", "Confirm password must be at least 6 characters.");
-    if (p !== c) return Alert.alert("Password mismatch", "Passwords do not match.");
+    if (p !== c)
+      return Alert.alert("Password mismatch", "Passwords do not match.");
 
-    setVerifyOpen(true);
+    try {
+      const result = await register(e, p);
+
+      if (!result.success) {
+        Alert.alert("Signup Failed", result.error || "Unable to register.");
+        return;
+      }
+
+      // OTP successfully sent
+      setVerifyOpen(true);
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Something went wrong.");
+    }
   };
 
-  const handleVerified = (_code: string) => {
-    onSignupSuccess();
+  const handleVerified = async (otp: string) => {
+    try {
+      const result = await verifyRegistrationOtp(email.trim(), otp);
+
+      if (!result.success) {
+        Alert.alert("Verification Failed", result.error || "Invalid OTP.");
+        return;
+      }
+
+      setVerifyOpen(false);
+      onSignupSuccess();
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Something went wrong during verification.");
+    }
   };
 
-  const handleResend = () => {
-    Alert.alert("Resent", "Verification code resent (demo).");
-  };
+  const handleResend = async () => {
+    try {
+      const result = await register(email.trim(), password.trim());
 
-  const handleTerms = () => Alert.alert("Terms of use", "Open Terms of use screen/link.");
-  const handlePrivacy = () => Alert.alert("Privacy Policy", "Open Privacy Policy screen/link.");
+      if (!result.success) {
+        Alert.alert("Resend Failed", result.error || "Unable to resend OTP.");
+        return;
+      }
+
+      Alert.alert("OTP Sent", "A new verification code has been sent.");
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Unable to resend OTP.");
+    }
+  };
 
   return (
     <View style={styles.safe}>
@@ -125,8 +162,9 @@ export default function SignupScreen({
             canContinue={canContinue}
             onContinue={handleContinue}
             onGoLogin={handleBack}
-            onTerms={handleTerms}
-            onPrivacy={handlePrivacy}
+            onTerms={() => Alert.alert("Terms", "Open Terms of use")}
+            onPrivacy={() => Alert.alert("Privacy", "Open Privacy Policy")}
+            loading={isLoading} // dynamically disables button & shows loading
           />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -134,7 +172,6 @@ export default function SignupScreen({
       <EnterVerificationModal
         visible={verifyOpen}
         email={email.trim()}
-        initialSeconds={34}
         onClose={() => setVerifyOpen(false)}
         onResend={handleResend}
         onVerified={handleVerified}
@@ -147,14 +184,13 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
   return StyleSheet.create({
     flex: { flex: 1 },
     safe: { flex: 1, backgroundColor: "#FFFFFF" },
-
     scrollContent: {
       flexGrow: 1,
       paddingHorizontal: scale(22),
       paddingTop: vscale(6),
       paddingBottom: vscale(14),
     },
-
+    
     // (rest kept as-is, since SignupCard uses these)
     page: { flexGrow: 1 },
 
