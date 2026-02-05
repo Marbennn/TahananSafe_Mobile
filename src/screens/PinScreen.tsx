@@ -1,14 +1,22 @@
 // src/screens/PinScreen.tsx
 import React, { useMemo, useState } from "react";
-import { View, Text, Pressable, StyleSheet, StatusBar, Alert } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  StatusBar,
+  Alert,
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "../theme/colors";
 
 import PinScreenLogo from "../../assets/Logo2.svg";
+import { useAuthStore } from "../../store/authStore";
 
 type Props = {
-  onVerified: (pin: string) => void;
+  onVerified: () => void; // navigate to login / home
   onForgotPin: () => void;
 };
 
@@ -16,6 +24,7 @@ type KeyVariant = "ghost";
 
 export default function PinScreen({ onVerified, onForgotPin }: Props) {
   const insets = useSafeAreaInsets();
+  const { verifyPin, isLoading } = useAuthStore();
 
   const [pin, setPin] = useState<string>("");
   const PIN_LENGTH = 4;
@@ -26,21 +35,45 @@ export default function PinScreen({ onVerified, onForgotPin }: Props) {
     return arr;
   }, [pin]);
 
+  const submitPin = async (enteredPin: string) => {
+    if (isLoading) return;
+
+    try {
+      const result = await verifyPin(enteredPin);
+
+      if (!result.success) {
+        // show actual backend/store error
+        const errorMessage = result.error ?? "Invalid PIN, please try again";
+        Alert.alert("Error", errorMessage);
+        setPin(""); // reset input
+        return;
+      }
+
+      // PIN verified successfully
+      Alert.alert("Success", "Your PIN has been verified.");
+      onVerified(); // navigate to next screen
+    } catch (err) {
+      // fallback if verifyPin throws
+      console.error("submitPin error:", err);
+      Alert.alert("Error", "An unexpected error occurred. Please try again.");
+      setPin("");
+    }
+  };
+
   const addDigit = (d: string) => {
-    if (pin.length >= PIN_LENGTH) return;
+    if (pin.length >= PIN_LENGTH || isLoading) return;
     const next = pin + d;
     setPin(next);
 
     if (next.length === PIN_LENGTH) {
       setTimeout(() => {
-        Alert.alert("PIN Entered", next);
-        onVerified(next);
-      }, 80);
+        submitPin(next);
+      }, 120);
     }
   };
 
   const backspace = () => {
-    if (!pin.length) return;
+    if (!pin.length || isLoading) return;
     setPin((p) => p.slice(0, -1));
   };
 
@@ -54,11 +87,11 @@ export default function PinScreen({ onVerified, onForgotPin }: Props) {
         </View>
 
         <View style={styles.topArea}>
-          <Text style={styles.title}>Enter your pin</Text>
+          <Text style={styles.title}>Enter your PIN</Text>
           <Text style={styles.subtitle}>Please enter your PIN to proceed</Text>
 
           <View style={styles.pinRow}>
-            {Array.from({ length: 4 }).map((_, idx) => (
+            {Array.from({ length: PIN_LENGTH }).map((_, idx) => (
               <View key={idx} style={styles.pinBox}>
                 <Text style={styles.pinDot}>{masked[idx]}</Text>
               </View>
@@ -76,10 +109,9 @@ export default function PinScreen({ onVerified, onForgotPin }: Props) {
           <View style={styles.sheetInner}>
             <View style={styles.keypadWrap}>
               <View style={styles.keypadGrid}>
-                {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+                {["1","2","3","4","5","6","7","8","9"].map((d) => (
                   <KeyBtn key={d} label={d} onPress={() => addDigit(d)} />
                 ))}
-
                 <View style={styles.keySpacer} />
                 <KeyBtn label="0" onPress={() => addDigit("0")} />
                 <KeyBtn label="⌫" onPress={backspace} variant="ghost" />
@@ -89,7 +121,12 @@ export default function PinScreen({ onVerified, onForgotPin }: Props) {
             <Pressable
               onPress={onForgotPin}
               hitSlop={10}
-              style={({ pressed }) => [styles.forgotWrap, pressed && { opacity: 0.7 }]}
+              disabled={isLoading}
+              style={({ pressed }) => [
+                styles.forgotWrap,
+                pressed && { opacity: 0.7 },
+                isLoading && { opacity: 0.5 },
+              ]}
             >
               <Text style={styles.forgotText}>Forgot your PIN code?</Text>
             </Pressable>
@@ -100,25 +137,17 @@ export default function PinScreen({ onVerified, onForgotPin }: Props) {
   );
 }
 
-function KeyBtn({
-  label,
-  onPress,
-  variant,
-}: {
-  label: string;
-  onPress: () => void;
-  variant?: KeyVariant;
-}) {
+function KeyBtn({ label, onPress, variant }: { label: string; onPress: () => void; variant?: KeyVariant }) {
   const isGhost = variant === "ghost";
   return (
     <Pressable
       onPress={onPress}
+      hitSlop={10}
       style={({ pressed }) => [
         styles.keyBtn,
         isGhost && styles.keyBtnGhost,
         pressed && { transform: [{ scale: 0.98 }] },
       ]}
-      hitSlop={10}
     >
       <Text style={[styles.keyText, isGhost && styles.keyTextGhost]}>{label}</Text>
     </Pressable>
@@ -129,9 +158,18 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#0B5E9B" },
   background: { flex: 1 },
 
-  topBrand: { alignItems: "center", paddingTop: 10, paddingBottom: 6, marginBottom: 28 },
+  topBrand: {
+    alignItems: "center",
+    paddingTop: 10,
+    paddingBottom: 6,
+    marginBottom: 28,
+  },
 
-  topArea: { alignItems: "center", justifyContent: "center", paddingBottom: 30 },
+  topArea: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 30,
+  },
 
   title: { fontSize: 22, fontWeight: "800", color: "#FFFFFF", marginBottom: 6 },
   subtitle: { fontSize: 12, color: "rgba(255,255,255,0.8)", marginBottom: 16, fontWeight: "600" },
@@ -164,42 +202,16 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
 
-  sheetTopFade: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    height: 18,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-  },
-
+  sheetTopFade: { position: "absolute", left: 0, right: 0, top: 0, height: 18, borderTopLeftRadius: 26, borderTopRightRadius: 26 },
   sheetInner: { flex: 1, justifyContent: "space-between" },
 
   keypadWrap: { alignItems: "center", justifyContent: "flex-start", paddingTop: 6 },
-  keypadGrid: {
-    width: 270,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    rowGap: 14,
-  },
+  keypadGrid: { width: 270, flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 14 },
 
-  keyBtn: {
-    width: 78,
-    height: 46,
-    borderRadius: 12,
-    borderWidth: 1.6,
-    borderColor: "#2B6CB0",
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  keyBtn: { width: 78, height: 46, borderRadius: 12, borderWidth: 1.6, borderColor: "#2B6CB0", backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
   keyText: { fontSize: 16, fontWeight: "800", color: "#2B6CB0" },
-
   keyBtnGhost: { borderColor: "rgba(43,108,176,0.25)", backgroundColor: "#F7FBFF" },
   keyTextGhost: { color: "rgba(43,108,176,0.7)" },
-
   keySpacer: { width: 78, height: 46 },
 
   forgotWrap: { alignItems: "center", paddingTop: 10, paddingBottom: 80 },

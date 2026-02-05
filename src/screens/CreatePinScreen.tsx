@@ -10,10 +10,7 @@ import {
   Alert,
   Platform,
 } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
 
@@ -27,13 +24,11 @@ type Props = {
 
 export default function CreatePinScreen({ onContinue, onBack }: Props) {
   const insets = useSafeAreaInsets();
-
   const PIN_LENGTH = 4;
 
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
 
-  // Grab setPin method and isLoading state from your auth store
   const { setPin: savePin, isLoading } = useAuthStore();
 
   const canContinue = useMemo(() => {
@@ -60,7 +55,10 @@ export default function CreatePinScreen({ onContinue, onBack }: Props) {
         return;
       }
 
-      // PIN saved to database successfully
+      // ✅ PIN saved successfully (DO NOT display the actual PIN)
+      Alert.alert("Success", "Your PIN has been saved securely.");
+
+      // continue to next step (screen/navigation)
       onContinue(pin);
     } catch (error: any) {
       Alert.alert("Error", error.message || "Something went wrong");
@@ -78,24 +76,17 @@ export default function CreatePinScreen({ onContinue, onBack }: Props) {
         </View>
 
         {/* Card */}
-        <View
-          style={[
-            styles.cardWrap,
-            { paddingBottom: Math.max(insets.bottom, 18) },
-          ]}
-        >
+        <View style={[styles.cardWrap, { paddingBottom: Math.max(insets.bottom, 18) }]}>
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Create your Pin</Text>
+            <Text style={styles.cardTitle}>Create your PIN</Text>
 
             {/* Enter PIN */}
             <Text style={styles.label}>
-              Enter your Pin <Text style={styles.req}>*</Text>
+              Enter your PIN <Text style={styles.req}>*</Text>
             </Text>
             <TextInput
               value={pin}
-              onChangeText={(t) =>
-                setPin(t.replace(/\D/g, "").slice(0, PIN_LENGTH))
-              }
+              onChangeText={(t) => setPin(t.replace(/\D/g, "").slice(0, PIN_LENGTH))}
               placeholder={"X ".repeat(PIN_LENGTH).trim()}
               placeholderTextColor="#9AA4B2"
               keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
@@ -107,7 +98,7 @@ export default function CreatePinScreen({ onContinue, onBack }: Props) {
 
             {/* Confirm PIN */}
             <Text style={[styles.label, { marginTop: 12 }]}>
-              Confirm your Pin <Text style={styles.req}>*</Text>
+              Confirm your PIN <Text style={styles.req}>*</Text>
             </Text>
             <TextInput
               value={confirmPin}
@@ -134,28 +125,20 @@ export default function CreatePinScreen({ onContinue, onBack }: Props) {
                 pressed && canContinue && { transform: [{ scale: 0.99 }] },
               ]}
             >
-              <LinearGradient
-                colors={["#0B5E9B", "#083B6B"]}
-                style={styles.btnInner}
-              >
-                <Text style={styles.btnText}>
-                  {isLoading ? "Saving..." : "Continue"}
-                </Text>
+              <LinearGradient colors={["#0B5E9B", "#083B6B"]} style={styles.btnInner}>
+                <Text style={styles.btnText}>{isLoading ? "Saving..." : "Continue"}</Text>
               </LinearGradient>
             </Pressable>
 
-            {onBack ? (
+            {onBack && (
               <Pressable
                 onPress={onBack}
                 hitSlop={10}
-                style={({ pressed }) => [
-                  styles.backWrap,
-                  pressed && { opacity: 0.7 },
-                ]}
+                style={({ pressed }) => [styles.backWrap, pressed && { opacity: 0.7 }]}
               >
                 <Text style={styles.backText}>Back</Text>
               </Pressable>
-            ) : null}
+            )}
           </View>
         </View>
       </LinearGradient>
@@ -167,18 +150,9 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#0B5E9B" },
   background: { flex: 1 },
 
-  topBrand: {
-    alignItems: "center",
-    paddingTop: 10,
-    paddingBottom: 6,
-    marginBottom: 28,
-  },
+  topBrand: { alignItems: "center", paddingTop: 10, paddingBottom: 6, marginBottom: 28 },
 
-  cardWrap: {
-    flex: 1,
-    paddingHorizontal: 18,
-    justifyContent: "flex-start",
-  },
+  cardWrap: { flex: 1, paddingHorizontal: 18, justifyContent: "flex-start" },
 
   card: {
     backgroundColor: "#FFFFFF",
@@ -195,20 +169,9 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
 
-  cardTitle: {
-    textAlign: "center",
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#111827",
-    marginBottom: 14,
-  },
+  cardTitle: { textAlign: "center", fontSize: 14, fontWeight: "800", color: "#111827", marginBottom: 14 },
 
-  label: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 6,
-  },
+  label: { fontSize: 11, fontWeight: "700", color: "#111827", marginBottom: 6 },
   req: { color: "#EF4444", fontWeight: "900" },
 
   input: {
@@ -223,33 +186,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
 
-  btnOuter: {
-    marginTop: 16,
-    borderRadius: 999,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(11,94,155,0.35)",
-  },
-  btnInner: {
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 999,
-  },
-  btnText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.2,
-  },
+  btnOuter: { marginTop: 16, borderRadius: 999, overflow: "hidden", borderWidth: 1, borderColor: "rgba(11,94,155,0.35)" },
+  btnInner: { height: 44, alignItems: "center", justifyContent: "center", borderRadius: 999 },
+  btnText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900", letterSpacing: 0.2 },
 
-  backWrap: {
-    marginTop: 10,
-    alignItems: "center",
-  },
-  backText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#0B5E9B",
-  },
+  backWrap: { marginTop: 10, alignItems: "center" },
+  backText: { fontSize: 11, fontWeight: "800", color: "#0B5E9B" },
 });
