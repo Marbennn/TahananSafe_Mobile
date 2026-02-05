@@ -1,3 +1,4 @@
+// src/components/SignupScreen/EnterVerificationModal.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -9,11 +10,11 @@ import {
   Platform,
   Animated,
   useWindowDimensions,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../../theme/colors";
-
-// ✅ separated badge component
+import { useAuthStore } from "../../store/authStore"; // Zustand store
 import ChecklistBadge from "../ChecklistBadge";
 
 type Props = {
@@ -21,8 +22,7 @@ type Props = {
   email: string;
   initialSeconds?: number; // default: 34
   onClose: () => void;
-  onVerified: (code: string) => void;
-  onResend?: () => void;
+  onVerified: (code: string) => void | Promise<void>;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -35,11 +35,8 @@ export default function EnterVerificationModal({
   initialSeconds = 34,
   onClose,
   onVerified,
-  onResend,
 }: Props) {
   const { width, height } = useWindowDimensions();
-
-  // ✅ responsive scaling (same style as your screens)
   const s = clamp(width / 375, 0.95, 1.45);
   const vs = clamp(height / 812, 0.95, 1.25);
   const scale = (n: number) => Math.round(n * s);
@@ -49,39 +46,53 @@ export default function EnterVerificationModal({
 
   const [code, setCode] = useState<string>("");
   const [secondsLeft, setSecondsLeft] = useState<number>(initialSeconds);
-
   const inputRef = useRef<TextInput>(null);
-
   const fade = useRef(new Animated.Value(0)).current;
   const pop = useRef(new Animated.Value(0.96)).current;
 
   const timeText = `00:${String(secondsLeft).padStart(2, "0")}`;
   const canContinue = code.length === 4;
 
-  const focusInput = () => {
+  const verifyRegistrationOtp = useAuthStore(
+    (state) => state.verifyRegistrationOtp,
+  );
+  const storeResendOtp = useAuthStore((state) => state.resendOtp);
+
+  const focusInput = () =>
     requestAnimationFrame(() => inputRef.current?.focus?.());
-  };
 
   const closeWithAnim = () => {
     Animated.parallel([
-      Animated.timing(fade, { toValue: 0, duration: 120, useNativeDriver: true }),
-      Animated.timing(pop, { toValue: 0.98, duration: 120, useNativeDriver: true }),
+      Animated.timing(fade, {
+        toValue: 0,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(pop, {
+        toValue: 0.98,
+        duration: 120,
+        useNativeDriver: true,
+      }),
     ]).start(({ finished }) => {
       if (finished) onClose();
     });
   };
 
+  // Animate modal open
   useEffect(() => {
     if (!visible) return;
 
     setCode("");
     setSecondsLeft(initialSeconds);
-
     fade.setValue(0);
     pop.setValue(0.96);
 
     Animated.parallel([
-      Animated.timing(fade, { toValue: 1, duration: 160, useNativeDriver: true }),
+      Animated.timing(fade, {
+        toValue: 1,
+        duration: 160,
+        useNativeDriver: true,
+      }),
       Animated.spring(pop, {
         toValue: 1,
         speed: 18,
@@ -94,72 +105,102 @@ export default function EnterVerificationModal({
     return () => clearTimeout(t);
   }, [visible, initialSeconds, fade, pop]);
 
+  // Countdown timer
   useEffect(() => {
-    if (!visible) return;
-    if (secondsLeft <= 0) return;
+    if (!visible || secondsLeft <= 0) return;
 
-    const t = setInterval(() => {
-      setSecondsLeft((s) => Math.max(0, s - 1));
-    }, 1000);
-
+    const t = setInterval(
+      () => setSecondsLeft((s) => Math.max(0, s - 1)),
+      1000,
+    );
     return () => clearInterval(t);
   }, [visible, secondsLeft]);
 
-  const handleChange = (t: string) => {
-    const cleaned = t.replace(/\D/g, "").slice(0, 4);
-    setCode(cleaned);
+  const handleChange = (text: string) => {
+    setCode(text.replace(/\D/g, "").slice(0, 4));
   };
 
-  const handleContinue = () => {
+  // Verify OTP
+  const handleContinue = async () => {
     if (!canContinue) return;
-    const finalCode = code;
-    closeWithAnim();
-    onVerified(finalCode);
+
+    try {
+      const res = await verifyRegistrationOtp(email, code);
+
+      if (res.success) {
+        Alert.alert("Success", "Your account has been verified!");
+        closeWithAnim();
+        await onVerified(code);
+      } else {
+        Alert.alert(
+          "Invalid OTP",
+          res.error || "Please enter the correct OTP.",
+        );
+        setCode("");
+        focusInput();
+      }
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Something went wrong.");
+    }
   };
 
-  const handleResend = () => {
+  // Resend OTP (backend handles logic)
+  const handleResend = async () => {
     if (secondsLeft > 0) return;
-    setSecondsLeft(initialSeconds);
-    onResend?.();
-    setTimeout(focusInput, 160);
+
+    try {
+      const result = await storeResendOtp(email);
+
+      if (!result.success) {
+        Alert.alert("Error", result.message || "Failed to resend OTP");
+      } else {
+        Alert.alert(
+          "OTP Sent",
+          result.message || "A new OTP has been sent to your email.",
+        );
+        setSecondsLeft(initialSeconds);
+        setTimeout(focusInput, 160);
+      }
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Something went wrong.");
+    }
   };
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={closeWithAnim}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={closeWithAnim}
+    >
       <View style={styles.modalRoot}>
         <Animated.View style={[styles.backdrop, { opacity: fade }]} />
 
         <Animated.View
-          style={[
-            styles.card,
-            {
-              opacity: fade,
-              transform: [{ scale: pop }],
-            },
-          ]}
+          style={[styles.card, { opacity: fade, transform: [{ scale: pop }] }]}
         >
-          {/* ✅ Badge icon (halo + svg only) */}
           <View style={styles.badgeWrap}>
             <ChecklistBadge size={scale(86)} />
           </View>
 
           <Text style={styles.title}>Enter Verification Code!</Text>
-
           <Text style={styles.sub}>
-            Enter the 4 - digit verification code sent to{"\n"}your email address
+            Enter the 4-digit verification code sent to{"\n"}
+            {email}
           </Text>
 
-          {/* Code boxes */}
           <Pressable onPress={focusInput} style={styles.otpRow}>
             {[0, 1, 2, 3].map((i) => {
               const ch = code[i] ?? "";
               const isActive = i === code.length && code.length < 4;
               const isFilled = ch.length > 0;
-
               return (
                 <View
                   key={i}
-                  style={[styles.otpBox, (isActive || isFilled) && styles.otpBoxActive]}
+                  style={[
+                    styles.otpBox,
+                    (isActive || isFilled) && styles.otpBoxActive,
+                  ]}
                 >
                   <Text style={styles.otpChar}>{ch}</Text>
                 </View>
@@ -167,7 +208,6 @@ export default function EnterVerificationModal({
             })}
           </Pressable>
 
-          {/* Hidden input */}
           <TextInput
             ref={inputRef}
             value={code}
@@ -181,23 +221,26 @@ export default function EnterVerificationModal({
             onSubmitEditing={handleContinue}
           />
 
-          {/* Info row */}
           <View style={styles.infoRow}>
             <Text style={styles.timer}>
               Remaining Time <Text style={styles.timerStrong}>{timeText}</Text>
             </Text>
-
             <View style={styles.resendRow}>
               <Text style={styles.mutedSmall}>Didn’t get the code </Text>
-              <Pressable onPress={handleResend} hitSlop={10} disabled={secondsLeft > 0}>
-                <Text style={[styles.resend, secondsLeft > 0 && { opacity: 0.45 }]}>
+              <Pressable
+                onPress={handleResend}
+                hitSlop={10}
+                disabled={secondsLeft > 0}
+              >
+                <Text
+                  style={[styles.resend, secondsLeft > 0 && { opacity: 0.45 }]}
+                >
                   Resend it
                 </Text>
               </Pressable>
             </View>
           </View>
 
-          {/* Continue */}
           <Pressable
             onPress={handleContinue}
             disabled={!canContinue}
@@ -220,8 +263,11 @@ export default function EnterVerificationModal({
             </View>
           </Pressable>
 
-          {/* Cancel */}
-          <Pressable onPress={closeWithAnim} hitSlop={10} style={styles.cancelBtn}>
+          <Pressable
+            onPress={closeWithAnim}
+            hitSlop={10}
+            style={styles.cancelBtn}
+          >
             <Text style={styles.cancelText}>Cancel</Text>
           </Pressable>
         </Animated.View>
@@ -230,7 +276,11 @@ export default function EnterVerificationModal({
   );
 }
 
-function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+// Styles (unchanged)
+function createStyles(
+  scale: (n: number) => number,
+  vscale: (n: number) => number,
+) {
   return StyleSheet.create({
     modalRoot: {
       flex: 1,
@@ -238,12 +288,10 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       alignItems: "center",
       paddingHorizontal: scale(18),
     },
-
     backdrop: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: "rgba(0,0,0,0.28)",
     },
-
     card: {
       width: "100%",
       maxWidth: scale(320),
@@ -252,7 +300,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingHorizontal: scale(18),
       paddingTop: scale(16),
       paddingBottom: scale(12),
-
       ...Platform.select({
         ios: {
           shadowColor: "#000",
@@ -263,13 +310,11 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
         android: { elevation: 10 },
       }),
     },
-
     badgeWrap: {
       alignItems: "center",
       marginTop: scale(2),
       marginBottom: scale(10),
     },
-
     title: {
       textAlign: "center",
       fontSize: scale(13.5),
@@ -277,7 +322,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       color: Colors.text,
       marginBottom: scale(6),
     },
-
     sub: {
       textAlign: "center",
       fontSize: scale(10.5),
@@ -285,7 +329,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       color: "#6B7280",
       marginBottom: scale(12),
     },
-
     otpRow: {
       flexDirection: "row",
       justifyContent: "space-between",
@@ -293,7 +336,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingHorizontal: scale(6),
       marginBottom: scale(10),
     },
-
     otpBox: {
       flex: 1,
       height: vscale(48),
@@ -304,24 +346,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       alignItems: "center",
       justifyContent: "center",
     },
-
-    otpBoxActive: {
-      borderColor: "#A7C6E6",
-    },
-
-    otpChar: {
-      fontSize: scale(16),
-      fontWeight: "900",
-      color: Colors.text,
-    },
-
-    hiddenInput: {
-      position: "absolute",
-      opacity: 0,
-      height: 1,
-      width: 1,
-    },
-
+    otpBoxActive: { borderColor: "#A7C6E6" },
+    otpChar: { fontSize: scale(16), fontWeight: "900", color: Colors.text },
+    hiddenInput: { position: "absolute", opacity: 0, height: 1, width: 1 },
     infoRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -330,36 +357,16 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       gap: scale(8),
       marginBottom: scale(12),
     },
-
-    timer: {
-      fontSize: scale(10),
-      color: "#6B7280",
-      fontWeight: "700",
-    },
-
-    timerStrong: {
-      color: Colors.primary,
-      fontWeight: "900",
-    },
-
-    resendRow: {
-      flexDirection: "row",
-      alignItems: "center",
-    },
-
-    mutedSmall: {
-      fontSize: scale(10),
-      color: "#6B7280",
-      fontWeight: "600",
-    },
-
+    timer: { fontSize: scale(10), color: "#6B7280", fontWeight: "700" },
+    timerStrong: { color: Colors.primary, fontWeight: "900" },
+    resendRow: { flexDirection: "row", alignItems: "center" },
+    mutedSmall: { fontSize: scale(10), color: "#6B7280", fontWeight: "600" },
     resend: {
       fontSize: scale(10),
       fontWeight: "900",
       color: Colors.link,
       textDecorationLine: "underline",
     },
-
     btnOuter: {
       borderRadius: scale(14),
       marginTop: scale(2),
@@ -373,29 +380,14 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
         android: { elevation: 7 },
       }),
     },
-
-    btnClip: {
-      borderRadius: scale(14),
-      overflow: "hidden",
-    },
-
+    btnClip: { borderRadius: scale(14), overflow: "hidden" },
     btnGradient: {
       height: vscale(46),
       alignItems: "center",
       justifyContent: "center",
     },
-
-    btnText: {
-      color: "#FFFFFF",
-      fontSize: scale(12.8),
-      fontWeight: "900",
-    },
-
-    cancelBtn: {
-      alignItems: "center",
-      paddingVertical: scale(10),
-    },
-
+    btnText: { color: "#FFFFFF", fontSize: scale(12.8), fontWeight: "900" },
+    cancelBtn: { alignItems: "center", paddingVertical: scale(10) },
     cancelText: {
       fontSize: scale(11.5),
       fontWeight: "800",

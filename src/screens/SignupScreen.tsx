@@ -23,7 +23,7 @@ type Props = {
   onGoLogin: () => void;
   onSignupSuccess: () => void;
   onBack?: () => void;
-  progressActiveCount?: 1 | 2 | 3; // kept for compatibility (shell controls header)
+  progressActiveCount?: 1 | 2 | 3;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -34,29 +34,21 @@ function isValidEmail(e: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 }
 
-export default function SignupScreen({
-  onGoLogin,
-  onSignupSuccess,
-  onBack,
-}: Props) {
+export default function SignupScreen({ onGoLogin, onSignupSuccess, onBack }: Props) {
   const { width, height } = useWindowDimensions();
-
   const s = clamp(width / 375, 0.95, 1.45);
   const vs = clamp(height / 812, 0.95, 1.25);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
-
   const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
 
-  const { register, verifyRegistrationOtp, isLoading } = useAuthStore();
+  const { register, isLoading } = useAuthStore();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-
   const [verifyOpen, setVerifyOpen] = useState(false);
 
   const passwordsMatch = password === confirmPassword;
@@ -102,35 +94,9 @@ export default function SignupScreen({
     }
   };
 
-  const handleVerified = async (otp: string) => {
-    try {
-      const result = await verifyRegistrationOtp(email.trim(), otp);
-
-      if (!result.success) {
-        Alert.alert("Verification Failed", result.error || "Invalid OTP.");
-        return;
-      }
-
-      setVerifyOpen(false);
-      onSignupSuccess();
-    } catch (err: any) {
-      Alert.alert("Error", err.message || "Something went wrong during verification.");
-    }
-  };
-
-  const handleResend = async () => {
-    try {
-      const result = await register(email.trim(), password.trim());
-
-      if (!result.success) {
-        Alert.alert("Resend Failed", result.error || "Unable to resend OTP.");
-        return;
-      }
-
-      Alert.alert("OTP Sent", "A new verification code has been sent.");
-    } catch (err: any) {
-      Alert.alert("Error", err.message || "Unable to resend OTP.");
-    }
+  const handleVerified = async (_otp: string) => {
+    setVerifyOpen(false); // close modal
+    onSignupSuccess();    // continue signup flow
   };
 
   return (
@@ -164,7 +130,7 @@ export default function SignupScreen({
             onGoLogin={handleBack}
             onTerms={() => Alert.alert("Terms", "Open Terms of use")}
             onPrivacy={() => Alert.alert("Privacy", "Open Privacy Policy")}
-            loading={isLoading} // dynamically disables button & shows loading
+            loading={isLoading}
           />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -173,8 +139,7 @@ export default function SignupScreen({
         visible={verifyOpen}
         email={email.trim()}
         onClose={() => setVerifyOpen(false)}
-        onResend={handleResend}
-        onVerified={handleVerified}
+        onVerified={handleVerified} // modal handles verification internally
       />
     </View>
   );
@@ -190,18 +155,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingTop: vscale(6),
       paddingBottom: vscale(14),
     },
-    
-    // (rest kept as-is, since SignupCard uses these)
     page: { flexGrow: 1 },
-
     titleBlock: { marginTop: vscale(18), marginBottom: vscale(22) },
-
-    screenTitle: {
-      fontSize: scale(26),
-      fontWeight: "800",
-      color: Colors.text,
-    },
-
+    screenTitle: { fontSize: scale(26), fontWeight: "800", color: Colors.text },
     screenSub: {
       marginTop: vscale(8),
       fontSize: scale(13),
@@ -209,19 +165,10 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       color: Colors.muted,
       maxWidth: scale(360),
     },
-
     form: {},
     fieldBlock: { marginBottom: vscale(14) },
-
-    label: {
-      marginBottom: vscale(8),
-      fontSize: scale(13),
-      fontWeight: "700",
-      color: Colors.text,
-    },
-
+    label: { marginBottom: vscale(8), fontSize: scale(13), fontWeight: "700", color: Colors.text },
     inputWrap: { position: "relative" },
-
     input: {
       height: vscale(50),
       borderRadius: scale(14),
@@ -232,72 +179,25 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       fontSize: scale(14),
       color: Colors.text,
     },
-
-    eyeBtn: {
-      position: "absolute",
-      right: scale(10),
-      top: 0,
-      height: vscale(50),
-      width: scale(34),
-      alignItems: "center",
-      justifyContent: "center",
-    },
-
-    errorText: {
-      marginTop: vscale(2),
-      fontSize: scale(11),
-      color: "#DC2626",
-      fontWeight: "700",
-    },
-
+    eyeBtn: { position: "absolute", right: scale(10), top: 0, height: vscale(50), width: scale(34), alignItems: "center", justifyContent: "center" },
+    errorText: { marginTop: vscale(2), fontSize: scale(11), color: "#DC2626", fontWeight: "700" },
     ctaOuter: {
       marginTop: vscale(4),
       borderRadius: scale(14),
       ...Platform.select({
-        ios: {
-          shadowColor: "#000",
-          shadowOpacity: 0.16,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 7 },
-        },
+        ios: { shadowColor: "#000", shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 7 } },
         android: { elevation: 7 },
       }),
     },
-
     ctaInnerClip: { borderRadius: scale(14), overflow: "hidden" },
-
     ctaGradient: { height: vscale(52), alignItems: "center", justifyContent: "center" },
-
     ctaText: { color: "#FFFFFF", fontSize: scale(14), fontWeight: "800" },
-
-    footer: {
-      flexDirection: "row",
-      justifyContent: "center",
-      alignItems: "center",
-      marginTop: vscale(18),
-    },
-
+    footer: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: vscale(18) },
     footerText: { fontSize: scale(12), color: Colors.muted },
-
     footerLink: { fontSize: scale(12), fontWeight: "800", color: Colors.link },
-
-    termsWrap: {
-      marginTop: "auto",
-      alignItems: "center",
-      paddingTop: vscale(18),
-      paddingBottom: vscale(6),
-    },
-
+    termsWrap: { marginTop: "auto", alignItems: "center", paddingTop: vscale(18), paddingBottom: vscale(6) },
     termsText: { fontSize: scale(11), color: "#6B7280", textAlign: "center", lineHeight: scale(14) },
-
     termsRow: { flexDirection: "row", alignItems: "center", marginTop: vscale(2) },
-
-    termsLink: {
-      fontSize: scale(11),
-      color: Colors.link,
-      fontWeight: "700",
-      textDecorationLine: "underline",
-      lineHeight: scale(14),
-    },
+    termsLink: { fontSize: scale(11), color: Colors.link, fontWeight: "700", textDecorationLine: "underline", lineHeight: scale(14) },
   });
 }

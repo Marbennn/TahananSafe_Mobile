@@ -56,12 +56,15 @@ type AuthStore = {
 
   register: (email: string, password: string) => Promise<AuthResponse>;
   verifyRegistrationOtp: (email: string, otp: string) => Promise<AuthResponse>;
+  resendOtp: (email: string) => Promise<AuthResponse>; // ✅ Updated endpoint
 
   login: (email: string, password: string) => Promise<AuthResponse>;
   verifyLoginOtp: (email: string, otp: string) => Promise<AuthResponse>;
 
   updatePersonalInfo: (payload: PersonalInfoPayload) => Promise<AuthResponse>;
-  setSecurityQuestion: (payload: SecurityQuestionPayload) => Promise<AuthResponse>;
+  setSecurityQuestion: (
+    payload: SecurityQuestionPayload,
+  ) => Promise<AuthResponse>;
 
   setPin: (pin: string) => Promise<AuthResponse>;
   verifyPin: (pin: string) => Promise<AuthResponse>;
@@ -72,10 +75,7 @@ type AuthStore = {
 
 /* ================= HELPERS ================= */
 
-const jsonFetch = async (
-  url: string,
-  options: RequestInit = {}
-) => {
+const jsonFetch = async (url: string, options: RequestInit = {}) => {
   const res = await fetch(url, {
     ...options,
     headers: {
@@ -92,7 +92,7 @@ const jsonFetch = async (
 const authFetch = async (
   url: string,
   token: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ) => {
   return jsonFetch(url, {
     ...options,
@@ -163,6 +163,23 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       });
 
       return { success: true, user: data.user };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  // ✅ RESEND REGISTRATION OTP (updated to match backend)
+  resendOtp: async (email) => {
+    try {
+      set({ isLoading: true });
+      const data = await jsonFetch(`${API_URL}/resend-verification-otp`, {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+
+      return { success: true, message: data.message };
     } catch (e: any) {
       return { success: false, error: e.message };
     } finally {
@@ -293,11 +310,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   /* ===== LOGOUT ===== */
   logout: async () => {
-    await AsyncStorage.multiRemove([
-      "user",
-      "accessToken",
-      "refreshToken",
-    ]);
+    await AsyncStorage.multiRemove(["user", "accessToken", "refreshToken"]);
     set({ user: null, accessToken: null, refreshToken: null });
   },
 }));
