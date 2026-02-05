@@ -1,5 +1,5 @@
 // src/screens/LoginScreen.tsx
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -21,6 +21,12 @@ import type { NavigationProp, ParamListBase } from "@react-navigation/native";
 
 import LoginCard from "../components/LoginScreen/LoginCard";
 
+// ✅ OTP modal
+import EnterVerificationModal from "../components/LoginScreen/EnterVerificationModal";
+
+// ✅ Forgot password modal (with OTP inside)
+import ResetPasswordModal from "../components/LoginScreen/ResetPasswordModal";
+
 type Props = {
   onGoSignup: () => void;
   onLoginSuccess: () => void;
@@ -34,7 +40,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const { width, height } = useWindowDimensions();
 
-  // ✅ responsive
   const s = clamp(width / 375, 0.95, 1.45);
   const vs = clamp(height / 812, 0.95, 1.25);
   const scale = (n: number) => Math.round(n * s);
@@ -43,17 +48,38 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const backIconSize = scale(22);
   const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
 
+  // ✅ Login OTP modal
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [verifyEmail] = useState<string>("");
+
+  // ✅ Forgot password modal
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+
   const handleBack = () => {
+    if (verifyOpen) {
+      setVerifyOpen(false);
+      return;
+    }
+    if (resetOpen) {
+      setResetOpen(false);
+      return;
+    }
+
     if (navigation.canGoBack()) {
       navigation.goBack();
       return;
     }
-    // fallback when Login was opened via reset/replace
     onGoSignup();
   };
 
+  const handleLoginPressed = () => {
+    setVerifyOpen(true);
+  };
+
   const handleForgotPassword = () => {
-    Alert.alert("Forgot Password", "Go to Forgot Password screen.");
+    setResetEmail("");
+    setResetOpen(true);
   };
 
   const handleTerms = () =>
@@ -61,13 +87,25 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const handlePrivacy = () =>
     Alert.alert("Privacy Policy", "Open Privacy Policy screen/link.");
 
+  const handleResend = () => {
+    Alert.alert("Resent", "Verification code resent (demo).");
+  };
+
+  const handleVerified = (_code: string) => {
+    setVerifyOpen(false);
+    onLoginSuccess();
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Back Arrow */}
       <View style={styles.header}>
-        <Pressable onPress={handleBack} hitSlop={12} style={styles.backBtn}>
+        <Pressable
+          onPress={handleBack}
+          hitSlop={12}
+          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
+        >
           <Ionicons name="chevron-back" size={backIconSize} color="#111827" />
         </Pressable>
       </View>
@@ -83,7 +121,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         >
           <View style={styles.page}>
             <LoginCard
-              onLoginSuccess={onLoginSuccess}
+              onLoginSuccess={handleLoginPressed}
               onGoSignup={onGoSignup}
               onForgotPassword={handleForgotPassword}
             />
@@ -106,14 +144,36 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* ✅ Login OTP modal */}
+      <EnterVerificationModal
+        visible={verifyOpen}
+        email={verifyEmail}
+        initialSeconds={34}
+        onClose={() => setVerifyOpen(false)}
+        onResend={handleResend}
+        onVerified={handleVerified}
+      />
+
+      {/* ✅ Reset password modal with OTP section */}
+      <ResetPasswordModal
+        visible={resetOpen}
+        email={resetEmail}
+        setEmail={setResetEmail}
+        onClose={() => setResetOpen(false)}
+        onVerified={(code) => {
+          // demo behavior after OTP is complete
+          Alert.alert("OTP Verified", `Code: ${code} (demo)`);
+          setResetOpen(false);
+        }}
+        scale={scale}
+        vscale={vscale}
+      />
     </SafeAreaView>
   );
 }
 
-function createStyles(
-  scale: (n: number) => number,
-  vscale: (n: number) => number
-) {
+function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
   return StyleSheet.create({
     flex: { flex: 1 },
     safe: { flex: 1, backgroundColor: "#FFFFFF" },

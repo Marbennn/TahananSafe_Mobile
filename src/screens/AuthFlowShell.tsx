@@ -9,7 +9,7 @@ import {
 } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-import AuthProgressHeader from "../components/AuthFlow/AuthProgressHeader";
+import AuthProgressHeader from "../components/AuthFlow/SignupProgressHeader";
 
 import SignupScreen from "./SignupScreen";
 import PersonalDetailsScreen from "./PersonalDetailsScreen";

@@ -18,10 +18,10 @@ import EnterVerificationModal from "../components/SignupScreen/EnterVerification
 import SignupCard from "../components/SignupScreen/SignupCard";
 
 type Props = {
-  onGoLogin: () => void;
+  onGoLogin: () => void; // ✅ go to Login screen
   onSignupSuccess: () => void;
-  onBack?: () => void;
-  progressActiveCount?: 1 | 2 | 3; // kept for compatibility (shell controls header)
+  onBack?: () => void; // (not used here anymore; header handles back)
+  progressActiveCount?: 1 | 2 | 3;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -35,7 +35,6 @@ function isValidEmail(e: string) {
 export default function SignupScreen({
   onGoLogin,
   onSignupSuccess,
-  onBack,
 }: Props) {
   const { width, height } = useWindowDimensions();
 
@@ -64,11 +63,6 @@ export default function SignupScreen({
     return e.length > 0 && p.length >= 6 && c.length >= 6 && passwordsMatch;
   }, [email, password, confirmPassword, passwordsMatch]);
 
-  const handleBack = () => {
-    if (onBack) onBack();
-    else onGoLogin();
-  };
-
   const handleContinue = () => {
     const e = email.trim();
     const p = password.trim();
@@ -94,7 +88,8 @@ export default function SignupScreen({
   };
 
   const handleTerms = () => Alert.alert("Terms of use", "Open Terms of use screen/link.");
-  const handlePrivacy = () => Alert.alert("Privacy Policy", "Open Privacy Policy screen/link.");
+  const handlePrivacy = () =>
+    Alert.alert("Privacy Policy", "Open Privacy Policy screen/link.");
 
   return (
     <View style={styles.safe}>
@@ -124,7 +119,7 @@ export default function SignupScreen({
             passwordsMatch={passwordsMatch}
             canContinue={canContinue}
             onContinue={handleContinue}
-            onGoLogin={handleBack}
+            onGoLogin={onGoLogin}  // ✅ FIX: go to Login screen
             onTerms={handleTerms}
             onPrivacy={handlePrivacy}
           />
@@ -155,7 +150,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingBottom: vscale(14),
     },
 
-    // (rest kept as-is, since SignupCard uses these)
     page: { flexGrow: 1 },
 
     titleBlock: { marginTop: vscale(18), marginBottom: vscale(22) },
@@ -252,7 +246,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingBottom: vscale(6),
     },
 
-    termsText: { fontSize: scale(11), color: "#6B7280", textAlign: "center", lineHeight: scale(14) },
+    termsText: {
+      fontSize: scale(11),
+      color: "#6B7280",
+      textAlign: "center",
+      lineHeight: scale(14),
+    },
 
     termsRow: { flexDirection: "row", alignItems: "center", marginTop: vscale(2) },
 
