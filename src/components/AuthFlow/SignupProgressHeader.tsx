@@ -110,24 +110,33 @@ export default function AuthProgressHeader({
 
 function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
   return StyleSheet.create({
+    // ✅ MATCH LoginScreen header exactly:
+    // LoginScreen:
+    // header: { paddingHorizontal: 18, paddingTop: 6 }
     header: {
       paddingHorizontal: scale(18),
-      height: vscale(46), // ✅ stable header height (like onboarding)
+      paddingTop: vscale(6),
+      paddingBottom: vscale(6),
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
       backgroundColor: "#FFFFFF",
     },
 
+    // ✅ MATCH LoginScreen backBtn exactly:
+    // backBtn: { width: 36, height: 36, alignItems:"flex-start", justifyContent:"center" }
     backBtn: {
       width: scale(36),
       height: scale(36),
-      alignItems: "center",
+      alignItems: "flex-start",
       justifyContent: "center",
-      borderRadius: scale(10),
     },
 
-    headerSpacer: { width: scale(36), height: scale(36) },
+    // ✅ same width as backBtn so progress stays centered
+    headerSpacer: {
+      width: scale(36),
+      height: scale(36),
+    },
 
     progressRow: {
       flex: 1,

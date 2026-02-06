@@ -21,11 +21,15 @@ import type { NavigationProp, ParamListBase } from "@react-navigation/native";
 
 import LoginCard from "../components/LoginScreen/LoginCard";
 
-// ✅ OTP modal
+// ✅ Login OTP modal
 import EnterVerificationModal from "../components/LoginScreen/EnterVerificationModal";
 
-// ✅ Forgot password modal (with OTP inside)
-import ResetPasswordModal from "../components/LoginScreen/ResetPasswordModal";
+// ✅ Forgot password (email + otp in one)
+import ForgotPasswordEmailOtpModal from "../components/LoginScreen/ForgotPasswordEmailOtpModal";
+
+// ✅ Next modals (kept separate)
+import ForgotPasswordNewPasswordModal from "../components/LoginScreen/ForgotPasswordNewPasswordModal";
+import ForgotPasswordSuccessModal from "../components/LoginScreen/ForgotPasswordSuccessModal";
 
 type Props = {
   onGoSignup: () => void;
@@ -35,6 +39,8 @@ type Props = {
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
+
+type ForgotStep = "none" | "emailOtp" | "newpass" | "success";
 
 export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
@@ -52,17 +58,22 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [verifyEmail] = useState<string>("");
 
-  // ✅ Forgot password modal
-  const [resetOpen, setResetOpen] = useState(false);
+  // ✅ Forgot password flow
+  const [forgotStep, setForgotStep] = useState<ForgotStep>("none");
   const [resetEmail, setResetEmail] = useState("");
+
+  const closeForgotFlow = () => {
+    setForgotStep("none");
+    setResetEmail("");
+  };
 
   const handleBack = () => {
     if (verifyOpen) {
       setVerifyOpen(false);
       return;
     }
-    if (resetOpen) {
-      setResetOpen(false);
+    if (forgotStep !== "none") {
+      closeForgotFlow();
       return;
     }
 
@@ -73,13 +84,11 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     onGoSignup();
   };
 
-  const handleLoginPressed = () => {
-    setVerifyOpen(true);
-  };
+  const handleLoginPressed = () => setVerifyOpen(true);
 
   const handleForgotPassword = () => {
     setResetEmail("");
-    setResetOpen(true);
+    setForgotStep("emailOtp");
   };
 
   const handleTerms = () =>
@@ -94,6 +103,17 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const handleVerified = (_code: string) => {
     setVerifyOpen(false);
     onLoginSuccess();
+  };
+
+  // ✅ called when forgot-password OTP verified
+  const handleForgotOtpVerified = (code: string) => {
+    Alert.alert("OTP Verified", `Code: ${code} (demo)`);
+    setForgotStep("newpass");
+  };
+
+  const handleResetPassword = (newPass: string) => {
+    Alert.alert("Password Updated", `Email: ${resetEmail}\nNew: ${newPass} (demo)`);
+    setForgotStep("success");
   };
 
   return (
@@ -155,17 +175,32 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         onVerified={handleVerified}
       />
 
-      {/* ✅ Reset password modal with OTP section */}
-      <ResetPasswordModal
-        visible={resetOpen}
+      {/* ✅ Forgot Password: Email + OTP in ONE modal */}
+      <ForgotPasswordEmailOtpModal
+        visible={forgotStep === "emailOtp"}
         email={resetEmail}
         setEmail={setResetEmail}
-        onClose={() => setResetOpen(false)}
-        onVerified={(code) => {
-          // demo behavior after OTP is complete
-          Alert.alert("OTP Verified", `Code: ${code} (demo)`);
-          setResetOpen(false);
-        }}
+        onClose={closeForgotFlow}
+        onVerified={handleForgotOtpVerified}
+        scale={scale}
+        vscale={vscale}
+        initialSeconds={34}
+      />
+
+      {/* ✅ New password modal */}
+      <ForgotPasswordNewPasswordModal
+        visible={forgotStep === "newpass"}
+        onClose={closeForgotFlow}
+        onBack={() => setForgotStep("emailOtp")}
+        onReset={handleResetPassword}
+        scale={scale}
+        vscale={vscale}
+      />
+
+      {/* ✅ Success modal */}
+      <ForgotPasswordSuccessModal
+        visible={forgotStep === "success"}
+        onClose={closeForgotFlow}
         scale={scale}
         vscale={vscale}
       />
@@ -197,9 +232,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingBottom: vscale(14),
     },
 
-    page: {
-      flexGrow: 1,
-    },
+    page: { flexGrow: 1 },
 
     termsWrap: {
       marginTop: "auto",
