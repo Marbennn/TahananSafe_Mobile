@@ -1,5 +1,5 @@
 // src/screens/PersonalDetailsScreen.tsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -16,20 +16,16 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
 
 import PersonalDetailsForm from "../components/PersonalDetailsScreen/PersonalDetailsForm";
+import { useAuthStore, PersonalInfoPayload } from "../store/authStore";
 
-type SubmitPayload = {
-  firstName: string;
-  lastName: string;
-  dob: string; // MM / DD / YYYY (or whatever your form uses)
-  contactNumber: string;
-  gender: "male" | "female";
-};
-
+/**
+ * Props are REQUIRED for AuthFlowShell navigation.
+ * Do NOT remove — this is what advances the flow.
+ */
 type Props = {
-  initialValues?: Partial<SubmitPayload>;
-  onBack?: () => void; // handled by AuthFlowShell header, but keep prop
-  onSubmit?: (payload: SubmitPayload) => void;
-  progressActiveCount?: 1 | 2 | 3; // handled by AuthFlowShell header, but keep prop
+  onBack?: () => void; // handled by AuthFlowShell header
+  onSubmit?: () => void; // 🚀 MUST be called to go next screen
+  progressActiveCount?: 1 | 2 | 3; // handled by AuthFlowShell header
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -38,13 +34,11 @@ function clamp(n: number, min: number, max: number) {
 
 const BLUE = "#1D4ED8";
 
-export default function PersonalDetailsScreen({
-  initialValues,
-  onSubmit,
-}: Props) {
+export default function PersonalDetailsScreen({ onSubmit }: Props) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
+  // Scaling for responsive design
   const s = clamp(width / 375, 0.95, 1.45);
   const vs = clamp(height / 812, 0.95, 1.25);
   const scale = (n: number) => Math.round(n * s);
@@ -52,15 +46,28 @@ export default function PersonalDetailsScreen({
 
   const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
 
-  const [firstName, setFirstName] = useState(initialValues?.firstName ?? "");
-  const [lastName, setLastName] = useState(initialValues?.lastName ?? "");
-  const [dob, setDob] = useState(initialValues?.dob ?? "");
-  const [contactNumber, setContactNumber] = useState(
-    initialValues?.contactNumber ?? ""
-  );
+  // Zustand store
+  const { user, updatePersonalInfo, isLoading } = useAuthStore();
+
+  // State initialized from user store (like initialValues)
+  const [firstName, setFirstName] = useState(user?.firstName ?? "");
+  const [lastName, setLastName] = useState(user?.lastName ?? "");
+  const [dob, setDob] = useState(user?.dateOfBirth ?? "");
+  const [contactNumber, setContactNumber] = useState(user?.contactNumber ?? "");
   const [gender, setGender] = useState<"male" | "female">(
-    initialValues?.gender ?? "male"
+    (user?.gender as "male" | "female") ?? "male",
   );
+
+  // Update form state when user changes (like refreshing from backend)
+  useEffect(() => {
+    if (user) {
+      setFirstName(user.firstName ?? "");
+      setLastName(user.lastName ?? "");
+      setDob(user.dateOfBirth ?? "");
+      setContactNumber(user.contactNumber ?? "");
+      setGender((user.gender as "male" | "female") ?? "male");
+    }
+  }, [user]);
 
   const canContinue =
     firstName.trim().length > 0 &&
@@ -69,23 +76,34 @@ export default function PersonalDetailsScreen({
     contactNumber.trim().length > 0 &&
     (gender === "male" || gender === "female");
 
-  const handleContinue = () => {
-    if (!canContinue) {
+  const handleContinue = async () => {
+    if (!canContinue || isLoading) {
       Alert.alert("Required", "Please complete all fields.");
       return;
     }
 
-    const payload: SubmitPayload = {
+    const payload: PersonalInfoPayload = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      dob: dob.trim(),
+      dateOfBirth: dob.trim(),
       contactNumber: contactNumber.trim(),
       gender,
     };
 
-    if (onSubmit) return onSubmit(payload);
+    try {
+      const response = await updatePersonalInfo(payload);
 
-    Alert.alert("Saved", "Personal details saved (demo).");
+      if (!response.success) {
+        Alert.alert("Error", response.error || "Failed to save details.");
+        return;
+      }
+
+      // ✅ SUCCESS → ADVANCE AUTH FLOW
+      // Do NOT block with alerts
+      onSubmit?.();
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Something went wrong.");
+    }
   };
 
   return (
@@ -137,12 +155,14 @@ export default function PersonalDetailsScreen({
           >
             <Pressable
               onPress={handleContinue}
-              disabled={!canContinue}
+              disabled={!canContinue || isLoading}
               hitSlop={10}
               style={({ pressed }) => [
                 styles.ctaOuter,
-                !canContinue && { opacity: 0.55 },
-                pressed && canContinue ? { transform: [{ scale: 0.99 }] } : null,
+                (!canContinue || isLoading) && { opacity: 0.55 },
+                pressed && canContinue && !isLoading
+                  ? { transform: [{ scale: 0.99 }] }
+                  : null,
               ]}
             >
               <View style={styles.ctaInnerClip}>
@@ -152,7 +172,9 @@ export default function PersonalDetailsScreen({
                   end={{ x: 1, y: 1 }}
                   style={styles.ctaGradient}
                 >
-                  <Text style={styles.ctaText}>Continue</Text>
+                  <Text style={styles.ctaText}>
+                    {isLoading ? "Saving..." : "Continue"}
+                  </Text>
                 </LinearGradient>
               </View>
             </Pressable>
@@ -163,7 +185,10 @@ export default function PersonalDetailsScreen({
   );
 }
 
-function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+function createStyles(
+  scale: (n: number) => number,
+  vscale: (n: number) => number,
+) {
   return StyleSheet.create({
     flex: { flex: 1 },
     safe: { flex: 1, backgroundColor: "#FFFFFF" },
@@ -274,7 +299,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       fontWeight: "800",
     },
 
-    // If your PersonalDetailsForm uses a modal picker, keep these:
     modalOverlay: {
       flex: 1,
       backgroundColor: "rgba(0,0,0,0.35)",

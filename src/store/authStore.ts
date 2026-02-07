@@ -1,35 +1,27 @@
-// src/store/authStore.ts
 import { create } from "zustand";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-/* ================= CONFIG ================= */
-
-// ⚠️ Replace with env later (expo-constants / react-native-config)
-const API_URL = "http://192.168.5.136:5000/api/mobile/v1";
-
-/* ================= TYPES ================= */
+const API_URL = "http://192.168.5.137:5000/api/mobile/v1";
 
 export type User = {
   id: string;
   email: string;
-  profileImage?: string;
+
   firstName?: string;
   lastName?: string;
-  middleName?: string;
-  suffix?: string;
-  age?: string;
+  dateOfBirth?: string;
   gender?: "male" | "female" | "other";
-  phoneNumber?: string;
+  contactNumber?: string;
+  profileImage?: string;
 };
 
 export type PersonalInfoPayload = {
   firstName: string;
   lastName: string;
-  middleName: string;
-  suffix?: string;
-  age: string;
+  dateOfBirth: string; // ISO string
   gender: "male" | "female" | "other";
-  phoneNumber: string;
+  contactNumber: string;
+  profileImage?: string;
 };
 
 export type SecurityQuestionPayload = {
@@ -56,7 +48,7 @@ type AuthStore = {
 
   register: (email: string, password: string) => Promise<AuthResponse>;
   verifyRegistrationOtp: (email: string, otp: string) => Promise<AuthResponse>;
-  resendOtp: (email: string) => Promise<AuthResponse>; // ✅ Updated endpoint
+  resendOtp: (email: string) => Promise<AuthResponse>;
 
   login: (email: string, password: string) => Promise<AuthResponse>;
   verifyLoginOtp: (email: string, otp: string) => Promise<AuthResponse>;
@@ -72,8 +64,6 @@ type AuthStore = {
   refreshAccessToken: () => Promise<boolean>;
   logout: () => Promise<void>;
 };
-
-/* ================= HELPERS ================= */
 
 const jsonFetch = async (url: string, options: RequestInit = {}) => {
   const res = await fetch(url, {
@@ -103,15 +93,12 @@ const authFetch = async (
   });
 };
 
-/* ================= STORE ================= */
-
 export const useAuthStore = create<AuthStore>((set, get) => ({
   user: null,
   accessToken: null,
   refreshToken: null,
   isLoading: false,
 
-  /* ===== APP BOOTSTRAP ===== */
   bootstrap: async () => {
     const [user, accessToken, refreshToken] = await AsyncStorage.multiGet([
       "user",
@@ -126,7 +113,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     });
   },
 
-  /* ===== REGISTER ===== */
   register: async (email, password) => {
     try {
       set({ isLoading: true });
@@ -170,7 +156,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
-  // ✅ RESEND REGISTRATION OTP (updated to match backend)
   resendOtp: async (email) => {
     try {
       set({ isLoading: true });
@@ -178,7 +163,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         method: "POST",
         body: JSON.stringify({ email }),
       });
-
       return { success: true, message: data.message };
     } catch (e: any) {
       return { success: false, error: e.message };
@@ -187,7 +171,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
-  /* ===== LOGIN ===== */
   login: async (email, password) => {
     try {
       set({ isLoading: true });
@@ -231,7 +214,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
-  /* ===== PROFILE ===== */
   updatePersonalInfo: async (payload) => {
     try {
       const token = get().accessToken!;
@@ -262,7 +244,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
-  /* ===== PIN ===== */
   setPin: async (pin) => {
     try {
       const token = get().accessToken!;
@@ -289,7 +270,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
-  /* ===== TOKEN ===== */
   refreshAccessToken: async () => {
     try {
       const refreshToken = get().refreshToken;
@@ -308,7 +288,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
-  /* ===== LOGOUT ===== */
   logout: async () => {
     await AsyncStorage.multiRemove(["user", "accessToken", "refreshToken"]);
     set({ user: null, accessToken: null, refreshToken: null });
