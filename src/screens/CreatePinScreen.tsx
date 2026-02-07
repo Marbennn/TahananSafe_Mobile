@@ -7,11 +7,13 @@ import {
   Pressable,
   Platform,
   useWindowDimensions,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
+import { useAuthStore } from "../store/authStore"; // ✅ Import auth store
 
 type Props = {
   onContinue: (pin: string) => void;
@@ -33,6 +35,7 @@ export default function CreatePinScreen({
 }: Props) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
+  const { setPin, isLoading } = useAuthStore(); // ✅ Pull setPin & isLoading
 
   const s = clamp(width / 375, 0.95, 1.45);
   const vs = clamp(height / 812, 0.95, 1.25);
@@ -42,28 +45,35 @@ export default function CreatePinScreen({
   const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
 
   const PIN_LENGTH = 4;
-  const [pin, setPin] = useState("");
+  const [pin, setPinValue] = useState("");
 
   const dots = useMemo(
     () => Array.from({ length: PIN_LENGTH }).map((_, i) => i < pin.length),
     [pin]
   );
 
-  const canSignup = pin.length === PIN_LENGTH;
+  const canSignup = pin.length === PIN_LENGTH && !isLoading;
 
   const addDigit = (d: string) => {
     if (pin.length >= PIN_LENGTH) return;
-    setPin((p) => (p + d).slice(0, PIN_LENGTH));
+    setPinValue((p) => (p + d).slice(0, PIN_LENGTH));
   };
 
   const backspace = () => {
     if (!pin.length) return;
-    setPin((p) => p.slice(0, -1));
+    setPinValue((p) => p.slice(0, -1));
   };
 
-  const handleSignup = () => {
+  const handleSignup = async () => {
     if (!canSignup) return;
-    onContinue(pin);
+
+    // ✅ Call auth store setPin to save to backend
+    const res = await setPin(pin);
+    if (res.success) {
+      onContinue(pin); // Continue in flow
+    } else {
+      Alert.alert("Error", res.error || "Failed to set PIN"); // Show error if failed
+    }
   };
 
   return (
@@ -94,7 +104,12 @@ export default function CreatePinScreen({
         <View style={styles.keypad}>
           <View style={styles.keypadGrid}>
             {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
-              <KeyButton key={d} label={d} onPress={() => addDigit(d)} styles={styles} />
+              <KeyButton
+                key={d}
+                label={d}
+                onPress={() => addDigit(d)}
+                styles={styles}
+              />
             ))}
 
             <View style={styles.keySpacer} />
@@ -132,7 +147,7 @@ export default function CreatePinScreen({
                 end={{ x: 1, y: 1 }}
                 style={styles.ctaGradient}
               >
-                <Text style={styles.ctaText}>Signup</Text>
+                <Text style={styles.ctaText}>{isLoading ? "Saving..." : "Signup"}</Text>
               </LinearGradient>
             </View>
           </Pressable>
