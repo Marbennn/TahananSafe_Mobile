@@ -11,18 +11,18 @@ import {
 } from "react-native";
 import { Colors } from "../theme/colors";
 
-// ✅ API base url helper
-import { apiUrl } from "../config/api";
-
 // ✅ popup
 import EnterVerificationModal from "../components/SignupScreen/EnterVerificationModal";
 
 // ✅ Signup card component
 import SignupCard from "../components/SignupScreen/SignupCard";
 
+// ✅ API (separated)
+import { registerSendOtp } from "../api/auth";
+
 type Props = {
   onGoLogin: () => void;
-  onSignupSuccess: () => void;
+  onSignupSuccess: () => void; // navigate to PersonalDetails screen
   onBack?: () => void;
   progressActiveCount?: 1 | 2 | 3;
 };
@@ -39,34 +39,6 @@ function isValidEmail(e: string) {
 function log(tag: string, ...args: any[]) {
   console.log(tag, ...args);
 }
-
-async function safeReadJson(res: Response): Promise<any> {
-  const ct = res.headers.get("content-type") || "";
-  if (!ct.includes("application/json")) return null;
-  return res.json().catch(() => null);
-}
-
-async function readErrorMessage(res: Response): Promise<string> {
-  try {
-    const ct = res.headers.get("content-type") || "";
-    if (ct.includes("application/json")) {
-      const j = await res.json().catch(() => null);
-      if (j && typeof j === "object") return String(j.message || j.error || JSON.stringify(j));
-      return "Request failed.";
-    }
-    const t = await res.text().catch(() => "");
-    return t || "Request failed.";
-  } catch {
-    return "Request failed.";
-  }
-}
-
-type VerifyResponse = {
-  message?: string;
-  user?: { id: string; email: string; profileImage?: string };
-  accessToken?: string;
-  refreshToken?: string;
-};
 
 export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
   const { width, height } = useWindowDimensions();
@@ -94,12 +66,17 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
     const e = email.trim();
     const p = password.trim();
     const c = confirmPassword.trim();
-    return e.length > 0 && p.length >= 6 && c.length >= 6 && passwordsMatch && !isSubmitting;
+    return (
+      e.length > 0 &&
+      p.length >= 6 &&
+      c.length >= 6 &&
+      passwordsMatch &&
+      !isSubmitting
+    );
   }, [email, password, confirmPassword, passwordsMatch, isSubmitting]);
 
   /**
    * ✅ Step 1: send OTP email
-   * Correct backend route: POST /api/mobile/v1/register
    */
   const handleContinue = async () => {
     const e = email.trim();
@@ -116,44 +93,28 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
 
     if (!e) return Alert.alert("Required", "Please enter your email.");
     if (!isValidEmail(e)) return Alert.alert("Invalid", "Please enter a valid email.");
-    if (p.length < 6) return Alert.alert("Invalid", "Password must be at least 6 characters.");
-    if (c.length < 6) return Alert.alert("Invalid", "Confirm password must be at least 6 characters.");
+    if (p.length < 6)
+      return Alert.alert("Invalid", "Password must be at least 6 characters.");
+    if (c.length < 6)
+      return Alert.alert("Invalid", "Confirm password must be at least 6 characters.");
     if (p !== c) return Alert.alert("Password mismatch", "Passwords do not match.");
 
-    const path = "/api/mobile/v1/register";
-    const url = apiUrl(path);
-
     setIsSubmitting(true);
-    log("[SIGNUP] submitting START", { url, path });
+    log("[SIGNUP] submitting START");
 
     try {
-      log("[SIGNUP] request body", { email: e, password: "********" });
-
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: e, password: p }),
-      });
-
-      log("[SIGNUP] response status", { status: res.status, ok: res.ok });
-
-      if (!res.ok) {
-        const msg = await readErrorMessage(res);
-        log("[SIGNUP] error body", msg);
-        return Alert.alert("Signup failed", msg);
-      }
-
-      const json = await safeReadJson(res);
-      log("[SIGNUP] success body", json);
+      await registerSendOtp(e, p);
 
       setVerifyOpen(true);
       log("[SIGNUP] verify modal OPEN");
 
-      // ✅ Updated to 4-digit (matches your modal + backend)
-      Alert.alert("Verification", "We sent a 4-digit OTP to your email. Enter it to verify.");
+      Alert.alert(
+        "Verification",
+        "We sent a 4-digit OTP to your email. Enter it to verify."
+      );
     } catch (err: any) {
-      log("[SIGNUP] network error", err);
-      Alert.alert("Network error", err?.message ? String(err.message) : "Please try again.");
+      log("[SIGNUP] error", err);
+      Alert.alert("Signup failed", err?.message ? String(err.message) : "Please try again.");
     } finally {
       setIsSubmitting(false);
       log("[SIGNUP] submitting END");
@@ -161,63 +122,21 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
   };
 
   /**
-   * ✅ Step 2: verify OTP + create user + receive tokens
-   * Correct backend route: POST /api/mobile/v1/verify-registration-otp
+   * ✅ Step 2: OTP is verified inside the modal (backend call is inside modal)
+   * ✅ Once modal succeeds, we navigate to next screen
    */
-  const handleVerified = async (code: string) => {
-    const e = email.trim();
-    const otp = code.trim();
+  const handleVerified = (code: string) => {
+    log("[SIGNUP] OTP verified in modal. codeLen:", code?.length);
 
-    log("[VERIFY] handleVerified()", { email: e, otpLen: otp.length });
+    setVerifyOpen(false);
+    log("[SIGNUP] verify modal CLOSE (success)");
 
-    if (!otp) return Alert.alert("Required", "Please enter the OTP code.");
-
-    const path = "/api/mobile/v1/verify-registration-otp";
-    const url = apiUrl(path);
-
-    setIsSubmitting(true);
-    log("[VERIFY] submitting START", { url, path });
-
-    try {
-      log("[VERIFY] request body", { email: e, otp: "****" });
-
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: e, otp }),
-      });
-
-      log("[VERIFY] response status", { status: res.status, ok: res.ok });
-
-      if (!res.ok) {
-        const msg = await readErrorMessage(res);
-        log("[VERIFY] error body", msg);
-        return Alert.alert("Verification failed", msg);
-      }
-
-      const data = (await res.json().catch(() => ({}))) as VerifyResponse;
-      log("[VERIFY] success body", data);
-
-      if (data.accessToken) log("[VERIFY] accessToken (len)", data.accessToken.length);
-      if (data.refreshToken) log("[VERIFY] refreshToken (len)", data.refreshToken.length);
-      if (data.user) log("[VERIFY] user", data.user);
-
-      setVerifyOpen(false);
-      log("[VERIFY] verify modal CLOSE");
-
-      onSignupSuccess();
-      log("[VERIFY] onSignupSuccess() called");
-    } catch (err: any) {
-      log("[VERIFY] network error", err);
-      Alert.alert("Network error", err?.message ? String(err.message) : "Please try again.");
-    } finally {
-      setIsSubmitting(false);
-      log("[VERIFY] submitting END");
-    }
+    onSignupSuccess();
+    log("[SIGNUP] onSignupSuccess() called");
   };
 
   /**
-   * ✅ Resend OTP: call /register again
+   * ✅ Resend OTP: call register again
    */
   const handleResend = async () => {
     const e = email.trim();
@@ -225,52 +144,42 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
 
     log("[RESEND] handleResend()", { email: e, passwordLen: p.length });
 
-    if (!e || !isValidEmail(e)) return Alert.alert("Invalid", "Please enter a valid email first.");
-    if (!p || p.length < 6) return Alert.alert("Invalid", "Please enter your password again to resend OTP.");
-
-    const path = "/api/mobile/v1/register";
-    const url = apiUrl(path);
+    if (!e || !isValidEmail(e))
+      return Alert.alert("Invalid", "Please enter a valid email first.");
+    if (!p || p.length < 6)
+      return Alert.alert("Invalid", "Please enter your password again to resend OTP.");
 
     setIsSubmitting(true);
-    log("[RESEND] submitting START", { url, path });
+    log("[RESEND] submitting START");
 
     try {
-      log("[RESEND] request body", { email: e, password: "********" });
-
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: e, password: p }),
-      });
-
-      log("[RESEND] response status", { status: res.status, ok: res.ok });
-
-      if (!res.ok) {
-        const msg = await readErrorMessage(res);
-        log("[RESEND] error body", msg);
-        return Alert.alert("Resend failed", msg);
-      }
-
-      const json = await safeReadJson(res);
-      log("[RESEND] success body", json);
-
+      await registerSendOtp(e, p);
       Alert.alert("Resent", "A new OTP was sent to your email.");
     } catch (err: any) {
-      log("[RESEND] network error", err);
-      Alert.alert("Network error", err?.message ? String(err.message) : "Please try again.");
+      log("[RESEND] error", err);
+      Alert.alert("Resend failed", err?.message ? String(err.message) : "Please try again.");
     } finally {
       setIsSubmitting(false);
       log("[RESEND] submitting END");
     }
   };
 
-  const handleTerms = () => Alert.alert("Terms of use", "Open Terms of use screen/link.");
-  const handlePrivacy = () => Alert.alert("Privacy Policy", "Open Privacy Policy screen/link.");
+  const handleTerms = () =>
+    Alert.alert("Terms of use", "Open Terms of use screen/link.");
+  const handlePrivacy = () =>
+    Alert.alert("Privacy Policy", "Open Privacy Policy screen/link.");
 
   return (
     <View style={styles.safe}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scrollContent}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          bounces={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scrollContent}
+        >
           <SignupCard
             scale={scale}
             vscale={vscale}
@@ -300,7 +209,7 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
         email={email.trim()}
         initialSeconds={34}
         onClose={() => {
-          log("[VERIFY] verify modal CLOSE (manual)");
+          log("[SIGNUP] verify modal CLOSE (manual)");
           setVerifyOpen(false);
         }}
         onResend={handleResend}

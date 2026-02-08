@@ -8,15 +8,20 @@ import {
   StyleSheet,
   useWindowDimensions,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../../theme/colors";
 
 type Props = {
-  onLoginSuccess: () => void;
+  // ✅ UPDATED: now receives email + password (supports async)
+  onLoginSuccess: (email: string, password: string) => void | Promise<void>;
   onGoSignup: () => void;
   onForgotPassword: () => void;
+
+  // ✅ Optional: so LoginScreen can disable UI while requesting
+  loading?: boolean;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -27,6 +32,7 @@ export default function LoginCard({
   onLoginSuccess,
   onGoSignup,
   onForgotPassword,
+  loading = false,
 }: Props) {
   const { width, height } = useWindowDimensions();
 
@@ -43,8 +49,11 @@ export default function LoginCard({
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
-  const handleLogin = () => {
-    onLoginSuccess(); // ✅ always active
+  const canLogin = email.trim().length > 0 && password.trim().length > 0 && !loading;
+
+  const handleLogin = async () => {
+    if (!canLogin) return;
+    await onLoginSuccess(email.trim(), password);
   };
 
   return (
@@ -67,6 +76,7 @@ export default function LoginCard({
           keyboardType="email-address"
           autoCapitalize="none"
           style={styles.input}
+          editable={!loading}
         />
       </View>
 
@@ -82,11 +92,16 @@ export default function LoginCard({
             secureTextEntry={!showPassword}
             autoCapitalize="none"
             style={[styles.input, { paddingRight: scale(44) }]}
+            editable={!loading}
           />
           <Pressable
             onPress={() => setShowPassword((v) => !v)}
             hitSlop={10}
-            style={styles.eyeBtn}
+            disabled={loading}
+            style={({ pressed }) => [
+              styles.eyeBtn,
+              pressed && !loading ? { opacity: 0.7 } : null,
+            ]}
           >
             <Ionicons
               name={showPassword ? "eye-off-outline" : "eye-outline"}
@@ -103,27 +118,32 @@ export default function LoginCard({
           onPress={() => setRememberMe((v) => !v)}
           style={styles.rememberWrap}
           hitSlop={8}
+          disabled={loading}
         >
-          <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+          <View style={[styles.checkbox, rememberMe && styles.checkboxChecked, loading && { opacity: 0.6 }]}>
             {rememberMe && (
               <Ionicons name="checkmark" size={scale(14)} color="#FFFFFF" />
             )}
           </View>
-          <Text style={styles.rememberText}>Remember me</Text>
+          <Text style={[styles.rememberText, loading && { opacity: 0.6 }]}>Remember me</Text>
         </Pressable>
 
-        <Pressable onPress={onForgotPassword} hitSlop={10}>
-          <Text style={styles.forgotText}>Forgot Password?</Text>
+        <Pressable onPress={onForgotPassword} hitSlop={10} disabled={loading}>
+          <Text style={[styles.forgotText, loading && { opacity: 0.6 }]}>
+            Forgot Password?
+          </Text>
         </Pressable>
       </View>
 
-      {/* ✅ LOGIN BUTTON (EXACT SAME AS SIGNUP) */}
+      {/* ✅ LOGIN BUTTON (EXACT SAME AS SIGNUP UI) */}
       <Pressable
         onPress={handleLogin}
+        disabled={!canLogin}
         hitSlop={10}
         style={({ pressed }) => [
           styles.ctaOuter,
-          pressed ? { transform: [{ scale: 0.99 }] } : null,
+          !canLogin && { opacity: 0.6 },
+          pressed && canLogin ? { transform: [{ scale: 0.99 }] } : null,
         ]}
       >
         <View style={styles.ctaInnerClip}>
@@ -133,7 +153,7 @@ export default function LoginCard({
             end={{ x: 1, y: 1 }}
             style={styles.ctaGradient}
           >
-            <Text style={styles.ctaText}>Login</Text>
+            {loading ? <ActivityIndicator /> : <Text style={styles.ctaText}>Login</Text>}
           </LinearGradient>
         </View>
       </Pressable>
@@ -141,18 +161,17 @@ export default function LoginCard({
       {/* Footer */}
       <View style={styles.footer}>
         <Text style={styles.footerText}>Not yet registered? </Text>
-        <Pressable onPress={onGoSignup} hitSlop={10}>
-          <Text style={styles.footerLink}>Create an account</Text>
+        <Pressable onPress={onGoSignup} hitSlop={10} disabled={loading}>
+          <Text style={[styles.footerLink, loading && { opacity: 0.6 }]}>
+            Create an account
+          </Text>
         </Pressable>
       </View>
     </View>
   );
 }
 
-function createStyles(
-  scale: (n: number) => number,
-  vscale: (n: number) => number
-) {
+function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
   return StyleSheet.create({
     container: {
       marginTop: vscale(18),

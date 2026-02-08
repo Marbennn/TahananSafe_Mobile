@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from "react";
 import {
   Alert,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -13,23 +14,26 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "../theme/colors";
 
+import { Colors } from "../theme/colors";
 import PersonalDetailsForm from "../components/PersonalDetailsScreen/PersonalDetailsForm";
+
+// ✅ API (separated)
+import { savePersonalDetails } from "../api/user";
 
 type SubmitPayload = {
   firstName: string;
   lastName: string;
-  dob: string; // MM / DD / YYYY (or whatever your form uses)
+  dob: string; // MM/DD/YYYY
   contactNumber: string;
   gender: "male" | "female";
 };
 
 type Props = {
   initialValues?: Partial<SubmitPayload>;
-  onBack?: () => void; // handled by AuthFlowShell header, but keep prop
+  onBack?: () => void;
   onSubmit?: (payload: SubmitPayload) => void;
-  progressActiveCount?: 1 | 2 | 3; // handled by AuthFlowShell header, but keep prop
+  progressActiveCount?: 1 | 2 | 3;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -38,10 +42,43 @@ function clamp(n: number, min: number, max: number) {
 
 const BLUE = "#1D4ED8";
 
-export default function PersonalDetailsScreen({
-  initialValues,
-  onSubmit,
-}: Props) {
+/** ---------- VALIDATION HELPERS ---------- **/
+function normalizeName(s: string) {
+  return s.trim().replace(/\s+/g, " ");
+}
+function isValidName(s: string) {
+  return /^[A-Za-z\s.'-]{2,}$/.test(s);
+}
+function normalizePhone(raw: string) {
+  const t = raw.trim();
+  if (t.startsWith("+")) return "+" + t.slice(1).replace(/\D/g, "");
+  return t.replace(/\D/g, "");
+}
+function isValidPHPhone(raw: string) {
+  const p = normalizePhone(raw);
+  if (/^09\d{9}$/.test(p)) return true;
+  if (/^\+63\d{10}$/.test(p)) return true;
+  return false;
+}
+function isValidDobFormat(mmddyyyy: string) {
+  return /^(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])\/(19|20)\d{2}$/.test(mmddyyyy);
+}
+function parseDob(mmddyyyy: string): Date | null {
+  if (!isValidDobFormat(mmddyyyy)) return null;
+  const [mm, dd, yyyy] = mmddyyyy.split("/").map((x) => Number(x));
+  const d = new Date(yyyy, mm - 1, dd);
+  if (d.getFullYear() !== yyyy || d.getMonth() !== mm - 1 || d.getDate() !== dd) return null;
+  return d;
+}
+function calcAge(dob: Date) {
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const m = now.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age--;
+  return age;
+}
+
+export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
@@ -55,58 +92,83 @@ export default function PersonalDetailsScreen({
   const [firstName, setFirstName] = useState(initialValues?.firstName ?? "");
   const [lastName, setLastName] = useState(initialValues?.lastName ?? "");
   const [dob, setDob] = useState(initialValues?.dob ?? "");
-  const [contactNumber, setContactNumber] = useState(
-    initialValues?.contactNumber ?? ""
-  );
-  const [gender, setGender] = useState<"male" | "female">(
-    initialValues?.gender ?? "male"
-  );
+  const [contactNumber, setContactNumber] = useState(initialValues?.contactNumber ?? "");
+  const [gender, setGender] = useState<"male" | "female">(initialValues?.gender ?? "male");
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const canContinue =
-    firstName.trim().length > 0 &&
-    lastName.trim().length > 0 &&
+    normalizeName(firstName).length > 0 &&
+    normalizeName(lastName).length > 0 &&
     dob.trim().length > 0 &&
     contactNumber.trim().length > 0 &&
     (gender === "male" || gender === "female");
 
-  const handleContinue = () => {
-    if (!canContinue) {
-      Alert.alert("Required", "Please complete all fields.");
+  function validateAll(): { ok: boolean; message?: string } {
+    const fn = normalizeName(firstName);
+    const ln = normalizeName(lastName);
+    const phone = normalizePhone(contactNumber);
+    const dobDate = parseDob(dob.trim());
+
+    if (!fn) return { ok: false, message: "First name is required." };
+    if (!ln) return { ok: false, message: "Last name is required." };
+    if (!isValidName(fn)) return { ok: false, message: "First name must contain letters only (min 2 characters)." };
+    if (!isValidName(ln)) return { ok: false, message: "Last name must contain letters only (min 2 characters)." };
+
+    if (!dob.trim()) return { ok: false, message: "Date of Birth is required." };
+    if (!dobDate) return { ok: false, message: "Invalid Date of Birth. Use MM/DD/YYYY (example: 02/24/2000)." };
+
+    const age = calcAge(dobDate);
+    if (age < 10) return { ok: false, message: "Invalid Date of Birth (age too low)." };
+    if (age > 120) return { ok: false, message: "Invalid Date of Birth (age too high)." };
+
+    if (!phone) return { ok: false, message: "Contact number is required." };
+    if (!isValidPHPhone(phone))
+      return { ok: false, message: "Invalid PH contact number. Use 09XXXXXXXXX or +63XXXXXXXXXX." };
+
+    if (gender !== "male" && gender !== "female") return { ok: false, message: "Please select your gender." };
+
+    return { ok: true };
+  }
+
+  const handleContinue = async () => {
+    const check = validateAll();
+    if (!check.ok) {
+      Alert.alert("Invalid", check.message || "Please check your inputs.");
       return;
     }
 
     const payload: SubmitPayload = {
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
+      firstName: normalizeName(firstName),
+      lastName: normalizeName(lastName),
       dob: dob.trim(),
-      contactNumber: contactNumber.trim(),
+      contactNumber: normalizePhone(contactNumber),
       gender,
     };
 
-    if (onSubmit) return onSubmit(payload);
+    try {
+      setIsSubmitting(true);
+      await savePersonalDetails(payload);
 
-    Alert.alert("Saved", "Personal details saved (demo).");
+      Alert.alert("Saved", "Personal details saved successfully.");
+      onSubmit?.(payload);
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "Something went wrong.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <View style={styles.safe}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={0}
-      >
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={styles.body}>
-          <ScrollView
-            bounces={false}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.scrollContent}
-          >
+          <ScrollView bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scrollContent}>
             <View style={styles.page}>
               <View style={styles.titleBlock}>
                 <Text style={styles.screenTitle}>Enter Your Details</Text>
                 <Text style={styles.screenSub}>
-                  Enter your personal information. This will be kept{"\n"}
-                  private and secure.
+                  Enter your personal information. This will be kept{"\n"}private and secure.
                 </Text>
               </View>
 
@@ -129,30 +191,27 @@ export default function PersonalDetailsScreen({
             </View>
           </ScrollView>
 
-          <View
-            style={[
-              styles.bottomBar,
-              { paddingBottom: Math.max(insets.bottom, vscale(12)) },
-            ]}
-          >
+          <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, vscale(12)) }]}>
             <Pressable
               onPress={handleContinue}
-              disabled={!canContinue}
+              disabled={!canContinue || isSubmitting}
               hitSlop={10}
               style={({ pressed }) => [
                 styles.ctaOuter,
-                !canContinue && { opacity: 0.55 },
-                pressed && canContinue ? { transform: [{ scale: 0.99 }] } : null,
+                (!canContinue || isSubmitting) && { opacity: 0.55 },
+                pressed && canContinue && !isSubmitting ? { transform: [{ scale: 0.99 }] } : null,
               ]}
             >
               <View style={styles.ctaInnerClip}>
-                <LinearGradient
-                  colors={Colors.gradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.ctaGradient}
-                >
-                  <Text style={styles.ctaText}>Continue</Text>
+                <LinearGradient colors={Colors.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.ctaGradient}>
+                  {isSubmitting ? (
+                    <View style={styles.loadingRow}>
+                      <ActivityIndicator color="#FFFFFF" />
+                      <Text style={styles.loadingText}>Saving...</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.ctaText}>Continue</Text>
+                  )}
                 </LinearGradient>
               </View>
             </Pressable>
@@ -167,7 +226,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
   return StyleSheet.create({
     flex: { flex: 1 },
     safe: { flex: 1, backgroundColor: "#FFFFFF" },
-
     body: { flex: 1 },
 
     scrollContent: {
@@ -179,16 +237,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
 
     page: { flexGrow: 1 },
 
-    titleBlock: {
-      marginTop: vscale(18),
-      marginBottom: vscale(22),
-    },
+    titleBlock: { marginTop: vscale(18), marginBottom: vscale(22) },
 
-    screenTitle: {
-      fontSize: scale(26),
-      fontWeight: "800",
-      color: Colors.text,
-    },
+    screenTitle: { fontSize: scale(26), fontWeight: "800", color: Colors.text },
 
     screenSub: {
       marginTop: vscale(8),
@@ -201,12 +252,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     form: {},
     fieldBlock: { marginBottom: vscale(14) },
 
-    label: {
-      marginBottom: vscale(8),
-      fontSize: scale(13),
-      fontWeight: "700",
-      color: Colors.text,
-    },
+    label: { marginBottom: vscale(8), fontSize: scale(13), fontWeight: "700", color: Colors.text },
 
     input: {
       height: vscale(50),
@@ -233,48 +279,28 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       justifyContent: "space-between",
     },
 
-    selectText: {
-      flex: 1,
-      paddingRight: scale(10),
-      fontSize: scale(14),
-      color: Colors.placeholder,
-    },
+    selectText: { flex: 1, paddingRight: scale(10), fontSize: scale(14), color: Colors.placeholder },
 
-    bottomBar: {
-      paddingHorizontal: scale(22),
-      paddingTop: vscale(10),
-      backgroundColor: "#FFFFFF",
-    },
+    bottomBar: { paddingHorizontal: scale(22), paddingTop: vscale(10), backgroundColor: "#FFFFFF" },
 
     ctaOuter: {
       marginTop: vscale(4),
       borderRadius: scale(14),
       ...Platform.select({
-        ios: {
-          shadowColor: "#000",
-          shadowOpacity: 0.16,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 7 },
-        },
+        ios: { shadowColor: "#000", shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 7 } },
         android: { elevation: 7 },
       }),
     },
 
     ctaInnerClip: { borderRadius: scale(14), overflow: "hidden" },
 
-    ctaGradient: {
-      height: vscale(52),
-      alignItems: "center",
-      justifyContent: "center",
-    },
+    ctaGradient: { height: vscale(52), alignItems: "center", justifyContent: "center" },
 
-    ctaText: {
-      color: "#FFFFFF",
-      fontSize: scale(14),
-      fontWeight: "800",
-    },
+    ctaText: { color: "#FFFFFF", fontSize: scale(14), fontWeight: "800" },
 
-    // If your PersonalDetailsForm uses a modal picker, keep these:
+    loadingRow: { flexDirection: "row", alignItems: "center", gap: scale(10) },
+    loadingText: { color: "#FFFFFF", fontSize: scale(14), fontWeight: "800" },
+
     modalOverlay: {
       flex: 1,
       backgroundColor: "rgba(0,0,0,0.35)",
@@ -282,19 +308,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingHorizontal: scale(18),
     },
 
-    modalSheet: {
-      backgroundColor: "#FFFFFF",
-      borderRadius: scale(16),
-      padding: scale(14),
-      maxHeight: "70%",
-    },
+    modalSheet: { backgroundColor: "#FFFFFF", borderRadius: scale(16), padding: scale(14), maxHeight: "70%" },
 
-    modalTitle: {
-      fontSize: scale(14),
-      fontWeight: "800",
-      color: "#111827",
-      marginBottom: vscale(10),
-    },
+    modalTitle: { fontSize: scale(14), fontWeight: "800", color: "#111827", marginBottom: vscale(10) },
 
     modalItem: {
       paddingVertical: vscale(10),
@@ -307,12 +323,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
 
     modalItemActive: { backgroundColor: "rgba(29, 78, 216, 0.08)" },
 
-    modalItemText: {
-      color: "#111827",
-      fontSize: scale(13),
-      flex: 1,
-      paddingRight: scale(10),
-    },
+    modalItemText: { color: "#111827", fontSize: scale(13), flex: 1, paddingRight: scale(10) },
 
     modalItemTextActive: { fontWeight: "800", color: "#1D4ED8" },
 

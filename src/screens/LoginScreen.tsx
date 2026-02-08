@@ -42,6 +42,43 @@ function clamp(n: number, min: number, max: number) {
 
 type ForgotStep = "none" | "emailOtp" | "newpass" | "success";
 
+const TAG = "[LoginScreen]";
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+
+// ✅ Your backend mounts mobile routes at: /api/mobile/v1
+const LOGIN_PATH = "/api/mobile/v1/login";
+
+async function loginRequest(email: string, password: string) {
+  const url = `${API_URL}${LOGIN_PATH}`;
+  console.log(`${TAG} loginRequest URL:`, url);
+  console.log(`${TAG} loginRequest email:`, email);
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+
+  const raw = await res.text().catch(() => "");
+  console.log(`${TAG} loginRequest status:`, res.status);
+  console.log(`${TAG} loginRequest raw:`, raw);
+
+  let data: any = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = {};
+    }
+  }
+
+  if (!res.ok) {
+    throw new Error(data?.message || `Login failed (HTTP ${res.status})`);
+  }
+
+  return data as { message?: string };
+}
+
 export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const { width, height } = useWindowDimensions();
@@ -56,9 +93,11 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
 
   // ✅ Login OTP modal
   const [verifyOpen, setVerifyOpen] = useState(false);
-  const [verifyEmail] = useState<string>("");
+  const [verifyEmail, setVerifyEmail] = useState<string>("");
+  const [verifyPassword, setVerifyPassword] = useState<string>(""); // only for resend
+  const [sendingOtp, setSendingOtp] = useState(false);
 
-  // ✅ Forgot password flow
+  // ✅ Forgot password flow (still demo unless you add backend endpoints)
   const [forgotStep, setForgotStep] = useState<ForgotStep>("none");
   const [resetEmail, setResetEmail] = useState("");
 
@@ -84,8 +123,57 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     onGoSignup();
   };
 
-  const handleLoginPressed = () => setVerifyOpen(true);
+  // ✅ Called by LoginCard after user types email+password
+  const handleLoginPressed = async (email: string, password: string) => {
+    if (sendingOtp) return;
 
+    try {
+      setSendingOtp(true);
+      console.log(`${TAG} handleLoginPressed START`, { email });
+
+      // Step 1: call backend /login to send OTP
+      await loginRequest(email, password);
+
+      // Step 2: open OTP modal with correct email
+      setVerifyEmail(email);
+      setVerifyPassword(password);
+      setVerifyOpen(true);
+
+      console.log(`${TAG} OTP modal opened`);
+    } catch (err: any) {
+      console.log(`${TAG} handleLoginPressed ERROR:`, err?.message || err);
+      Alert.alert("Login Failed", err?.message || "Something went wrong.");
+    } finally {
+      setSendingOtp(false);
+      console.log(`${TAG} handleLoginPressed END`);
+    }
+  };
+
+  // ✅ Resend OTP (calls /login again)
+  const handleResend = async () => {
+    if (!verifyEmail || !verifyPassword) {
+      Alert.alert("Resend Failed", "Missing login info. Please login again.");
+      return;
+    }
+
+    try {
+      console.log(`${TAG} resend START`, { verifyEmail });
+      await loginRequest(verifyEmail, verifyPassword);
+      Alert.alert("Resent", "Verification code resent to your email.");
+      console.log(`${TAG} resend END`);
+    } catch (err: any) {
+      console.log(`${TAG} resend ERROR:`, err?.message || err);
+      Alert.alert("Resend Failed", err?.message || "Something went wrong.");
+    }
+  };
+
+  // ✅ called when OTP verified successfully (modal will call backend + save tokens)
+  const handleVerified = (_code: string) => {
+    setVerifyOpen(false);
+    onLoginSuccess();
+  };
+
+  // ✅ Forgot password flow (still demo)
   const handleForgotPassword = () => {
     setResetEmail("");
     setForgotStep("emailOtp");
@@ -96,15 +184,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const handlePrivacy = () =>
     Alert.alert("Privacy Policy", "Open Privacy Policy screen/link.");
 
-  const handleResend = () => {
-    Alert.alert("Resent", "Verification code resent (demo).");
-  };
-
-  const handleVerified = (_code: string) => {
-    setVerifyOpen(false);
-    onLoginSuccess();
-  };
-
   // ✅ called when forgot-password OTP verified
   const handleForgotOtpVerified = (code: string) => {
     Alert.alert("OTP Verified", `Code: ${code} (demo)`);
@@ -112,7 +191,10 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   };
 
   const handleResetPassword = (newPass: string) => {
-    Alert.alert("Password Updated", `Email: ${resetEmail}\nNew: ${newPass} (demo)`);
+    Alert.alert(
+      "Password Updated",
+      `Email: ${resetEmail}\nNew: ${newPass} (demo)`,
+    );
     setForgotStep("success");
   };
 
@@ -141,9 +223,11 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         >
           <View style={styles.page}>
             <LoginCard
+              // ✅ IMPORTANT: LoginCard must call this with email+password
               onLoginSuccess={handleLoginPressed}
               onGoSignup={onGoSignup}
               onForgotPassword={handleForgotPassword}
+              loading={sendingOtp}
             />
 
             <View style={styles.termsWrap}>

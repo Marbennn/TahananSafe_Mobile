@@ -1,12 +1,6 @@
 // src/components/SignupScreen/SignupCard.tsx
-import React from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  TextInput,
-  Platform,
-} from "react-native";
+import React, { useMemo } from "react";
+import { View, Text, Pressable, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../../theme/colors";
@@ -46,6 +40,10 @@ type Props = {
   onPrivacy: () => void;
 };
 
+function isValidEmail(e: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+}
+
 export default function SignupCard({
   scale,
   vscale,
@@ -71,6 +69,22 @@ export default function SignupCard({
   onTerms,
   onPrivacy,
 }: Props) {
+  const emailTrim = email.trim();
+  const passTrim = password.trim();
+
+  // ✅ validations (Email + Password only)
+  const emailError = useMemo(() => {
+    if (emailTrim.length === 0) return null;
+    if (!isValidEmail(emailTrim)) return "Please enter a valid email address.";
+    return null;
+  }, [emailTrim]);
+
+  const passwordError = useMemo(() => {
+    if (passTrim.length === 0) return null;
+    if (passTrim.length < 6) return "Password must be at least 6 characters.";
+    return null;
+  }, [passTrim]);
+
   return (
     <View style={styles.page}>
       <View style={styles.titleBlock}>
@@ -82,6 +96,7 @@ export default function SignupCard({
       </View>
 
       <View style={styles.form}>
+        {/* EMAIL */}
         <View style={styles.fieldBlock}>
           <Text style={styles.label}>Email</Text>
           <TextInput
@@ -94,8 +109,10 @@ export default function SignupCard({
             autoCorrect={false}
             style={styles.input}
           />
+          {!!emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
         </View>
 
+        {/* PASSWORD */}
         <View style={styles.fieldBlock}>
           <Text style={styles.label}>Password</Text>
           <View style={styles.inputWrap}>
@@ -109,11 +126,7 @@ export default function SignupCard({
               autoCorrect={false}
               style={[styles.input, { paddingRight: scale(44) }]}
             />
-            <Pressable
-              onPress={toggleShowPassword}
-              hitSlop={10}
-              style={styles.eyeBtn}
-            >
+            <Pressable onPress={toggleShowPassword} hitSlop={10} style={styles.eyeBtn}>
               <Ionicons
                 name={showPassword ? "eye-off-outline" : "eye-outline"}
                 size={scale(18)}
@@ -121,8 +134,10 @@ export default function SignupCard({
               />
             </Pressable>
           </View>
+          {!!passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
         </View>
 
+        {/* CONFIRM PASSWORD (NO validation message) */}
         <View style={styles.fieldBlock}>
           <Text style={styles.label}>Confirm Password</Text>
           <View style={styles.inputWrap}>
@@ -136,11 +151,7 @@ export default function SignupCard({
               autoCorrect={false}
               style={[styles.input, { paddingRight: scale(44) }]}
             />
-            <Pressable
-              onPress={toggleShowConfirm}
-              hitSlop={10}
-              style={styles.eyeBtn}
-            >
+            <Pressable onPress={toggleShowConfirm} hitSlop={10} style={styles.eyeBtn}>
               <Ionicons
                 name={showConfirm ? "eye-off-outline" : "eye-outline"}
                 size={scale(18)}
@@ -150,12 +161,10 @@ export default function SignupCard({
           </View>
         </View>
 
-        {!passwordsMatch && confirmPassword.length > 0 ? (
-          <Text style={styles.errorText}>Passwords do not match.</Text>
-        ) : (
-          <View style={{ height: vscale(10) }} />
-        )}
+        {/* Keep your old mismatch message OUT (removed) */}
+        <View style={{ height: vscale(10) }} />
 
+        {/* CONTINUE */}
         <Pressable
           onPress={onContinue}
           disabled={!canContinue}
@@ -187,9 +196,7 @@ export default function SignupCard({
       </View>
 
       <View style={styles.termsWrap}>
-        <Text style={styles.termsText}>
-          By clicking create account you agree to recognizes
-        </Text>
+        <Text style={styles.termsText}>By clicking create account you agree to recognizes</Text>
 
         <View style={styles.termsRow}>
           <Pressable onPress={onTerms} hitSlop={8}>

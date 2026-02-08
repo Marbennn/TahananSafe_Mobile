@@ -7,7 +7,10 @@ import {
   Pressable,
   Platform,
   useWindowDimensions,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -27,10 +30,104 @@ function clamp(n: number, min: number, max: number) {
 const BLUE = "#1D4ED8";
 const BORDER = "#93C5FD";
 
-export default function CreatePinScreen({
-  onContinue,
-  onSkip,
-}: Props) {
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+const ACCESS_TOKEN_KEY = "accessToken";
+
+// ✅ Adjust this if your backend mount path is different
+const SET_PIN_PATH = "/api/mobile/v1/set-pin";
+
+// ✅ simple logger (easy to grep)
+const TAG = "[CreatePinScreen]";
+
+// ✅ fetch with timeout so you can see if it hangs
+async function fetchWithTimeout(input: RequestInfo, init: RequestInit, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(input, { ...init, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+async function setPinRequest(pin: string) {
+  console.log(`${TAG} API_URL:`, API_URL);
+  console.log(`${TAG} SET_PIN_PATH:`, SET_PIN_PATH);
+
+  const url = `${API_URL}${SET_PIN_PATH}`;
+
+  const token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
+  console.log(`${TAG} token exists?`, Boolean(token));
+  console.log(`${TAG} token preview:`, token ? `${token.slice(0, 18)}...` : null);
+
+  if (!token) {
+    throw new Error("Missing access token. Please login again.");
+  }
+
+  // Never log full pin in production; for debugging, show masked
+  console.log(`${TAG} PIN length:`, String(pin).length, " PIN masked:", "*".repeat(String(pin).length));
+
+  const body = JSON.stringify({ pin: String(pin) });
+  console.log(`${TAG} Request URL:`, url);
+  console.log(`${TAG} Request method: PUT`);
+  console.log(`${TAG} Request body:`, body);
+
+  let res: Response;
+
+  try {
+    res = await fetchWithTimeout(
+      url,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body,
+      },
+      15000,
+    );
+  } catch (e: any) {
+    // AbortError = timeout
+    console.log(`${TAG} fetch error:`, e?.name, e?.message);
+    if (e?.name === "AbortError") {
+      throw new Error("Request timed out. Check your API_URL / network / backend.");
+    }
+    throw new Error(e?.message || "Network request failed");
+  }
+
+  console.log(`${TAG} Response status:`, res.status);
+  console.log(`${TAG} Response ok:`, res.ok);
+
+  // Read raw text first for better debugging
+  const rawText = await res.text().catch(() => "");
+  console.log(`${TAG} Response raw text:`, rawText);
+
+  let data: any = {};
+  if (rawText) {
+    try {
+      data = JSON.parse(rawText);
+    } catch (e) {
+      console.log(`${TAG} JSON parse failed. Response is not JSON.`);
+      data = {};
+    }
+  }
+
+  console.log(`${TAG} Response parsed JSON:`, data);
+
+  if (!res.ok) {
+    const msg =
+      data?.message ||
+      `Failed to set PIN (HTTP ${res.status}). Check backend logs + route mount.`;
+    throw new Error(msg);
+  }
+
+  return data as { message?: string };
+}
+
+export default function CreatePinScreen({ onContinue, onSkip }: Props) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
@@ -43,27 +140,56 @@ export default function CreatePinScreen({
 
   const PIN_LENGTH = 4;
   const [pin, setPin] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const dots = useMemo(
     () => Array.from({ length: PIN_LENGTH }).map((_, i) => i < pin.length),
-    [pin]
+    [pin],
   );
 
-  const canSignup = pin.length === PIN_LENGTH;
+  const canSignup = pin.length === PIN_LENGTH && !loading;
 
   const addDigit = (d: string) => {
+    if (loading) return;
     if (pin.length >= PIN_LENGTH) return;
     setPin((p) => (p + d).slice(0, PIN_LENGTH));
   };
 
   const backspace = () => {
+    if (loading) return;
     if (!pin.length) return;
     setPin((p) => p.slice(0, -1));
   };
 
-  const handleSignup = () => {
-    if (!canSignup) return;
-    onContinue(pin);
+  const handleSignup = async () => {
+    console.log(`${TAG} Signup pressed. pin length:`, pin.length);
+    console.log(`${TAG} canSignup:`, canSignup);
+
+    if (loading) return;
+    if (pin.length !== PIN_LENGTH) return;
+
+    try {
+      setLoading(true);
+      console.log(`${TAG} setLoading(true)`);
+
+      const result = await setPinRequest(pin);
+      console.log(`${TAG} setPinRequest success:`, result);
+
+      console.log(`${TAG} calling onContinue(pin)`);
+      onContinue(pin);
+    } catch (err: any) {
+      console.log(`${TAG} ERROR:`, err?.message || err);
+      Alert.alert("PIN Setup Failed", err?.message || "Something went wrong.");
+    } finally {
+      setLoading(false);
+      console.log(`${TAG} setLoading(false)`);
+    }
+  };
+
+  const handleSkip = () => {
+    console.log(`${TAG} Skip pressed. loading:`, loading);
+    if (loading) return;
+    onSkip?.();
   };
 
   return (
@@ -94,19 +220,34 @@ export default function CreatePinScreen({
         <View style={styles.keypad}>
           <View style={styles.keypadGrid}>
             {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
-              <KeyButton key={d} label={d} onPress={() => addDigit(d)} styles={styles} />
+              <KeyButton
+                key={d}
+                label={d}
+                onPress={() => addDigit(d)}
+                styles={styles}
+                disabled={loading}
+              />
             ))}
 
             <View style={styles.keySpacer} />
 
-            <KeyButton label="0" onPress={() => addDigit("0")} styles={styles} />
+            <KeyButton
+              label="0"
+              onPress={() => addDigit("0")}
+              styles={styles}
+              disabled={loading}
+            />
 
             <Pressable
               onPress={backspace}
+              disabled={loading}
               hitSlop={14}
               style={({ pressed }) => [
                 styles.iconBtn,
-                pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 },
+                loading && { opacity: 0.45 },
+                pressed && !loading
+                  ? { transform: [{ scale: 0.96 }], opacity: 0.85 }
+                  : null,
               ]}
             >
               <Ionicons name="backspace-outline" size={scale(26)} color={BLUE} />
@@ -132,15 +273,24 @@ export default function CreatePinScreen({
                 end={{ x: 1, y: 1 }}
                 style={styles.ctaGradient}
               >
-                <Text style={styles.ctaText}>Signup</Text>
+                {loading ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text style={styles.ctaText}>Signup</Text>
+                )}
               </LinearGradient>
             </View>
           </Pressable>
 
           <Pressable
-            onPress={onSkip}
+            onPress={handleSkip}
+            disabled={loading}
             hitSlop={10}
-            style={({ pressed }) => [styles.skipWrap, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [
+              styles.skipWrap,
+              loading && { opacity: 0.45 },
+              pressed && !loading ? { opacity: 0.7 } : null,
+            ]}
           >
             <Text style={styles.skipText}>Skip</Text>
           </Pressable>
@@ -154,18 +304,22 @@ function KeyButton({
   label,
   onPress,
   styles,
+  disabled,
 }: {
   label: string;
   onPress: () => void;
   styles: ReturnType<typeof createStyles>;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       hitSlop={10}
       style={({ pressed }) => [
         styles.keyBtn,
-        pressed && { transform: [{ scale: 0.98 }], opacity: 0.95 },
+        disabled && { opacity: 0.45 },
+        pressed && !disabled ? { transform: [{ scale: 0.98 }], opacity: 0.95 } : null,
       ]}
     >
       <Text style={styles.keyText}>{label}</Text>
