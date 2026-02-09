@@ -10,17 +10,22 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
 
+// ✅ use your existing session helpers (same keys App.tsx uses)
+import { getAccessToken, setHasPin, setLoggedIn } from "../auth/session";
+
+// ✅ use your existing PIN API (same endpoints)
+import { setPinApi } from "../api/pin";
+
 type Props = {
   onContinue: (pin: string) => void;
   onBack?: () => void;
   onSkip?: () => void;
-  progressActiveCount?: 1 | 2 | 3; // kept for compatibility (shell controls header)
+  progressActiveCount?: 1 | 2 | 3;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -29,103 +34,7 @@ function clamp(n: number, min: number, max: number) {
 
 const BLUE = "#1D4ED8";
 const BORDER = "#93C5FD";
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
-const ACCESS_TOKEN_KEY = "accessToken";
-
-// ✅ Adjust this if your backend mount path is different
-const SET_PIN_PATH = "/api/mobile/v1/set-pin";
-
-// ✅ simple logger (easy to grep)
 const TAG = "[CreatePinScreen]";
-
-// ✅ fetch with timeout so you can see if it hangs
-async function fetchWithTimeout(input: RequestInfo, init: RequestInit, timeoutMs = 15000) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const res = await fetch(input, { ...init, signal: controller.signal });
-    return res;
-  } finally {
-    clearTimeout(id);
-  }
-}
-
-async function setPinRequest(pin: string) {
-  console.log(`${TAG} API_URL:`, API_URL);
-  console.log(`${TAG} SET_PIN_PATH:`, SET_PIN_PATH);
-
-  const url = `${API_URL}${SET_PIN_PATH}`;
-
-  const token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
-  console.log(`${TAG} token exists?`, Boolean(token));
-  console.log(`${TAG} token preview:`, token ? `${token.slice(0, 18)}...` : null);
-
-  if (!token) {
-    throw new Error("Missing access token. Please login again.");
-  }
-
-  // Never log full pin in production; for debugging, show masked
-  console.log(`${TAG} PIN length:`, String(pin).length, " PIN masked:", "*".repeat(String(pin).length));
-
-  const body = JSON.stringify({ pin: String(pin) });
-  console.log(`${TAG} Request URL:`, url);
-  console.log(`${TAG} Request method: PUT`);
-  console.log(`${TAG} Request body:`, body);
-
-  let res: Response;
-
-  try {
-    res = await fetchWithTimeout(
-      url,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body,
-      },
-      15000,
-    );
-  } catch (e: any) {
-    // AbortError = timeout
-    console.log(`${TAG} fetch error:`, e?.name, e?.message);
-    if (e?.name === "AbortError") {
-      throw new Error("Request timed out. Check your API_URL / network / backend.");
-    }
-    throw new Error(e?.message || "Network request failed");
-  }
-
-  console.log(`${TAG} Response status:`, res.status);
-  console.log(`${TAG} Response ok:`, res.ok);
-
-  // Read raw text first for better debugging
-  const rawText = await res.text().catch(() => "");
-  console.log(`${TAG} Response raw text:`, rawText);
-
-  let data: any = {};
-  if (rawText) {
-    try {
-      data = JSON.parse(rawText);
-    } catch (e) {
-      console.log(`${TAG} JSON parse failed. Response is not JSON.`);
-      data = {};
-    }
-  }
-
-  console.log(`${TAG} Response parsed JSON:`, data);
-
-  if (!res.ok) {
-    const msg =
-      data?.message ||
-      `Failed to set PIN (HTTP ${res.status}). Check backend logs + route mount.`;
-    throw new Error(msg);
-  }
-
-  return data as { message?: string };
-}
 
 export default function CreatePinScreen({ onContinue, onSkip }: Props) {
   const insets = useSafeAreaInsets();
@@ -144,7 +53,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
 
   const dots = useMemo(
     () => Array.from({ length: PIN_LENGTH }).map((_, i) => i < pin.length),
-    [pin],
+    [pin]
   );
 
   const canSignup = pin.length === PIN_LENGTH && !loading;
@@ -163,32 +72,48 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
 
   const handleSignup = async () => {
     console.log(`${TAG} Signup pressed. pin length:`, pin.length);
-    console.log(`${TAG} canSignup:`, canSignup);
 
     if (loading) return;
     if (pin.length !== PIN_LENGTH) return;
 
     try {
       setLoading(true);
-      console.log(`${TAG} setLoading(true)`);
 
-      const result = await setPinRequest(pin);
-      console.log(`${TAG} setPinRequest success:`, result);
+      // ✅ read token from the SAME storage key App.tsx uses
+      const accessToken = await getAccessToken();
+      console.log(`${TAG} accessToken exists?`, Boolean(accessToken));
 
-      console.log(`${TAG} calling onContinue(pin)`);
+      if (!accessToken) {
+        throw new Error("Session missing. Please login again.");
+      }
+
+      // ✅ call backend to set PIN
+      const result = await setPinApi({ accessToken, pin: String(pin) });
+      console.log(`${TAG} setPinApi success:`, result);
+
+      // ✅ IMPORTANT: update app flags so Splash won't send you to onboarding
+      await setHasPin(true);
+      await setLoggedIn(true); // extra safety for signup flow
+
+      console.log(`${TAG} setHasPin(true) + setLoggedIn(true)`);
+
       onContinue(pin);
     } catch (err: any) {
       console.log(`${TAG} ERROR:`, err?.message || err);
       Alert.alert("PIN Setup Failed", err?.message || "Something went wrong.");
     } finally {
       setLoading(false);
-      console.log(`${TAG} setLoading(false)`);
     }
   };
 
-  const handleSkip = () => {
-    console.log(`${TAG} Skip pressed. loading:`, loading);
+  const handleSkip = async () => {
     if (loading) return;
+
+    // If user skips, we explicitly mark hasPin false so Splash behaves consistently
+    try {
+      await setHasPin(false);
+    } catch {}
+
     onSkip?.();
   };
 
@@ -319,7 +244,9 @@ function KeyButton({
       style={({ pressed }) => [
         styles.keyBtn,
         disabled && { opacity: 0.45 },
-        pressed && !disabled ? { transform: [{ scale: 0.98 }], opacity: 0.95 } : null,
+        pressed && !disabled
+          ? { transform: [{ scale: 0.98 }], opacity: 0.95 }
+          : null,
       ]}
     >
       <Text style={styles.keyText}>{label}</Text>

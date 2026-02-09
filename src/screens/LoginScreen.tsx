@@ -21,7 +21,7 @@ import type { NavigationProp, ParamListBase } from "@react-navigation/native";
 
 import LoginCard from "../components/LoginScreen/LoginCard";
 
-// ✅ Login OTP modal
+// ✅ Login OTP modal (THIS modal already calls /verify-login-otp and saves tokens)
 import EnterVerificationModal from "../components/LoginScreen/EnterVerificationModal";
 
 // ✅ Forgot password (email + otp in one)
@@ -45,7 +45,7 @@ type ForgotStep = "none" | "emailOtp" | "newpass" | "success";
 const TAG = "[LoginScreen]";
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
 
-// ✅ Your backend mounts mobile routes at: /api/mobile/v1
+// ✅ Backend is mounted at: /api/mobile/v1  (from your backend index.js)
 const LOGIN_PATH = "/api/mobile/v1/login";
 
 async function loginRequest(email: string, password: string) {
@@ -91,13 +91,13 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const backIconSize = scale(22);
   const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
 
-  // ✅ Login OTP modal
+  // ✅ Login OTP modal state
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState<string>("");
   const [verifyPassword, setVerifyPassword] = useState<string>(""); // only for resend
   const [sendingOtp, setSendingOtp] = useState(false);
 
-  // ✅ Forgot password flow (still demo unless you add backend endpoints)
+  // ✅ Forgot password flow (demo)
   const [forgotStep, setForgotStep] = useState<ForgotStep>("none");
   const [resetEmail, setResetEmail] = useState("");
 
@@ -127,15 +127,17 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const handleLoginPressed = async (email: string, password: string) => {
     if (sendingOtp) return;
 
+    const emailNorm = String(email).trim().toLowerCase();
+
     try {
       setSendingOtp(true);
-      console.log(`${TAG} handleLoginPressed START`, { email });
+      console.log(`${TAG} handleLoginPressed START`, { email: emailNorm });
 
       // Step 1: call backend /login to send OTP
-      await loginRequest(email, password);
+      await loginRequest(emailNorm, password);
 
-      // Step 2: open OTP modal with correct email
-      setVerifyEmail(email);
+      // Step 2: open OTP modal with correct email (store password for resend)
+      setVerifyEmail(emailNorm);
       setVerifyPassword(password);
       setVerifyOpen(true);
 
@@ -167,7 +169,16 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     }
   };
 
-  // ✅ called when OTP verified successfully (modal will call backend + save tokens)
+  /**
+   * ✅ IMPORTANT FIX:
+   * EnterVerificationModal already:
+   *  - calls /verify-login-otp
+   *  - saves accessToken & refreshToken
+   *
+   * So LoginScreen MUST NOT verify again (or OTP becomes "expired").
+   *
+   * This handler now only proceeds to app after modal success.
+   */
   const handleVerified = (_code: string) => {
     setVerifyOpen(false);
     onLoginSuccess();
@@ -184,17 +195,13 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const handlePrivacy = () =>
     Alert.alert("Privacy Policy", "Open Privacy Policy screen/link.");
 
-  // ✅ called when forgot-password OTP verified
   const handleForgotOtpVerified = (code: string) => {
     Alert.alert("OTP Verified", `Code: ${code} (demo)`);
     setForgotStep("newpass");
   };
 
   const handleResetPassword = (newPass: string) => {
-    Alert.alert(
-      "Password Updated",
-      `Email: ${resetEmail}\nNew: ${newPass} (demo)`,
-    );
+    Alert.alert("Password Updated", `Email: ${resetEmail}\nNew: ${newPass} (demo)`);
     setForgotStep("success");
   };
 
@@ -223,7 +230,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         >
           <View style={styles.page}>
             <LoginCard
-              // ✅ IMPORTANT: LoginCard must call this with email+password
               onLoginSuccess={handleLoginPressed}
               onGoSignup={onGoSignup}
               onForgotPassword={handleForgotPassword}

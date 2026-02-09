@@ -12,12 +12,14 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../../theme/colors";
 
 // ✅ separated badge component
 import ChecklistBadge from "../ChecklistBadge";
+
+// ✅ IMPORTANT: use the SAME storage keys your app uses everywhere
+import { saveTokens, setLoggedIn } from "../../auth/session";
 
 type Props = {
   visible: boolean;
@@ -43,13 +45,8 @@ function clamp(n: number, min: number, max: number) {
 const TAG = "[Signup EnterVerificationModal]";
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
 
-// ✅ FIX: Signup should verify REGISTRATION OTP (NOT login OTP)
+// ✅ Signup should verify REGISTRATION OTP (NOT login OTP)
 const VERIFY_REG_OTP_PATH = "/api/mobile/v1/verify-registration-otp";
-
-// Storage keys (match what you used in CreatePinScreen)
-const ACCESS_TOKEN_KEY = "accessToken";
-const REFRESH_TOKEN_KEY = "refreshToken";
-const USER_KEY = "user";
 
 async function verifyRegistrationOtpRequest(email: string, otp: string) {
   const url = `${API_URL}${VERIFY_REG_OTP_PATH}`;
@@ -82,7 +79,7 @@ async function verifyRegistrationOtpRequest(email: string, otp: string) {
 
   return data as {
     message?: string;
-    accessToken?: string;
+    accessToken: string;
     refreshToken?: string;
     user?: any;
   };
@@ -109,6 +106,7 @@ export default function EnterVerificationModal({
 
   const [code, setCode] = useState<string>("");
   const [secondsLeft, setSecondsLeft] = useState<number>(initialSeconds);
+  const [savingSession, setSavingSession] = useState(false);
 
   const inputRef = useRef<TextInput>(null);
 
@@ -116,14 +114,14 @@ export default function EnterVerificationModal({
   const pop = useRef(new Animated.Value(0.96)).current;
 
   const timeText = `00:${String(secondsLeft).padStart(2, "0")}`;
-  const canContinue = code.length === 4 && !isVerifying;
+  const canContinue = code.length === 4 && !isVerifying && !savingSession;
 
   const focusInput = () => {
     requestAnimationFrame(() => inputRef.current?.focus?.());
   };
 
   const closeWithAnim = () => {
-    if (isVerifying) return;
+    if (isVerifying || savingSession) return;
     Animated.parallel([
       Animated.timing(fade, { toValue: 0, duration: 120, useNativeDriver: true }),
       Animated.timing(pop, { toValue: 0.98, duration: 120, useNativeDriver: true }),
@@ -137,6 +135,7 @@ export default function EnterVerificationModal({
 
     setCode("");
     setSecondsLeft(initialSeconds);
+    setSavingSession(false);
 
     fade.setValue(0);
     pop.setValue(0.96);
@@ -184,15 +183,21 @@ export default function EnterVerificationModal({
     if (otp.length !== 4) return;
 
     try {
+      setSavingSession(true);
       console.log(`${TAG} verify START`);
+
       const data = await verifyRegistrationOtpRequest(e, otp);
 
-      // ✅ Save tokens for protected endpoints like set-pin / me
-      if (data?.accessToken) await AsyncStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
-      if (data?.refreshToken) await AsyncStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
-      if (data?.user) await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      // ✅ SAVE TOKENS USING YOUR APP'S OFFICIAL STORAGE KEYS
+      await saveTokens({
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+      });
 
-      console.log(`${TAG} tokens saved?`, {
+      // ✅ Mark logged in so Splash won't send you back to onboarding
+      await setLoggedIn(true);
+
+      console.log(`${TAG} tokens saved via session.ts`, {
         access: Boolean(data?.accessToken),
         refresh: Boolean(data?.refreshToken),
       });
@@ -201,14 +206,18 @@ export default function EnterVerificationModal({
       onVerified(otp);
     } catch (err: any) {
       console.log(`${TAG} verify ERROR:`, err?.message || err);
-      Alert.alert("Verification Failed", err?.message || "OTP is incorrect. Please try again.");
+      Alert.alert(
+        "Verification Failed",
+        err?.message || "OTP is incorrect. Please try again."
+      );
     } finally {
+      setSavingSession(false);
       console.log(`${TAG} verify END`);
     }
   };
 
   const handleResend = () => {
-    if (secondsLeft > 0 || isVerifying) return;
+    if (secondsLeft > 0 || isVerifying || savingSession) return;
     setSecondsLeft(initialSeconds);
     onResend?.();
     setTimeout(focusInput, 160);
@@ -238,7 +247,11 @@ export default function EnterVerificationModal({
             Enter the 4 - digit verification code sent to{"\n"}your email address
           </Text>
 
-          <Pressable onPress={focusInput} style={styles.otpRow} disabled={isVerifying}>
+          <Pressable
+            onPress={focusInput}
+            style={styles.otpRow}
+            disabled={isVerifying || savingSession}
+          >
             {[0, 1, 2, 3].map((i) => {
               const ch = code[i] ?? "";
               const isActive = i === code.length && code.length < 4;
@@ -247,7 +260,10 @@ export default function EnterVerificationModal({
               return (
                 <View
                   key={i}
-                  style={[styles.otpBox, (isActive || isFilled) && styles.otpBoxActive]}
+                  style={[
+                    styles.otpBox,
+                    (isActive || isFilled) && styles.otpBoxActive,
+                  ]}
                 >
                   <Text style={styles.otpChar}>{ch}</Text>
                 </View>
@@ -255,7 +271,6 @@ export default function EnterVerificationModal({
             })}
           </Pressable>
 
-          {/* ✅ NEW: show error inside modal */}
           {!!errorText && <Text style={styles.errorText}>{errorText}</Text>}
 
           <TextInput
@@ -269,7 +284,7 @@ export default function EnterVerificationModal({
             autoFocus={false}
             blurOnSubmit={false}
             onSubmitEditing={handleContinue}
-            editable={!isVerifying}
+            editable={!isVerifying && !savingSession}
           />
 
           <View style={styles.infoRow}>
@@ -282,9 +297,16 @@ export default function EnterVerificationModal({
               <Pressable
                 onPress={handleResend}
                 hitSlop={10}
-                disabled={secondsLeft > 0 || isVerifying}
+                disabled={secondsLeft > 0 || isVerifying || savingSession}
               >
-                <Text style={[styles.resend, (secondsLeft > 0 || isVerifying) && { opacity: 0.45 }]}>
+                <Text
+                  style={[
+                    styles.resend,
+                    (secondsLeft > 0 || isVerifying || savingSession) && {
+                      opacity: 0.45,
+                    },
+                  ]}
+                >
                   Resend it
                 </Text>
               </Pressable>
@@ -308,7 +330,11 @@ export default function EnterVerificationModal({
                 end={{ x: 1, y: 1 }}
                 style={styles.btnGradient}
               >
-                {isVerifying ? <ActivityIndicator /> : <Text style={styles.btnText}>Continue</Text>}
+                {isVerifying || savingSession ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text style={styles.btnText}>Continue</Text>
+                )}
               </LinearGradient>
             </View>
           </Pressable>
@@ -316,8 +342,11 @@ export default function EnterVerificationModal({
           <Pressable
             onPress={closeWithAnim}
             hitSlop={10}
-            style={[styles.cancelBtn, isVerifying && { opacity: 0.45 }]}
-            disabled={isVerifying}
+            style={[
+              styles.cancelBtn,
+              (isVerifying || savingSession) && { opacity: 0.45 },
+            ]}
+            disabled={isVerifying || savingSession}
           >
             <Text style={styles.cancelText}>Cancel</Text>
           </Pressable>
@@ -393,16 +422,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       alignItems: "center",
       justifyContent: "center",
     },
-    otpBoxActive: {
-      borderColor: "#A7C6E6",
-    },
+    otpBoxActive: { borderColor: "#A7C6E6" },
     otpChar: {
       fontSize: scale(16),
       fontWeight: "900",
       color: Colors.text,
     },
-
-    // ✅ NEW error text style
     errorText: {
       textAlign: "center",
       marginBottom: scale(10),
@@ -410,7 +435,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       color: "#DC2626",
       fontWeight: "800",
     },
-
     hiddenInput: {
       position: "absolute",
       opacity: 0,
@@ -434,10 +458,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       color: Colors.primary,
       fontWeight: "900",
     },
-    resendRow: {
-      flexDirection: "row",
-      alignItems: "center",
-    },
+    resendRow: { flexDirection: "row", alignItems: "center" },
     mutedSmall: {
       fontSize: scale(10),
       color: "#6B7280",

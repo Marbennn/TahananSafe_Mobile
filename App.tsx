@@ -26,10 +26,24 @@ import NotificationsScreen from "./src/screens/NotificationsScreen";
 // ✅ Onboarding pager screen
 import OnboardingPagerScreen from "./src/screens/OnboardingPagerScreen";
 
+// ✅ PIN screen
+import PinScreen from "./src/screens/PinScreen";
+
 // Incident flow screens (inside Main)
 import IncidentLogScreen from "./src/screens/IncidentLogScreen";
 import IncidentLogConfirmationScreen from "./src/screens/IncidentLogConfirmationScreen";
 import IncidentLogConfirmedScreen from "./src/screens/IncidentLogConfirmedScreen";
+
+// ✅ Persist login/session
+import {
+  isLoggedIn,
+  setLoggedIn,
+  getAccessToken,
+  setHasPin,
+} from "./src/auth/session";
+
+// ✅ APIs for PIN & profile
+import { getMeApi, verifyPinApi } from "./src/api/pin";
 
 // Types
 import type { TabKey } from "./src/components/BottomNavBar";
@@ -50,7 +64,10 @@ type RootStackParamList = {
   // Login flow (optional)
   Login: undefined;
 
-  // App shell (HomeScreen is inside MainShell)
+  // ✅ PIN gate
+  Pin: undefined;
+
+  // App shell
   Main: undefined;
 
   // Extra
@@ -260,11 +277,17 @@ export default function App() {
             initialRouteName="Splash"
             screenOptions={{ headerShown: false, gestureEnabled: true }}
           >
-            {/* ✅ Splash -> OnboardingPager */}
+            {/* ✅ Splash -> (Pin/Main if logged in) else OnboardingPager */}
             <Stack.Screen name="Splash">
               {({ navigation }) => (
                 <AppSplashScreenWrapper
-                  onDone={() => navigation.replace("OnboardingPager")}
+                  onGoMain={() =>
+                    navigation.reset({ index: 0, routes: [{ name: "Main" }] })
+                  }
+                  onGoPin={() =>
+                    navigation.reset({ index: 0, routes: [{ name: "Pin" }] })
+                  }
+                  onGoOnboarding={() => navigation.replace("OnboardingPager")}
                 />
               )}
             </Stack.Screen>
@@ -278,27 +301,109 @@ export default function App() {
               )}
             </Stack.Screen>
 
-            {/* ✅ AuthFlow (stationary header + internal transitions) */}
+            {/* ✅ AuthFlow */}
             <Stack.Screen name="AuthFlow">
               {({ navigation }) => (
                 <AuthFlowShell
                   onExitToOnboarding={() => navigation.goBack()}
                   onGoLogin={() => navigation.navigate("Login")}
-                  onAuthDone={() =>
-                    navigation.reset({ index: 0, routes: [{ name: "Main" }] })
-                  }
+                  onAuthDone={async () => {
+                    // ✅ logged in flag should already be set in your auth logic
+                    // but keep this as fallback
+                    await setLoggedIn(true);
+
+                    // After auth, decide if Pin is needed
+                    try {
+                      const token = await getAccessToken();
+                      if (token) {
+                        const me = await getMeApi({ accessToken: token });
+                        await setHasPin(!!me.user.hasPin);
+                        if (me.user.hasPin) {
+                          navigation.reset({
+                            index: 0,
+                            routes: [{ name: "Pin" }],
+                          });
+                          return;
+                        }
+                      }
+                    } catch {
+                      // ignore, go main
+                    }
+
+                    navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+                  }}
                 />
               )}
             </Stack.Screen>
 
-            {/* Optional login */}
+            {/* ✅ Login */}
             <Stack.Screen name="Login">
               {({ navigation }) => (
                 <LoginScreen
                   onGoSignup={() => navigation.replace("AuthFlow")}
-                  onLoginSuccess={() =>
-                    navigation.reset({ index: 0, routes: [{ name: "Main" }] })
-                  }
+                  onLoginSuccess={async () => {
+                    await setLoggedIn(true);
+
+                    // After login, decide if Pin is needed
+                    try {
+                      const token = await getAccessToken();
+                      if (token) {
+                        const me = await getMeApi({ accessToken: token });
+                        await setHasPin(!!me.user.hasPin);
+                        if (me.user.hasPin) {
+                          navigation.reset({
+                            index: 0,
+                            routes: [{ name: "Pin" }],
+                          });
+                          return;
+                        }
+                      }
+                    } catch {
+                      // ignore, go main
+                    }
+
+                    navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+                  }}
+                />
+              )}
+            </Stack.Screen>
+
+            {/* ✅ PIN Gate */}
+            <Stack.Screen name="Pin">
+              {({ navigation }) => (
+                <PinScreen
+                  onBack={() => {
+                    // optional: prevent going back to app without PIN
+                    // You can keep this disabled or send to Login:
+                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+                  }}
+                  onForgotPin={() => {
+                    Alert.alert(
+                      "Forgot PIN",
+                      "Feature coming soon. Please contact support or use recovery flow."
+                    );
+                  }}
+                  onVerified={async (pin) => {
+                    try {
+                      const token = await getAccessToken();
+                      if (!token) {
+                        Alert.alert("Session expired", "Please log in again.");
+                        await setLoggedIn(false);
+                        navigation.reset({
+                          index: 0,
+                          routes: [{ name: "Login" }],
+                        });
+                        return;
+                      }
+
+                      await verifyPinApi({ accessToken: token, pin });
+                      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+                    } catch (e: any) {
+                      Alert.alert("Invalid PIN", e?.message || "Try again.");
+                      // PinScreen already clears digits when user types again,
+                      // so we just show the error.
+                    }
+                  }}
                 />
               )}
             </Stack.Screen>
@@ -307,10 +412,13 @@ export default function App() {
             <Stack.Screen name="Main">
               {({ navigation }) => (
                 <MainShell
-                  onLogout={() =>
-                    navigation.reset({ index: 0, routes: [{ name: "Login" }] })
+                  onLogout={async () => {
+                    await setLoggedIn(false);
+                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+                  }}
+                  onOpenNotifications={() =>
+                    navigation.navigate("Notifications")
                   }
-                  onOpenNotifications={() => navigation.navigate("Notifications")}
                 />
               )}
             </Stack.Screen>
@@ -327,11 +435,54 @@ export default function App() {
   );
 }
 
-function AppSplashScreenWrapper({ onDone }: { onDone: () => void }) {
+function AppSplashScreenWrapper({
+  onGoMain,
+  onGoPin,
+  onGoOnboarding,
+}: {
+  onGoMain: () => void;
+  onGoPin: () => void;
+  onGoOnboarding: () => void;
+}) {
   React.useEffect(() => {
-    const t = setTimeout(onDone, 5000);
-    return () => clearTimeout(t);
-  }, [onDone]);
+    let mounted = true;
+
+    const t = setTimeout(async () => {
+      try {
+        const logged = await isLoggedIn();
+        if (!mounted) return;
+
+        if (!logged) {
+          onGoOnboarding();
+          return;
+        }
+
+        const token = await getAccessToken();
+        if (!token) {
+          onGoOnboarding();
+          return;
+        }
+
+        // ✅ ask backend if user has PIN
+        const me = await getMeApi({ accessToken: token });
+        const hasPin = !!me.user.hasPin;
+
+        await setHasPin(hasPin);
+
+        if (!mounted) return;
+        if (hasPin) onGoPin();
+        else onGoMain();
+      } catch {
+        if (!mounted) return;
+        onGoOnboarding();
+      }
+    }, 5000);
+
+    return () => {
+      mounted = false;
+      clearTimeout(t);
+    };
+  }, [onGoMain, onGoPin, onGoOnboarding]);
 
   return <AppSplashScreen />;
 }

@@ -18,7 +18,7 @@ import GreetingCard from "../components/HomeScreen/GreetingCard";
 import RecentLogCard, { LogItem } from "../components/HomeScreen/RecentLogCard";
 import QuickActions from "../components/HomeScreen/QuickActions";
 
-import HomeScreenLogo from "../../assets/HomeScreen/HomeScreenLogo.svg";
+import HomeScreenLogo from "../../assets/HomeScreen/NewLogo.svg";
 
 // ✅ NEW: separated tutorial overlay
 import FabTutorialOverlay from "../components/Tutorial/FabTutorialOverlay";
