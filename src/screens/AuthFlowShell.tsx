@@ -15,6 +15,9 @@ import SignupScreen from "./SignupScreen";
 import PersonalDetailsScreen from "./PersonalDetailsScreen";
 import CreatePinScreen from "./CreatePinScreen";
 
+// ✅ IMPORTANT: unlock pin for THIS RUN so App.tsx won't force PinScreen right away
+import { setPinUnlockedThisRun } from "../auth/session";
+
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
@@ -28,13 +31,8 @@ type AuthStackParamList = {
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 type Props = {
-  // back from first step (Signup) -> return to onboarding
   onExitToOnboarding: () => void;
-
-  // when user chooses "Login" from signup
   onGoLogin: () => void;
-
-  // when auth flow finished (CreatePin done/skip)
   onAuthDone: () => void;
 };
 
@@ -51,7 +49,8 @@ export default function AuthFlowShell({
   const vscale = (n: number) => Math.round(n * vs);
 
   const navRef = useNavigationContainerRef<AuthStackParamList>();
-  const [routeName, setRouteName] = useState<keyof AuthStackParamList>("Signup");
+  const [routeName, setRouteName] =
+    useState<keyof AuthStackParamList>("Signup");
 
   const progressActiveCount = useMemo<1 | 2 | 3>(() => {
     if (routeName === "Signup") return 1;
@@ -60,7 +59,9 @@ export default function AuthFlowShell({
   }, [routeName]);
 
   const handleStateChange = useCallback(() => {
-    const name = navRef.getCurrentRoute()?.name as keyof AuthStackParamList | undefined;
+    const name = navRef.getCurrentRoute()?.name as
+      | keyof AuthStackParamList
+      | undefined;
     if (name) setRouteName(name);
   }, [navRef]);
 
@@ -76,11 +77,17 @@ export default function AuthFlowShell({
     [navRef]
   );
 
+  // ✅ helper: finish auth and unlock for this run
+  const finishAuth = useCallback(() => {
+    // This prevents App.tsx from forcing PinScreen immediately after CreatePin.
+    setPinUnlockedThisRun(true);
+    onAuthDone();
+  }, [onAuthDone]);
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* ✅ 100% STATIONARY HEADER (never unmounts) */}
       <AuthProgressHeader
         onBack={handleBack}
         progressActiveCount={progressActiveCount}
@@ -88,7 +95,6 @@ export default function AuthFlowShell({
         vscale={vscale}
       />
 
-      {/* ✅ nested navigation tree (React Navigation v7) */}
       <View style={styles.body}>
         <NavigationIndependentTree>
           <NavigationContainer ref={navRef} onStateChange={handleStateChange}>
@@ -125,8 +131,8 @@ export default function AuthFlowShell({
                 {() => (
                   <CreatePinScreen
                     onBack={handleBack}
-                    onContinue={() => onAuthDone()}
-                    onSkip={() => onAuthDone()}
+                    onContinue={() => finishAuth()}
+                    onSkip={() => finishAuth()}
                     progressActiveCount={3}
                   />
                 )}

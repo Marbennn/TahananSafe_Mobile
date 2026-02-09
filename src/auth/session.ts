@@ -8,11 +8,32 @@ const KEYS = {
   hasPin: "@tahanansafe_has_pin",
 } as const;
 
+/**
+ * ✅ In-memory flag ONLY for current app run
+ * - resets when app is fully closed
+ * - prevents going to PinScreen immediately after creating pin
+ */
+let pinUnlockedThisRun = false;
+
+export function setPinUnlockedThisRun(value: boolean) {
+  pinUnlockedThisRun = value;
+}
+
+export function isPinUnlockedThisRun(): boolean {
+  return pinUnlockedThisRun;
+}
+
+export function resetPinUnlockedThisRun() {
+  pinUnlockedThisRun = false;
+}
+
 export async function setLoggedIn(value: boolean) {
   if (value) {
     await AsyncStorage.setItem(KEYS.loggedIn, "1");
   } else {
-    // logging out clears everything
+    // logging out clears everything + resets in-memory unlock
+    pinUnlockedThisRun = false;
+
     await AsyncStorage.multiRemove([
       KEYS.loggedIn,
       KEYS.accessToken,
@@ -55,6 +76,9 @@ export async function getHasPin(): Promise<boolean> {
 }
 
 export async function clearSession() {
+  // clearing session resets in-memory unlock too
+  pinUnlockedThisRun = false;
+
   await AsyncStorage.multiRemove([
     KEYS.loggedIn,
     KEYS.accessToken,

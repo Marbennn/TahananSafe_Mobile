@@ -12,9 +12,10 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 // Screens
 import AppSplashScreen from "./src/screens/AppSplashScreen";
 import LoginScreen from "./src/screens/LoginScreen";
-
-// ✅ New: Stationary header auth shell
 import AuthFlowShell from "./src/screens/AuthFlowShell";
+import OnboardingPagerScreen from "./src/screens/OnboardingPagerScreen";
+import PinScreen from "./src/screens/PinScreen";
+import CreatePinScreen from "./src/screens/CreatePinScreen";
 
 import HomeScreen from "./src/screens/HomeScreen";
 import InboxScreen from "./src/screens/HotlinesScreen";
@@ -23,26 +24,23 @@ import ReportDetailScreen from "./src/screens/ReportDetailScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
 
-// ✅ Onboarding pager screen
-import OnboardingPagerScreen from "./src/screens/OnboardingPagerScreen";
-
-// ✅ PIN screen
-import PinScreen from "./src/screens/PinScreen";
-
-// Incident flow screens (inside Main)
 import IncidentLogScreen from "./src/screens/IncidentLogScreen";
 import IncidentLogConfirmationScreen from "./src/screens/IncidentLogConfirmationScreen";
 import IncidentLogConfirmedScreen from "./src/screens/IncidentLogConfirmedScreen";
 
-// ✅ Persist login/session
+// Session helpers
 import {
   isLoggedIn,
   setLoggedIn,
   getAccessToken,
   setHasPin,
+  // ✅ NEW in-memory run flag
+  isPinUnlockedThisRun,
+  setPinUnlockedThisRun,
+  resetPinUnlockedThisRun,
 } from "./src/auth/session";
 
-// ✅ APIs for PIN & profile
+// APIs for PIN & profile
 import { getMeApi, verifyPinApi } from "./src/api/pin";
 
 // Types
@@ -54,23 +52,12 @@ enableScreens(true);
 
 type RootStackParamList = {
   Splash: undefined;
-
-  // ✅ Onboarding
   OnboardingPager: undefined;
-
-  // ✅ Stationary auth flow wrapper
   AuthFlow: undefined;
-
-  // Login flow (optional)
   Login: undefined;
-
-  // ✅ PIN gate
+  CreatePin: undefined;
   Pin: undefined;
-
-  // App shell
   Main: undefined;
-
-  // Extra
   Notifications: undefined;
 };
 
@@ -78,6 +65,8 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 type IncidentStep = "form" | "confirm" | "confirmed";
 type ReportStep = "list" | "detail";
+
+/* ===================== MAIN SHELL ===================== */
 
 function MainShell({
   onLogout,
@@ -88,72 +77,27 @@ function MainShell({
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>("Home");
 
-  // Incident flow state
   const [incidentStep, setIncidentStep] = useState<IncidentStep>("form");
   const [incidentPreview, setIncidentPreview] =
     useState<IncidentPreviewData | null>(null);
 
-  // Reports flow state
   const [reportStep, setReportStep] = useState<ReportStep>("list");
   const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
 
   const alertNo = useMemo(() => "676767", []);
-  const confirmedDateLine = useMemo(() => {
-    const now = new Date();
-    const weekday = now.toLocaleDateString(undefined, { weekday: "long" });
-    const monthDayYear = now.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-    const time = now.toLocaleTimeString(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-    return `${weekday} | ${monthDayYear} | ${time}`;
-  }, []);
+  const confirmedDateLine = useMemo(() => new Date().toLocaleString(), []);
 
   const handleQuickExit = () => {
     Alert.alert("Quick Exit", "Returning to Login", [
-      {
-        text: "OK",
-        onPress: () => {
-          setActiveTab("Home");
-
-          // reset incident flow
-          setIncidentStep("form");
-          setIncidentPreview(null);
-
-          // reset reports flow
-          setReportStep("list");
-          setSelectedReport(null);
-
-          onLogout();
-        },
-      },
+      { text: "OK", onPress: onLogout },
     ]);
   };
 
   const handleTabChange = (tab: TabKey) => {
     setActiveTab(tab);
-
-    if (tab !== "Incident") {
-      setIncidentStep("form");
-      setIncidentPreview(null);
-    }
-
-    if (tab !== "Reports") {
-      setReportStep("list");
-      setSelectedReport(null);
-    }
+    if (tab !== "Incident") setIncidentStep("form");
+    if (tab !== "Reports") setReportStep("list");
   };
-
-  const Placeholder = ({ title }: { title: string }) => (
-    <View style={styles.placeholder}>
-      <Text style={styles.placeholderTitle}>{title}</Text>
-      <Text style={styles.placeholderText}>Screen coming soon…</Text>
-    </View>
-  );
 
   if (activeTab === "Home") {
     return (
@@ -191,10 +135,7 @@ function MainShell({
       );
     }
 
-    if (!selectedReport) {
-      setReportStep("list");
-      return null;
-    }
+    if (!selectedReport) return null;
 
     return (
       <ReportDetailScreen
@@ -222,25 +163,16 @@ function MainShell({
     if (incidentStep === "form") {
       return (
         <IncidentLogScreen
-          onBack={() => {
-            setActiveTab("Home");
-            setIncidentStep("form");
-            setIncidentPreview(null);
-          }}
-          onProceedConfirm={(previewData: IncidentPreviewData) => {
-            setIncidentPreview(previewData);
+          onBack={() => setActiveTab("Home")}
+          onProceedConfirm={(data) => {
+            setIncidentPreview(data);
             setIncidentStep("confirm");
           }}
         />
       );
     }
 
-    if (incidentStep === "confirm") {
-      if (!incidentPreview) {
-        setIncidentStep("form");
-        return null;
-      }
-
+    if (incidentStep === "confirm" && incidentPreview) {
       return (
         <IncidentLogConfirmationScreen
           data={incidentPreview}
@@ -256,16 +188,16 @@ function MainShell({
         dateLine={confirmedDateLine}
         onGoHome={() => {
           setIncidentStep("form");
-          setIncidentPreview(null);
           setActiveTab("Home");
         }}
       />
     );
   }
 
-  if (activeTab === "Ledger") return <Placeholder title="Ledger" />;
-  return <Placeholder title="Unknown" />;
+  return null;
 }
+
+/* ===================== APP ROOT ===================== */
 
 export default function App() {
   return (
@@ -277,7 +209,7 @@ export default function App() {
             initialRouteName="Splash"
             screenOptions={{ headerShown: false, gestureEnabled: true }}
           >
-            {/* ✅ Splash -> (Pin/Main if logged in) else OnboardingPager */}
+            {/* ✅ Splash decides where to go */}
             <Stack.Screen name="Splash">
               {({ navigation }) => (
                 <AppSplashScreenWrapper
@@ -287,12 +219,14 @@ export default function App() {
                   onGoPin={() =>
                     navigation.reset({ index: 0, routes: [{ name: "Pin" }] })
                   }
+                  onGoCreatePin={() =>
+                    navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] })
+                  }
                   onGoOnboarding={() => navigation.replace("OnboardingPager")}
                 />
               )}
             </Stack.Screen>
 
-            {/* ✅ Onboarding -> AuthFlow */}
             <Stack.Screen name="OnboardingPager">
               {({ navigation }) => (
                 <OnboardingPagerScreen
@@ -308,26 +242,31 @@ export default function App() {
                   onExitToOnboarding={() => navigation.goBack()}
                   onGoLogin={() => navigation.navigate("Login")}
                   onAuthDone={async () => {
-                    // ✅ logged in flag should already be set in your auth logic
-                    // but keep this as fallback
                     await setLoggedIn(true);
 
-                    // After auth, decide if Pin is needed
                     try {
                       const token = await getAccessToken();
                       if (token) {
                         const me = await getMeApi({ accessToken: token });
-                        await setHasPin(!!me.user.hasPin);
-                        if (me.user.hasPin) {
-                          navigation.reset({
-                            index: 0,
-                            routes: [{ name: "Pin" }],
-                          });
+                        const hasPin = !!me.user.hasPin;
+                        await setHasPin(hasPin);
+
+                        if (hasPin) {
+                          // ✅ If already unlocked this run, go Main immediately
+                          if (isPinUnlockedThisRun()) {
+                            navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+                            return;
+                          }
+
+                          navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
                           return;
                         }
+
+                        navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] });
+                        return;
                       }
                     } catch {
-                      // ignore, go main
+                      // ignore
                     }
 
                     navigation.reset({ index: 0, routes: [{ name: "Main" }] });
@@ -344,24 +283,46 @@ export default function App() {
                   onLoginSuccess={async () => {
                     await setLoggedIn(true);
 
-                    // After login, decide if Pin is needed
                     try {
                       const token = await getAccessToken();
                       if (token) {
                         const me = await getMeApi({ accessToken: token });
-                        await setHasPin(!!me.user.hasPin);
-                        if (me.user.hasPin) {
-                          navigation.reset({
-                            index: 0,
-                            routes: [{ name: "Pin" }],
-                          });
+                        const hasPin = !!me.user.hasPin;
+                        await setHasPin(hasPin);
+
+                        if (hasPin) {
+                          if (isPinUnlockedThisRun()) {
+                            navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+                            return;
+                          }
+
+                          navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
                           return;
                         }
+
+                        navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] });
+                        return;
                       }
                     } catch {
-                      // ignore, go main
+                      // ignore
                     }
 
+                    navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+                  }}
+                />
+              )}
+            </Stack.Screen>
+
+            {/* ✅ Root Create PIN (optional / keep) */}
+            <Stack.Screen name="CreatePin">
+              {({ navigation }) => (
+                <CreatePinScreen
+                  onContinue={() => {
+                    setPinUnlockedThisRun(true);
+                    navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+                  }}
+                  onSkip={() => {
+                    setPinUnlockedThisRun(true);
                     navigation.reset({ index: 0, routes: [{ name: "Main" }] });
                   }}
                 />
@@ -372,36 +333,31 @@ export default function App() {
             <Stack.Screen name="Pin">
               {({ navigation }) => (
                 <PinScreen
-                  onBack={() => {
-                    // optional: prevent going back to app without PIN
-                    // You can keep this disabled or send to Login:
-                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
-                  }}
+                  onBack={() =>
+                    navigation.reset({ index: 0, routes: [{ name: "Login" }] })
+                  }
                   onForgotPin={() => {
-                    Alert.alert(
-                      "Forgot PIN",
-                      "Feature coming soon. Please contact support or use recovery flow."
-                    );
+                    Alert.alert("Forgot PIN", "Recovery coming soon.");
                   }}
                   onVerified={async (pin) => {
                     try {
                       const token = await getAccessToken();
                       if (!token) {
-                        Alert.alert("Session expired", "Please log in again.");
                         await setLoggedIn(false);
+                        resetPinUnlockedThisRun();
                         navigation.reset({
                           index: 0,
-                          routes: [{ name: "Login" }],
+                          routes: [{ name: "AuthFlow" }],
                         });
                         return;
                       }
 
                       await verifyPinApi({ accessToken: token, pin });
+
+                      setPinUnlockedThisRun(true);
                       navigation.reset({ index: 0, routes: [{ name: "Main" }] });
                     } catch (e: any) {
                       Alert.alert("Invalid PIN", e?.message || "Try again.");
-                      // PinScreen already clears digits when user types again,
-                      // so we just show the error.
                     }
                   }}
                 />
@@ -413,12 +369,17 @@ export default function App() {
               {({ navigation }) => (
                 <MainShell
                   onLogout={async () => {
+                    // ✅ logout -> Signup/AuthFlow
+                    resetPinUnlockedThisRun();
                     await setLoggedIn(false);
-                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+                    await setHasPin(false);
+
+                    navigation.reset({
+                      index: 0,
+                      routes: [{ name: "AuthFlow" }],
+                    });
                   }}
-                  onOpenNotifications={() =>
-                    navigation.navigate("Notifications")
-                  }
+                  onOpenNotifications={() => navigation.navigate("Notifications")}
                 />
               )}
             </Stack.Screen>
@@ -435,13 +396,17 @@ export default function App() {
   );
 }
 
+/* ===================== SPLASH WRAPPER ===================== */
+
 function AppSplashScreenWrapper({
   onGoMain,
   onGoPin,
+  onGoCreatePin,
   onGoOnboarding,
 }: {
   onGoMain: () => void;
   onGoPin: () => void;
+  onGoCreatePin: () => void;
   onGoOnboarding: () => void;
 }) {
   React.useEffect(() => {
@@ -463,26 +428,31 @@ function AppSplashScreenWrapper({
           return;
         }
 
-        // ✅ ask backend if user has PIN
         const me = await getMeApi({ accessToken: token });
         const hasPin = !!me.user.hasPin;
 
         await setHasPin(hasPin);
 
         if (!mounted) return;
-        if (hasPin) onGoPin();
-        else onGoMain();
+
+        if (hasPin) {
+          // ✅ if unlocked this run -> Main else Pin
+          if (isPinUnlockedThisRun()) onGoMain();
+          else onGoPin();
+        } else {
+          onGoCreatePin();
+        }
       } catch {
         if (!mounted) return;
         onGoOnboarding();
       }
-    }, 5000);
+    }, 1200);
 
     return () => {
       mounted = false;
       clearTimeout(t);
     };
-  }, [onGoMain, onGoPin, onGoOnboarding]);
+  }, [onGoMain, onGoPin, onGoCreatePin, onGoOnboarding]);
 
   return <AppSplashScreen />;
 }

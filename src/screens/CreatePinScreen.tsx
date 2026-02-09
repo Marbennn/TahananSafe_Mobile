@@ -15,10 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
 
-// ✅ use your existing session helpers (same keys App.tsx uses)
 import { getAccessToken, setHasPin, setLoggedIn } from "../auth/session";
-
-// ✅ use your existing PIN API (same endpoints)
 import { setPinApi } from "../api/pin";
 
 type Props = {
@@ -79,7 +76,6 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
     try {
       setLoading(true);
 
-      // ✅ read token from the SAME storage key App.tsx uses
       const accessToken = await getAccessToken();
       console.log(`${TAG} accessToken exists?`, Boolean(accessToken));
 
@@ -87,16 +83,14 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
         throw new Error("Session missing. Please login again.");
       }
 
-      // ✅ call backend to set PIN
-      const result = await setPinApi({ accessToken, pin: String(pin) });
-      console.log(`${TAG} setPinApi success:`, result);
+      await setPinApi({ accessToken, pin: String(pin) });
+      console.log(`${TAG} setPinApi success`);
 
-      // ✅ IMPORTANT: update app flags so Splash won't send you to onboarding
+      // ✅ Persist flags (for future launches)
       await setHasPin(true);
-      await setLoggedIn(true); // extra safety for signup flow
+      await setLoggedIn(true);
 
-      console.log(`${TAG} setHasPin(true) + setLoggedIn(true)`);
-
+      // ✅ IMPORTANT: App.tsx will route you straight to Home/Main
       onContinue(pin);
     } catch (err: any) {
       console.log(`${TAG} ERROR:`, err?.message || err);
@@ -108,12 +102,10 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
 
   const handleSkip = async () => {
     if (loading) return;
-
-    // If user skips, we explicitly mark hasPin false so Splash behaves consistently
     try {
       await setHasPin(false);
+      await setLoggedIn(true);
     } catch {}
-
     onSkip?.();
   };
 
@@ -198,11 +190,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
                 end={{ x: 1, y: 1 }}
                 style={styles.ctaGradient}
               >
-                {loading ? (
-                  <ActivityIndicator />
-                ) : (
-                  <Text style={styles.ctaText}>Signup</Text>
-                )}
+                {loading ? <ActivityIndicator /> : <Text style={styles.ctaText}>Continue</Text>}
               </LinearGradient>
             </View>
           </Pressable>
@@ -244,9 +232,7 @@ function KeyButton({
       style={({ pressed }) => [
         styles.keyBtn,
         disabled && { opacity: 0.45 },
-        pressed && !disabled
-          ? { transform: [{ scale: 0.98 }], opacity: 0.95 }
-          : null,
+        pressed && !disabled ? { transform: [{ scale: 0.98 }], opacity: 0.95 } : null,
       ]}
     >
       <Text style={styles.keyText}>{label}</Text>
@@ -267,25 +253,14 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: "#FFFFFF" },
-
     container: {
       flex: 1,
       backgroundColor: "#FFFFFF",
       paddingHorizontal: scale(22),
       paddingTop: vscale(6),
     },
-
-    titleBlock: {
-      marginTop: vscale(18),
-      marginBottom: vscale(22),
-    },
-
-    screenTitle: {
-      fontSize: scale(26),
-      fontWeight: "800",
-      color: Colors.text,
-    },
-
+    titleBlock: { marginTop: vscale(18), marginBottom: vscale(22) },
+    screenTitle: { fontSize: scale(26), fontWeight: "800", color: Colors.text },
     screenSub: {
       marginTop: vscale(8),
       fontSize: scale(13),
@@ -293,7 +268,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       color: Colors.muted,
       maxWidth: scale(360),
     },
-
     dotsRow: {
       flexDirection: "row",
       justifyContent: "center",
@@ -302,19 +276,15 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       marginTop: spaceTitleToDots,
       marginBottom: spaceDotsToKeypad,
     },
-
     dot: {
       width: dotSize,
       height: dotSize,
       borderRadius: 999,
       borderWidth: dotBorder,
     },
-
     dotEmpty: { borderColor: "#CBD5E1", backgroundColor: "transparent" },
     dotFilled: { borderColor: BLUE, backgroundColor: BLUE },
-
     keypad: { alignItems: "center" },
-
     keypadGrid: {
       width: keypadWidth,
       flexDirection: "row",
@@ -323,7 +293,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       rowGap: vscale(14),
       paddingHorizontal: scale(16),
     },
-
     keyBtn: {
       width: keyW,
       height: vscale(54),
@@ -338,15 +307,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
         ios: { shadowOpacity: 0 },
       }),
     },
-
-    keyText: {
-      fontSize: scale(16),
-      fontWeight: "800",
-      color: BLUE,
-    },
-
+    keyText: { fontSize: scale(16), fontWeight: "800", color: BLUE },
     keySpacer: { width: keyW, height: vscale(54) },
-
     iconBtn: {
       width: keyW,
       height: vscale(54),
@@ -355,7 +317,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       alignItems: "center",
       justifyContent: "center",
     },
-
     bottomArea: {
       marginTop: "auto",
       paddingTop: vscale(26),
@@ -363,7 +324,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       alignItems: "center",
       width: "100%",
     },
-
     ctaOuter: {
       width: "100%",
       marginTop: vscale(4),
@@ -378,32 +338,15 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
         android: { elevation: 7 },
       }),
     },
-
-    ctaInnerClip: {
-      width: "100%",
-      borderRadius: scale(14),
-      overflow: "hidden",
-    },
-
+    ctaInnerClip: { width: "100%", borderRadius: scale(14), overflow: "hidden" },
     ctaGradient: {
       width: "100%",
       height: vscale(52),
       alignItems: "center",
       justifyContent: "center",
     },
-
-    ctaText: {
-      color: "#FFFFFF",
-      fontSize: scale(14),
-      fontWeight: "800",
-    },
-
+    ctaText: { color: "#FFFFFF", fontSize: scale(14), fontWeight: "800" },
     skipWrap: { marginTop: vscale(10) },
-
-    skipText: {
-      fontSize: scale(12),
-      fontWeight: "700",
-      color: "#111827",
-    },
+    skipText: { fontSize: scale(12), fontWeight: "700", color: "#111827" },
   });
 }
