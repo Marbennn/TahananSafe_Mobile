@@ -21,13 +21,11 @@ import type { NavigationProp, ParamListBase } from "@react-navigation/native";
 
 import LoginCard from "../components/LoginScreen/LoginCard";
 
-// ✅ Login OTP modal (THIS modal already calls /verify-login-otp and saves tokens)
+// ✅ Login OTP modal
 import EnterVerificationModal from "../components/LoginScreen/EnterVerificationModal";
 
-// ✅ Forgot password (email + otp in one)
+// ✅ Forgot password modals
 import ForgotPasswordEmailOtpModal from "../components/LoginScreen/ForgotPasswordEmailOtpModal";
-
-// ✅ Next modals (kept separate)
 import ForgotPasswordNewPasswordModal from "../components/LoginScreen/ForgotPasswordNewPasswordModal";
 import ForgotPasswordSuccessModal from "../components/LoginScreen/ForgotPasswordSuccessModal";
 
@@ -44,8 +42,6 @@ type ForgotStep = "none" | "emailOtp" | "newpass" | "success";
 
 const TAG = "[LoginScreen]";
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
-
-// ✅ Backend is mounted at: /api/mobile/v1  (from your backend index.js)
 const LOGIN_PATH = "/api/mobile/v1/login";
 
 async function loginRequest(email: string, password: string) {
@@ -97,13 +93,15 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const [verifyPassword, setVerifyPassword] = useState<string>(""); // only for resend
   const [sendingOtp, setSendingOtp] = useState(false);
 
-  // ✅ Forgot password flow (demo)
+  // ✅ Forgot password flow
   const [forgotStep, setForgotStep] = useState<ForgotStep>("none");
   const [resetEmail, setResetEmail] = useState("");
+  const [resetToken, setResetToken] = useState(""); // ✅ NEW
 
   const closeForgotFlow = () => {
     setForgotStep("none");
     setResetEmail("");
+    setResetToken("");
   };
 
   const handleBack = () => {
@@ -133,10 +131,8 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       setSendingOtp(true);
       console.log(`${TAG} handleLoginPressed START`, { email: emailNorm });
 
-      // Step 1: call backend /login to send OTP
       await loginRequest(emailNorm, password);
 
-      // Step 2: open OTP modal with correct email (store password for resend)
       setVerifyEmail(emailNorm);
       setVerifyPassword(password);
       setVerifyOpen(true);
@@ -151,7 +147,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     }
   };
 
-  // ✅ Resend OTP (calls /login again)
   const handleResend = async () => {
     if (!verifyEmail || !verifyPassword) {
       Alert.alert("Resend Failed", "Missing login info. Please login again.");
@@ -169,24 +164,15 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     }
   };
 
-  /**
-   * ✅ IMPORTANT FIX:
-   * EnterVerificationModal already:
-   *  - calls /verify-login-otp
-   *  - saves accessToken & refreshToken
-   *
-   * So LoginScreen MUST NOT verify again (or OTP becomes "expired").
-   *
-   * This handler now only proceeds to app after modal success.
-   */
   const handleVerified = (_code: string) => {
     setVerifyOpen(false);
     onLoginSuccess();
   };
 
-  // ✅ Forgot password flow (still demo)
+  // ✅ Forgot password start
   const handleForgotPassword = () => {
     setResetEmail("");
+    setResetToken("");
     setForgotStep("emailOtp");
   };
 
@@ -195,13 +181,14 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const handlePrivacy = () =>
     Alert.alert("Privacy Policy", "Open Privacy Policy screen/link.");
 
-  const handleForgotOtpVerified = (code: string) => {
-    Alert.alert("OTP Verified", `Code: ${code} (demo)`);
+  // ✅ OTP verified => receive resetToken from modal
+  const handleForgotOtpVerified = (token: string) => {
+    setResetToken(token);
     setForgotStep("newpass");
   };
 
-  const handleResetPassword = (newPass: string) => {
-    Alert.alert("Password Updated", `Email: ${resetEmail}\nNew: ${newPass} (demo)`);
+  // ✅ New password modal success
+  const handleResetSuccess = () => {
     setForgotStep("success");
   };
 
@@ -265,7 +252,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         onVerified={handleVerified}
       />
 
-      {/* ✅ Forgot Password: Email + OTP in ONE modal */}
+      {/* ✅ Forgot Password: Email + OTP */}
       <ForgotPasswordEmailOtpModal
         visible={forgotStep === "emailOtp"}
         email={resetEmail}
@@ -280,9 +267,11 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       {/* ✅ New password modal */}
       <ForgotPasswordNewPasswordModal
         visible={forgotStep === "newpass"}
+        email={resetEmail}
+        resetToken={resetToken}
         onClose={closeForgotFlow}
         onBack={() => setForgotStep("emailOtp")}
-        onReset={handleResetPassword}
+        onResetSuccess={handleResetSuccess}
         scale={scale}
         vscale={vscale}
       />

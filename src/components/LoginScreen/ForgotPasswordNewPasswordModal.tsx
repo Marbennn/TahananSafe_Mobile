@@ -10,6 +10,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -18,9 +19,15 @@ import { Colors } from "../../theme/colors";
 type Props = {
   visible: boolean;
 
+  // ✅ needed to reset
+  email: string;
+  resetToken: string;
+
   onClose: () => void;
   onBack: () => void;
-  onReset: (newPassword: string) => void;
+
+  // ✅ call when backend reset success
+  onResetSuccess: () => void;
 
   scale: (n: number) => number;
   vscale: (n: number) => number;
@@ -30,11 +37,39 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+const TAG = "[ForgotPasswordNewPasswordModal]";
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+const RESET_PATH = "/api/mobile/v1/forgot-password/reset";
+
+async function resetPassword(email: string, resetToken: string, newPassword: string) {
+  const url = `${API_URL}${RESET_PATH}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, resetToken, newPassword }),
+  });
+
+  const raw = await res.text().catch(() => "");
+  let data: any = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = {};
+    }
+  }
+
+  if (!res.ok) throw new Error(data?.message || `Failed (HTTP ${res.status})`);
+  return data as { message?: string };
+}
+
 export default function ForgotPasswordNewPasswordModal({
   visible,
+  email,
+  resetToken,
   onClose,
   onBack,
-  onReset,
+  onResetSuccess,
   scale,
   vscale,
 }: Props) {
@@ -44,6 +79,7 @@ export default function ForgotPasswordNewPasswordModal({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -51,15 +87,23 @@ export default function ForgotPasswordNewPasswordModal({
     setConfirmPassword("");
     setShowNew(false);
     setShowConfirm(false);
+    setLoading(false);
   }, [visible]);
 
   const passwordsMatch = newPassword === confirmPassword;
   const canReset =
     newPassword.trim().length >= 6 &&
     confirmPassword.trim().length >= 6 &&
-    passwordsMatch;
+    passwordsMatch &&
+    !!email &&
+    !!resetToken;
 
-  const handleReset = () => {
+  const handleReset = async () => {
+    if (!email || !resetToken) {
+      Alert.alert("Expired", "Reset session expired. Please try again.");
+      return;
+    }
+
     if (!canReset) {
       if (newPassword.trim().length < 6) {
         Alert.alert("Invalid", "Password must be at least 6 characters.");
@@ -71,7 +115,23 @@ export default function ForgotPasswordNewPasswordModal({
       }
       return;
     }
-    onReset(newPassword.trim());
+
+    if (loading) return;
+
+    try {
+      setLoading(true);
+      console.log(`${TAG} reset START`, { email });
+
+      await resetPassword(email.trim().toLowerCase(), resetToken, newPassword.trim());
+
+      Alert.alert("Success", "Password reset successfully.");
+      onResetSuccess();
+    } catch (err: any) {
+      console.log(`${TAG} reset ERROR`, err?.message || err);
+      Alert.alert("Failed", err?.message || "Could not reset password.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -157,10 +217,10 @@ export default function ForgotPasswordNewPasswordModal({
               <Pressable
                 onPress={handleReset}
                 hitSlop={10}
-                disabled={!canReset}
+                disabled={!canReset || loading}
                 style={({ pressed }) => [
                   styles.btnOuter,
-                  !canReset && { opacity: 0.55 },
+                  (!canReset || loading) && { opacity: 0.55 },
                   pressed ? { transform: [{ scale: 0.99 }], opacity: 0.98 } : null,
                 ]}
               >
@@ -170,7 +230,11 @@ export default function ForgotPasswordNewPasswordModal({
                   end={{ x: 1, y: 1 }}
                   style={styles.btn}
                 >
-                  <Text style={styles.btnText}>Reset Password</Text>
+                  {loading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.btnText}>Reset Password</Text>
+                  )}
                 </LinearGradient>
               </Pressable>
 
@@ -200,15 +264,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingHorizontal: scale(18),
       justifyContent: "center",
     },
-
     centerWrap: { flex: 1, justifyContent: "center" },
-
     scrollInner: {
       flexGrow: 1,
       justifyContent: "center",
       paddingVertical: vscale(14),
     },
-
     card: {
       width: "100%",
       maxWidth: cardW,
@@ -219,7 +280,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingTop: clamp(vscale(16), 14, 18),
       paddingBottom: clamp(vscale(16), 14, 18),
       maxHeight: "92%",
-
       ...Platform.select({
         ios: {
           shadowColor: "#000",
@@ -230,7 +290,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
         android: { elevation: 8 },
       }),
     },
-
     closeBtn: {
       position: "absolute",
       top: vscale(8),
@@ -241,7 +300,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       justifyContent: "center",
       borderRadius: 999,
     },
-
     title: {
       textAlign: "center",
       fontSize: clamp(scale(14), 13, 16),
@@ -249,7 +307,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       color: "#111827",
       marginBottom: vscale(6),
     },
-
     subtitle: {
       textAlign: "center",
       fontSize: clamp(scale(10.5), 10, 12),
@@ -257,14 +314,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       color: "#6B7280",
       marginBottom: vscale(12),
     },
-
     label: {
       fontSize: clamp(scale(11), 10, 12),
       fontWeight: "800",
       color: "#111827",
       marginBottom: vscale(8),
     },
-
     input: {
       width: "100%",
       height: inputH,
@@ -276,9 +331,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       fontSize: clamp(scale(13), 12, 14),
       color: "#111827",
     },
-
     passWrap: { position: "relative", width: "100%", justifyContent: "center" },
-
     eyeBtn: {
       position: "absolute",
       right: clamp(scale(10), 8, 12),
@@ -287,7 +340,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       alignItems: "center",
       justifyContent: "center",
     },
-
     errorText: {
       marginTop: vscale(6),
       fontSize: clamp(scale(10), 9, 11),
@@ -295,7 +347,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       color: "#DC2626",
       textAlign: "center",
     },
-
     btnOuter: {
       width: "100%",
       borderRadius: clamp(scale(14), 12, 16),
@@ -311,22 +362,18 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
         android: { elevation: 7 },
       }),
     },
-
     btn: {
       height: clamp(vscale(44), 42, 52),
       alignItems: "center",
       justifyContent: "center",
       borderRadius: clamp(scale(14), 12, 16),
     },
-
     btnText: {
       color: "#FFFFFF",
       fontSize: clamp(scale(12), 11, 13),
       fontWeight: "900",
     },
-
     backLink: { marginTop: vscale(10), alignItems: "center" },
-
     backText: {
       fontSize: clamp(scale(11), 10, 12),
       fontWeight: "900",

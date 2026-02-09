@@ -10,6 +10,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,7 +24,8 @@ type Props = {
 
   onClose: () => void;
 
-  onVerified: (code: string) => void;
+  // ✅ will return resetToken instead of just OTP code
+  onVerified: (resetToken: string) => void;
 
   scale: (n: number) => number;
   vscale: (n: number) => number;
@@ -41,6 +43,55 @@ function isValidEmail(e: string) {
 
 function pad2(n: number) {
   return n < 10 ? `0${n}` : `${n}`;
+}
+
+const TAG = "[ForgotPasswordEmailOtpModal]";
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+
+const SEND_OTP_PATH = "/api/mobile/v1/forgot-password/send-otp";
+const VERIFY_OTP_PATH = "/api/mobile/v1/forgot-password/verify-otp";
+
+async function sendForgotOtp(email: string) {
+  const url = `${API_URL}${SEND_OTP_PATH}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+
+  const raw = await res.text().catch(() => "");
+  let data: any = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = {};
+    }
+  }
+  if (!res.ok) throw new Error(data?.message || `Failed (HTTP ${res.status})`);
+  return data as { message?: string; expiresInSeconds?: number };
+}
+
+async function verifyForgotOtp(email: string, otp: string) {
+  const url = `${API_URL}${VERIFY_OTP_PATH}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, otp }),
+  });
+
+  const raw = await res.text().catch(() => "");
+  let data: any = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = {};
+    }
+  }
+  if (!res.ok) throw new Error(data?.message || `Failed (HTTP ${res.status})`);
+
+  return data as { message?: string; resetToken: string; expiresInSeconds?: number };
 }
 
 export default function ForgotPasswordEmailOtpModal({
@@ -64,11 +115,16 @@ export default function ForgotPasswordEmailOtpModal({
   const [secondsLeft, setSecondsLeft] = useState(initialSeconds);
   const refs = useRef<Array<TextInput | null>>([]);
 
+  const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+
   const resetAll = () => {
     setOtpVisible(false);
     setOtp(Array.from({ length: OTP_LEN }, () => ""));
     setSecondsLeft(initialSeconds);
     refs.current = [];
+    setSending(false);
+    setVerifying(false);
   };
 
   useEffect(() => {
@@ -88,24 +144,59 @@ export default function ForgotPasswordEmailOtpModal({
 
   const canSend = email.trim().length > 0 && isValidEmail(email.trim());
   const codeJoined = otp.join("");
-  const canVerify = codeJoined.length === OTP_LEN && otp.every((d) => d.length === 1);
+  const canVerify =
+    codeJoined.length === OTP_LEN && otp.every((d) => d.length === 1);
 
-  const handleSendCode = () => {
+  const handleSendCode = async () => {
     if (!canSend) return Alert.alert("Invalid", "Please enter a valid email.");
+    if (sending) return;
 
-    setOtpVisible(true);
-    setSecondsLeft(initialSeconds);
-    setOtp(Array.from({ length: OTP_LEN }, () => ""));
+    const emailNorm = email.trim().toLowerCase();
 
-    setTimeout(() => refs.current?.[0]?.focus?.(), 120);
+    try {
+      setSending(true);
+      console.log(`${TAG} send OTP`, { email: emailNorm });
+
+      await sendForgotOtp(emailNorm);
+
+      setOtpVisible(true);
+      setSecondsLeft(initialSeconds);
+      setOtp(Array.from({ length: OTP_LEN }, () => ""));
+      setTimeout(() => refs.current?.[0]?.focus?.(), 120);
+
+      Alert.alert("Sent", "Verification code sent to your email.");
+    } catch (err: any) {
+      console.log(`${TAG} send ERROR`, err?.message || err);
+      Alert.alert("Failed", err?.message || "Could not send code.");
+    } finally {
+      setSending(false);
+    }
   };
 
-  const handleResend = () => {
+  const handleResend = async () => {
     if (secondsLeft > 0) return;
+    if (!canSend) return Alert.alert("Invalid", "Please enter a valid email.");
+    if (sending) return;
 
-    setSecondsLeft(initialSeconds);
-    setOtp(Array.from({ length: OTP_LEN }, () => ""));
-    setTimeout(() => refs.current?.[0]?.focus?.(), 120);
+    const emailNorm = email.trim().toLowerCase();
+
+    try {
+      setSending(true);
+      console.log(`${TAG} resend OTP`, { email: emailNorm });
+
+      await sendForgotOtp(emailNorm);
+
+      setSecondsLeft(initialSeconds);
+      setOtp(Array.from({ length: OTP_LEN }, () => ""));
+      setTimeout(() => refs.current?.[0]?.focus?.(), 120);
+
+      Alert.alert("Resent", "Verification code resent to your email.");
+    } catch (err: any) {
+      console.log(`${TAG} resend ERROR`, err?.message || err);
+      Alert.alert("Failed", err?.message || "Could not resend code.");
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleOtpChange = (index: number, value: string) => {
@@ -135,10 +226,30 @@ export default function ForgotPasswordEmailOtpModal({
     if (index > 0) refs.current[index - 1]?.focus?.();
   };
 
-  const handleVerify = () => {
-    if (!canVerify) return Alert.alert("Invalid", "Please enter the 4-digit code.");
-    onVerified(codeJoined);
+  const handleVerify = async () => {
+    if (!canVerify)
+      return Alert.alert("Invalid", "Please enter the 4-digit code.");
+    if (verifying) return;
+
+    const emailNorm = email.trim().toLowerCase();
+
+    try {
+      setVerifying(true);
+      console.log(`${TAG} verify OTP`, { email: emailNorm });
+
+      const data = await verifyForgotOtp(emailNorm, codeJoined);
+
+      // ✅ pass resetToken to next step
+      onVerified(data.resetToken);
+    } catch (err: any) {
+      console.log(`${TAG} verify ERROR`, err?.message || err);
+      Alert.alert("Invalid", err?.message || "OTP verification failed.");
+    } finally {
+      setVerifying(false);
+    }
   };
+
+  const buttonDisabled = otpVisible ? !canVerify || verifying : !canSend || sending;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -200,7 +311,7 @@ export default function ForgotPasswordEmailOtpModal({
                       <Text style={styles.smallText}>Didn't get the code? </Text>
                       <Pressable
                         onPress={handleResend}
-                        disabled={secondsLeft > 0}
+                        disabled={secondsLeft > 0 || sending}
                         hitSlop={8}
                         style={({ pressed }) => [
                           pressed && secondsLeft <= 0 ? { opacity: 0.7 } : null,
@@ -209,7 +320,7 @@ export default function ForgotPasswordEmailOtpModal({
                         <Text
                           style={[
                             styles.resendText,
-                            secondsLeft > 0 && { opacity: 0.45 },
+                            (secondsLeft > 0 || sending) && { opacity: 0.45 },
                           ]}
                         >
                           Resend it
@@ -218,13 +329,12 @@ export default function ForgotPasswordEmailOtpModal({
                     </View>
                   </View>
 
-                  {/* ✅ ALWAYS SAME WIDTH AS EMAIL */}
                   <View style={styles.otpRow}>
                     {otp.map((d, i) => (
                       <TextInput
                         key={i}
                         ref={(r) => {
-                          refs.current[i] = r; // ✅ no return
+                          refs.current[i] = r;
                         }}
                         value={d}
                         placeholder="*"
@@ -245,10 +355,10 @@ export default function ForgotPasswordEmailOtpModal({
               <Pressable
                 onPress={otpVisible ? handleVerify : handleSendCode}
                 hitSlop={10}
-                disabled={otpVisible ? !canVerify : !canSend}
+                disabled={buttonDisabled}
                 style={({ pressed }) => [
                   styles.btnOuter,
-                  (otpVisible ? !canVerify : !canSend) && { opacity: 0.55 },
+                  buttonDisabled && { opacity: 0.55 },
                   pressed ? { transform: [{ scale: 0.99 }], opacity: 0.98 } : null,
                 ]}
               >
@@ -258,9 +368,13 @@ export default function ForgotPasswordEmailOtpModal({
                   end={{ x: 1, y: 1 }}
                   style={styles.btn}
                 >
-                  <Text style={styles.btnText}>
-                    {otpVisible ? "Verify OTP" : "Send Verification Code"}
-                  </Text>
+                  {sending || verifying ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.btnText}>
+                      {otpVisible ? "Verify OTP" : "Send Verification Code"}
+                    </Text>
+                  )}
                 </LinearGradient>
               </Pressable>
 
@@ -283,7 +397,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
   const cardW = clamp(scale(332), 292, 396);
   const inputH = clamp(vscale(46), 42, 54);
 
-  // OTP: keep full row width, boxes flex equally, cap min size for tiny screens
   const otpSize = clamp(scale(54), 44, 66);
   const otpGap = clamp(scale(10), 8, 14);
 
@@ -294,15 +407,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingHorizontal: scale(18),
       justifyContent: "center",
     },
-
     centerWrap: { flex: 1, justifyContent: "center" },
-
     scrollInner: {
       flexGrow: 1,
       justifyContent: "center",
       paddingVertical: vscale(14),
     },
-
     card: {
       width: "100%",
       maxWidth: cardW,
@@ -312,10 +422,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingHorizontal: clamp(scale(18), 14, 22),
       paddingTop: clamp(vscale(16), 14, 18),
       paddingBottom: clamp(vscale(16), 14, 18),
-
-      // ✅ never overflow screen height
       maxHeight: "92%",
-
       ...Platform.select({
         ios: {
           shadowColor: "#000",
@@ -326,7 +433,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
         android: { elevation: 8 },
       }),
     },
-
     closeBtn: {
       position: "absolute",
       top: vscale(8),
@@ -337,7 +443,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       justifyContent: "center",
       borderRadius: 999,
     },
-
     title: {
       textAlign: "center",
       fontSize: clamp(scale(14), 13, 16),
@@ -345,7 +450,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       color: "#111827",
       marginBottom: vscale(6),
     },
-
     subtitle: {
       textAlign: "center",
       fontSize: clamp(scale(10.5), 10, 12),
@@ -353,14 +457,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       color: "#6B7280",
       marginBottom: vscale(12),
     },
-
     label: {
       fontSize: clamp(scale(11), 10, 12),
       fontWeight: "800",
       color: "#111827",
       marginBottom: vscale(8),
     },
-
     input: {
       width: "100%",
       height: inputH,
@@ -372,13 +474,11 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       fontSize: clamp(scale(13), 12, 14),
       color: "#111827",
     },
-
     otpBlock: {
       width: "100%",
       marginTop: vscale(10),
       marginBottom: vscale(12),
     },
-
     otpInfoRow: {
       width: "100%",
       flexDirection: "row",
@@ -386,27 +486,23 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       justifyContent: "space-between",
       marginBottom: vscale(10),
     },
-
     resendRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "flex-end",
       flexShrink: 1,
     },
-
     smallText: {
       fontSize: clamp(scale(9.5), 9, 11),
       color: "#6B7280",
       fontWeight: "700",
     },
-
     resendText: {
       fontSize: clamp(scale(9.5), 9, 11),
       color: "#1D4ED8",
       fontWeight: "900",
       textDecorationLine: "underline",
     },
-
     otpRow: {
       width: "100%",
       flexDirection: "row",
@@ -414,11 +510,10 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       justifyContent: "space-between",
       gap: otpGap,
     },
-
     otpBox: {
       flex: 1,
       height: otpSize,
-      minWidth: 0, // ✅ IMPORTANT: prevents overflow on Android
+      minWidth: 0,
       borderRadius: clamp(scale(12), 10, 14),
       borderWidth: 1.2,
       borderColor: "#93C5FD",
@@ -430,7 +525,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingTop: 0,
       paddingBottom: 0,
     },
-
     btnOuter: {
       width: "100%",
       borderRadius: clamp(scale(14), 12, 16),
@@ -446,25 +540,21 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
         android: { elevation: 7 },
       }),
     },
-
     btn: {
       height: clamp(vscale(44), 42, 52),
       alignItems: "center",
       justifyContent: "center",
       borderRadius: clamp(scale(14), 12, 16),
     },
-
     btnText: {
       color: "#FFFFFF",
       fontSize: clamp(scale(12), 11, 13),
       fontWeight: "900",
     },
-
     backLink: {
       marginTop: vscale(10),
       alignItems: "center",
     },
-
     backText: {
       fontSize: clamp(scale(11), 10, 12),
       fontWeight: "900",
