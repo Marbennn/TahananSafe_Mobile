@@ -15,7 +15,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
 
-import { getAccessToken, setHasPin, setLoggedIn } from "../auth/session";
+import {
+  getAccessToken,
+  setHasPin,
+  setLoggedIn,
+  setPinSkipped,
+  setPinUnlockedThisRun,
+} from "../auth/session";
 import { setPinApi } from "../api/pin";
 
 type Props = {
@@ -68,7 +74,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
   };
 
   const handleSignup = async () => {
-    console.log(`${TAG} Signup pressed. pin length:`, pin.length);
+    console.log(`${TAG} Continue pressed. pin length:`, pin.length);
 
     if (loading) return;
     if (pin.length !== PIN_LENGTH) return;
@@ -86,11 +92,18 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
       await setPinApi({ accessToken, pin: String(pin) });
       console.log(`${TAG} setPinApi success`);
 
-      // ✅ Persist flags (for future launches)
+      // ✅ Persist PIN mode
       await setHasPin(true);
+
+      // ✅ If they set PIN, they did NOT skip
+      await setPinSkipped(false);
+
+      // ✅ Logged in
       await setLoggedIn(true);
 
-      // ✅ IMPORTANT: App.tsx will route you straight to Home/Main
+      // ✅ For THIS run: go Home immediately without bouncing to Pin
+      setPinUnlockedThisRun(true);
+
       onContinue(pin);
     } catch (err: any) {
       console.log(`${TAG} ERROR:`, err?.message || err);
@@ -101,12 +114,28 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
   };
 
   const handleSkip = async () => {
+    console.log(`${TAG} Skip pressed`);
+
     if (loading) return;
+
     try {
+      setLoading(true);
+
+      // ✅ They chose NO PIN mode
       await setHasPin(false);
+      await setPinSkipped(true);
+
+      // ✅ Logged in
       await setLoggedIn(true);
-    } catch {}
-    onSkip?.();
+
+      // ✅ For THIS run: go Home immediately
+      setPinUnlockedThisRun(true);
+    } catch (err: any) {
+      console.log(`${TAG} Skip ERROR:`, err?.message || err);
+    } finally {
+      setLoading(false);
+      onSkip?.();
+    }
   };
 
   return (
@@ -190,7 +219,11 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
                 end={{ x: 1, y: 1 }}
                 style={styles.ctaGradient}
               >
-                {loading ? <ActivityIndicator /> : <Text style={styles.ctaText}>Continue</Text>}
+                {loading ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text style={styles.ctaText}>Continue</Text>
+                )}
               </LinearGradient>
             </View>
           </Pressable>
@@ -232,7 +265,9 @@ function KeyButton({
       style={({ pressed }) => [
         styles.keyBtn,
         disabled && { opacity: 0.45 },
-        pressed && !disabled ? { transform: [{ scale: 0.98 }], opacity: 0.95 } : null,
+        pressed && !disabled
+          ? { transform: [{ scale: 0.98 }], opacity: 0.95 }
+          : null,
       ]}
     >
       <Text style={styles.keyText}>{label}</Text>

@@ -34,10 +34,11 @@ import {
   setLoggedIn,
   getAccessToken,
   setHasPin,
-  // ✅ NEW in-memory run flag
   isPinUnlockedThisRun,
   setPinUnlockedThisRun,
   resetPinUnlockedThisRun,
+  isOnboardingSeen,
+  isPinSkipped, // ✅ NEW
 } from "./src/auth/session";
 
 // APIs for PIN & profile
@@ -209,7 +210,6 @@ export default function App() {
             initialRouteName="Splash"
             screenOptions={{ headerShown: false, gestureEnabled: true }}
           >
-            {/* ✅ Splash decides where to go */}
             <Stack.Screen name="Splash">
               {({ navigation }) => (
                 <AppSplashScreenWrapper
@@ -223,6 +223,9 @@ export default function App() {
                     navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] })
                   }
                   onGoOnboarding={() => navigation.replace("OnboardingPager")}
+                  onGoAuthFlow={() =>
+                    navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })
+                  }
                 />
               )}
             </Stack.Screen>
@@ -230,12 +233,13 @@ export default function App() {
             <Stack.Screen name="OnboardingPager">
               {({ navigation }) => (
                 <OnboardingPagerScreen
-                  onDone={() => navigation.navigate("AuthFlow")}
+                  onDone={() =>
+                    navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })
+                  }
                 />
               )}
             </Stack.Screen>
 
-            {/* ✅ AuthFlow */}
             <Stack.Screen name="AuthFlow">
               {({ navigation }) => (
                 <AuthFlowShell
@@ -251,14 +255,20 @@ export default function App() {
                         const hasPin = !!me.user.hasPin;
                         await setHasPin(hasPin);
 
+                        // ✅ If has pin, gate it (unless unlocked this run)
                         if (hasPin) {
-                          // ✅ If already unlocked this run, go Main immediately
                           if (isPinUnlockedThisRun()) {
                             navigation.reset({ index: 0, routes: [{ name: "Main" }] });
                             return;
                           }
-
                           navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
+                          return;
+                        }
+
+                        // ✅ No pin (auth flow ended) -> go Main if skipped, else CreatePin
+                        const skipped = await isPinSkipped();
+                        if (skipped) {
+                          navigation.reset({ index: 0, routes: [{ name: "Main" }] });
                           return;
                         }
 
@@ -275,7 +285,6 @@ export default function App() {
               )}
             </Stack.Screen>
 
-            {/* ✅ Login */}
             <Stack.Screen name="Login">
               {({ navigation }) => (
                 <LoginScreen
@@ -295,8 +304,13 @@ export default function App() {
                             navigation.reset({ index: 0, routes: [{ name: "Main" }] });
                             return;
                           }
-
                           navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
+                          return;
+                        }
+
+                        const skipped = await isPinSkipped();
+                        if (skipped) {
+                          navigation.reset({ index: 0, routes: [{ name: "Main" }] });
                           return;
                         }
 
@@ -313,15 +327,16 @@ export default function App() {
               )}
             </Stack.Screen>
 
-            {/* ✅ Root Create PIN (optional / keep) */}
             <Stack.Screen name="CreatePin">
               {({ navigation }) => (
                 <CreatePinScreen
                   onContinue={() => {
+                    // ✅ after creating pin, go HOME immediately
                     setPinUnlockedThisRun(true);
                     navigation.reset({ index: 0, routes: [{ name: "Main" }] });
                   }}
                   onSkip={() => {
+                    // ✅ skip -> go HOME immediately
                     setPinUnlockedThisRun(true);
                     navigation.reset({ index: 0, routes: [{ name: "Main" }] });
                   }}
@@ -329,7 +344,6 @@ export default function App() {
               )}
             </Stack.Screen>
 
-            {/* ✅ PIN Gate */}
             <Stack.Screen name="Pin">
               {({ navigation }) => (
                 <PinScreen
@@ -345,10 +359,7 @@ export default function App() {
                       if (!token) {
                         await setLoggedIn(false);
                         resetPinUnlockedThisRun();
-                        navigation.reset({
-                          index: 0,
-                          routes: [{ name: "AuthFlow" }],
-                        });
+                        navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
                         return;
                       }
 
@@ -364,20 +375,15 @@ export default function App() {
               )}
             </Stack.Screen>
 
-            {/* ✅ Main */}
             <Stack.Screen name="Main">
               {({ navigation }) => (
                 <MainShell
                   onLogout={async () => {
-                    // ✅ logout -> Signup/AuthFlow
                     resetPinUnlockedThisRun();
                     await setLoggedIn(false);
                     await setHasPin(false);
 
-                    navigation.reset({
-                      index: 0,
-                      routes: [{ name: "AuthFlow" }],
-                    });
+                    navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
                   }}
                   onOpenNotifications={() => navigation.navigate("Notifications")}
                 />
@@ -403,28 +409,37 @@ function AppSplashScreenWrapper({
   onGoPin,
   onGoCreatePin,
   onGoOnboarding,
+  onGoAuthFlow,
 }: {
   onGoMain: () => void;
   onGoPin: () => void;
   onGoCreatePin: () => void;
   onGoOnboarding: () => void;
+  onGoAuthFlow: () => void;
 }) {
   React.useEffect(() => {
     let mounted = true;
 
     const t = setTimeout(async () => {
       try {
+        const seenOnboarding = await isOnboardingSeen();
+        if (!mounted) return;
+
         const logged = await isLoggedIn();
         if (!mounted) return;
 
+        // ✅ Not logged in: show onboarding ONCE only
         if (!logged) {
-          onGoOnboarding();
+          if (!seenOnboarding) onGoOnboarding();
+          else onGoAuthFlow();
           return;
         }
 
         const token = await getAccessToken();
         if (!token) {
-          onGoOnboarding();
+          // treat as not logged in, follow same onboarding rule
+          if (!seenOnboarding) onGoOnboarding();
+          else onGoAuthFlow();
           return;
         }
 
@@ -432,19 +447,35 @@ function AppSplashScreenWrapper({
         const hasPin = !!me.user.hasPin;
 
         await setHasPin(hasPin);
-
         if (!mounted) return;
 
+        // ✅ If PIN exists -> require PIN each new app run (unless unlocked this run)
         if (hasPin) {
-          // ✅ if unlocked this run -> Main else Pin
           if (isPinUnlockedThisRun()) onGoMain();
           else onGoPin();
-        } else {
-          onGoCreatePin();
+          return;
         }
+
+        // ✅ No PIN:
+        // - if user skipped PIN -> go Main
+        // - else -> force CreatePin
+        const skipped = await isPinSkipped();
+        if (skipped) {
+          onGoMain();
+          return;
+        }
+
+        onGoCreatePin();
       } catch {
         if (!mounted) return;
-        onGoOnboarding();
+
+        try {
+          const seenOnboarding = await isOnboardingSeen();
+          if (!seenOnboarding) onGoOnboarding();
+          else onGoAuthFlow();
+        } catch {
+          onGoOnboarding();
+        }
       }
     }, 1200);
 
@@ -452,7 +483,7 @@ function AppSplashScreenWrapper({
       mounted = false;
       clearTimeout(t);
     };
-  }, [onGoMain, onGoPin, onGoCreatePin, onGoOnboarding]);
+  }, [onGoMain, onGoPin, onGoCreatePin, onGoOnboarding, onGoAuthFlow]);
 
   return <AppSplashScreen />;
 }

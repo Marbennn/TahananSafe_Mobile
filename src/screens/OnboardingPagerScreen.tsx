@@ -20,6 +20,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
 import OnboardingSlide from "../components/OnBoarding/OnboardingSlide";
 
+// ✅ NEW: onboarding storage flag
+import { setOnboardingSeen } from "../auth/session";
+
 // SVGs
 import OB1 from "../../assets/OnBoarding/OB1.svg";
 import OB2 from "../../assets/OnBoarding/OB2.svg";
@@ -119,9 +122,16 @@ export default function OnboardingPagerScreen({ onDone }: Props) {
 
   const isLast = page === 2;
 
-  const handlePrimary = () => {
-    if (isLast) onDone();
-    else goTo((page + 1) as PageIndex, true);
+  const handlePrimary = async () => {
+    if (isLast) {
+      try {
+        await setOnboardingSeen(true);
+      } catch {}
+      onDone();
+      return;
+    }
+
+    goTo((page + 1) as PageIndex, true);
   };
 
   const handleBack = () => {

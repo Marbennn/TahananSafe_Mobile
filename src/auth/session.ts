@@ -6,12 +6,18 @@ const KEYS = {
   accessToken: "@tahanansafe_access_token",
   refreshToken: "@tahanansafe_refresh_token",
   hasPin: "@tahanansafe_has_pin",
+
+  // ✅ onboarding shown flag
+  onboardingSeen: "@tahanansafe_onboarding_seen",
+
+  // ✅ NEW: user chose to skip PIN setup
+  pinSkipped: "@tahanansafe_pin_skipped",
 } as const;
 
 /**
  * ✅ In-memory flag ONLY for current app run
  * - resets when app is fully closed
- * - prevents going to PinScreen immediately after creating pin
+ * - used to bypass PinScreen after user just verified PIN
  */
 let pinUnlockedThisRun = false;
 
@@ -27,6 +33,30 @@ export function resetPinUnlockedThisRun() {
   pinUnlockedThisRun = false;
 }
 
+/* ===================== ONBOARDING FLAG ===================== */
+
+export async function setOnboardingSeen(value: boolean) {
+  await AsyncStorage.setItem(KEYS.onboardingSeen, value ? "1" : "0");
+}
+
+export async function isOnboardingSeen(): Promise<boolean> {
+  const v = await AsyncStorage.getItem(KEYS.onboardingSeen);
+  return v === "1";
+}
+
+/* ===================== PIN SKIP FLAG ===================== */
+
+export async function setPinSkipped(value: boolean) {
+  await AsyncStorage.setItem(KEYS.pinSkipped, value ? "1" : "0");
+}
+
+export async function isPinSkipped(): Promise<boolean> {
+  const v = await AsyncStorage.getItem(KEYS.pinSkipped);
+  return v === "1";
+}
+
+/* ===================== AUTH / TOKENS ===================== */
+
 export async function setLoggedIn(value: boolean) {
   if (value) {
     await AsyncStorage.setItem(KEYS.loggedIn, "1");
@@ -39,7 +69,9 @@ export async function setLoggedIn(value: boolean) {
       KEYS.accessToken,
       KEYS.refreshToken,
       KEYS.hasPin,
+      KEYS.pinSkipped, // ✅ reset skip choice on logout
     ]);
+    // ✅ NOTE: we do NOT remove onboardingSeen (so onboarding stays one-time)
   }
 }
 
@@ -84,5 +116,7 @@ export async function clearSession() {
     KEYS.accessToken,
     KEYS.refreshToken,
     KEYS.hasPin,
+    KEYS.pinSkipped, // ✅ reset skip choice
   ]);
+  // ✅ NOTE: do NOT remove onboardingSeen
 }
