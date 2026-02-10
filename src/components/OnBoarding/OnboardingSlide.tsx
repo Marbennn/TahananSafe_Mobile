@@ -22,7 +22,7 @@ type Props = {
 export default function OnboardingSlide({ Svg, title, description }: Props) {
   const { width, height } = useWindowDimensions();
 
-  // ✅ responsive scale (bigger phones => bigger UI)
+  // ✅ responsive scale
   const s = clamp(width / 375, 0.95, 1.6);
   const vs = clamp(height / 812, 0.95, 1.35);
 
@@ -31,11 +31,6 @@ export default function OnboardingSlide({ Svg, title, description }: Props) {
 
   const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
 
-  /**
-   * ✅ Responsive SVG sizing:
-   * - based on screen width
-   * - capped so it doesn't become too huge
-   */
   const illusW = clamp(Math.round(width * 0.74), scale(250), scale(360));
   const illusH = Math.round(illusW * 0.82);
 
@@ -61,8 +56,6 @@ function createStyles(
       alignItems: "center",
       justifyContent: "center",
       paddingHorizontal: scale(22),
-      paddingTop: vscale(6),
-      paddingBottom: vscale(6),
       backgroundColor: "#FFFFFF",
     },
 

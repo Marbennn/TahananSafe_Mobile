@@ -19,17 +19,14 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { Colors } from "../theme/colors";
 import OnboardingSlide from "../components/OnBoarding/OnboardingSlide";
-
-// ✅ NEW: onboarding storage flag
 import { setOnboardingSeen } from "../auth/session";
 
-// SVGs
 import OB1 from "../../assets/OnBoarding/OB1.svg";
 import OB2 from "../../assets/OnBoarding/OB2.svg";
 import OB3 from "../../assets/OnBoarding/OB3.svg";
 
 type Props = {
-  onDone: () => void; // go to Signup
+  onDone: () => void;
 };
 
 type PageIndex = 0 | 1 | 2;
@@ -42,7 +39,6 @@ export default function OnboardingPagerScreen({ onDone }: Props) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
-  // ✅ responsive scale (same idea as your slide)
   const s = clamp(width / 375, 0.95, 1.6);
   const vs = clamp(height / 812, 0.95, 1.35);
   const scale = (n: number) => Math.round(n * s);
@@ -50,18 +46,12 @@ export default function OnboardingPagerScreen({ onDone }: Props) {
 
   const styles = useMemo(
     () => createStyles(scale, vscale, insets.bottom),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [width, height, insets.bottom]
   );
 
-  // ✅ Animated value for realtime indicator
+  const scrollRef = useRef<ScrollView>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
-
-  // ✅ Track current page
   const [page, setPage] = useState<PageIndex>(0);
-
-  // ✅ ScrollView ref
-  const scrollRef = useRef<ScrollView | null>(null);
 
   const slides = useMemo(
     () => [
@@ -102,7 +92,6 @@ export default function OnboardingPagerScreen({ onDone }: Props) {
     setPage(clamped);
   };
 
-  // ✅ If screen width changes (rotation), keep the same page visible
   useEffect(() => {
     goTo(page, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -114,16 +103,17 @@ export default function OnboardingPagerScreen({ onDone }: Props) {
   const GAP = scale(8);
   const STEP = DOT_W + GAP;
 
+  // ✅ total width of the whole dot group (3 dots + 2 gaps)
+  const INDICATOR_W = DOT_W * 3 + GAP * 2;
+
   const translateX = scrollX.interpolate({
     inputRange: [0, width, width * 2],
     outputRange: [0, STEP, STEP * 2],
     extrapolate: "clamp",
   });
 
-  const isLast = page === 2;
-
   const handlePrimary = async () => {
-    if (isLast) {
+    if (page === 2) {
       try {
         await setOnboardingSeen(true);
       } catch {}
@@ -143,7 +133,7 @@ export default function OnboardingPagerScreen({ onDone }: Props) {
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* ✅ FIXED HEADER (does NOT swipe) */}
+      {/* ✅ FIXED HEADER */}
       <View style={styles.header}>
         <Pressable
           onPress={handleBack}
@@ -162,9 +152,7 @@ export default function OnboardingPagerScreen({ onDone }: Props) {
       {/* ✅ SWIPING CONTENT ONLY */}
       <View style={styles.contentArea}>
         <Animated.ScrollView
-          ref={(r) => {
-            scrollRef.current = r as unknown as ScrollView;
-          }}
+          ref={scrollRef}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
@@ -186,12 +174,12 @@ export default function OnboardingPagerScreen({ onDone }: Props) {
             </View>
           ))}
         </Animated.ScrollView>
-      </View>
 
-      {/* ✅ FIXED FOOTER (indicator + button do NOT swipe) */}
-      <View style={styles.footer}>
-        {/* Indicator */}
-        <View style={[styles.indicatorRow, { height: DOT_H }]}>
+        {/* ✅ FIXED INDICATOR OVERLAY (ALIGNED) */}
+        <View
+          pointerEvents="none"
+          style={[styles.fixedIndicator, { width: INDICATOR_W, height: DOT_H }]}
+        >
           {[0, 1, 2].map((i) => (
             <View
               key={i}
@@ -206,7 +194,6 @@ export default function OnboardingPagerScreen({ onDone }: Props) {
           ))}
 
           <Animated.View
-            pointerEvents="none"
             style={[
               styles.activePill,
               {
@@ -217,8 +204,10 @@ export default function OnboardingPagerScreen({ onDone }: Props) {
             ]}
           />
         </View>
+      </View>
 
-        {/* CTA */}
+      {/* ✅ FIXED FOOTER */}
+      <View style={styles.footer}>
         <Pressable
           onPress={handlePrimary}
           hitSlop={10}
@@ -250,6 +239,7 @@ function createStyles(
     safe: {
       flex: 1,
       backgroundColor: "#FFFFFF",
+      position: "relative",
     },
 
     header: {
@@ -271,21 +261,21 @@ function createStyles(
     contentArea: {
       flex: 1,
       backgroundColor: "#FFFFFF",
+      position: "relative",
     },
 
-    footer: {
-      paddingHorizontal: scale(22),
-      paddingTop: vscale(10),
-      paddingBottom: Math.max(vscale(14), bottomInset + vscale(10)),
-      backgroundColor: "#FFFFFF",
-    },
-
-    indicatorRow: {
+    // ✅ Now this container is ONLY as wide as the dot group.
+    // So activePill left:0 aligns with dot #1 perfectly.
+    fixedIndicator: {
+      position: "absolute",
       alignSelf: "center",
       flexDirection: "row",
       alignItems: "center",
-      position: "relative",
-      marginBottom: vscale(14),
+
+      bottom: vscale(120),
+
+      zIndex: 50,
+      elevation: 50,
     },
 
     activePill: {
@@ -294,6 +284,13 @@ function createStyles(
       top: 0,
       borderRadius: 999,
       backgroundColor: Colors.primary,
+    },
+
+    footer: {
+      paddingHorizontal: scale(22),
+      paddingTop: vscale(10),
+      paddingBottom: Math.max(vscale(14), bottomInset + vscale(10)),
+      backgroundColor: "#FFFFFF",
     },
 
     ctaPressable: {
