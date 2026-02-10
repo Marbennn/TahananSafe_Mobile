@@ -19,10 +19,11 @@ import {
   getAccessToken,
   setHasPin,
   setLoggedIn,
-  setPinSkipped,
   setPinUnlockedThisRun,
+  setPinSkippedForUser, // ✅ per-user skip
 } from "../auth/session";
-import { setPinApi } from "../api/pin";
+
+import { setPinApi, getMeApi } from "../api/pin";
 
 type Props = {
   onContinue: (pin: string) => void;
@@ -75,7 +76,6 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
 
   const handleSignup = async () => {
     console.log(`${TAG} Continue pressed. pin length:`, pin.length);
-
     if (loading) return;
     if (pin.length !== PIN_LENGTH) return;
 
@@ -84,10 +84,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
 
       const accessToken = await getAccessToken();
       console.log(`${TAG} accessToken exists?`, Boolean(accessToken));
-
-      if (!accessToken) {
-        throw new Error("Session missing. Please login again.");
-      }
+      if (!accessToken) throw new Error("Session missing. Please login again.");
 
       await setPinApi({ accessToken, pin: String(pin) });
       console.log(`${TAG} setPinApi success`);
@@ -95,13 +92,19 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
       // ✅ Persist PIN mode
       await setHasPin(true);
 
-      // ✅ If they set PIN, they did NOT skip
-      await setPinSkipped(false);
+      // ✅ Mark skip=false for this user (since they set a PIN)
+      try {
+        const me = await getMeApi({ accessToken });
+        const userId = String(me.user._id); // ✅ FIX: _id not id
+        await setPinSkippedForUser(userId, false);
+      } catch {
+        // ignore
+      }
 
       // ✅ Logged in
       await setLoggedIn(true);
 
-      // ✅ For THIS run: go Home immediately without bouncing to Pin
+      // ✅ For THIS run: go Home immediately
       setPinUnlockedThisRun(true);
 
       onContinue(pin);
@@ -115,26 +118,35 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
 
   const handleSkip = async () => {
     console.log(`${TAG} Skip pressed`);
-
     if (loading) return;
 
     try {
       setLoading(true);
 
-      // ✅ They chose NO PIN mode
+      const accessToken = await getAccessToken();
+      if (!accessToken) throw new Error("Session missing. Please login again.");
+
+      // ✅ No PIN mode
       await setHasPin(false);
-      await setPinSkipped(true);
+
+      // ✅ Save skip choice FOR THIS USER
+      const me = await getMeApi({ accessToken });
+      const userId = String(me.user._id); // ✅ FIX: _id not id
+      await setPinSkippedForUser(userId, true);
 
       // ✅ Logged in
       await setLoggedIn(true);
 
       // ✅ For THIS run: go Home immediately
       setPinUnlockedThisRun(true);
+
+      // ✅ Navigate immediately
+      onSkip?.();
     } catch (err: any) {
       console.log(`${TAG} Skip ERROR:`, err?.message || err);
+      Alert.alert("Skip Failed", err?.message || "Something went wrong.");
     } finally {
       setLoading(false);
-      onSkip?.();
     }
   };
 
@@ -219,11 +231,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
                 end={{ x: 1, y: 1 }}
                 style={styles.ctaGradient}
               >
-                {loading ? (
-                  <ActivityIndicator />
-                ) : (
-                  <Text style={styles.ctaText}>Continue</Text>
-                )}
+                {loading ? <ActivityIndicator /> : <Text style={styles.ctaText}>Continue</Text>}
               </LinearGradient>
             </View>
           </Pressable>

@@ -1,7 +1,7 @@
 // App.tsx
 import "react-native-gesture-handler";
 import React, { useMemo, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { enableScreens } from "react-native-screens";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -38,7 +38,7 @@ import {
   setPinUnlockedThisRun,
   resetPinUnlockedThisRun,
   isOnboardingSeen,
-  isPinSkipped, // ✅ NEW
+  isPinSkippedForUser, // ✅ per-user skip
 } from "./src/auth/session";
 
 // APIs for PIN & profile
@@ -255,7 +255,6 @@ export default function App() {
                         const hasPin = !!me.user.hasPin;
                         await setHasPin(hasPin);
 
-                        // ✅ If has pin, gate it (unless unlocked this run)
                         if (hasPin) {
                           if (isPinUnlockedThisRun()) {
                             navigation.reset({ index: 0, routes: [{ name: "Main" }] });
@@ -265,8 +264,9 @@ export default function App() {
                           return;
                         }
 
-                        // ✅ No pin (auth flow ended) -> go Main if skipped, else CreatePin
-                        const skipped = await isPinSkipped();
+                        // ✅ FIX: use _id not id
+                        const userId = String(me.user._id);
+                        const skipped = await isPinSkippedForUser(userId);
                         if (skipped) {
                           navigation.reset({ index: 0, routes: [{ name: "Main" }] });
                           return;
@@ -308,7 +308,9 @@ export default function App() {
                           return;
                         }
 
-                        const skipped = await isPinSkipped();
+                        // ✅ FIX: use _id not id
+                        const userId = String(me.user._id);
+                        const skipped = await isPinSkippedForUser(userId);
                         if (skipped) {
                           navigation.reset({ index: 0, routes: [{ name: "Main" }] });
                           return;
@@ -331,12 +333,10 @@ export default function App() {
               {({ navigation }) => (
                 <CreatePinScreen
                   onContinue={() => {
-                    // ✅ after creating pin, go HOME immediately
                     setPinUnlockedThisRun(true);
                     navigation.reset({ index: 0, routes: [{ name: "Main" }] });
                   }}
                   onSkip={() => {
-                    // ✅ skip -> go HOME immediately
                     setPinUnlockedThisRun(true);
                     navigation.reset({ index: 0, routes: [{ name: "Main" }] });
                   }}
@@ -428,7 +428,6 @@ function AppSplashScreenWrapper({
         const logged = await isLoggedIn();
         if (!mounted) return;
 
-        // ✅ Not logged in: show onboarding ONCE only
         if (!logged) {
           if (!seenOnboarding) onGoOnboarding();
           else onGoAuthFlow();
@@ -437,7 +436,6 @@ function AppSplashScreenWrapper({
 
         const token = await getAccessToken();
         if (!token) {
-          // treat as not logged in, follow same onboarding rule
           if (!seenOnboarding) onGoOnboarding();
           else onGoAuthFlow();
           return;
@@ -449,17 +447,15 @@ function AppSplashScreenWrapper({
         await setHasPin(hasPin);
         if (!mounted) return;
 
-        // ✅ If PIN exists -> require PIN each new app run (unless unlocked this run)
         if (hasPin) {
           if (isPinUnlockedThisRun()) onGoMain();
           else onGoPin();
           return;
         }
 
-        // ✅ No PIN:
-        // - if user skipped PIN -> go Main
-        // - else -> force CreatePin
-        const skipped = await isPinSkipped();
+        // ✅ FIX: use _id not id
+        const userId = String(me.user._id);
+        const skipped = await isPinSkippedForUser(userId);
         if (skipped) {
           onGoMain();
           return;

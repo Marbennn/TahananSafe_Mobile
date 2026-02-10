@@ -10,7 +10,7 @@ const KEYS = {
   // ✅ onboarding shown flag
   onboardingSeen: "@tahanansafe_onboarding_seen",
 
-  // ✅ NEW: user chose to skip PIN setup
+  // ✅ legacy: global skip pin (keep for backward compatibility)
   pinSkipped: "@tahanansafe_pin_skipped",
 } as const;
 
@@ -44,7 +44,7 @@ export async function isOnboardingSeen(): Promise<boolean> {
   return v === "1";
 }
 
-/* ===================== PIN SKIP FLAG ===================== */
+/* ===================== PIN SKIP (LEGACY GLOBAL) ===================== */
 
 export async function setPinSkipped(value: boolean) {
   await AsyncStorage.setItem(KEYS.pinSkipped, value ? "1" : "0");
@@ -55,13 +55,31 @@ export async function isPinSkipped(): Promise<boolean> {
   return v === "1";
 }
 
+/* ===================== PIN SKIP (PER USER) ===================== */
+
+function keyPinSkippedForUser(userId: string) {
+  return `@tahanansafe_pin_skipped_${userId}`;
+}
+
+export async function setPinSkippedForUser(userId: string, value: boolean) {
+  if (!userId) return;
+  await AsyncStorage.setItem(keyPinSkippedForUser(userId), value ? "1" : "0");
+}
+
+export async function isPinSkippedForUser(userId: string): Promise<boolean> {
+  if (!userId) return false;
+  const v = await AsyncStorage.getItem(keyPinSkippedForUser(userId));
+  return v === "1";
+}
+
 /* ===================== AUTH / TOKENS ===================== */
 
 export async function setLoggedIn(value: boolean) {
   if (value) {
     await AsyncStorage.setItem(KEYS.loggedIn, "1");
   } else {
-    // logging out clears everything + resets in-memory unlock
+    // ✅ logging out clears session tokens + login flags
+    // ✅ but it should NOT delete per-user pinSkipped_*
     pinUnlockedThisRun = false;
 
     await AsyncStorage.multiRemove([
@@ -69,8 +87,9 @@ export async function setLoggedIn(value: boolean) {
       KEYS.accessToken,
       KEYS.refreshToken,
       KEYS.hasPin,
-      KEYS.pinSkipped, // ✅ reset skip choice on logout
+      // ✅ don't remove KEYS.pinSkipped (legacy) OR per-user keys
     ]);
+
     // ✅ NOTE: we do NOT remove onboardingSeen (so onboarding stays one-time)
   }
 }
@@ -108,7 +127,7 @@ export async function getHasPin(): Promise<boolean> {
 }
 
 export async function clearSession() {
-  // clearing session resets in-memory unlock too
+  // ✅ clearing session resets in-memory unlock too
   pinUnlockedThisRun = false;
 
   await AsyncStorage.multiRemove([
@@ -116,7 +135,8 @@ export async function clearSession() {
     KEYS.accessToken,
     KEYS.refreshToken,
     KEYS.hasPin,
-    KEYS.pinSkipped, // ✅ reset skip choice
+    // ✅ do NOT remove per-user pinSkipped_*
   ]);
+
   // ✅ NOTE: do NOT remove onboardingSeen
 }
