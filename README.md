@@ -14,3 +14,8 @@ npx expo install expo-constants
 npx expo install @react-native-async-storage/async-storage
 npx expo install @react-native-community/datetimepicker
 npx expo install @react-native-community/datetimepicker
+
+
+
+ngrok http 8000
+ngrok config add-authtoken 39QPKKhDmSFzloA77UuULLbkFw4_4bASfyaPhvhoLjv7AV7zx
