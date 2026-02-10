@@ -28,7 +28,7 @@ const SLIDE_COUNT = 2;
 const SVG_RATIO = 170 / 408;
 
 // ✅ Make card a bit shorter than the SVG height (cropped vertically)
-const HEIGHT_FACTOR = 0.9; // try 0.88–0.92 if you want more/less height
+const HEIGHT_FACTOR = 0.9;
 
 const CARD_BG = "#0B3A5A";
 
@@ -46,13 +46,11 @@ export default function GreetingCard({
   const dpr = PixelRatio.get();
   const snapToPx = useCallback((v: number) => Math.round(v * dpr) / dpr, [dpr]);
 
-  // scale based on common mobile width (375)
   const s = useMemo(() => clamp(screenW / 375, 0.9, 1.25), [screenW]);
 
   const MH = useMemo(() => clamp(Math.round(14 * s), 12, 18), [s]);
   const R = useMemo(() => clamp(Math.round(16 * s), 14, 18), [s]);
 
-  // responsive width -> responsive height
   const cardWApprox = useMemo(
     () => Math.max(1, Math.round(screenW - MH * 2)),
     [screenW, MH]
@@ -60,10 +58,9 @@ export default function GreetingCard({
 
   const CARD_H = useMemo(() => {
     const h = Math.round(cardWApprox * SVG_RATIO * HEIGHT_FACTOR);
-    return clamp(h, 118, 175); // ✅ slightly shorter range
+    return clamp(h, 118, 175);
   }, [cardWApprox]);
 
-  // seam cover width (2 physical px)
   const SEAM = useMemo(() => 2 / dpr, [dpr]);
 
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -314,7 +311,6 @@ export default function GreetingCard({
               />
             </View>
 
-            {/* ✅ hides the tiny seam while swiping */}
             <View
               pointerEvents="none"
               style={{
@@ -345,9 +341,7 @@ export default function GreetingCard({
           <View style={styles.dotsRow} pointerEvents="none">
             {Array.from({ length: SLIDE_COUNT }).map((_, i) => {
               const isActive = i === activeIndex;
-              return (
-                <View key={i} style={[styles.dot, isActive && styles.dotActive]} />
-              );
+              return <View key={i} style={[styles.dot, isActive && styles.dotActive]} />;
             })}
           </View>
         </View>

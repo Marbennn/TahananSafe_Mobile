@@ -1,7 +1,9 @@
 // src/auth/AuthContext.tsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { Alert } from "react-native";
 import { clearSession, getSession, saveSession, StoredUser } from "./authStorage";
+
+// ✅ use your existing /me api
+import { getMeApi } from "../api/pin";
 
 type AuthState = {
   isBooting: boolean;
@@ -19,9 +21,44 @@ type AuthContextType = AuthState & {
   }) => Promise<void>;
   logout: () => Promise<void>;
   setUser: (u: StoredUser | null) => void;
+  refreshMe: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+function normalizeUser(input: any): StoredUser | null {
+  if (!input) return null;
+
+  const u = input?.user ?? input; // supports {user:{...}} or {...}
+
+  const firstName =
+    (typeof u?.firstName === "string" && u.firstName.trim()) ||
+    (typeof u?.profile?.firstName === "string" && u.profile.firstName.trim()) ||
+    (typeof u?.personalInfo?.firstName === "string" && u.personalInfo.firstName.trim()) ||
+    "";
+
+  const lastName =
+    (typeof u?.lastName === "string" && u.lastName.trim()) ||
+    (typeof u?.profile?.lastName === "string" && u.profile.lastName.trim()) ||
+    (typeof u?.personalInfo?.lastName === "string" && u.personalInfo.lastName.trim()) ||
+    "";
+
+  return {
+    _id: u?._id ? String(u._id) : undefined,
+    id: u?.id ? String(u.id) : undefined,
+    email: typeof u?.email === "string" ? u.email : undefined,
+    firstName: firstName || undefined,
+    lastName: lastName || undefined,
+    name: typeof u?.name === "string" ? u.name : undefined,
+    hasPin: !!u?.hasPin,
+    profileImage: u?.profileImage,
+    phoneNumber: u?.phoneNumber,
+    dateOfBirth: u?.dateOfBirth,
+    gender: u?.gender,
+    age: u?.age,
+    ...u,
+  };
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isBooting, setIsBooting] = useState(true);
@@ -30,6 +67,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [user, setUser] = useState<StoredUser | null>(null);
 
+  const refreshMe = async () => {
+    if (!accessToken) return;
+
+    try {
+      const me = await getMeApi({ accessToken });
+      const normalized = normalizeUser(me);
+
+      if (normalized) {
+        setUser(normalized);
+
+        // keep storage in sync
+        await saveSession({
+          accessToken,
+          refreshToken: refreshToken ?? undefined,
+          user: normalized,
+        });
+      }
+    } catch {
+      // ignore - home can still load
+    }
+  };
+
   // ✅ Restore session on app start
   useEffect(() => {
     let mounted = true;
@@ -37,14 +96,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const session = await getSession();
-
         if (!mounted) return;
 
         if (session.accessToken) setAccessToken(session.accessToken);
         if (session.refreshToken) setRefreshToken(session.refreshToken);
         if (session.user) setUser(session.user);
-      } catch (e) {
-        // if storage fails, we just start logged out
+
+        // ✅ If user missing but token exists -> fetch /me
+        if (session.accessToken && !session.user) {
+          try {
+            const me = await getMeApi({ accessToken: session.accessToken });
+            const normalized = normalizeUser(me);
+            if (!mounted) return;
+
+            if (normalized) {
+              setUser(normalized);
+              await saveSession({
+                accessToken: session.accessToken,
+                refreshToken: session.refreshToken ?? undefined,
+                user: normalized,
+              });
+            }
+          } catch {
+            // ignore
+          }
+        }
       } finally {
         if (mounted) setIsBooting(false);
       }
@@ -62,16 +138,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }) => {
     setAccessToken(payload.accessToken);
     setRefreshToken(payload.refreshToken ?? null);
-    setUser(payload.user ?? null);
+
+    const normalized = normalizeUser(payload.user);
+    setUser(normalized);
 
     await saveSession({
       accessToken: payload.accessToken,
       refreshToken: payload.refreshToken,
-      user: payload.user,
+      user: normalized ?? null,
     });
+
+    // ✅ If login didn't provide user -> fetch /me immediately
+    if (!normalized) {
+      try {
+        const me = await getMeApi({ accessToken: payload.accessToken });
+        const fromMe = normalizeUser(me);
+        if (fromMe) {
+          setUser(fromMe);
+          await saveSession({
+            accessToken: payload.accessToken,
+            refreshToken: payload.refreshToken,
+            user: fromMe,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
   };
 
-  // ✅ Only logs out when user taps logout
   const logout = async () => {
     setAccessToken(null);
     setRefreshToken(null);
@@ -89,6 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       logout,
       setUser,
+      refreshMe,
     }),
     [isBooting, accessToken, refreshToken, user]
   );

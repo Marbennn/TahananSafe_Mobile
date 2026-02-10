@@ -8,16 +8,25 @@ const KEYS = {
 } as const;
 
 export type StoredUser = {
+  _id?: string;
   id?: string;
   email?: string;
+  firstName?: string;
+  lastName?: string;
   name?: string;
+  hasPin?: boolean;
+  profileImage?: string;
+  phoneNumber?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  age?: number;
   [key: string]: any;
 };
 
 export async function saveSession(params: {
   accessToken: string;
   refreshToken?: string;
-  user?: StoredUser;
+  user?: StoredUser | null;
 }) {
   await AsyncStorage.setItem(KEYS.accessToken, params.accessToken);
 
@@ -30,7 +39,11 @@ export async function saveSession(params: {
   }
 }
 
-export async function getSession() {
+export async function getSession(): Promise<{
+  accessToken: string | null;
+  refreshToken: string | null;
+  user: StoredUser | null;
+}> {
   const [accessToken, refreshToken, userStr] = await Promise.all([
     AsyncStorage.getItem(KEYS.accessToken),
     AsyncStorage.getItem(KEYS.refreshToken),
