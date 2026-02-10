@@ -23,7 +23,7 @@ type Props = {
   firstName: string;
   lastName: string;
   dob: string; // MM/DD/YYYY
-  contactNumber: string; // we store FULL like "+63 9XXXXXXXXX"
+  contactNumber: string; // stored like "+63 XXXXXXXXXX" (local part)
   gender: "male" | "female";
 
   // setters
@@ -82,6 +82,11 @@ function daysInMonth(year: number, monthIndex0: number) {
   return new Date(year, monthIndex0 + 1, 0).getDate();
 }
 
+// ✅ Local part validation: must be 9XXXXXXXXX (10 digits starting with 9)
+function isValidLocalMobile10(local10: string) {
+  return /^9\d{9}$/.test(local10);
+}
+
 export default function PersonalDetailsForm({
   scale,
   vscale,
@@ -130,13 +135,23 @@ export default function PersonalDetailsForm({
   // ✅ local phone state (digits only after +63)
   const [localPhone, setLocalPhone] = useState("");
 
+  // ✅ show validation only after user touches the field
+  const [contactTouched, setContactTouched] = useState(false);
+
   useEffect(() => {
     const local = normalizeToLocal10(contactNumber || "");
     setLocalPhone(local);
   }, [contactNumber]);
 
+  /**
+   * ✅ NO MORE forcing 9:
+   * - keep digits only
+   * - max 10 digits
+   * - store as "+63 XXXXXXXXXX"
+   */
   const commitPhone = (nextLocal10: string) => {
     const cleaned = digitsOnly(nextLocal10).slice(0, 10);
+
     setLocalPhone(cleaned);
 
     if (!cleaned) {
@@ -145,6 +160,10 @@ export default function PersonalDetailsForm({
     }
     setContactNumber(formatFullPH(cleaned));
   };
+
+  // ✅ show error if user already touched and current input is invalid
+  const showPhoneError =
+    contactTouched && localPhone.length > 0 && !isValidLocalMobile10(localPhone);
 
   /** ---------------- DOB 3-PART PICKER ---------------- **/
   const monthOptions = useMemo(
@@ -202,17 +221,14 @@ export default function PersonalDetailsForm({
 
   // ✅ clamp month/day if user ends up in the future
   useEffect(() => {
-    // If current year but month is in the future -> clamp month to current month
     if (isCurrentYear && draftMonth > currentMonthIndex0) {
       setDraftMonth(currentMonthIndex0);
       return;
     }
 
-    // Clamp day to max allowed for month/year
     const maxInMonth = daysInMonth(draftYear, draftMonth);
     let allowedMaxDay = maxInMonth;
 
-    // If current year & current month -> cannot go past today
     if (isCurrentMonthInCurrentYear) {
       allowedMaxDay = Math.min(allowedMaxDay, currentDay);
     }
@@ -230,7 +246,6 @@ export default function PersonalDetailsForm({
     currentYear,
   ]);
 
-  // ✅ day options with future-day restriction
   const dayOptions = useMemo(() => {
     const maxInMonth = daysInMonth(draftYear, draftMonth);
     let maxAllowed = maxInMonth;
@@ -271,6 +286,7 @@ export default function PersonalDetailsForm({
             placeholder="Enter your legal first name"
             placeholderTextColor={Colors.placeholder}
             autoCapitalize="words"
+            maxLength={16} // ✅ limit to 16
             style={[
               styles.input,
               firstFocused ? styles.inputFocused : styles.inputIdle,
@@ -289,6 +305,7 @@ export default function PersonalDetailsForm({
             placeholder="Enter your legal last name"
             placeholderTextColor={Colors.placeholder}
             autoCapitalize="words"
+            maxLength={16} // ✅ limit to 16
             style={[
               styles.input,
               lastFocused ? styles.inputFocused : styles.inputIdle,
@@ -331,7 +348,7 @@ export default function PersonalDetailsForm({
           </Pressable>
         </View>
 
-        {/* ✅ CONTACT NUMBER (fixed +63 prefix) */}
+        {/* ✅ CONTACT NUMBER (fixed +63 prefix, NO forcing 9, show red validation text) */}
         <View style={styles.fieldBlock}>
           <Text style={styles.label}>Contact Number</Text>
 
@@ -362,18 +379,27 @@ export default function PersonalDetailsForm({
               onChangeText={commitPhone}
               placeholder="9XXXXXXXXX"
               placeholderTextColor={Colors.placeholder}
-              keyboardType="phone-pad"
+              keyboardType="number-pad"
               style={{
                 flex: 1,
                 fontSize: scale(14),
                 color: Colors.text,
                 paddingVertical: 0,
               }}
-              onFocus={() => setContactFocused(true)}
-              onBlur={() => setContactFocused(false)}
+              onFocus={() => {
+                setContactFocused(true);
+              }}
+              onBlur={() => {
+                setContactFocused(false);
+                setContactTouched(true);
+              }}
               maxLength={10}
             />
           </View>
+
+          {showPhoneError ? (
+            <Text style={styles.errorText}>Please enter a valid mobile number</Text>
+          ) : null}
         </View>
 
         {/* Gender */}
@@ -405,7 +431,6 @@ export default function PersonalDetailsForm({
           <Pressable style={styles.modalSheet} onPress={() => {}}>
             <Text style={styles.modalTitle}>Select Date of Birth</Text>
 
-            {/* current selection display */}
             <View style={{ marginBottom: vscale(10) }}>
               <Text style={{ color: "#111827", fontWeight: "800", fontSize: scale(13) }}>
                 {draftDobLabel}
@@ -415,7 +440,6 @@ export default function PersonalDetailsForm({
               </Text>
             </View>
 
-            {/* 3 separate pick buttons */}
             <View style={{ gap: vscale(10) }}>
               <Pressable
                 onPress={() => setMonthOpen(true)}
@@ -448,7 +472,6 @@ export default function PersonalDetailsForm({
               </Pressable>
             </View>
 
-            {/* actions */}
             <View style={{ marginTop: vscale(12) }}>
               <Pressable onPress={saveDobFromDraft} style={styles.modalCancel}>
                 <Text style={[styles.modalCancelText, { color: "#111827" }]}>Save</Text>
@@ -476,7 +499,6 @@ export default function PersonalDetailsForm({
                     {monthOptions.map((label, idx) => {
                       const active = idx === draftMonth;
 
-                      // ✅ DISABLE future months if selecting current year
                       const isFutureMonth = draftYear === currentYear && idx > currentMonthIndex0;
                       const disabled = isFutureMonth;
 
@@ -532,7 +554,6 @@ export default function PersonalDetailsForm({
                     {dayOptions.map((d) => {
                       const active = d === draftDay;
 
-                      // dayOptions already restricted, so no "future day" exists here
                       return (
                         <Pressable
                           key={String(d)}

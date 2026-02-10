@@ -54,12 +54,19 @@ function normalizePhone(raw: string) {
   if (t.startsWith("+")) return "+" + t.slice(1).replace(/\D/g, "");
   return t.replace(/\D/g, "");
 }
+
+/**
+ * ✅ PH Phone (STRICT):
+ * - 09XXXXXXXXX (must start with 09)
+ * - +639XXXXXXXXX (must start with +639)
+ */
 function isValidPHPhone(raw: string) {
   const p = normalizePhone(raw);
   if (/^09\d{9}$/.test(p)) return true;
-  if (/^\+63\d{10}$/.test(p)) return true;
+  if (/^\+639\d{9}$/.test(p)) return true;
   return false;
 }
+
 function isValidDobFormat(mmddyyyy: string) {
   return /^(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])\/(19|20)\d{2}$/.test(mmddyyyy);
 }
@@ -112,6 +119,11 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
 
     if (!fn) return { ok: false, message: "First name is required." };
     if (!ln) return { ok: false, message: "Last name is required." };
+
+    // ✅ limit to 16 chars
+    if (fn.length > 16) return { ok: false, message: "First name must be 16 characters or less." };
+    if (ln.length > 16) return { ok: false, message: "Last name must be 16 characters or less." };
+
     if (!isValidName(fn)) return { ok: false, message: "First name must contain letters only (min 2 characters)." };
     if (!isValidName(ln)) return { ok: false, message: "Last name must contain letters only (min 2 characters)." };
 
@@ -123,8 +135,11 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
     if (age > 120) return { ok: false, message: "Invalid Date of Birth (age too high)." };
 
     if (!phone) return { ok: false, message: "Contact number is required." };
-    if (!isValidPHPhone(phone))
-      return { ok: false, message: "Invalid PH contact number. Use 09XXXXXXXXX or +63XXXXXXXXXX." };
+
+    // ✅ must be 09... OR +639...
+    if (!isValidPHPhone(phone)) {
+      return { ok: false, message: "Invalid PH contact number. Use 09XXXXXXXXX or +639XXXXXXXXX." };
+    }
 
     if (gender !== "male" && gender !== "female") return { ok: false, message: "Please select your gender." };
 
@@ -203,7 +218,12 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
               ]}
             >
               <View style={styles.ctaInnerClip}>
-                <LinearGradient colors={Colors.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.ctaGradient}>
+                <LinearGradient
+                  colors={Colors.gradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.ctaGradient}
+                >
                   {isSubmitting ? (
                     <View style={styles.loadingRow}>
                       <ActivityIndicator color="#FFFFFF" />
@@ -267,6 +287,14 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     inputIdle: { borderColor: "#E5E7EB" },
     inputFocused: { borderColor: "#1D4ED8" },
 
+    // ✅ NEW: red validation text style
+    errorText: {
+      marginTop: vscale(6),
+      fontSize: scale(12),
+      color: "#DC2626",
+      fontWeight: "700",
+    },
+
     select: {
       height: vscale(50),
       borderRadius: scale(14),
@@ -279,7 +307,13 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       justifyContent: "space-between",
     },
 
-    selectText: { flex: 1, paddingRight: scale(10), fontSize: scale(14), color: Colors.placeholder },
+    // ✅ Gender text color black
+    selectText: {
+      flex: 1,
+      paddingRight: scale(10),
+      fontSize: scale(14),
+      color: "#111827",
+    },
 
     bottomBar: { paddingHorizontal: scale(22), paddingTop: vscale(10), backgroundColor: "#FFFFFF" },
 
