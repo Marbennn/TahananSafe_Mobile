@@ -11,6 +11,7 @@ import {
   Linking,
   Platform,
   StatusBar,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -56,13 +57,46 @@ async function callNumber(num: string) {
   await Linking.openURL(url);
 }
 
+const BG = "#F6F8FC";
+const BORDER = "#E7EEF7";
+const NAVY = "#0A2E57";
+
 export default function HotlinesScreen({
   onTabChange,
   initialTab = "Inbox", // Inbox = Hotlines
 }: Props) {
   const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+  const { width, height } = useWindowDimensions();
 
+  // ===== Responsive scaling helpers =====
+  // Base design: 375x812
+  const wScale = Math.min(Math.max(width / 375, 0.9), 1.25);
+  const hScale = Math.min(Math.max(height / 812, 0.9), 1.2);
+
+  const scale = (n: number) => Math.round(n * wScale);
+  const vscale = (n: number) => Math.round(n * hScale);
+
+  // ✅ Keep numbers OUTSIDE StyleSheet.create
+  const iconSize = scale(22);
+  const callIconSize = scale(20);
+
+  const SEARCH_H = vscale(44);
+  const FILTER_SIZE = vscale(44);
+  const SECTION_H = vscale(28);
+  const CALL_BTN_SIZE = vscale(40);
+
+  const styles = useMemo(
+    () =>
+      makeStyles(scale, vscale, {
+        SEARCH_H,
+        FILTER_SIZE,
+        SECTION_H,
+        CALL_BTN_SIZE,
+      }),
+    [width, height]
+  );
+
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [query, setQuery] = useState("");
 
   // ✅ MATCH HomeScreen nav sizing exactly
@@ -128,20 +162,20 @@ export default function HotlinesScreen({
   };
 
   return (
-    // ✅ MATCH HomeScreen: only top safe area; navbar handles bottom inset itself
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.page}>
         {/* Header */}
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>
+        {/* ✅ FIX: no double insets padding */}
+        <View style={styles.header}>
           <Text style={styles.title}>Hotlines</Text>
         </View>
 
         {/* Search row */}
         <View style={styles.searchRow}>
           <View style={styles.searchBox}>
-            <Ionicons name="search-outline" size={18} color="#9AA4B2" />
+            <Ionicons name="search-outline" size={iconSize} color="#9AA4B2" />
             <TextInput
               value={query}
               onChangeText={setQuery}
@@ -160,7 +194,7 @@ export default function HotlinesScreen({
             ]}
             hitSlop={10}
           >
-            <Ionicons name="options-outline" size={18} color="#9AA4B2" />
+            <Ionicons name="options-outline" size={iconSize} color="#9AA4B2" />
           </Pressable>
         </View>
 
@@ -190,7 +224,7 @@ export default function HotlinesScreen({
                     ]}
                     hitSlop={10}
                   >
-                    <Ionicons name="call" size={18} color={Colors.primary} />
+                    <Ionicons name="call" size={callIconSize} color={Colors.primary} />
                   </Pressable>
                 </View>
               ))}
@@ -215,109 +249,131 @@ export default function HotlinesScreen({
   );
 }
 
-const BG = "#F6F8FC";
-const BORDER = "#E7EEF7";
-const NAVY = "#0A2E57";
+function makeStyles(
+  scale: (n: number) => number,
+  vscale: (n: number) => number,
+  dims: {
+    SEARCH_H: number;
+    FILTER_SIZE: number;
+    SECTION_H: number;
+    CALL_BTN_SIZE: number;
+  }
+) {
+  const { SEARCH_H, FILTER_SIZE, SECTION_H, CALL_BTN_SIZE } = dims;
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: BG },
-  page: { flex: 1, backgroundColor: BG },
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: BG },
+    page: { flex: 1, backgroundColor: BG },
 
-  header: {
-    paddingHorizontal: 16,
-    paddingBottom: 6,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#1F2A37",
-  },
+    header: {
+      paddingHorizontal: scale(16),
+      paddingTop: vscale(6),
+      paddingBottom: vscale(6),
+    },
+    title: {
+      fontSize: scale(28),
+      fontWeight: "900",
+      color: "#1F2A37",
+    },
 
-  searchRow: {
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  searchBox: {
-    flex: 1,
-    height: 36,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: BORDER,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 13,
-    color: "#111827",
-    paddingVertical: 0,
-  },
-  filterBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: BORDER,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    searchRow: {
+      paddingHorizontal: scale(16),
+      paddingTop: vscale(6),
+      paddingBottom: vscale(10),
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(10),
+    },
+    searchBox: {
+      flex: 1,
+      height: SEARCH_H,
+      backgroundColor: "#FFFFFF",
+      borderRadius: Math.round(SEARCH_H / 2),
+      borderWidth: 1,
+      borderColor: BORDER,
+      paddingHorizontal: scale(14),
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(10),
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: scale(16),
+      color: "#111827",
+      paddingVertical: 0,
+    },
+    filterBtn: {
+      width: FILTER_SIZE,
+      height: FILTER_SIZE,
+      borderRadius: Math.round(FILTER_SIZE / 2),
+      backgroundColor: "#FFFFFF",
+      borderWidth: 1,
+      borderColor: BORDER,
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  content: {
-    paddingHorizontal: 16,
-    paddingTop: 2,
-  },
+    content: {
+      paddingHorizontal: scale(16),
+      paddingTop: vscale(4),
+    },
 
-  section: { marginBottom: 10 },
-  sectionHeader: {
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: NAVY,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 6,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-  sectionHeaderText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.2,
-  },
+    section: { marginBottom: vscale(12) },
 
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  cardLeft: { flex: 1, paddingRight: 10 },
-  cardNumber: { fontSize: 14, fontWeight: "900", color: "#111827" },
-  cardLabel: { marginTop: 2, fontSize: 10, fontWeight: "600", color: "#6B7280" },
+    sectionHeader: {
+      height: SECTION_H,
+      borderRadius: Math.round(SECTION_H / 2),
+      backgroundColor: NAVY,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: vscale(8),
+      shadowColor: "#000",
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 2,
+      paddingHorizontal: scale(10),
+    },
+    sectionHeaderText: {
+      color: "#FFFFFF",
+      fontSize: scale(13),
+      fontWeight: "900",
+      letterSpacing: 0.2,
+      textAlign: "center",
+    },
 
-  callBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#F2F6FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});
+    card: {
+      backgroundColor: "#FFFFFF",
+      borderWidth: 1,
+      borderColor: BORDER,
+      borderRadius: scale(12),
+      paddingVertical: vscale(12),
+      paddingHorizontal: scale(14),
+      marginBottom: vscale(10),
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    cardLeft: { flex: 1, paddingRight: scale(10) },
+    cardNumber: {
+      fontSize: scale(18),
+      fontWeight: "900",
+      color: "#111827",
+    },
+    cardLabel: {
+      marginTop: vscale(4),
+      fontSize: scale(13),
+      fontWeight: "700",
+      color: "#6B7280",
+    },
+
+    callBtn: {
+      width: CALL_BTN_SIZE,
+      height: CALL_BTN_SIZE,
+      borderRadius: Math.round(CALL_BTN_SIZE / 2),
+      backgroundColor: "#F2F6FF",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+  });
+}

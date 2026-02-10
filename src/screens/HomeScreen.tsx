@@ -147,16 +147,15 @@ export default function HomeScreen({
     };
   }, [user, setUser]);
 
-  // ✅ LIVE CLOCK: update every minute so time + greeting stays current
+  // ✅ LIVE CLOCK
   const [now, setNow] = useState<Date>(() => new Date());
 
   useEffect(() => {
-    // tick now immediately on mount
     setNow(new Date());
 
     const id = setInterval(() => {
       setNow(new Date());
-    }, 60 * 1000); // ✅ every minute
+    }, 60 * 1000);
 
     return () => clearInterval(id);
   }, []);
@@ -164,7 +163,6 @@ export default function HomeScreen({
   const greeting = useMemo(() => makeGreeting(now), [now]);
   const dateLine = useMemo(() => makeDateLine(now), [now]);
 
-  // ✅ Real firstName
   const userName = useMemo(() => {
     const fn = user?.firstName;
     if (typeof fn === "string" && fn.trim().length > 0) return fn.trim();
@@ -173,6 +171,10 @@ export default function HomeScreen({
 
   // ✅ scale based on common mobile width (375)
   const s = useMemo(() => clamp(width / 375, 0.9, 1.25), [width]);
+
+  // ✅ small boost for Home fonts only (so “a bit bigger”)
+  // keeps layout stable while improving readability
+  const fs = useMemo(() => clamp(s * 1.06, 0.95, 1.3), [s]);
 
   const NAV_BASE_HEIGHT = 78;
   const FAB_SIZE = 62;
@@ -284,11 +286,12 @@ export default function HomeScreen({
           alignItems: "center",
           justifyContent: "center",
         },
+        // ✅ slightly bigger
         badgeText: {
-          fontSize: clamp(Math.round(10 * s), 9, 12),
+          fontSize: clamp(Math.round(11 * fs), 10, 13),
           fontWeight: "900",
           color: "#fff",
-          lineHeight: clamp(Math.round(12 * s), 10, 14),
+          lineHeight: clamp(Math.round(13 * fs), 11, 15),
         },
 
         scrollContent: {
@@ -303,14 +306,18 @@ export default function HomeScreen({
           alignItems: "center",
           justifyContent: "space-between",
         },
+
+        // ✅ bigger
         sectionTitle: {
-          fontSize: clamp(Math.round(12 * s), 11, 14),
-          fontWeight: "800",
+          fontSize: clamp(Math.round(14 * fs), 13, 16),
+          fontWeight: "900",
           color: TEXT_DARK,
         },
+
+        // ✅ bigger
         seeMore: {
-          fontSize: clamp(Math.round(11 * s), 10, 13),
-          fontWeight: "800",
+          fontSize: clamp(Math.round(13 * fs), 12, 15),
+          fontWeight: "900",
           color: Colors.link,
         },
 
@@ -320,7 +327,7 @@ export default function HomeScreen({
           gap: clamp(Math.round(12 * s), 10, 14),
         },
       }),
-    [PAD, GAP, s, logoW, logoH, iconBtnSize, HEADER_TOP_PAD]
+    [PAD, GAP, s, fs, logoW, logoH, iconBtnSize, HEADER_TOP_PAD]
   );
 
   return (
@@ -382,7 +389,6 @@ export default function HomeScreen({
             { paddingBottom: CONTENT_BOTTOM_PAD },
           ]}
         >
-          {/* ✅ LIVE GREETING + LIVE DATE/TIME */}
           <GreetingCard greeting={greeting} dateLine={dateLine} userName={userName} />
 
           <View style={styles.sectionRow}>

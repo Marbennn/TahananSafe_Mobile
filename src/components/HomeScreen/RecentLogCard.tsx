@@ -1,6 +1,12 @@
 // src/components/HomeScreen/RecentLogCard.tsx
 import React, { useMemo } from "react";
-import { View, Text, StyleSheet, Pressable, useWindowDimensions } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  useWindowDimensions,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../theme/colors";
 
@@ -22,7 +28,6 @@ type Props = {
 const CARD_BORDER = "#E7EEF7";
 
 function clamp(n: number, min: number, max: number) {
-  "worklet";
   return Math.max(min, Math.min(max, n));
 }
 
@@ -32,15 +37,20 @@ export default function RecentLogCard({ item, onPress }: Props) {
   // ✅ scale based on common mobile width (375)
   const s = useMemo(() => clamp(width / 375, 0.9, 1.15), [width]);
 
-  // ✅ dynamic sizes
+  // ✅ small font bump (keeps layout stable)
+  const fs = useMemo(() => clamp(s * 1.06, 0.95, 1.25), [s]);
+
   const S = useMemo(() => {
+    const padV = Math.round(16 * s);
+    const padH = Math.round(14 * s);
+
     return StyleSheet.create({
       card: {
         flexDirection: "row",
         backgroundColor: "#fff",
         borderRadius: 16,
-        paddingVertical: Math.round(16 * s),
-        paddingHorizontal: Math.round(14 * s),
+        paddingVertical: padV,
+        paddingHorizontal: padH,
         minHeight: Math.round(96 * s),
         borderWidth: 1,
         borderColor: CARD_BORDER,
@@ -64,19 +74,20 @@ export default function RecentLogCard({ item, onPress }: Props) {
         paddingRight: Math.round(10 * s),
       },
 
-      // ✅ Title uses primary color (responsive size)
+      // ✅ slightly bigger
       title: {
-        fontSize: Math.round(13 * s),
+        fontSize: Math.round(14 * fs),
         fontWeight: "900",
         color: Colors.primary,
         marginBottom: Math.round(4 * s),
       },
 
+      // ✅ slightly bigger
       detail: {
-        fontSize: Math.round(11 * s),
+        fontSize: Math.round(12 * fs),
         fontWeight: "600",
-        color: Colors.timestamp, // #888888
-        lineHeight: Math.round(16 * s),
+        color: Colors.timestamp,
+        lineHeight: Math.round(17 * fs),
         marginBottom: Math.round(10 * s),
       },
 
@@ -94,25 +105,26 @@ export default function RecentLogCard({ item, onPress }: Props) {
         gap: Math.round(3 * s),
       },
 
+      // ✅ slightly bigger
       metaDate: {
-        fontSize: Math.round(10 * s),
+        fontSize: Math.round(11 * fs),
         fontWeight: "700",
         color: Colors.timestamp,
       },
       metaTime: {
-        fontSize: Math.round(10 * s),
+        fontSize: Math.round(11 * fs),
         fontWeight: "900",
         color: Colors.heading,
       },
 
       chevWrap: {
-        width: Math.round(20 * s),
+        width: Math.round(22 * s),
         alignItems: "flex-end",
         paddingTop: Math.round(6 * s),
         justifyContent: "flex-start",
       },
     });
-  }, [s]);
+  }, [s, fs]);
 
   return (
     <Pressable

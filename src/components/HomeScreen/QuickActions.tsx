@@ -37,6 +37,9 @@ export default function QuickActions({
   // scale factor
   const s = useMemo(() => clamp(width / 375, 0.9, 1.25), [width]);
 
+  // ✅ small font bump for titles/labels
+  const fs = useMemo(() => clamp(s * 1.06, 0.95, 1.3), [s]);
+
   // base spacing
   const BASE_PAD = useMemo(() => clamp(Math.round(16 * s), 12, 20), [s]);
   const GAP = useMemo(() => clamp(Math.round(10 * s), 8, 14), [s]);
@@ -44,53 +47,35 @@ export default function QuickActions({
   // available width inside padding
   const available = useMemo(() => width - BASE_PAD * 2, [width, BASE_PAD]);
 
-  // ideal tile width before rounding/clamping
+  // ideal tile width
   const idealItemW = useMemo(() => (available - GAP * 3) / 4, [available, GAP]);
 
-  // button hit-area size (keep this the same so layout/title won't move)
-  const btnSize = useMemo(
-    () => clamp(Math.round(idealItemW), 62, 88),
-    [idealItemW]
-  );
+  // button hit-area size
+  const btnSize = useMemo(() => clamp(Math.round(idealItemW), 62, 88), [idealItemW]);
 
-  // compute leftover and center perfectly
+  // center perfectly
   const rowContentW = useMemo(() => btnSize * 4 + GAP * 3, [btnSize, GAP]);
-  const extra = useMemo(
-    () => Math.max(0, available - rowContentW),
-    [available, rowContentW]
-  );
-  const sidePad = useMemo(
-    () => BASE_PAD + Math.floor(extra / 2),
-    [BASE_PAD, extra]
-  );
+  const extra = useMemo(() => Math.max(0, available - rowContentW), [available, rowContentW]);
+  const sidePad = useMemo(() => BASE_PAD + Math.floor(extra / 2), [BASE_PAD, extra]);
 
-  // ✅ NEW: smaller blue tile INSIDE the same button
-  // Change 0.88 -> 0.85 if you want even smaller
+  // smaller blue tile inside the same button
   const TILE_FACTOR = 0.88;
-  const tileSize = useMemo(
-    () => Math.round(btnSize * TILE_FACTOR),
-    [btnSize]
-  );
+  const tileSize = useMemo(() => Math.round(btnSize * TILE_FACTOR), [btnSize]);
 
-  // ✅ Icons scale off the smaller tile (so both shrink together)
-  const iconSizeSvg = useMemo(
-    () => clamp(Math.round(tileSize * 0.42), 18, 30),
-    [tileSize]
-  );
-  const iconSizeIon = useMemo(
-    () => clamp(Math.round(tileSize * 0.38), 16, 28),
-    [tileSize]
-  );
+  // icons scale off tile
+  const iconSizeSvg = useMemo(() => clamp(Math.round(tileSize * 0.42), 18, 30), [tileSize]);
+  const iconSizeIon = useMemo(() => clamp(Math.round(tileSize * 0.38), 16, 28), [tileSize]);
 
   const styles = useMemo(
     () =>
       StyleSheet.create({
         wrap: { marginTop: clamp(Math.round(14 * s), 10, 18) },
 
+        // ✅ bigger title
         title: {
           paddingHorizontal: sidePad,
-          fontSize: clamp(Math.round(12 * s), 11, 14),
-          fontWeight: "800",
+          fontSize: clamp(Math.round(14 * fs), 13, 16),
+          fontWeight: "900",
           color: "#0B2B45",
         },
 
@@ -107,7 +92,7 @@ export default function QuickActions({
           alignItems: "center",
         },
 
-        // ✅ Pressable still uses btnSize (layout unchanged)
+        // Pressable still uses btnSize (layout unchanged)
         btn: {
           width: btnSize,
           height: btnSize,
@@ -121,15 +106,16 @@ export default function QuickActions({
           justifyContent: "center",
         },
 
+        // ✅ bigger label
         label: {
           marginTop: clamp(Math.round(8 * s), 6, 10),
-          fontSize: clamp(Math.round(11 * s), 10, 13),
-          fontWeight: "800",
+          fontSize: clamp(Math.round(12 * fs), 11, 14),
+          fontWeight: "900",
           color: "#0B2B45",
           textAlign: "center",
         },
       }),
-    [s, sidePad, GAP, btnSize]
+    [s, fs, sidePad, GAP, btnSize]
   );
 
   return (
@@ -169,9 +155,7 @@ export default function QuickActions({
           label="Sign out"
           onPress={onSignOut ?? (() => {})}
           iconNudge={{ x: 0, y: -4 }}
-          Icon={(sz) => (
-            <Ionicons name="log-out-outline" size={sz} color="#fff" />
-          )}
+          Icon={(sz) => <Ionicons name="log-out-outline" size={sz} color="#fff" />}
           tileSize={tileSize}
           iconOverlayStyle={styles.iconOverlay}
           labelStyle={styles.label}
@@ -184,9 +168,7 @@ export default function QuickActions({
           label="Hide App"
           onPress={onHideApp ?? (() => {})}
           iconNudge={{ x: 0, y: -4 }}
-          Icon={(sz) => (
-            <Ionicons name="eye-off-outline" size={sz} color="#fff" />
-          )}
+          Icon={(sz) => <Ionicons name="eye-off-outline" size={sz} color="#fff" />}
           tileSize={tileSize}
           iconOverlayStyle={styles.iconOverlay}
           labelStyle={styles.label}
@@ -233,7 +215,6 @@ function QuickAction({
           pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
         ]}
       >
-        {/* ✅ smaller blue background */}
         <BlueBoxSvg width={tileSize} height={tileSize} />
 
         <View
@@ -243,7 +224,6 @@ function QuickAction({
             { transform: [{ translateX: x }, { translateY: y }] },
           ]}
         >
-          {/* ✅ smaller icon */}
           {Icon(iconSize)}
         </View>
       </Pressable>

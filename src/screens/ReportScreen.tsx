@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   StatusBar,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -27,13 +28,13 @@ export type ReportItem = {
   timeRight: string;
   groupLabel?: string;
 
-  // detail fields (for clicked report screen)
+  // detail fields
   status?: "PENDING" | "ONGOING" | "CANCELLED" | "RESOLVED";
   witnessName?: string;
   witnessType?: string;
   location?: string;
-  incidentTypeLabel?: string; // e.g. "Sinipa ng tatay"
-  alertNo?: string; // e.g. 676767
+  incidentTypeLabel?: string;
+  alertNo?: string;
 };
 
 type Props = {
@@ -41,16 +42,23 @@ type Props = {
   onTabChange?: (tab: TabKey) => void;
   initialTab?: TabKey;
 
-  // ✅ new: open clicked report screen
   onOpenReport?: (item: ReportItem) => void;
 };
+
+const BG = "#F5FAFE";
+const BORDER = "#E7EEF7";
+const TEXT_DARK = "#0B2B45";
 
 function ReportCard({
   item,
   onPress,
+  styles,
+  chevronSize,
 }: {
   item: ReportItem;
   onPress?: () => void;
+  styles: ReturnType<typeof makeStyles>;
+  chevronSize: number;
 }) {
   return (
     <Pressable
@@ -84,7 +92,7 @@ function ReportCard({
       </View>
 
       <View style={styles.cardChevron}>
-        <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+        <Ionicons name="chevron-forward" size={chevronSize} color="#94A3B8" />
       </View>
     </Pressable>
   );
@@ -97,6 +105,18 @@ export default function ReportScreen({
   onOpenReport,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+
+  // ===== Responsive scaling helpers (same approach as Hotlines) =====
+  const wScale = Math.min(Math.max(width / 375, 0.9), 1.25);
+  const hScale = Math.min(Math.max(height / 812, 0.9), 1.2);
+
+  const scale = (n: number) => Math.round(n * wScale);
+  const vscale = (n: number) => Math.round(n * hScale);
+
+  const chevronSize = scale(20);
+
+  const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
 
   // ✅ Reports tab key in your BottomNavBar is "Ledger"
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab ?? "Ledger");
@@ -133,7 +153,6 @@ export default function ReportScreen({
         timeLeft: "8:30 PM",
         dateRight: "January 20, 2026",
         timeRight: "12:00 PM",
-
         status: "PENDING",
         witnessName: "John Dela Cruz",
         witnessType: "Neighbor",
@@ -150,7 +169,6 @@ export default function ReportScreen({
         timeLeft: "8:30 PM",
         dateRight: "January 20, 2026",
         timeRight: "12:00 PM",
-
         status: "PENDING",
         witnessName: "John Dela Cruz",
         witnessType: "Neighbor",
@@ -167,7 +185,6 @@ export default function ReportScreen({
         timeLeft: "8:30 PM",
         dateRight: "January 20, 2026",
         timeRight: "12:00 PM",
-
         status: "PENDING",
         witnessName: "John Dela Cruz",
         witnessType: "Neighbor",
@@ -184,7 +201,6 @@ export default function ReportScreen({
         timeLeft: "8:30 PM",
         dateRight: "January 20, 2026",
         timeRight: "12:00 PM",
-
         status: "PENDING",
         witnessName: "John Dela Cruz",
         witnessType: "Neighbor",
@@ -201,7 +217,6 @@ export default function ReportScreen({
         timeLeft: "8:30 PM",
         dateRight: "January 20, 2026",
         timeRight: "12:00 PM",
-
         status: "PENDING",
         witnessName: "John Dela Cruz",
         witnessType: "Neighbor",
@@ -223,8 +238,8 @@ export default function ReportScreen({
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.page}>
-        {/* ✅ LEFT title */}
-        <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 8) }]}>
+        {/* ✅ FIX GAP: SafeAreaView already adds top inset, so no extra paddingTop */}
+        <View style={styles.topBar}>
           <Text style={styles.topTitle}>Reports</Text>
         </View>
 
@@ -245,10 +260,7 @@ export default function ReportScreen({
                     ]}
                   >
                     <Text
-                      style={[
-                        styles.segmentText,
-                        active && styles.segmentTextActive,
-                      ]}
+                      style={[styles.segmentText, active && styles.segmentTextActive]}
                       numberOfLines={1}
                     >
                       {k}
@@ -280,7 +292,12 @@ export default function ReportScreen({
                     <Text style={styles.groupLabel}>{item.groupLabel}</Text>
                   ) : null}
 
-                  <ReportCard item={item} onPress={() => onOpenReport?.(item)} />
+                  <ReportCard
+                    item={item}
+                    onPress={() => onOpenReport?.(item)}
+                    styles={styles}
+                    chevronSize={chevronSize}
+                  />
                 </View>
               );
             });
@@ -305,129 +322,129 @@ export default function ReportScreen({
   );
 }
 
-const BG = "#F5FAFE";
-const BORDER = "#E7EEF7";
-const TEXT_DARK = "#0B2B45";
+function makeStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+  const SEG_H = vscale(40);
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: BG },
-  page: { flex: 1, backgroundColor: BG },
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: BG },
+    page: { flex: 1, backgroundColor: BG },
 
-  topBar: {
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  // ✅ make it bigger
-  topTitle: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: TEXT_DARK,
-  },
+    topBar: {
+      paddingHorizontal: scale(16),
+      paddingTop: vscale(6), // small, clean
+      paddingBottom: vscale(10),
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    topTitle: {
+      fontSize: scale(28),
+      fontWeight: "900",
+      color: TEXT_DARK,
+    },
 
-  segmentWrap: {
-    paddingHorizontal: 14,
-    paddingTop: 6,
-    paddingBottom: 8,
-  },
-  segmentPill: {
-    height: 34,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: BORDER,
-    flexDirection: "row",
-    overflow: "hidden",
-  },
-  segmentBtn: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 6,
-  },
-  segmentBtnActive: {
-    backgroundColor: Colors.primary,
-  },
-  segmentText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#6B7280",
-  },
-  segmentTextActive: {
-    color: "#FFFFFF",
-  },
+    segmentWrap: {
+      paddingHorizontal: scale(16),
+      paddingTop: vscale(6),
+      paddingBottom: vscale(10),
+    },
+    segmentPill: {
+      height: SEG_H,
+      borderRadius: Math.round(SEG_H / 2),
+      backgroundColor: "#FFFFFF",
+      borderWidth: 1,
+      borderColor: BORDER,
+      flexDirection: "row",
+      overflow: "hidden",
+    },
+    segmentBtn: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: scale(6),
+    },
+    segmentBtnActive: {
+      backgroundColor: Colors.primary,
+    },
+    segmentText: {
+      fontSize: scale(12),
+      fontWeight: "800",
+      color: "#6B7280",
+    },
+    segmentTextActive: {
+      color: "#FFFFFF",
+    },
 
-  scrollContent: {
-    paddingHorizontal: 14,
-    paddingTop: 6,
-  },
+    scrollContent: {
+      paddingHorizontal: scale(16),
+      paddingTop: vscale(6),
+    },
 
-  block: {
-    marginBottom: 10,
-    gap: 8,
-  },
+    block: {
+      marginBottom: vscale(12),
+      gap: vscale(8),
+    },
 
-  groupLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#94A3B8",
-    paddingLeft: 2,
-  },
+    groupLabel: {
+      fontSize: scale(12),
+      fontWeight: "800",
+      color: "#94A3B8",
+      paddingLeft: scale(2),
+    },
 
-  card: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    borderWidth: 1,
-    borderColor: BORDER,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
-  },
-  cardLeftBar: {
-    width: 4,
-    backgroundColor: Colors.primary,
-  },
-  cardBody: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingLeft: 10,
-    paddingRight: 8,
-    gap: 4,
-  },
-  cardTitle: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: Colors.primary,
-  },
-  cardDetail: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#6B7280",
-    fontStyle: "italic",
-    lineHeight: 14,
-  },
-  cardMetaRow: {
-    marginTop: 6,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  cardMeta: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#94A3B8",
-    lineHeight: 12,
-  },
-  cardChevron: {
-    width: 34,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingRight: 8,
-  },
-});
+    card: {
+      flexDirection: "row",
+      alignItems: "stretch",
+      borderWidth: 1,
+      borderColor: BORDER,
+      backgroundColor: "#FFFFFF",
+      borderRadius: scale(16),
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: 0.04,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 2,
+    },
+    cardLeftBar: {
+      width: scale(4),
+      backgroundColor: Colors.primary,
+    },
+    cardBody: {
+      flex: 1,
+      paddingVertical: vscale(12),
+      paddingLeft: scale(12),
+      paddingRight: scale(10),
+      gap: vscale(6),
+    },
+    cardTitle: {
+      fontSize: scale(15),
+      fontWeight: "900",
+      color: Colors.primary,
+    },
+    cardDetail: {
+      fontSize: scale(13),
+      fontWeight: "700",
+      color: "#6B7280",
+      fontStyle: "italic",
+      lineHeight: vscale(18),
+    },
+    cardMetaRow: {
+      marginTop: vscale(6),
+      flexDirection: "row",
+      justifyContent: "space-between",
+      gap: scale(10),
+    },
+    cardMeta: {
+      fontSize: scale(11),
+      fontWeight: "800",
+      color: "#94A3B8",
+      lineHeight: vscale(14),
+    },
+    cardChevron: {
+      width: scale(38),
+      alignItems: "center",
+      justifyContent: "center",
+      paddingRight: scale(10),
+    },
+  });
+}
