@@ -108,6 +108,9 @@ export default function EnterVerificationModal({
   const [secondsLeft, setSecondsLeft] = useState<number>(initialSeconds);
   const [savingSession, setSavingSession] = useState(false);
 
+  // ✅ NEW: show "OTP sent" message inside the modal (auto-hide)
+  const [showSentNotice, setShowSentNotice] = useState(false);
+
   const inputRef = useRef<TextInput>(null);
 
   const fade = useRef(new Animated.Value(0)).current;
@@ -137,6 +140,9 @@ export default function EnterVerificationModal({
     setSecondsLeft(initialSeconds);
     setSavingSession(false);
 
+    // ✅ show inline notice every time modal opens
+    setShowSentNotice(true);
+
     fade.setValue(0);
     pop.setValue(0.96);
 
@@ -151,7 +157,14 @@ export default function EnterVerificationModal({
     ]).start();
 
     const t = setTimeout(focusInput, 220);
-    return () => clearTimeout(t);
+
+    // ✅ auto hide notice after 2.8s
+    const noticeTimer = setTimeout(() => setShowSentNotice(false), 2800);
+
+    return () => {
+      clearTimeout(t);
+      clearTimeout(noticeTimer);
+    };
   }, [visible, initialSeconds, fade, pop]);
 
   useEffect(() => {
@@ -220,6 +233,11 @@ export default function EnterVerificationModal({
     if (secondsLeft > 0 || isVerifying || savingSession) return;
     setSecondsLeft(initialSeconds);
     onResend?.();
+
+    // ✅ show notice again on resend
+    setShowSentNotice(true);
+    setTimeout(() => setShowSentNotice(false), 2800);
+
     setTimeout(focusInput, 160);
   };
 
@@ -240,6 +258,15 @@ export default function EnterVerificationModal({
           <View style={styles.badgeWrap}>
             <ChecklistBadge size={scale(86)} />
           </View>
+
+          {/* ✅ NEW: inline notice (replaces popup) */}
+          {showSentNotice ? (
+            <View style={styles.noticeBox}>
+              <Text style={styles.noticeText}>
+                We sent a 4-digit OTP to your email. Enter it to verify.
+              </Text>
+            </View>
+          ) : null}
 
           <Text style={styles.title}>Enter Verification Code!</Text>
 
@@ -391,6 +418,26 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       marginTop: scale(2),
       marginBottom: scale(10),
     },
+
+    // ✅ NEW notice styles
+    noticeBox: {
+      alignSelf: "stretch",
+      borderRadius: scale(12),
+      paddingVertical: scale(10),
+      paddingHorizontal: scale(12),
+      backgroundColor: "rgba(59,130,246,0.10)",
+      borderWidth: 1,
+      borderColor: "rgba(59,130,246,0.25)",
+      marginBottom: scale(10),
+    },
+    noticeText: {
+      textAlign: "center",
+      fontSize: scale(10.8),
+      lineHeight: scale(14),
+      color: "#1D4ED8",
+      fontWeight: "800",
+    },
+
     title: {
       textAlign: "center",
       fontSize: scale(13.5),

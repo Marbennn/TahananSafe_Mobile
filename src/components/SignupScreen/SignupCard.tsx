@@ -1,47 +1,42 @@
 // src/components/SignupScreen/SignupCard.tsx
-import React, { useMemo } from "react";
+import React from "react";
 import { View, Text, Pressable, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../../theme/colors";
 
 type Props = {
-  // responsive helpers from SignupScreen
   scale: (n: number) => number;
   vscale: (n: number) => number;
-
-  // styles from SignupScreen (so UI stays identical)
   styles: any;
 
-  // values
   email: string;
   password: string;
   confirmPassword: string;
 
-  // setters
   setEmail: (v: string) => void;
   setPassword: (v: string) => void;
   setConfirmPassword: (v: string) => void;
 
-  // visibility toggles
   showPassword: boolean;
   showConfirm: boolean;
   toggleShowPassword: () => void;
   toggleShowConfirm: () => void;
 
-  // validation + actions
-  passwordsMatch: boolean;
   canContinue: boolean;
   onContinue: () => void;
 
-  // footer + links
   onGoLogin: () => void;
   onTerms: () => void;
   onPrivacy: () => void;
+
+  emailError: string | null;
+  passwordError: string | null;
+  confirmError: string | null;
 };
 
-function isValidEmail(e: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+function removeSpaces(s: string) {
+  return s.replace(/\s/g, "");
 }
 
 export default function SignupCard({
@@ -61,29 +56,18 @@ export default function SignupCard({
   toggleShowPassword,
   toggleShowConfirm,
 
-  passwordsMatch,
   canContinue,
   onContinue,
 
   onGoLogin,
   onTerms,
   onPrivacy,
+
+  emailError,
+  passwordError,
+  confirmError,
 }: Props) {
-  const emailTrim = email.trim();
-  const passTrim = password.trim();
-
-  // ✅ validations (Email + Password only)
-  const emailError = useMemo(() => {
-    if (emailTrim.length === 0) return null;
-    if (!isValidEmail(emailTrim)) return "Please enter a valid email address.";
-    return null;
-  }, [emailTrim]);
-
-  const passwordError = useMemo(() => {
-    if (passTrim.length === 0) return null;
-    if (passTrim.length < 6) return "Password must be at least 6 characters.";
-    return null;
-  }, [passTrim]);
+  const confirmTyped = confirmPassword.trim().length > 0;
 
   return (
     <View style={styles.page}>
@@ -101,12 +85,13 @@ export default function SignupCard({
           <Text style={styles.label}>Email</Text>
           <TextInput
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(t) => setEmail(removeSpaces(t))}
             placeholder="JohnDoe@gmail.com"
             placeholderTextColor={Colors.placeholder}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            maxLength={30}
             style={styles.input}
           />
           {!!emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
@@ -118,12 +103,13 @@ export default function SignupCard({
           <View style={styles.inputWrap}>
             <TextInput
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(t) => setPassword(removeSpaces(t))}
               placeholder="********"
               placeholderTextColor={Colors.placeholder}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
               autoCorrect={false}
+              maxLength={16}
               style={[styles.input, { paddingRight: scale(44) }]}
             />
             <Pressable onPress={toggleShowPassword} hitSlop={10} style={styles.eyeBtn}>
@@ -137,18 +123,19 @@ export default function SignupCard({
           {!!passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
         </View>
 
-        {/* CONFIRM PASSWORD (NO validation message) */}
+        {/* CONFIRM PASSWORD */}
         <View style={styles.fieldBlock}>
           <Text style={styles.label}>Confirm Password</Text>
           <View style={styles.inputWrap}>
             <TextInput
               value={confirmPassword}
-              onChangeText={setConfirmPassword}
+              onChangeText={(t) => setConfirmPassword(removeSpaces(t))}
               placeholder="********"
               placeholderTextColor={Colors.placeholder}
               secureTextEntry={!showConfirm}
               autoCapitalize="none"
               autoCorrect={false}
+              maxLength={16}
               style={[styles.input, { paddingRight: scale(44) }]}
             />
             <Pressable onPress={toggleShowConfirm} hitSlop={10} style={styles.eyeBtn}>
@@ -159,9 +146,12 @@ export default function SignupCard({
               />
             </Pressable>
           </View>
+
+          {confirmTyped && !!confirmError ? (
+            <Text style={styles.errorText}>{confirmError}</Text>
+          ) : null}
         </View>
 
-        {/* Keep your old mismatch message OUT (removed) */}
         <View style={{ height: vscale(10) }} />
 
         {/* CONTINUE */}
