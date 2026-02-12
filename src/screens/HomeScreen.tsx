@@ -1,5 +1,5 @@
 // src/screens/HomeScreen.tsx
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,13 +9,10 @@ import {
   ScrollView,
   useWindowDimensions,
   ActivityIndicator,
-  RefreshControl,
   Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useIsFocused } from "@react-navigation/native";
-
 import { Colors } from "../theme/colors";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 
@@ -35,17 +32,22 @@ import { useAuth } from "../auth/AuthContext";
 import { getAccessToken } from "../auth/session";
 import { getMeApi } from "../api/pin";
 
+// ✅ Use ReportItem type (same object your ReportDetailScreen expects)
+import type { ReportItem } from "./ReportScreen";
+
 type Props = {
   onQuickExit?: () => void;
   onTabChange?: (tab: TabKey) => void;
   initialTab?: TabKey;
 
   onOpenNotifications?: () => void;
+
+  // ✅ NEW: used to open ReportDetailScreen via MainShell state (NO navigation.navigate)
+  onOpenReport?: (report: ReportItem) => void;
 };
 
 const BG = "#F5FAFE";
 const TEXT_DARK = "#0B2B45";
-const CARD_BORDER = "#E7EEF7";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -80,14 +82,15 @@ function getApiBaseUrl() {
     return envUrl.replace(/\/+$/, "");
   }
 
-  // Fallbacks (only if env missing)
   if (Platform.OS === "android") return "http://10.0.2.2:8000";
   return "http://localhost:8000";
 }
 
 const API_BASE_URL = getApiBaseUrl();
 
-/* ===================== DATE HELPERS (same as Reports) ===================== */
+// ---------------------------
+// Small helpers for mapping
+// ---------------------------
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -110,7 +113,10 @@ function toMonthName(mIndex: number) {
   return months[mIndex] ?? "";
 }
 
-// Accepts: "02/12/2026" OR ISO date string from Mongo createdAt/updatedAt
+function formatFullDate(d: Date) {
+  return `${toMonthName(d.getMonth())} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
 function parseDateSmart(input?: string): Date | null {
   if (!input) return null;
 
@@ -130,109 +136,29 @@ function parseDateSmart(input?: string): Date | null {
   return d;
 }
 
-function formatFullDate(d: Date) {
-  return `${toMonthName(d.getMonth())} ${d.getDate()}, ${d.getFullYear()}`;
+function normalizeStatus(dbStatus?: string): ReportItem["status"] {
+  const s = String(dbStatus ?? "").trim().toLowerCase();
+  if (s === "submitted" || s === "pending") return "PENDING";
+  if (s === "ongoing" || s === "on going" || s === "on-going" || s === "in_progress" || s === "in progress")
+    return "ONGOING";
+  if (s === "cancelled" || s === "canceled") return "CANCELLED";
+  if (s === "resolved" || s === "done" || s === "completed") return "RESOLVED";
+  return "PENDING";
 }
 
-function formatTimeFromDate(d: Date) {
-  const h = d.getHours();
-  const m = d.getMinutes();
-  const ampm = h >= 12 ? "PM" : "AM";
-  const hh = h % 12 === 0 ? 12 : h % 12;
-  return `${hh}:${pad2(m)} ${ampm}`;
-}
-
-/* ===================== FETCH RECENT LOGS ===================== */
-/**
- * ✅ Your Mongo incident docs look like:
- * {
- *   _id, user, incidentType, details, dateStr, timeStr, status, createdAt, updatedAt ...
- * }
- *
- * We'll fetch "my incidents" from the mobile API and show the latest 2.
- *
- * IMPORTANT:
- * - This endpoint must exist in your backend.
- * - If your Reports screen already uses `/api/mobile/v1/reports/my`,
- *   we reuse the SAME endpoint here.
- */
-async function fetchMyRecentLogs(): Promise<LogItem[]> {
-  const token = await getAccessToken();
-
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const url = `${API_BASE_URL}/api/mobile/v1/reports/my`;
-
-  const res = await fetch(url, { method: "GET", headers });
-  const text = await res.text().catch(() => "");
-  let json: any = {};
+// ✅ Safer photo mapping (fixes "[object Object]" issue)
+function normalizePhoto(p: any): string {
+  if (!p) return "";
+  if (typeof p === "string") return p;
+  if (typeof p?.url === "string") return p.url;
+  if (typeof p?.secure_url === "string") return p.secure_url;
+  if (typeof p?.path === "string") return p.path;
+  if (typeof p?.filename === "string") return p.filename;
   try {
-    json = text ? JSON.parse(text) : {};
+    return JSON.stringify(p);
   } catch {
-    json = { message: text };
+    return String(p);
   }
-
-  if (!res.ok) {
-    // backend often returns JSON string like {"message":"Please Login - no token"}
-    const msg = typeof json?.message === "string" ? json.message : text || `Request failed (${res.status})`;
-    throw new Error(msg);
-  }
-
-  const rawList = Array.isArray(json) ? json : json?.incidents ?? json?.reports ?? [];
-
-  const mapped: LogItem[] = (rawList as any[])
-    .map((doc: any) => {
-      const id = String(doc?._id ?? doc?.id ?? "");
-      const incidentType = String(doc?.incidentType ?? "Incident Report");
-      const details = String(doc?.details ?? "");
-
-      const dateStr = String(doc?.dateStr ?? "");
-      const timeStr = String(doc?.timeStr ?? "");
-
-      const createdAtIso = doc?.createdAt ? String(doc.createdAt) : "";
-      const updatedAtIso = doc?.updatedAt ? String(doc.updatedAt) : "";
-
-      const leftObj = parseDateSmart(dateStr) ?? parseDateSmart(createdAtIso);
-      const leftDate = leftObj ? formatFullDate(leftObj) : dateStr || "—";
-      const leftTime = timeStr || (leftObj ? formatTimeFromDate(leftObj) : "—");
-
-      const rightObj = parseDateSmart(updatedAtIso) ?? parseDateSmart(createdAtIso) ?? leftObj;
-      const rightDate = rightObj ? formatFullDate(rightObj) : "—";
-      const rightTime = rightObj ? formatTimeFromDate(rightObj) : "—";
-
-      const detailLine =
-        leftDate && leftTime && leftDate !== "—" && leftTime !== "—"
-          ? `On ${leftDate}, at approximately ${leftTime},`
-          : details
-          ? details
-          : "—";
-
-      return {
-        id,
-        title: incidentType,
-        detail: detailLine,
-        dateLeft: leftDate,
-        timeLeft: leftTime,
-        dateRight: rightDate,
-        timeRight: rightTime,
-      };
-    })
-    .filter((x) => x.id);
-
-  // newest first using createdAt (fallback: dateLeft parse)
-  const sorted = [...mapped].sort((a, b) => {
-    const ad = parseDateSmart(a.dateLeft) ?? null;
-    const bd = parseDateSmart(b.dateLeft) ?? null;
-    const at = ad ? ad.getTime() : 0;
-    const bt = bd ? bd.getTime() : 0;
-    return bt - at;
-  });
-
-  // show latest 2 cards like your UI
-  return sorted.slice(0, 2);
 }
 
 export default function HomeScreen({
@@ -240,13 +166,13 @@ export default function HomeScreen({
   onTabChange,
   initialTab = "Home",
   onOpenNotifications,
+  onOpenReport,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const isFocused = useIsFocused();
   const { width } = useWindowDimensions();
 
   // ✅ real user from AuthContext
-  const { user, setUser } = useAuth();
+  const { user, setUser, token } = useAuth() as any;
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
@@ -263,30 +189,25 @@ export default function HomeScreen({
 
     (async () => {
       try {
-        const existingFirst =
-          typeof user?.firstName === "string" ? user.firstName.trim() : "";
+        const existingFirst = typeof user?.firstName === "string" ? user.firstName.trim() : "";
         if (existingFirst.length > 0) return;
 
-        const token = await getAccessToken();
-        if (!token) return;
+        const t = await getAccessToken();
+        if (!t) return;
 
-        const me = await getMeApi({ accessToken: token });
+        const me = await getMeApi({ accessToken: t });
         const apiUser: any = me?.user ?? me;
 
         const firstName =
           (typeof apiUser?.firstName === "string" && apiUser.firstName.trim()) ||
-          (typeof apiUser?.profile?.firstName === "string" &&
-            apiUser.profile.firstName.trim()) ||
-          (typeof apiUser?.personalInfo?.firstName === "string" &&
-            apiUser.personalInfo.firstName.trim()) ||
+          (typeof apiUser?.profile?.firstName === "string" && apiUser.profile.firstName.trim()) ||
+          (typeof apiUser?.personalInfo?.firstName === "string" && apiUser.personalInfo.firstName.trim()) ||
           "";
 
         const lastName =
           (typeof apiUser?.lastName === "string" && apiUser.lastName.trim()) ||
-          (typeof apiUser?.profile?.lastName === "string" &&
-            apiUser.profile.lastName.trim()) ||
-          (typeof apiUser?.personalInfo?.lastName === "string" &&
-            apiUser.personalInfo.lastName.trim()) ||
+          (typeof apiUser?.profile?.lastName === "string" && apiUser.profile.lastName.trim()) ||
+          (typeof apiUser?.personalInfo?.lastName === "string" && apiUser.personalInfo.lastName.trim()) ||
           "";
 
         const nextUser = {
@@ -303,7 +224,6 @@ export default function HomeScreen({
         };
 
         if (!mounted) return;
-
         if (nextUser.email || nextUser._id || nextUser.firstName) {
           setUser(nextUser as any);
         }
@@ -322,11 +242,7 @@ export default function HomeScreen({
 
   useEffect(() => {
     setNow(new Date());
-
-    const id = setInterval(() => {
-      setNow(new Date());
-    }, 60 * 1000);
-
+    const id = setInterval(() => setNow(new Date()), 60 * 1000);
     return () => clearInterval(id);
   }, []);
 
@@ -341,8 +257,6 @@ export default function HomeScreen({
 
   // ✅ scale based on common mobile width (375)
   const s = useMemo(() => clamp(width / 375, 0.9, 1.25), [width]);
-
-  // ✅ small boost for Home fonts only
   const fs = useMemo(() => clamp(s * 1.06, 0.95, 1.3), [s]);
 
   const NAV_BASE_HEIGHT = 78;
@@ -369,45 +283,136 @@ export default function HomeScreen({
 
   const notifCount = 69;
 
-  /* ===================== REAL RECENT LOGS ===================== */
-  const [logs, setLogs] = useState<LogItem[]>([]);
-  const [logsLoading, setLogsLoading] = useState<boolean>(true);
-  const [logsRefreshing, setLogsRefreshing] = useState<boolean>(false);
-  const [logsError, setLogsError] = useState<string>("");
+  // ✅ Recent logs state (real from backend)
+  const [recentReports, setRecentReports] = useState<ReportItem[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
 
-  const loadRecentLogs = useCallback(async () => {
+  const fetchRecentReports = useCallback(async () => {
     try {
-      setLogsError("");
-      setLogsLoading(true);
+      setLoadingReports(true);
 
-      const list = await fetchMyRecentLogs();
-      setLogs(list);
-    } catch (e: any) {
-      setLogs([]);
-      setLogsError(e?.message ? String(e.message) : "Failed to load recent logs.");
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+      };
+
+      // ✅ Bearer token
+      const access = token || (await getAccessToken());
+      if (access) headers.Authorization = `Bearer ${access}`;
+
+      // ✅ Use the same endpoint your ReportScreen uses
+      const url = `${API_BASE_URL}/api/mobile/v1/reports/my`;
+
+      const res = await fetch(url, { method: "GET", headers });
+      const txt = await res.text().catch(() => "");
+      if (!res.ok) {
+        // don’t crash home; just show empty logs
+        return;
+      }
+
+      let json: any = {};
+      try {
+        json = txt ? JSON.parse(txt) : {};
+      } catch {
+        json = {};
+      }
+
+      const rawList = Array.isArray(json) ? json : json?.incidents ?? [];
+      const mapped: ReportItem[] = rawList.map((doc: any) => {
+        const id = String(doc?._id ?? doc?.id ?? "");
+        const incidentType = String(doc?.incidentType ?? "");
+        const details = String(doc?.details ?? "");
+        const offenderName = String(doc?.offenderName ?? "");
+
+        const dateStr = String(doc?.dateStr ?? "");
+        const timeStr = String(doc?.timeStr ?? "");
+
+        const createdAtIso = doc?.createdAt ? String(doc.createdAt) : "";
+        const updatedAtIso = doc?.updatedAt ? String(doc.updatedAt) : "";
+
+        const dateObj = parseDateSmart(dateStr) ?? parseDateSmart(createdAtIso) ?? null;
+
+        const leftDate = dateObj ? formatFullDate(dateObj) : dateStr || "—";
+        const leftTime = timeStr || "—";
+
+        const rightObj = parseDateSmart(updatedAtIso) ?? parseDateSmart(createdAtIso) ?? dateObj;
+        const rightDate = rightObj ? formatFullDate(rightObj) : "—";
+        const rightTime =
+          rightObj && !Number.isNaN(rightObj.getTime())
+            ? `${(() => {
+                const h = rightObj.getHours();
+                const m = rightObj.getMinutes();
+                const ampm = h >= 12 ? "PM" : "AM";
+                const hh = h % 12 === 0 ? 12 : h % 12;
+                return `${hh}:${pad2(m)} ${ampm}`;
+              })()}`
+            : "—";
+
+        const detailLine =
+          leftDate && leftTime && leftDate !== "—" && leftTime !== "—"
+            ? `On ${leftDate}, at approximately ${leftTime},`
+            : details
+            ? details
+            : "—";
+
+        const statusNorm = normalizeStatus(doc?.status);
+
+        const photos: string[] = Array.isArray(doc?.photos)
+          ? doc.photos.map((p: any) => normalizePhoto(p)).filter(Boolean)
+          : [];
+
+        return {
+          id,
+          groupLabel: "",
+
+          title: incidentType || "Incident Report",
+          detail: detailLine,
+          dateLeft: leftDate,
+          timeLeft: leftTime,
+          dateRight: rightDate,
+          timeRight: rightTime,
+
+          status: statusNorm,
+          witnessName: doc?.witnessName ? String(doc.witnessName) : "",
+          witnessType: doc?.witnessType ? String(doc.witnessType) : "",
+          location: doc?.locationStr ? String(doc.locationStr) : "",
+          incidentTypeLabel: incidentType,
+          alertNo: doc?.complainId ? `#${String(doc.complainId)}` : `#${String(id).slice(-4)}`,
+
+          offenderName,
+          photos,
+          createdAt: createdAtIso,
+          updatedAt: updatedAtIso,
+        } as ReportItem;
+      });
+
+      // ✅ newest first, show top 2
+      mapped.sort((a, b) => {
+        const ta = new Date(a.createdAt || 0).getTime();
+        const tb = new Date(b.createdAt || 0).getTime();
+        return tb - ta;
+      });
+
+      setRecentReports(mapped.slice(0, 2));
     } finally {
-      setLogsLoading(false);
+      setLoadingReports(false);
     }
-  }, []);
-
-  const refreshRecentLogs = useCallback(async () => {
-    try {
-      setLogsError("");
-      setLogsRefreshing(true);
-
-      const list = await fetchMyRecentLogs();
-      setLogs(list);
-    } catch (e: any) {
-      setLogsError(e?.message ? String(e.message) : "Failed to refresh recent logs.");
-    } finally {
-      setLogsRefreshing(false);
-    }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
-    if (!isFocused) return;
-    loadRecentLogs();
-  }, [isFocused, loadRecentLogs]);
+    fetchRecentReports();
+  }, [fetchRecentReports]);
+
+  const logs: LogItem[] = useMemo(() => {
+    return recentReports.map((r) => ({
+      id: r.id,
+      title: r.title,
+      detail: r.detail,
+      dateLeft: r.dateLeft,
+      timeLeft: r.timeLeft,
+      dateRight: r.dateRight,
+      timeRight: r.timeRight,
+    }));
+  }, [recentReports]);
 
   const PAD = useMemo(() => clamp(Math.round(16 * s), 12, 20), [s]);
   const GAP = useMemo(() => clamp(Math.round(16 * s), 12, 18), [s]);
@@ -509,50 +514,17 @@ export default function HomeScreen({
           gap: clamp(Math.round(12 * s), 10, 14),
         },
 
-        logsStateBox: {
-          borderWidth: 1,
-          borderColor: CARD_BORDER,
-          backgroundColor: "#FFFFFF",
-          borderRadius: 16,
-          paddingVertical: clamp(Math.round(14 * s), 12, 16),
-          paddingHorizontal: clamp(Math.round(14 * s), 12, 16),
+        miniCenter: {
+          paddingHorizontal: PAD,
+          paddingTop: 10,
           alignItems: "center",
           justifyContent: "center",
-          gap: clamp(Math.round(8 * s), 6, 10),
         },
 
-        logsHint: {
+        emptyHint: {
           fontSize: clamp(Math.round(12 * fs), 11, 14),
           fontWeight: "800",
           color: "#64748B",
-          textAlign: "center",
-        },
-
-        logsError: {
-          fontSize: clamp(Math.round(12 * fs), 11, 14),
-          fontWeight: "900",
-          color: "#B91C1C",
-          textAlign: "center",
-        },
-
-        retryBtn: {
-          marginTop: clamp(Math.round(4 * s), 3, 6),
-          paddingVertical: clamp(Math.round(10 * s), 8, 10),
-          paddingHorizontal: clamp(Math.round(16 * s), 14, 18),
-          backgroundColor: Colors.primary,
-          borderRadius: 999,
-        },
-
-        retryText: {
-          color: "#FFFFFF",
-          fontWeight: "900",
-          fontSize: clamp(Math.round(12 * fs), 11, 13),
-        },
-
-        apiHint: {
-          fontSize: clamp(Math.round(10 * fs), 9, 11),
-          fontWeight: "700",
-          color: "#94A3B8",
           textAlign: "center",
         },
       }),
@@ -579,10 +551,16 @@ export default function HomeScreen({
                 pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
               ]}
             >
-              <Ionicons name="notifications-outline" size={notifIconSize} color={TEXT_DARK} />
+              <Ionicons
+                name="notifications-outline"
+                size={notifIconSize}
+                color={TEXT_DARK}
+              />
               {notifCount > 0 ? (
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{notifCount > 99 ? "99+" : String(notifCount)}</Text>
+                  <Text style={styles.badgeText}>
+                    {notifCount > 99 ? "99+" : String(notifCount)}
+                  </Text>
                 </View>
               ) : null}
             </Pressable>
@@ -595,7 +573,11 @@ export default function HomeScreen({
                 pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
               ]}
             >
-              <Ionicons name="help-circle-outline" size={helpIconSize} color={TEXT_DARK} />
+              <Ionicons
+                name="help-circle-outline"
+                size={helpIconSize}
+                color={TEXT_DARK}
+              />
             </Pressable>
           </View>
         </View>
@@ -603,7 +585,6 @@ export default function HomeScreen({
         <ScrollView
           showsVerticalScrollIndicator={false}
           scrollIndicatorInsets={{ bottom: CONTENT_BOTTOM_PAD }}
-          refreshControl={<RefreshControl refreshing={logsRefreshing} onRefresh={refreshRecentLogs} />}
           contentContainerStyle={[
             styles.scrollContent,
             { paddingBottom: CONTENT_BOTTOM_PAD },
@@ -613,35 +594,48 @@ export default function HomeScreen({
 
           <View style={styles.sectionRow}>
             <Text style={styles.sectionTitle}>Recent Logs</Text>
-            <Pressable onPress={() => {}} hitSlop={10}>
+
+            <Pressable
+              onPress={() => {
+                // ✅ jump to reports list
+                onTabChange?.("Reports");
+              }}
+              hitSlop={10}
+            >
               <Text style={styles.seeMore}>See more</Text>
             </Pressable>
           </View>
 
           <View style={styles.logsWrap}>
-            {logsLoading ? (
-              <View style={styles.logsStateBox}>
+            {loadingReports ? (
+              <View style={styles.miniCenter}>
                 <ActivityIndicator size="small" color={Colors.primary} />
-                <Text style={styles.logsHint}>Loading recent logs…</Text>
-                <Text style={styles.apiHint}>API: {API_BASE_URL}</Text>
-              </View>
-            ) : logsError ? (
-              <View style={styles.logsStateBox}>
-                <Text style={styles.logsError}>{logsError}</Text>
-                <Pressable
-                  onPress={loadRecentLogs}
-                  style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.9 }]}
-                >
-                  <Text style={styles.retryText}>Retry</Text>
-                </Pressable>
-                <Text style={styles.apiHint}>API: {API_BASE_URL}</Text>
               </View>
             ) : logs.length === 0 ? (
-              <View style={styles.logsStateBox}>
-                <Text style={styles.logsHint}>No recent logs yet.</Text>
+              <View style={styles.miniCenter}>
+                <Text style={styles.emptyHint}>No recent reports.</Text>
               </View>
             ) : (
-              logs.map((item) => <RecentLogCard key={item.id} item={item} onPress={() => {}} />)
+              logs.map((item) => {
+                // ✅ find the matching ReportItem (for detail screen)
+                const full = recentReports.find((r) => r.id === item.id);
+
+                return (
+                  <RecentLogCard
+                    key={item.id}
+                    item={item}
+                    onPress={() => {
+                      if (!full) return;
+
+                      // ✅ IMPORTANT FIX:
+                      // DO NOT navigation.navigate("ReportDetailScreen")
+                      // because it is NOT a registered navigator screen.
+                      // Use MainShell callback instead.
+                      onOpenReport?.(full);
+                    }}
+                  />
+                );
+              })
             )}
           </View>
 
