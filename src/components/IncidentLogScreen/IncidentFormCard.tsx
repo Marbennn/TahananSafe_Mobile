@@ -1,6 +1,6 @@
 // src/components/IncidentLog/IncidentFormCard.tsx
 import React from "react";
-import { View, Text, StyleSheet, Pressable, TextInput } from "react-native";
+import { View, Text, StyleSheet, Pressable, TextInput, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../theme/colors";
 
@@ -29,7 +29,6 @@ type Props = {
 
 export default function IncidentFormCard({
   detailsLabel,
-
   incidentType,
   details,
   witnessName,
@@ -43,7 +42,6 @@ export default function IncidentFormCard({
   setWitnessName,
   setWitnessType,
 }: Props) {
-  // ✅ Always keep same label (unless parent passes a custom label)
   const finalDetailsLabel = detailsLabel ?? "Incident Detail";
 
   return (
@@ -52,11 +50,11 @@ export default function IncidentFormCard({
         {finalDetailsLabel} <Text style={styles.req}>*</Text>
       </Text>
 
-      {/* Dropdown (same for both modes) */}
+      {/* Dropdown */}
       <Pressable
         onPress={onPickIncidentType}
         style={({ pressed }) => [
-          styles.input,
+          styles.inputShell,
           styles.dropdown,
           pressed && { opacity: 0.98 },
         ]}
@@ -67,19 +65,21 @@ export default function IncidentFormCard({
         >
           {incidentType || "Type of Incident"}
         </Text>
-        <Ionicons name="chevron-down" size={18} color="#9AA4B2" />
+        <Ionicons name="chevron-down" size={20} color="#9AA4B2" />
       </Pressable>
 
-      {/* Description (same for both modes) */}
-      <TextInput
-        value={details}
-        onChangeText={setDetails}
-        placeholder="A detailed explanation of what happened, including actions, sequence of events, and any relevant details observed during the incident."
-        placeholderTextColor="#9AA4B2"
-        style={[styles.input, styles.textArea]}
-        multiline
-        textAlignVertical="top"
-      />
+      {/* Description */}
+      <View style={[styles.inputShell, styles.textAreaShell]}>
+        <TextInput
+          value={details}
+          onChangeText={setDetails}
+          placeholder="A detailed explanation of what happened, including actions, sequence of events, and any relevant details observed during the incident."
+          placeholderTextColor="#9AA4B2"
+          style={styles.textAreaInput}
+          multiline
+          textAlignVertical="top"
+        />
+      </View>
 
       {/* Add photo row */}
       <View style={styles.photoRow}>
@@ -90,31 +90,35 @@ export default function IncidentFormCard({
             pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
           ]}
         >
-          <Ionicons name="add" size={16} color={Colors.primary} />
+          <Ionicons name="cloud-upload-outline" size={18} color={Colors.primary} />
           <Text style={styles.photoText}>Add Photo</Text>
         </Pressable>
 
         <Text style={styles.photoLimit}>(Max 3)</Text>
       </View>
 
-      {/* Witness (same for both modes) */}
-      <Text style={[styles.sectionLabel, { marginTop: 14 }]}>Witness</Text>
+      {/* Witness */}
+      <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Witness</Text>
 
-      <TextInput
-        value={witnessName}
-        onChangeText={setWitnessName}
-        placeholder="Name (Optional)"
-        placeholderTextColor="#9AA4B2"
-        style={styles.input}
-      />
+      <View style={styles.inputShell}>
+        <TextInput
+          value={witnessName}
+          onChangeText={setWitnessName}
+          placeholder="Name (Optional)"
+          placeholderTextColor="#9AA4B2"
+          style={styles.textInput}
+        />
+      </View>
 
-      <TextInput
-        value={witnessType}
-        onChangeText={setWitnessType}
-        placeholder="Type (Neighbor, Family, etc.)"
-        placeholderTextColor="#9AA4B2"
-        style={styles.input}
-      />
+      <View style={styles.inputShell}>
+        <TextInput
+          value={witnessType}
+          onChangeText={setWitnessType}
+          placeholder="Type (Neighbor, Family, etc.)"
+          placeholderTextColor="#9AA4B2"
+          style={styles.textInput}
+        />
+      </View>
 
       {/* Meta row */}
       <View style={styles.metaBox}>
@@ -122,13 +126,13 @@ export default function IncidentFormCard({
           <Text style={styles.metaLabel}>Date:</Text>
           <Text style={styles.metaValue}>{dateStr}</Text>
 
-          <View style={{ width: 28 }} />
+          <View style={{ width: 24 }} />
 
           <Text style={styles.metaLabel}>Time:</Text>
           <Text style={styles.metaValue}>{timeStr}</Text>
         </View>
 
-        <View style={[styles.metaRow, { marginTop: 8 }]}>
+        <View style={[styles.metaRow, { marginTop: 10 }]}>
           <Text style={styles.metaLabel}>Location:</Text>
           <Text style={styles.metaValue}>{locationStr}</Text>
         </View>
@@ -145,36 +149,36 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: BORDER,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 18,
+    padding: 18,
     shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
     shadowOffset: { width: 0, height: 10 },
     elevation: 3,
   },
 
+  // ✅ bigger labels
   sectionLabel: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
     color: TEXT_DARK,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   req: {
     color: "#EF4444",
     fontWeight: "900",
   },
 
-  input: {
-    height: 44,
-    borderRadius: 12,
+  // ✅ input shell (bigger + nicer padding)
+  inputShell: {
+    height: 50,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: BORDER,
     backgroundColor: "#F9FBFF",
     paddingHorizontal: 14,
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#111827",
+    justifyContent: "center",
     marginBottom: 12,
   },
 
@@ -184,7 +188,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   dropdownText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#111827",
     paddingRight: 10,
@@ -194,51 +198,69 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  textArea: {
-    height: 110,
+  // ✅ normal text input bigger
+  textInput: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#111827",
+    paddingVertical: Platform.OS === "android" ? 0 : 12,
+  },
+
+  // ✅ textarea bigger
+  textAreaShell: {
+    height: 150,
     paddingTop: 12,
     paddingBottom: 12,
+  },
+  textAreaInput: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+    padding: 0,
+    lineHeight: 20,
   },
 
   photoRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start",
-    gap: 10,
-    marginTop: 4,
-    marginBottom: 8,
+    gap: 12,
+    marginTop: 2,
+    marginBottom: 10,
   },
 
   photoBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    height: 36,
-    borderRadius: 12,
+    gap: 10,
+    paddingHorizontal: 16,
+    height: 42,
+    borderRadius: 14,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: BORDER,
   },
+  // ✅ bigger photo text
   photoText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "900",
     color: TEXT_DARK,
   },
   photoLimit: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#9AA4B2",
   },
 
+  // ✅ meta bigger
   metaBox: {
-    marginTop: 6,
-    borderRadius: 12,
+    marginTop: 8,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: BORDER,
     backgroundColor: "#F9FBFF",
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   metaRow: {
     flexDirection: "row",
@@ -246,13 +268,13 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   metaLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "900",
     color: "#6B7280",
     marginRight: 6,
   },
   metaValue: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "900",
     color: TEXT_DARK,
   },

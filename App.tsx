@@ -28,7 +28,6 @@ import SettingsScreen from "./src/screens/SettingsScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
 
 import IncidentLogScreen from "./src/screens/IncidentLogScreen";
-import IncidentLogConfirmationScreen from "./src/screens/IncidentLogConfirmationScreen";
 import IncidentLogConfirmedScreen from "./src/screens/IncidentLogConfirmedScreen";
 
 // Session helpers
@@ -49,7 +48,6 @@ import { getMeApi, verifyPinApi } from "./src/api/pin";
 
 // Types
 import type { TabKey } from "./src/components/BottomNavBar";
-import type { IncidentPreviewData } from "./src/components/IncidentLogConfirmationScreen/IncidentPreviewCard";
 import type { ReportItem } from "./src/screens/ReportScreen";
 
 enableScreens(true);
@@ -67,7 +65,7 @@ type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-type IncidentStep = "form" | "confirm" | "confirmed";
+type IncidentStep = "form" | "confirmed";
 type ReportStep = "list" | "detail";
 
 /* ===================== MAIN SHELL ===================== */
@@ -82,8 +80,6 @@ function MainShell({
   const [activeTab, setActiveTab] = useState<TabKey>("Home");
 
   const [incidentStep, setIncidentStep] = useState<IncidentStep>("form");
-  const [incidentPreview, setIncidentPreview] =
-    useState<IncidentPreviewData | null>(null);
 
   const [reportStep, setReportStep] = useState<ReportStep>("list");
   const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
@@ -163,25 +159,12 @@ function MainShell({
     );
   }
 
-  if (activeTab === "Incident") {
+   if (activeTab === "Incident") {
     if (incidentStep === "form") {
       return (
         <IncidentLogScreen
           onBack={() => setActiveTab("Home")}
-          onProceedConfirm={(data) => {
-            setIncidentPreview(data);
-            setIncidentStep("confirm");
-          }}
-        />
-      );
-    }
-
-    if (incidentStep === "confirm" && incidentPreview) {
-      return (
-        <IncidentLogConfirmationScreen
-          data={incidentPreview}
-          onBack={() => setIncidentStep("form")}
-          onConfirm={() => setIncidentStep("confirmed")}
+          onSubmitted={() => setIncidentStep("confirmed")}
         />
       );
     }
@@ -191,12 +174,17 @@ function MainShell({
         alertNo={alertNo}
         dateLine={confirmedDateLine}
         onGoHome={() => {
-          setIncidentStep("form");
+          // ✅ 1) switch to Home FIRST
           setActiveTab("Home");
+
+          // ✅ 2) reset incident flow AFTER switching tabs
+          // (so next time you open Incident, it starts fresh)
+          setIncidentStep("form");
         }}
       />
     );
   }
+
 
   return null;
 }
@@ -225,11 +213,17 @@ export default function App() {
                       navigation.reset({ index: 0, routes: [{ name: "Pin" }] })
                     }
                     onGoCreatePin={() =>
-                      navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] })
+                      navigation.reset({
+                        index: 0,
+                        routes: [{ name: "CreatePin" }],
+                      })
                     }
                     onGoOnboarding={() => navigation.replace("OnboardingPager")}
                     onGoAuthFlow={() =>
-                      navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })
+                      navigation.reset({
+                        index: 0,
+                        routes: [{ name: "AuthFlow" }],
+                      })
                     }
                   />
                 )}
@@ -239,7 +233,10 @@ export default function App() {
                 {({ navigation }) => (
                   <OnboardingPagerScreen
                     onDone={() =>
-                      navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })
+                      navigation.reset({
+                        index: 0,
+                        routes: [{ name: "AuthFlow" }],
+                      })
                     }
                   />
                 )}
@@ -262,21 +259,33 @@ export default function App() {
 
                           if (hasPin) {
                             if (isPinUnlockedThisRun()) {
-                              navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+                              navigation.reset({
+                                index: 0,
+                                routes: [{ name: "Main" }],
+                              });
                               return;
                             }
-                            navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
+                            navigation.reset({
+                              index: 0,
+                              routes: [{ name: "Pin" }],
+                            });
                             return;
                           }
 
                           const userId = String(me.user._id);
                           const skipped = await isPinSkippedForUser(userId);
                           if (skipped) {
-                            navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+                            navigation.reset({
+                              index: 0,
+                              routes: [{ name: "Main" }],
+                            });
                             return;
                           }
 
-                          navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] });
+                          navigation.reset({
+                            index: 0,
+                            routes: [{ name: "CreatePin" }],
+                          });
                           return;
                         }
                       } catch {}
@@ -303,21 +312,33 @@ export default function App() {
 
                           if (hasPin) {
                             if (isPinUnlockedThisRun()) {
-                              navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+                              navigation.reset({
+                                index: 0,
+                                routes: [{ name: "Main" }],
+                              });
                               return;
                             }
-                            navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
+                            navigation.reset({
+                              index: 0,
+                              routes: [{ name: "Pin" }],
+                            });
                             return;
                           }
 
                           const userId = String(me.user._id);
                           const skipped = await isPinSkippedForUser(userId);
                           if (skipped) {
-                            navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+                            navigation.reset({
+                              index: 0,
+                              routes: [{ name: "Main" }],
+                            });
                             return;
                           }
 
-                          navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] });
+                          navigation.reset({
+                            index: 0,
+                            routes: [{ name: "CreatePin" }],
+                          });
                           return;
                         }
                       } catch {}
@@ -358,7 +379,10 @@ export default function App() {
                         if (!token) {
                           await setLoggedIn(false);
                           resetPinUnlockedThisRun();
-                          navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
+                          navigation.reset({
+                            index: 0,
+                            routes: [{ name: "AuthFlow" }],
+                          });
                           return;
                         }
 
@@ -382,7 +406,10 @@ export default function App() {
                       await setLoggedIn(false);
                       await setHasPin(false);
 
-                      navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
+                      navigation.reset({
+                        index: 0,
+                        routes: [{ name: "AuthFlow" }],
+                      });
                     }}
                     onOpenNotifications={() => navigation.navigate("Notifications")}
                   />

@@ -44,6 +44,10 @@ const TAG = "[LoginScreen]";
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
 const LOGIN_PATH = "/api/mobile/v1/login";
 
+type LoginSendOtpResponse = {
+  message?: string;
+};
+
 async function loginRequest(email: string, password: string) {
   const url = `${API_URL}${LOGIN_PATH}`;
   console.log(`${TAG} loginRequest URL:`, url);
@@ -69,10 +73,15 @@ async function loginRequest(email: string, password: string) {
   }
 
   if (!res.ok) {
-    throw new Error(data?.message || `Login failed (HTTP ${res.status})`);
+    const msg =
+      data?.message ||
+      (res.status === 403
+        ? "Access denied."
+        : `Login failed (HTTP ${res.status})`);
+    throw new Error(msg);
   }
 
-  return data as { message?: string };
+  return data as LoginSendOtpResponse;
 }
 
 export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
@@ -131,6 +140,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       setSendingOtp(true);
       console.log(`${TAG} handleLoginPressed START`, { email: emailNorm });
 
+      // ✅ Backend now blocks non-user roles (403)
       await loginRequest(emailNorm, password);
 
       setVerifyEmail(emailNorm);
@@ -139,8 +149,16 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
 
       console.log(`${TAG} OTP modal opened`);
     } catch (err: any) {
-      console.log(`${TAG} handleLoginPressed ERROR:`, err?.message || err);
-      Alert.alert("Login Failed", err?.message || "Something went wrong.");
+      const msg = err?.message || "Something went wrong.";
+
+      // Optional: slightly nicer message for role restriction
+      const pretty =
+        /role|allowed|access denied|not allowed/i.test(msg) || msg.includes("403")
+          ? "This account is not allowed to login in the mobile app. Please use a USER account."
+          : msg;
+
+      console.log(`${TAG} handleLoginPressed ERROR:`, msg);
+      Alert.alert("Login Failed", pretty);
     } finally {
       setSendingOtp(false);
       console.log(`${TAG} handleLoginPressed END`);
@@ -155,12 +173,21 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
 
     try {
       console.log(`${TAG} resend START`, { verifyEmail });
+
+      // ✅ Backend still blocks non-user roles
       await loginRequest(verifyEmail, verifyPassword);
+
       Alert.alert("Resent", "Verification code resent to your email.");
       console.log(`${TAG} resend END`);
     } catch (err: any) {
-      console.log(`${TAG} resend ERROR:`, err?.message || err);
-      Alert.alert("Resend Failed", err?.message || "Something went wrong.");
+      const msg = err?.message || "Something went wrong.";
+      const pretty =
+        /role|allowed|access denied|not allowed/i.test(msg) || msg.includes("403")
+          ? "This account is not allowed to login in the mobile app. Please use a USER account."
+          : msg;
+
+      console.log(`${TAG} resend ERROR:`, msg);
+      Alert.alert("Resend Failed", pretty);
     }
   };
 
@@ -287,7 +314,10 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   );
 }
 
-function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+function createStyles(
+  scale: (n: number) => number,
+  vscale: (n: number) => number,
+) {
   return StyleSheet.create({
     flex: { flex: 1 },
     safe: { flex: 1, backgroundColor: "#FFFFFF" },

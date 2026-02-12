@@ -1,5 +1,5 @@
 // src/screens/IncidentLogConfirmationScreen.tsx
-import React from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,9 +7,12 @@ import {
   Pressable,
   ScrollView,
   StatusBar,
+  useWindowDimensions,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
 
 // ✅ preview card
@@ -17,23 +20,96 @@ import IncidentPreviewCard, {
   IncidentPreviewData,
 } from "../components/IncidentLogConfirmationScreen/IncidentPreviewCard";
 
+// ✅ confirmed screen
+import IncidentLogConfirmedScreen from "./IncidentLogConfirmedScreen";
+
+type ConfirmResult = {
+  incidentId: string;
+  createdAt?: string; // ISO string
+};
+
 type Props = {
   data: IncidentPreviewData;
   onBack?: () => void;
-  onConfirm?: () => void; // ✅ will transition to IncidentLogConfirmedScreen
+
+  /**
+   * MUST resolve with incidentId if success.
+   * If it rejects/throws, we stay on preview screen.
+   */
+  onConfirm?: () => Promise<ConfirmResult>;
+
+  submitting?: boolean;
+
+  /**
+   * Optional: what to do when pressing "Go back to home" on the confirmed screen.
+   * If not provided, it falls back to onBack().
+   */
+  onGoHome?: () => void;
 };
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function formatDateLine(iso?: string) {
+  try {
+    const d = iso ? new Date(iso) : new Date();
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso || new Date().toISOString();
+  }
+}
 
 export default function IncidentLogConfirmationScreen({
   data,
   onBack,
   onConfirm,
+  submitting = false,
+  onGoHome,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  const s = useMemo(() => clamp(screenWidth / 375, 0.9, 1.2), [screenWidth]);
 
-  // ✅ fixed bottom button height (keep in sync with styles.confirmBtn.height)
-  const BTN_H = 44;
-  const BTN_TOP_PAD = 10;
-  const BTN_MARGIN = 16;
+  const [stage, setStage] = useState<"preview" | "confirmed">("preview");
+  const [confirmedAlertNo, setConfirmedAlertNo] = useState<string>("");
+  const [confirmedDateLine, setConfirmedDateLine] = useState<string>("");
+
+  const FOOTER_H = 72 * s;
+  const CONTENT_BOTTOM_PAD = Math.max(insets.bottom, 10) + FOOTER_H + 16;
+
+  const handleConfirm = async () => {
+    if (submitting) return;
+
+    try {
+      const result = await onConfirm?.();
+
+      // If parent didn't return anything, stay on preview.
+      if (!result?.incidentId) return;
+
+      setConfirmedAlertNo(result.incidentId);
+      setConfirmedDateLine(formatDateLine(result.createdAt));
+      setStage("confirmed");
+    } catch {
+      // parent already logs/alerts; just keep preview open
+    }
+  };
+
+  if (stage === "confirmed") {
+    return (
+      <IncidentLogConfirmedScreen
+        alertNo={confirmedAlertNo}
+        dateLine={confirmedDateLine}
+        onGoHome={onGoHome ?? onBack}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -43,11 +119,15 @@ export default function IncidentLogConfirmationScreen({
         {/* Top bar */}
         <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 8) }]}>
           <Pressable
+            disabled={submitting}
             onPress={onBack}
             hitSlop={12}
-            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [
+              styles.backBtn,
+              (pressed || submitting) && { opacity: 0.7 },
+            ]}
           >
-            <Ionicons name="chevron-back" size={22} color={Colors.primary} />
+            <Ionicons name="chevron-back" size={24} color={Colors.primary} />
           </Pressable>
 
           <Text style={styles.topTitle}>Incident Log Preview</Text>
@@ -55,39 +135,43 @@ export default function IncidentLogConfirmationScreen({
           <View style={{ width: 36, height: 36 }} />
         </View>
 
-        {/* ✅ Content area + fixed bottom button */}
-        <View style={styles.body}>
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={[
-              styles.scrollContent,
-              // ✅ ensures preview content never hides behind the fixed button
-              {
-                paddingBottom:
-                  BTN_TOP_PAD + BTN_H + BTN_MARGIN + Math.max(insets.bottom, 10),
-              },
-            ]}
-          >
-            <IncidentPreviewCard data={data} />
-          </ScrollView>
+        {/* Scrollable content */}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: CONTENT_BOTTOM_PAD },
+          ]}
+        >
+          <IncidentPreviewCard data={data} />
+        </ScrollView>
 
-          {/* ✅ Fixed bottom button */}
-          <View
-            style={[
-              styles.bottomBar,
-              { paddingBottom: Math.max(insets.bottom, 10) },
+        {/* Fixed bottom button */}
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+          <Pressable
+            disabled={submitting}
+            onPress={handleConfirm}
+            style={({ pressed }) => [
+              styles.submitShadow,
+              (pressed || submitting) && { opacity: 0.95 },
             ]}
           >
-            <Pressable
-              onPress={onConfirm} // ✅ App.tsx will setScreen("incident_confirmed")
-              style={({ pressed }) => [
-                styles.confirmBtn,
-                pressed && { transform: [{ scale: 0.99 }], opacity: 0.95 },
-              ]}
+            <LinearGradient
+              colors={Colors.gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.submitBtn, { height: 56 * s }]}
             >
-              <Text style={styles.confirmText}>Confirm</Text>
-            </Pressable>
-          </View>
+              {submitting ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <ActivityIndicator color="#FFFFFF" />
+                  <Text style={styles.submitText}>Submitting...</Text>
+                </View>
+              ) : (
+                <Text style={styles.submitText}>Confirm</Text>
+              )}
+            </LinearGradient>
+          </Pressable>
         </View>
       </View>
     </SafeAreaView>
@@ -96,6 +180,7 @@ export default function IncidentLogConfirmationScreen({
 
 const BG = "#F5FAFE";
 const TEXT_DARK = "#0B2B45";
+const SHADOW = "#000";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
@@ -103,54 +188,54 @@ const styles = StyleSheet.create({
 
   topBar: {
     paddingHorizontal: 14,
-    paddingBottom: 10,
+    paddingBottom: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
   topTitle: {
-    fontSize: 16,
+    fontSize: 22,
     fontWeight: "900",
     color: TEXT_DARK,
-  },
-
-  body: {
-    flex: 1,
+    letterSpacing: 0.2,
   },
 
   scrollContent: {
     paddingHorizontal: 14,
-    paddingTop: 6,
+    paddingTop: 4,
   },
 
-  bottomBar: {
+  footer: {
     paddingHorizontal: 14,
     paddingTop: 10,
     backgroundColor: BG,
   },
 
-  confirmBtn: {
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.primary,
+  submitShadow: {
+    borderRadius: 28,
+    shadowColor: SHADOW,
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 4,
+  },
+
+  submitBtn: {
+    borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
   },
-  confirmText: {
+
+  submitText: {
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: "900",
     letterSpacing: 0.2,
   },

@@ -1,5 +1,5 @@
 // src/screens/IncidentLogScreen.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -8,34 +8,35 @@ import {
   ScrollView,
   StatusBar,
   Alert,
+  TextInput,
   useWindowDimensions,
+  Platform,
+  KeyboardAvoidingView,
+  Image,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import * as ImagePicker from "expo-image-picker";
 import { Colors } from "../theme/colors";
 
-import IncidentFormCard from "../components/IncidentLogScreen/IncidentFormCard";
+// ✅ API
+import { submitIncident } from "../api/incidents";
 
-// ✅ preview screen (fallback local preview)
+// ✅ preview screen
 import IncidentLogConfirmScreen from "./IncidentLogConfirmationScreen";
-
-// ✅ import the TYPE from the preview card (correct source)
+// ✅ TYPE
 import type { IncidentPreviewData } from "../components/IncidentLogConfirmationScreen/IncidentPreviewCard";
-
-// ✅ (optional) if you want to keep App.tsx passing tabs without errors:
 import type { TabKey } from "../components/BottomNavBar";
-
-// ✅ NEW: separated tutorial overlay
-import IncidentSubmitTutorialOverlay from "../components/Tutorial/IncidentSubmitTutorialOverlay";
 
 type Props = {
   onBack?: () => void;
+  onSubmitted?: () => void;
 
-  // ✅ added so App.tsx props won't error
   initialTab?: TabKey | string;
   onTabChange?: (tab: TabKey) => void;
 
-  // ✅ IMPORTANT: add this to fix your TS error from App.tsx
   onProceedConfirm?: (previewData: IncidentPreviewData) => void;
 };
 
@@ -54,51 +55,69 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
+// ✅ small logger helper (consistent tag)
+function log(tag: string, data?: any) {
+  const ts = new Date().toISOString();
+  if (data !== undefined) console.log(`[IncidentLog] ${ts} ${tag}`, data);
+  else console.log(`[IncidentLog] ${ts} ${tag}`);
+}
+
+// ✅ minimal type for the response you return from backend
+type SubmitIncidentResponse = {
+  message?: string;
+  incident?: {
+    _id: string;
+    createdAt?: string;
+  };
+};
+
+export default function IncidentLogScreen({
+  onBack,
+  onProceedConfirm,
+  onSubmitted,
+}: Props) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
+  const s = useMemo(() => clamp(screenWidth / 375, 0.9, 1.2), [screenWidth]);
 
   const [mode, setMode] = useState<Mode>("complain");
 
-  const [incidentType, setIncidentType] = useState<string>("");
-  const [details, setDetails] = useState<string>("");
+  const [incidentType, setIncidentType] = useState("");
+  const [details, setDetails] = useState("");
 
-  const [witnessName, setWitnessName] = useState<string>("");
-  const [witnessType, setWitnessType] = useState<string>("");
+  const [witnessName, setWitnessName] = useState("");
+  const [witnessType, setWitnessType] = useState("");
 
   // demo values (replace later with Date/Time pickers)
-  const [dateStr] = useState<string>("01/15/2026");
-  const [timeStr] = useState<string>("10:00PM");
-  const [locationStr] = useState<string>("Brgy. 12");
+  const [dateStr] = useState("01/15/2026");
+  const [timeStr] = useState("10:00PM");
+  const [locationStr] = useState("Brgy. 12");
 
-  // ✅ simple local “navigation” to preview screen (fallback)
+  // ✅ selected photos (URIs)
+  const [photos, setPhotos] = useState<string[]>([]);
+  const MAX_PHOTOS = 3;
+
+  // preview state
   const [showPreview, setShowPreview] = useState(false);
 
-  // (optional) photo count placeholder
-  const [photoCount] = useState<number>(3);
+  // ✅ submitting state (used by preview confirm too)
+  const [submitting, setSubmitting] = useState(false);
 
-  // ✅ Tutorial state
-  const [showSubmitTutorial, setShowSubmitTutorial] = useState(false);
+  // footer height used to pad scroll so it won't hide behind button
+  const FOOTER_H = 72 * s;
+  const CONTENT_BOTTOM_PAD = Math.max(insets.bottom, 10) + FOOTER_H + 16;
 
-  // ✅ measure target (ABSOLUTE screen coords)
-  const [target, setTarget] = useState({
-    x: 0,
-    y: 0,
-    w: 0,
-    h: 0,
-    ready: false,
-  });
-
-  // ✅ ref for measureInWindow()
-  const submitBtnRef = useRef<View>(null);
-
-  // ✅ scale (simple, responsive-ish)
-  const s = useMemo(() => clamp(screenWidth / 375, 0.9, 1.2), [screenWidth]);
-
-  // ✅ keep small bottom padding only (safe area + a bit)
-  const CONTENT_BOTTOM_PAD = Math.max(insets.bottom, 10) + 10;
+  const openModePicker = () => {
+    if (submitting) return;
+    Alert.alert("Mode", "Choose one:", [
+      { text: "Complain", onPress: () => setMode("complain") },
+      { text: "Emergency", onPress: () => setMode("emergency") },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
 
   const openTypePicker = () => {
+    if (submitting) return;
     Alert.alert("Type of Incident", "Choose one:", [
       ...INCIDENT_TYPES.map((t) => ({
         text: t,
@@ -108,243 +127,449 @@ export default function IncidentLogScreen({ onBack, onProceedConfirm }: Props) {
     ]);
   };
 
-  const onAddPhoto = () => {
-    Alert.alert("Add Photo", "Hook this to ImagePicker (Max 3).");
+  // ✅ real Add Photo using Expo ImagePicker
+  const onAddPhoto = async () => {
+    try {
+      if (submitting) return;
+
+      if (photos.length >= MAX_PHOTOS) {
+        Alert.alert("Max reached", `You can only add up to ${MAX_PHOTOS} photos.`);
+        return;
+      }
+
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      log("ImagePicker permission result", perm);
+
+      if (perm.status !== "granted") {
+        Alert.alert(
+          "Permission needed",
+          "Please allow photo access so you can upload images."
+        );
+        return;
+      }
+
+      const remaining = MAX_PHOTOS - photos.length;
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+        allowsMultipleSelection: true,
+        selectionLimit: remaining, // iOS supports; Android may ignore
+      });
+
+      log("ImagePicker result.canceled", result.canceled);
+
+      if (result.canceled) return;
+
+      const newUris = (result.assets ?? []).map((a) => a.uri).filter(Boolean);
+      log("Picked photo URIs count", newUris.length);
+
+      if (newUris.length === 0) return;
+
+      setPhotos((prev) => {
+        const merged = Array.from(new Set([...prev, ...newUris]));
+        const sliced = merged.slice(0, MAX_PHOTOS);
+        log("Photos state updated", { prevCount: prev.length, newCount: sliced.length });
+        return sliced;
+      });
+    } catch (e) {
+      log("onAddPhoto ERROR", e);
+      Alert.alert("Error", "Could not open your gallery. Please try again.");
+    }
   };
 
-  const buildPreviewData = (): IncidentPreviewData => ({
-    incidentType,
-    details,
-    witnessName,
-    witnessType,
-    dateStr,
-    timeStr,
-    locationStr,
-    photoCount,
-  });
+  const removePhotoAt = (index: number) => {
+    if (submitting) return;
+    setPhotos((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      log("Removed photo", { index, before: prev.length, after: next.length });
+      return next;
+    });
+  };
+
+  // ✅ preview data: include photo URIs so preview can show actual thumbnails
+  const buildPreviewData = (): IncidentPreviewData =>
+    ({
+      incidentType: mode === "emergency" ? "Emergency" : incidentType,
+      details,
+      witnessName,
+      witnessType,
+      dateStr,
+      timeStr,
+      locationStr,
+      photoCount: photos.length,
+      photos,
+      mode,
+    } as any);
 
   const resetForm = () => {
+    log("resetForm()");
     setIncidentType("");
     setDetails("");
     setWitnessName("");
     setWitnessType("");
+    setPhotos([]);
   };
 
-  const onSubmit = () => {
-    // ✅ Validation changes:
-    // - Emergency: require only details
-    // - Complaint: require incidentType + details
+  // ✅ Submit to backend ONLY when user confirms (for complain)
+  const submitToBackend = async (): Promise<SubmitIncidentResponse> => {
+    const payload = {
+      mode,
+      incidentType,
+      details,
+      witnessName,
+      witnessType,
+      dateStr,
+      timeStr,
+      locationStr,
+      photos,
+    };
+
+    log("SUBMIT:START", {
+      mode,
+      incidentType,
+      detailsLen: details.trim().length,
+      witnessNameLen: witnessName.trim().length,
+      witnessTypeLen: witnessType.trim().length,
+      dateStr,
+      timeStr,
+      locationStr,
+      photosCount: photos.length,
+      photosPreview: photos.slice(0, 3).map((u) => (u ? `${u.slice(0, 35)}...` : "")),
+    });
+
+    setSubmitting(true);
+
+    const t0 = Date.now();
+    try {
+      const res = (await submitIncident(payload)) as SubmitIncidentResponse;
+
+      const ms = Date.now() - t0;
+      log("SUBMIT:SUCCESS", { tookMs: ms, response: res });
+
+      Alert.alert(
+        mode === "emergency" ? "Emergency Sent" : "Complaint Secured",
+        "Your report has been submitted."
+      );
+
+      // ✅ we still reset the form so user returns to empty form later
+      resetForm();
+
+      return res;
+    } catch (err: any) {
+      const ms = Date.now() - t0;
+
+      log("SUBMIT:FAILED", {
+        tookMs: ms,
+        message: err?.message,
+        name: err?.name,
+        status: err?.status,
+        data: err?.data,
+        raw: err,
+      });
+
+      Alert.alert("Submit failed", err?.message || "Something went wrong. Please try again.");
+      throw err;
+    } finally {
+      setSubmitting(false);
+      log("SUBMIT:END");
+    }
+  };
+
+  const onSubmit = async () => {
+    if (submitting) return;
+
+    log("onSubmit pressed", {
+      mode,
+      incidentType,
+      detailsLen: details.trim().length,
+      photosCount: photos.length,
+    });
+
+    // ✅ emergency: send immediately (no preview)
     if (mode === "emergency") {
       if (!details.trim()) {
         Alert.alert("Incomplete", "Please fill in the required fields.");
         return;
       }
-
-      Alert.alert("Emergency Sent", "Your emergency report has been submitted.");
-      resetForm();
+      await submitToBackend();
       return;
     }
 
-    // complain mode
+    // ✅ complain: validate and go to preview first
     if (!incidentType.trim() || !details.trim()) {
       Alert.alert("Incomplete", "Please fill in the required fields.");
       return;
     }
 
-    // ✅ Complaint flow:
+    // if parent wants to handle preview navigation externally
     if (onProceedConfirm) {
+      log("Delegating preview navigation to parent via onProceedConfirm()");
       onProceedConfirm(buildPreviewData());
       return;
     }
 
-    // Otherwise fallback to local preview screen behavior
+    log("Opening preview screen (local state)");
     setShowPreview(true);
   };
 
-  const onConfirmComplaint = () => {
-    Alert.alert("Complaint Secured", "Your complaint has been submitted.");
+  // ✅ Confirm on preview sends to backend THEN calls onSubmitted()
+  const onConfirmComplaint = async () => {
+    if (submitting) return;
+    log("Preview Confirm pressed");
+
+    const res = await submitToBackend();
+
+    const incidentId = res?.incident?._id || "";
+    const createdAt = res?.incident?.createdAt;
+
+    // ✅ NEW: close preview, then tell parent we submitted successfully
     setShowPreview(false);
-    resetForm();
+    onSubmitted?.();
+
+    // keep returning for confirmation screen compatibility (safe)
+    return { incidentId, createdAt };
   };
 
-  const actionText = useMemo(() => {
-    return mode === "emergency" ? "Send Emergency" : "Secure Complaint";
-  }, [mode]);
+  const actionText = mode === "emergency" ? "Send Emergency" : "Secure Complaint";
+  const detailsLabel = mode === "emergency" ? "Emergency Detail" : "Incident Detail";
 
-  const detailsLabel = useMemo(() => {
-    return mode === "emergency" ? "Emergency Detail *" : "Incident Detail *";
-  }, [mode]);
-
-  // ✅ Show preview screen (fallback local)
   if (showPreview) {
     return (
       <IncidentLogConfirmScreen
         data={buildPreviewData()}
-        onBack={() => setShowPreview(false)}
-        onConfirm={onConfirmComplaint}
+        submitting={submitting}
+        onBack={() => (submitting ? null : setShowPreview(false))}
+        onConfirm={onConfirmComplaint as any}
+        onGoHome={() => setShowPreview(false)}
       />
     );
   }
-
-  // ✅ helper: measure submit button absolute position
-  const measureSubmitButton = () => {
-    // measureInWindow gives absolute coords (screen)
-    submitBtnRef.current?.measureInWindow((x, y, w, h) => {
-      // Sometimes measure gives 0 when not ready; guard it
-      if (w > 0 && h > 0) {
-        setTarget({ x, y, w, h, ready: true });
-      }
-    });
-  };
-
-  // ✅ Auto-show tutorial (after first render + measure)
-  useEffect(() => {
-    // small delay lets layout settle
-    const t = setTimeout(() => {
-      measureSubmitButton();
-    }, 250);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ✅ show tutorial once target is ready
-  useEffect(() => {
-    if (target.ready) setShowSubmitTutorial(true);
-  }, [target.ready]);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
-      <View style={styles.page}>
+      <KeyboardAvoidingView
+        style={styles.page}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+      >
         {/* Top bar */}
         <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 8) }]}>
           <Pressable
+            disabled={submitting}
             onPress={onBack ?? (() => Alert.alert("Back", "Wire onBack() to navigation"))}
             hitSlop={12}
-            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [
+              styles.backBtn,
+              (pressed || submitting) && { opacity: 0.7 },
+            ]}
           >
-            <Ionicons name="chevron-back" size={22} color={Colors.primary} />
+            <Ionicons name="chevron-back" size={24} color={Colors.primary} />
           </Pressable>
 
           <Text style={styles.topTitle}>Incident Log</Text>
 
-          {/* right spacer for centered title */}
           <View style={{ width: 36, height: 36 }} />
         </View>
 
-        {/* Segmented control */}
-        <View style={styles.segmentWrap}>
-          <View style={styles.segmentPill}>
-            <Pressable
-              onPress={() => setMode("complain")}
-              style={({ pressed }) => [
-                styles.segmentBtn,
-                mode === "complain" && styles.segmentBtnActive,
-                pressed && { transform: [{ scale: 0.99 }] },
-              ]}
+        {/* mode pill */}
+        <View style={styles.pillWrap}>
+          <Pressable
+            disabled={submitting}
+            onPress={openModePicker}
+            style={({ pressed }) => [
+              styles.pillShadow,
+              (pressed || submitting) && { opacity: 0.95 },
+            ]}
+          >
+            <LinearGradient
+              colors={Colors.gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.pill}
             >
-              <Text style={[styles.segmentText, mode === "complain" && styles.segmentTextActive]}>
-                Complain
+              <Text style={styles.pillText}>
+                {mode === "emergency" ? "Emergency" : "Complain"}
               </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setMode("emergency")}
-              style={({ pressed }) => [
-                styles.segmentBtn,
-                mode === "emergency" && styles.segmentBtnActive,
-                pressed && { transform: [{ scale: 0.99 }] },
-              ]}
-            >
-              <Text style={[styles.segmentText, mode === "emergency" && styles.segmentTextActive]}>
-                Emergency
-              </Text>
-            </Pressable>
-          </View>
+            </LinearGradient>
+          </Pressable>
         </View>
 
-        {/* Form */}
+        {/* Scrollable content */}
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.scrollContent,
             { paddingBottom: CONTENT_BOTTOM_PAD },
           ]}
-          // ✅ if user scrolls, re-measure so overlay stays accurate
-          onScrollBeginDrag={() => {
-            if (showSubmitTutorial) setShowSubmitTutorial(false);
-          }}
-          scrollEventThrottle={16}
         >
-          <View style={styles.bodyFill}>
-            <IncidentFormCard
-              detailsLabel={detailsLabel}
-              mode={mode}
-              incidentType={incidentType}
-              details={details}
-              witnessName={witnessName}
-              witnessType={witnessType}
-              dateStr={dateStr}
-              timeStr={timeStr}
-              locationStr={locationStr}
-              onPickIncidentType={openTypePicker}
-              onAddPhoto={onAddPhoto}
-              setDetails={setDetails}
-              setWitnessName={setWitnessName}
-              setWitnessType={setWitnessType}
-            />
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>
+              {detailsLabel} <Text style={styles.required}>*</Text>
+            </Text>
 
-            {/* ✅ Submit Button (wrapped so we can measure it) */}
-            <View
-              ref={submitBtnRef}
-              collapsable={false}
-              onLayout={() => {
-                // When layout changes (rotation, text size, etc.), re-measure
-                measureSubmitButton();
-              }}
-            >
+            {/* Type (only complain) */}
+            {mode === "complain" && (
               <Pressable
-                onPress={() => {
-                  if (showSubmitTutorial) setShowSubmitTutorial(false);
-                  onSubmit();
-                }}
+                disabled={submitting}
+                onPress={openTypePicker}
+                style={({ pressed }) => [(pressed || submitting) && { opacity: 0.95 }]}
+              >
+                <View style={styles.input}>
+                  <Text style={[styles.inputText, !incidentType && styles.placeholder]}>
+                    {incidentType || "Type of Incident"}
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
+            {/* Details */}
+            <View style={[styles.input, styles.textArea]}>
+              <TextInput
+                editable={!submitting}
+                value={details}
+                onChangeText={setDetails}
+                placeholder="A detailed explanation of what happened, including actions, sequence of events, and any relevant details observed during the incident."
+                placeholderTextColor="#9AA7B5"
+                multiline
+                textAlignVertical="top"
+                style={styles.textAreaInput}
+              />
+            </View>
+
+            {/* Add Photo */}
+            <View style={styles.photoRow}>
+              <Pressable
+                disabled={submitting}
+                onPress={onAddPhoto}
                 style={({ pressed }) => [
-                  styles.submitBtn,
-                  pressed && { transform: [{ scale: 0.99 }], opacity: 0.95 },
+                  styles.photoBtn,
+                  (pressed || submitting) && { opacity: 0.9 },
                 ]}
               >
-                <Text style={styles.submitText}>{actionText}</Text>
+                <Ionicons name="cloud-upload-outline" size={18} color={Colors.primary} />
+                <Text style={styles.photoBtnText}>Add Photo</Text>
               </Pressable>
+
+              <Text style={styles.maxText}>(Max {MAX_PHOTOS})</Text>
+            </View>
+
+            {/* thumbs */}
+            {photos.length > 0 && (
+              <View style={styles.thumbRow}>
+                {photos.map((uri, idx) => (
+                  <Pressable
+                    key={`${uri}-${idx}`}
+                    disabled={submitting}
+                    onPress={() => {
+                      Alert.alert("Remove photo?", "Do you want to remove this photo?", [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Remove",
+                          style: "destructive",
+                          onPress: () => removePhotoAt(idx),
+                        },
+                      ]);
+                    }}
+                    style={({ pressed }) => [
+                      styles.thumbBox,
+                      (pressed || submitting) && { opacity: 0.92 },
+                    ]}
+                  >
+                    <Image source={{ uri }} style={styles.thumbImg} />
+                    <View style={styles.thumbX}>
+                      <Ionicons name="close" size={14} color="#FFFFFF" />
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            {/* Witness */}
+            <Text style={[styles.sectionTitle, { marginTop: 14 }]}>Witness</Text>
+
+            <View style={styles.input}>
+              <TextInput
+                editable={!submitting}
+                value={witnessName}
+                onChangeText={setWitnessName}
+                placeholder="Name (Optional)"
+                placeholderTextColor="#9AA7B5"
+                style={styles.textInput}
+              />
+            </View>
+
+            <View style={styles.input}>
+              <TextInput
+                editable={!submitting}
+                value={witnessType}
+                onChangeText={setWitnessType}
+                placeholder="Type (Neighbor, Family, etc.)."
+                placeholderTextColor="#9AA7B5"
+                style={styles.textInput}
+              />
+            </View>
+
+            {/* meta */}
+            <View style={styles.metaRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.metaText}>
+                  <Text style={styles.metaLabel}>Date:</Text> {dateStr}
+                </Text>
+                <Text style={[styles.metaText, { marginTop: 6 }]}>
+                  <Text style={styles.metaLabel}>Location:</Text> {locationStr}
+                </Text>
+              </View>
+
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={styles.metaText}>
+                  <Text style={styles.metaLabel}>Time:</Text> {timeStr}
+                </Text>
+              </View>
             </View>
           </View>
         </ScrollView>
 
-        {/* ✅ Tutorial overlay for the submit button */}
-        <IncidentSubmitTutorialOverlay
-          visible={showSubmitTutorial && target.ready}
-          onClose={() => setShowSubmitTutorial(false)}
-          screenWidth={screenWidth} // ✅ FIXED: correct prop name
-          s={s}
-          targetX={target.x}
-          targetY={target.y}
-          targetW={target.w}
-          targetH={target.h}
-          title="Submit your report"
-          message={
-            mode === "emergency"
-              ? "Tap Send Emergency to submit your emergency report."
-              : "Tap Secure Complaint to submit your complaint securely."
-          }
-        />
-      </View>
+        {/* bottom button */}
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+          <Pressable
+            disabled={submitting}
+            onPress={onSubmit}
+            style={({ pressed }) => [
+              styles.submitShadow,
+              (pressed || submitting) && { opacity: 0.95 },
+            ]}
+          >
+            <LinearGradient
+              colors={Colors.gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.submitBtn, { height: 56 * s }]}
+            >
+              {submitting ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <ActivityIndicator color="#FFFFFF" />
+                  <Text style={styles.submitText}>Submitting...</Text>
+                </View>
+              ) : (
+                <Text style={styles.submitText}>{actionText}</Text>
+              )}
+            </LinearGradient>
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const BG = "#F5FAFE";
+const CARD_BG = "#F3F7FB";
 const BORDER = "#E7EEF7";
 const TEXT_DARK = "#0B2B45";
+const SHADOW = "#000";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
@@ -352,82 +577,224 @@ const styles = StyleSheet.create({
 
   topBar: {
     paddingHorizontal: 14,
-    paddingBottom: 10,
+    paddingBottom: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
   topTitle: {
-    fontSize: 16,
+    fontSize: 22,
     fontWeight: "900",
     color: TEXT_DARK,
+    letterSpacing: 0.2,
   },
 
-  segmentWrap: {
+  pillWrap: {
     paddingHorizontal: 14,
-    paddingTop: 6,
-    paddingBottom: 8,
+    paddingTop: 14,
+    paddingBottom: 16,
   },
-  segmentPill: {
-    height: 34,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: BORDER,
-    flexDirection: "row",
-    overflow: "hidden",
+  pillShadow: {
+    borderRadius: 24,
+    shadowColor: SHADOW,
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 3,
   },
-  segmentBtn: {
-    flex: 1,
+  pill: {
+    height: 46,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },
-  segmentBtnActive: {
-    backgroundColor: Colors.primary,
-  },
-  segmentText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#6B7280",
-  },
-  segmentTextActive: {
+  pillText: {
     color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 0.2,
   },
 
   scrollContent: {
-    flexGrow: 1,
     paddingHorizontal: 14,
-    paddingTop: 6,
-  },
-
-  bodyFill: {
-    flex: 1,
-    justifyContent: "space-between",
+    paddingTop: 4,
     gap: 14,
   },
 
-  submitBtn: {
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.primary,
+  card: {
+    backgroundColor: CARD_BG,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: BORDER,
+    padding: 16,
+    shadowColor: SHADOW,
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 2,
+  },
+
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: TEXT_DARK,
+    marginBottom: 10,
+  },
+  required: {
+    color: "#E11D48",
+    fontWeight: "900",
+  },
+
+  input: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    height: 48,
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  inputText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: TEXT_DARK,
+  },
+  placeholder: {
+    color: "#9AA7B5",
+    fontWeight: "800",
+  },
+  textInput: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: TEXT_DARK,
+    paddingVertical: Platform.OS === "android" ? 0 : 12,
+  },
+
+  textArea: {
+    height: 140,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  textAreaInput: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    color: TEXT_DARK,
+    padding: 0,
+    lineHeight: 20,
+  },
+
+  photoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  photoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: BORDER,
+    paddingHorizontal: 16,
+    height: 40,
+    borderRadius: 14,
+  },
+  photoBtnText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: Colors.primary,
+  },
+  maxText: {
+    marginLeft: 12,
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#9AA7B5",
+  },
+
+  thumbRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  thumbBox: {
+    flex: 1,
+    height: 56,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "#EEF4FB",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
+    overflow: "hidden",
+  },
+  thumbImg: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  thumbX: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  metaRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  metaText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: TEXT_DARK,
+  },
+  metaLabel: {
+    fontWeight: "900",
+    color: "#52677A",
+  },
+
+  footer: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    backgroundColor: BG,
+    borderTopWidth: 0,
+    borderTopColor: "rgba(227,232,239,0.9)",
+  },
+
+  submitShadow: {
+    borderRadius: 28,
+    shadowColor: SHADOW,
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 4,
+  },
+  submitBtn: {
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
   },
   submitText: {
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: "900",
     letterSpacing: 0.2,
   },

@@ -1,6 +1,6 @@
 // src/components/IncidentLogConfirmationScreen/IncidentPreviewCard.tsx
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 export type IncidentPreviewData = {
@@ -11,7 +11,13 @@ export type IncidentPreviewData = {
   dateStr: string;
   timeStr: string;
   locationStr: string;
+
+  // ✅ existing (still supported)
   photoCount?: number;
+
+  // ✅ NEW: real image URIs from IncidentLogScreen
+  photos?: string[];
+  mode?: "complain" | "emergency"; // optional (safe)
 };
 
 type Props = {
@@ -19,13 +25,15 @@ type Props = {
 };
 
 export default function IncidentPreviewCard({ data }: Props) {
-  const photoCount = Math.min(Math.max(data.photoCount ?? 3, 0), 3);
-
   const incidentType = data.incidentType?.trim() ? data.incidentType : "—";
   const details = data.details?.trim() ? data.details : "—";
 
   const witnessName = data.witnessName?.trim() ? data.witnessName : "—";
   const witnessType = data.witnessType?.trim() ? data.witnessType : "—";
+
+  // ✅ Prefer real photos if provided; otherwise fall back to photoCount placeholders
+  const photos = Array.isArray(data.photos) ? data.photos.filter(Boolean).slice(0, 3) : [];
+  const fallbackCount = Math.min(Math.max(data.photoCount ?? 0, 0), 3);
 
   return (
     <View style={styles.card}>
@@ -38,15 +46,23 @@ export default function IncidentPreviewCard({ data }: Props) {
 
       {/* Photos */}
       <View style={styles.photoRow}>
-        {[0, 1, 2].map((i) => (
-          <View key={i} style={styles.photoBox}>
-            <Ionicons
-              name="image-outline"
-              size={22}
-              color={i < photoCount ? "#A7B3C2" : "#E1E7F0"}
-            />
-          </View>
-        ))}
+        {[0, 1, 2].map((i) => {
+          const uri = photos[i];
+
+          return (
+            <View key={i} style={styles.photoBox}>
+              {uri ? (
+                <Image source={{ uri }} style={styles.photoImg} />
+              ) : (
+                <Ionicons
+                  name="image-outline"
+                  size={22}
+                  color={photos.length > 0 ? "#E1E7F0" : i < fallbackCount ? "#A7B3C2" : "#E1E7F0"}
+                />
+              )}
+            </View>
+          );
+        })}
       </View>
 
       {/* Witness */}
@@ -82,7 +98,6 @@ const TEXT_DARK = "#0B2B45";
 const TEXT_MUTED = "#6B7280";
 
 const styles = StyleSheet.create({
-  // ✅ matches screenshot: not too tall, clean spacing
   card: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
@@ -103,7 +118,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  // ✅ small gray line under Incident Detail
   smallLine: {
     fontSize: 11,
     fontWeight: "900",
@@ -111,7 +125,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
-  // ✅ italic body like the screenshot
   detailsItalic: {
     fontSize: 11,
     fontStyle: "italic",
@@ -121,7 +134,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  // ✅ smaller photo boxes like screenshot
   photoRow: {
     flexDirection: "row",
     gap: 10,
@@ -136,6 +148,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#F2F6FF",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden", // ✅ important for rounded image
+  },
+  photoImg: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
   },
 
   witnessName: {
@@ -150,7 +168,6 @@ const styles = StyleSheet.create({
     color: TEXT_MUTED,
   },
 
-  // ✅ same line Date left / Time right
   metaRow: {
     marginTop: 14,
     flexDirection: "row",
@@ -173,7 +190,6 @@ const styles = StyleSheet.create({
     color: TEXT_DARK,
   },
 
-  // ✅ Location below
   locationRow: {
     marginTop: 8,
     flexDirection: "row",
