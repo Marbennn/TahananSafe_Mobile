@@ -68,6 +68,28 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 type IncidentStep = "form" | "confirmed";
 type ReportStep = "list" | "detail";
 
+type LastIncident = {
+  incidentId: string;
+  createdAt?: string;
+};
+
+function formatAlertNo(incidentId?: string) {
+  if (!incidentId) return "—";
+  // looks nicer than a full ObjectId
+  return incidentId.slice(-6).toUpperCase();
+}
+
+function formatDateLine(createdAt?: string) {
+  try {
+    if (!createdAt) return new Date().toLocaleString();
+    const d = new Date(createdAt);
+    if (Number.isNaN(d.getTime())) return new Date().toLocaleString();
+    return d.toLocaleString();
+  } catch {
+    return new Date().toLocaleString();
+  }
+}
+
 /* ===================== MAIN SHELL ===================== */
 
 function MainShell({
@@ -80,12 +102,10 @@ function MainShell({
   const [activeTab, setActiveTab] = useState<TabKey>("Home");
 
   const [incidentStep, setIncidentStep] = useState<IncidentStep>("form");
+  const [lastIncident, setLastIncident] = useState<LastIncident | null>(null);
 
   const [reportStep, setReportStep] = useState<ReportStep>("list");
   const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
-
-  const alertNo = useMemo(() => "676767", []);
-  const confirmedDateLine = useMemo(() => new Date().toLocaleString(), []);
 
   const handleQuickExit = () => {
     Alert.alert("Quick Exit", "Returning to Login", [
@@ -159,32 +179,33 @@ function MainShell({
     );
   }
 
-   if (activeTab === "Incident") {
+  if (activeTab === "Incident") {
     if (incidentStep === "form") {
       return (
         <IncidentLogScreen
           onBack={() => setActiveTab("Home")}
-          onSubmitted={() => setIncidentStep("confirmed")}
+          onSubmitted={(payload) => {
+            // ✅ store real mongo data here
+            setLastIncident(payload);
+            setIncidentStep("confirmed");
+          }}
         />
       );
     }
 
     return (
       <IncidentLogConfirmedScreen
-        alertNo={alertNo}
-        dateLine={confirmedDateLine}
+        alertNo={formatAlertNo(lastIncident?.incidentId)}
+        dateLine={formatDateLine(lastIncident?.createdAt)}
         onGoHome={() => {
-          // ✅ 1) switch to Home FIRST
           setActiveTab("Home");
-
-          // ✅ 2) reset incident flow AFTER switching tabs
-          // (so next time you open Incident, it starts fresh)
           setIncidentStep("form");
+          // optional: keep lastIncident so user can still see it later if needed
+          // setLastIncident(null);
         }}
       />
     );
   }
-
 
   return null;
 }

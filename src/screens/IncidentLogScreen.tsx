@@ -30,9 +30,16 @@ import IncidentLogConfirmScreen from "./IncidentLogConfirmationScreen";
 import type { IncidentPreviewData } from "../components/IncidentLogConfirmationScreen/IncidentPreviewCard";
 import type { TabKey } from "../components/BottomNavBar";
 
+type IncidentSubmittedPayload = {
+  incidentId: string;
+  createdAt?: string;
+};
+
 type Props = {
   onBack?: () => void;
-  onSubmitted?: () => void;
+
+  // ✅ UPDATED: now returns real data from backend
+  onSubmitted?: (payload: IncidentSubmittedPayload) => void;
 
   initialTab?: TabKey | string;
   onTabChange?: (tab: TabKey) => void;
@@ -71,6 +78,28 @@ type SubmitIncidentResponse = {
   };
 };
 
+/* ===================== DATE/TIME HELPERS ===================== */
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function formatDateMMDDYYYY(d: Date) {
+  const mm = pad2(d.getMonth() + 1);
+  const dd = pad2(d.getDate());
+  const yyyy = d.getFullYear();
+  return `${mm}/${dd}/${yyyy}`;
+}
+
+function formatTime12h(d: Date) {
+  let h = d.getHours();
+  const m = pad2(d.getMinutes());
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${m}${ampm}`;
+}
+/* ============================================================ */
+
 export default function IncidentLogScreen({
   onBack,
   onProceedConfirm,
@@ -88,10 +117,26 @@ export default function IncidentLogScreen({
   const [witnessName, setWitnessName] = useState("");
   const [witnessType, setWitnessType] = useState("");
 
-  // demo values (replace later with Date/Time pickers)
-  const [dateStr] = useState("01/15/2026");
-  const [timeStr] = useState("10:00PM");
+  // ✅ REAL current date/time (LIVE update every 2 seconds)
+  const [dateStr, setDateStr] = useState(() => formatDateMMDDYYYY(new Date()));
+  const [timeStr, setTimeStr] = useState(() => formatTime12h(new Date()));
   const [locationStr] = useState("Brgy. 12");
+
+  React.useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setDateStr(formatDateMMDDYYYY(now));
+      setTimeStr(formatTime12h(now));
+    };
+
+    // ✅ update immediately when screen mounts
+    tick();
+
+    // ✅ update every 2 seconds
+    const id = setInterval(tick, 2000);
+
+    return () => clearInterval(id);
+  }, []);
 
   // ✅ selected photos (URIs)
   const [photos, setPhotos] = useState<string[]>([]);
@@ -253,7 +298,7 @@ export default function IncidentLogScreen({
         "Your report has been submitted."
       );
 
-      // ✅ we still reset the form so user returns to empty form later
+      // ✅ reset so form is empty next time
       resetForm();
 
       return res;
@@ -314,7 +359,7 @@ export default function IncidentLogScreen({
     setShowPreview(true);
   };
 
-  // ✅ Confirm on preview sends to backend THEN calls onSubmitted()
+  // ✅ Confirm on preview sends to backend THEN calls onSubmitted(realData)
   const onConfirmComplaint = async () => {
     if (submitting) return;
     log("Preview Confirm pressed");
@@ -324,9 +369,11 @@ export default function IncidentLogScreen({
     const incidentId = res?.incident?._id || "";
     const createdAt = res?.incident?.createdAt;
 
-    // ✅ NEW: close preview, then tell parent we submitted successfully
+    // ✅ close preview first
     setShowPreview(false);
-    onSubmitted?.();
+
+    // ✅ IMPORTANT: send real backend data up to App.tsx
+    onSubmitted?.({ incidentId, createdAt });
 
     // keep returning for confirmation screen compatibility (safe)
     return { incidentId, createdAt };
