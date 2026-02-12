@@ -8,6 +8,9 @@ export type CreateIncidentPayload = {
   incidentType?: string;
   details: string;
 
+  // ✅ NEW
+  offenderName?: string;
+
   witnessName?: string;
   witnessType?: string;
 
@@ -49,6 +52,9 @@ export async function submitIncident(payload: CreateIncidentPayload) {
   if (payload.mode === "complain") {
     form.append("incidentType", payload.incidentType || "");
   }
+
+  // ✅ NEW
+  if (payload.offenderName) form.append("offenderName", payload.offenderName);
 
   if (payload.witnessName) form.append("witnessName", payload.witnessName);
   if (payload.witnessType) form.append("witnessType", payload.witnessType);

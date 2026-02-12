@@ -114,6 +114,9 @@ export default function IncidentLogScreen({
   const [incidentType, setIncidentType] = useState("");
   const [details, setDetails] = useState("");
 
+  // ✅ NEW: offender
+  const [offenderName, setOffenderName] = useState("");
+
   const [witnessName, setWitnessName] = useState("");
   const [witnessType, setWitnessType] = useState("");
 
@@ -238,6 +241,7 @@ export default function IncidentLogScreen({
     ({
       incidentType: mode === "emergency" ? "Emergency" : incidentType,
       details,
+      offenderName, // ✅ NEW
       witnessName,
       witnessType,
       dateStr,
@@ -252,6 +256,7 @@ export default function IncidentLogScreen({
     log("resetForm()");
     setIncidentType("");
     setDetails("");
+    setOffenderName(""); // ✅ NEW
     setWitnessName("");
     setWitnessType("");
     setPhotos([]);
@@ -263,6 +268,7 @@ export default function IncidentLogScreen({
       mode,
       incidentType,
       details,
+      offenderName, // ✅ NEW
       witnessName,
       witnessType,
       dateStr,
@@ -275,6 +281,7 @@ export default function IncidentLogScreen({
       mode,
       incidentType,
       detailsLen: details.trim().length,
+      offenderNameLen: offenderName.trim().length, // ✅ NEW
       witnessNameLen: witnessName.trim().length,
       witnessTypeLen: witnessType.trim().length,
       dateStr,
@@ -534,6 +541,22 @@ export default function IncidentLogScreen({
                 ))}
               </View>
             )}
+
+            {/* ✅ NEW: Offender */}
+            <Text style={[styles.sectionTitle, { marginTop: 14 }]}>
+              Offender (Optional)
+            </Text>
+
+            <View style={styles.input}>
+              <TextInput
+                editable={!submitting}
+                value={offenderName}
+                onChangeText={setOffenderName}
+                placeholder="Name of Offender"
+                placeholderTextColor="#9AA7B5"
+                style={styles.textInput}
+              />
+            </View>
 
             {/* Witness */}
             <Text style={[styles.sectionTitle, { marginTop: 14 }]}>Witness</Text>
