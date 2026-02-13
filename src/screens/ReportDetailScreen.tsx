@@ -1,5 +1,5 @@
 // src/screens/ReportDetailScreen.tsx
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -10,14 +10,16 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { Colors } from "../theme/colors";
 
-// ✅ Make sure ReportItem is exported from ReportScreen.tsx
 import type { ReportItem } from "./ReportScreen";
+import { fetchReportThreads, sendReportThreadMessage, ThreadDto } from "../api/reports";
 
 type ViewKey = "details" | "threads";
 
@@ -39,7 +41,27 @@ type Props = {
   onBack?: () => void;
 };
 
-// ✅ DEFAULT EXPORT (fixes your TS1192)
+function formatStamp(d: Date) {
+  return d.toLocaleString(undefined, {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function dtoToUi(dto: ThreadDto): ThreadMsg {
+  const isResident = dto.senderRole === "resident";
+  return {
+    id: dto._id,
+    side: isResident ? "right" : "left",
+    sender: isResident ? undefined : dto.senderName || "Staff",
+    text: dto.text,
+    time: dto.createdAt ? formatStamp(new Date(dto.createdAt)) : "",
+  };
+}
+
 export default function ReportDetailScreen({
   report,
   initialTab = "Reports",
@@ -71,61 +93,85 @@ export default function ReportDetailScreen({
   const pressFab = () => handleTab("Incident");
   const longPressFab = () => onQuickExit?.();
 
-  const [draft, setDraft] = useState("");
-  const [messages, setMessages] = useState<ThreadMsg[]>(() => [
-    {
-      id: "m1",
-      side: "left",
-      sender: "Brgy. Captain Rawr",
-      text: "Otw to the rescue",
-      time: "01/12/2026, 10:00PM",
-    },
-    {
-      id: "m2",
-      side: "right",
-      text: "Please hurry, i am suffering from minor injury uwu",
-      time: "01/12/2026, 10:00PM",
-    },
-    {
-      id: "m3",
-      side: "left",
-      sender: "Secretary Meow",
-      text: "Okay, wait there",
-      time: "01/12/2026, 10:00PM",
-    },
-    {
-      id: "m4",
-      side: "right",
-      text: "Thank you so much",
-      time: "01/12/2026, 10:00PM",
-    },
-  ]);
-
-  // ✅ keep this typed safely
   const threadScrollRef = useRef<ScrollView | null>(null);
 
-  const onSend = () => {
+  const [draft, setDraft] = useState("");
+
+  // ✅ backend thread state
+  const [loadingThreads, setLoadingThreads] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [messages, setMessages] = useState<ThreadMsg[]>([]);
+  const [threadsError, setThreadsError] = useState("");
+
+  // ✅ IMPORTANT: ensure we have an id
+  // Your ReportItem may have id or _id. Use what exists.
+  const reportId = (report as any)?.id || (report as any)?._id || "";
+
+  const loadThreads = async () => {
+    if (!reportId) return;
+    setLoadingThreads(true);
+    setThreadsError("");
+    try {
+      const list = await fetchReportThreads(reportId);
+      const ui = list.map(dtoToUi);
+      setMessages(ui);
+
+      setTimeout(() => {
+        threadScrollRef.current?.scrollToEnd({ animated: true });
+      }, 80);
+    } catch (e: any) {
+      setThreadsError(e?.message || "Failed to load threads");
+    } finally {
+      setLoadingThreads(false);
+    }
+  };
+
+  // Load threads when switching to Threads tab
+  useEffect(() => {
+    if (view === "threads") {
+      loadThreads();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, reportId]);
+
+  const onSend = async () => {
     const t = draft.trim();
     if (!t) return;
+    if (!reportId) {
+      Alert.alert("Missing report id", "Cannot send message because reportId is empty.");
+      return;
+    }
+    if (sending) return;
 
-    const now = new Date();
-    const stamp = now.toLocaleString(undefined, {
-      month: "2-digit",
-      day: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    setSending(true);
 
-    setMessages((prev) => [
-      ...prev,
-      { id: `m_${Date.now()}`, side: "right", text: t, time: stamp },
-    ]);
+    // ✅ Optimistic UI
+    const optimistic: ThreadMsg = {
+      id: `tmp_${Date.now()}`,
+      side: "right",
+      text: t,
+      time: formatStamp(new Date()),
+    };
+    setMessages((prev) => [...prev, optimistic]);
     setDraft("");
 
     setTimeout(() => {
       threadScrollRef.current?.scrollToEnd({ animated: true });
     }, 50);
+
+    try {
+      await sendReportThreadMessage(reportId, t);
+
+      // Refresh from backend to get official saved message + any new staff replies
+      await loadThreads();
+    } catch (e: any) {
+      Alert.alert("Send failed", e?.message || "Could not send message.");
+      // rollback optimistic message
+      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+      setDraft(t);
+    } finally {
+      setSending(false);
+    }
   };
 
   const threadHeader = useMemo(() => {
@@ -205,10 +251,8 @@ export default function ReportDetailScreen({
             ]}
           >
             <View style={styles.detailsCard}>
-              {/* ✅ PENDING uses primary color */}
               <Text style={styles.detailsH1}>
-                Incident Detail:{" "}
-                <Text style={styles.pendingText}>PENDING</Text>
+                Incident Detail: <Text style={styles.pendingText}>PENDING</Text>
               </Text>
 
               <Text style={styles.detailsBody}>
@@ -244,59 +288,74 @@ export default function ReportDetailScreen({
               <View style={styles.threadCard}>
                 <Text style={styles.threadHeaderText}>{threadHeader}</Text>
 
-                <ScrollView
-                  // ✅ FIXED: must return void (not ScrollView)
-                  ref={(r) => {
-                    threadScrollRef.current = r;
-                  }}
-                  style={styles.threadScroll}
-                  contentContainerStyle={styles.threadScrollContent}
-                  showsVerticalScrollIndicator
-                  nestedScrollEnabled
-                  keyboardShouldPersistTaps="handled"
-                >
-                  {messages.map((m) => {
-                    const isLeft = m.side === "left";
-                    return (
-                      <View key={m.id} style={styles.msgBlock}>
-                        {isLeft && m.sender ? (
-                          <Text style={styles.msgTopLine}>
-                            {m.sender}
-                            {"\n"}
-                            <Text style={styles.msgTime}>{m.time}</Text>
-                          </Text>
-                        ) : null}
+                {loadingThreads ? (
+                  <View style={styles.centerState}>
+                    <ActivityIndicator />
+                    <Text style={styles.stateText}>Loading threads...</Text>
+                  </View>
+                ) : threadsError ? (
+                  <View style={styles.centerState}>
+                    <Text style={[styles.stateText, { color: "#EF4444" }]}>
+                      {threadsError}
+                    </Text>
+                    <Pressable onPress={loadThreads} style={styles.retryBtn}>
+                      <Text style={styles.retryText}>Retry</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <ScrollView
+                    ref={(r) => {
+                      threadScrollRef.current = r;
+                    }}
+                    style={styles.threadScroll}
+                    contentContainerStyle={styles.threadScrollContent}
+                    showsVerticalScrollIndicator
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {messages.map((m) => {
+                      const isLeft = m.side === "left";
+                      return (
+                        <View key={m.id} style={styles.msgBlock}>
+                          {isLeft && m.sender ? (
+                            <Text style={styles.msgTopLine}>
+                              {m.sender}
+                              {"\n"}
+                              <Text style={styles.msgTime}>{m.time}</Text>
+                            </Text>
+                          ) : null}
 
-                        <View
-                          style={[
-                            styles.msgRow,
-                            isLeft ? styles.msgRowLeft : styles.msgRowRight,
-                          ]}
-                        >
                           <View
                             style={[
-                              styles.bubble,
-                              isLeft ? styles.bubbleLeft : styles.bubbleRight,
+                              styles.msgRow,
+                              isLeft ? styles.msgRowLeft : styles.msgRowRight,
                             ]}
                           >
-                            <Text style={styles.bubbleText}>{m.text}</Text>
+                            <View
+                              style={[
+                                styles.bubble,
+                                isLeft ? styles.bubbleLeft : styles.bubbleRight,
+                              ]}
+                            >
+                              <Text style={styles.bubbleText}>{m.text}</Text>
+                            </View>
                           </View>
-                        </View>
 
-                        {!isLeft ? (
-                          <Text
-                            style={[
-                              styles.msgTime,
-                              { textAlign: "right", marginTop: 4 },
-                            ]}
-                          >
-                            {m.time}
-                          </Text>
-                        ) : null}
-                      </View>
-                    );
-                  })}
-                </ScrollView>
+                          {!isLeft ? (
+                            <Text
+                              style={[
+                                styles.msgTime,
+                                { textAlign: "right", marginTop: 4 },
+                              ]}
+                            >
+                              {m.time}
+                            </Text>
+                          ) : null}
+                        </View>
+                      );
+                    })}
+                  </ScrollView>
+                )}
 
                 <View style={styles.replyRow}>
                   <TextInput
@@ -307,19 +366,25 @@ export default function ReportDetailScreen({
                     style={styles.replyInput}
                     returnKeyType="send"
                     onSubmitEditing={onSend}
+                    editable={!sending}
                   />
 
                   <Pressable
                     onPress={onSend}
+                    disabled={sending}
                     style={({ pressed }) => [
                       styles.sendBtn,
-                      pressed && {
+                      (pressed || sending) && {
                         transform: [{ scale: 0.98 }],
                         opacity: 0.95,
                       },
                     ]}
                   >
-                    <Ionicons name="send" size={18} color="#FFFFFF" />
+                    {sending ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Ionicons name="send" size={18} color="#FFFFFF" />
+                    )}
                   </Pressable>
                 </View>
               </View>
@@ -428,11 +493,7 @@ const styles = StyleSheet.create({
     color: TEXT_DARK,
     marginBottom: 10,
   },
-
-  // ✅ NEW: makes only "PENDING" primary
-  pendingText: {
-    color: Colors.primary,
-  },
+  pendingText: { color: Colors.primary },
 
   detailsBody: {
     fontSize: 10,
@@ -576,5 +637,30 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 8 },
     elevation: 4,
+  },
+
+  centerState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  stateText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#64748B",
+  },
+  retryBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "#FFFFFF",
+  },
+  retryText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: Colors.primary,
   },
 });
