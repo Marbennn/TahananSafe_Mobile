@@ -14,6 +14,8 @@ npx expo install expo-constants
 npx expo install @react-native-async-storage/async-storage
 npx expo install @react-native-community/datetimepicker
 npx expo install @react-native-community/datetimepicker
+npx expo install expo-location
+
 
 
 
