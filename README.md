@@ -16,6 +16,7 @@ npx expo install @react-native-community/datetimepicker
 npx expo install @react-native-community/datetimepicker
 npx expo install expo-location
 
+npx expo install expo-local-authentication expo-secure-store
 
 
 

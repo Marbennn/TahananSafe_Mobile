@@ -7,6 +7,9 @@ const KEYS = {
   refreshToken: "@tahanansafe_refresh_token",
   hasPin: "@tahanansafe_has_pin",
 
+  // ✅ IMPORTANT: clear stored user on logout too
+  user: "@tahanansafe_user",
+
   // ✅ onboarding shown flag
   onboardingSeen: "@tahanansafe_onboarding_seen",
 
@@ -79,6 +82,7 @@ export async function setLoggedIn(value: boolean) {
     await AsyncStorage.setItem(KEYS.loggedIn, "1");
   } else {
     // ✅ logging out clears session tokens + login flags
+    // ✅ plus stored user (fix stale "last account" name)
     // ✅ but it should NOT delete per-user pinSkipped_*
     pinUnlockedThisRun = false;
 
@@ -87,6 +91,7 @@ export async function setLoggedIn(value: boolean) {
       KEYS.accessToken,
       KEYS.refreshToken,
       KEYS.hasPin,
+      KEYS.user, // ✅ FIX: remove stored user
       // ✅ don't remove KEYS.pinSkipped (legacy) OR per-user keys
     ]);
 
@@ -135,6 +140,7 @@ export async function clearSession() {
     KEYS.accessToken,
     KEYS.refreshToken,
     KEYS.hasPin,
+    KEYS.user, // ✅ FIX: remove stored user
     // ✅ do NOT remove per-user pinSkipped_*
   ]);
 

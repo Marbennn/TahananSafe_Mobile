@@ -9,8 +9,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-// ✅ ADD THIS
-import { AuthProvider } from "./src/auth/AuthContext";
+// ✅ Auth
+import { AuthProvider, useAuth } from "./src/auth/AuthContext";
 
 // Screens
 import AppSplashScreen from "./src/screens/AppSplashScreen";
@@ -75,7 +75,6 @@ type LastIncident = {
 
 function formatAlertNo(incidentId?: string) {
   if (!incidentId) return "—";
-  // looks nicer than a full ObjectId
   return incidentId.slice(-6).toUpperCase();
 }
 
@@ -117,7 +116,6 @@ function MainShell({
     if (tab !== "Reports") setReportStep("list");
   };
 
-  // ✅ Helper: open report detail from ANY tab (Home recent logs, Reports list, etc.)
   const openReportDetail = (item: ReportItem) => {
     setSelectedReport(item);
     setReportStep("detail");
@@ -131,7 +129,6 @@ function MainShell({
         onQuickExit={handleQuickExit}
         onTabChange={handleTabChange}
         onOpenNotifications={onOpenNotifications}
-        // ✅ NEW: this makes RecentLogCard open ReportDetailScreen
         onOpenReport={openReportDetail}
       />
     );
@@ -192,7 +189,6 @@ function MainShell({
         <IncidentLogScreen
           onBack={() => setActiveTab("Home")}
           onSubmitted={(payload) => {
-            // ✅ store real mongo data here
             setLastIncident(payload);
             setIncidentStep("confirmed");
           }}
@@ -213,6 +209,38 @@ function MainShell({
   }
 
   return null;
+}
+
+/* ===================== MAIN SCREEN WRAPPER (FIX) ===================== */
+/**
+ * ✅ This wrapper lets us call AuthContext.logout() properly.
+ * That clears @tahanansafe_user so GreetingCard won't show the previous account.
+ */
+function MainScreenWrapper({ navigation }: { navigation: any }) {
+  const { logout: authLogout } = useAuth() as any;
+
+  return (
+    <MainShell
+      onLogout={async () => {
+        // ✅ reset in-memory pin unlock
+        resetPinUnlockedThisRun();
+
+        // ✅ IMPORTANT: clear AuthContext + @tahanansafe_user
+        try {
+          await authLogout();
+        } catch {
+          // ignore
+        }
+
+        // ✅ keep your session flags/tokens consistent too
+        await setLoggedIn(false);
+        await setHasPin(false);
+
+        navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
+      }}
+      onOpenNotifications={() => navigation.navigate("Notifications")}
+    />
+  );
 }
 
 /* ===================== APP ROOT ===================== */
@@ -386,18 +414,7 @@ export default function App() {
               </Stack.Screen>
 
               <Stack.Screen name="Main">
-                {({ navigation }) => (
-                  <MainShell
-                    onLogout={async () => {
-                      resetPinUnlockedThisRun();
-                      await setLoggedIn(false);
-                      await setHasPin(false);
-
-                      navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
-                    }}
-                    onOpenNotifications={() => navigation.navigate("Notifications")}
-                  />
-                )}
+                {({ navigation }) => <MainScreenWrapper navigation={navigation} />}
               </Stack.Screen>
 
               <Stack.Screen name="Notifications">

@@ -282,6 +282,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       backgroundColor: "#FFFFFF",
       fontSize: scale(14),
       color: Colors.text,
+      justifyContent: "center",
     },
 
     inputIdle: { borderColor: "#E5E7EB" },

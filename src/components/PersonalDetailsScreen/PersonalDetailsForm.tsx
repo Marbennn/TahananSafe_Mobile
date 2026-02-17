@@ -6,9 +6,10 @@ import {
   Text,
   TextInput,
   View,
-  ScrollView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { Colors } from "../../theme/colors";
 
 type GenderOption = { id: "male" | "female"; label: string };
@@ -60,26 +61,28 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
-function formatDobParts(monthIndex0: number, day: number, year: number) {
-  const mm = pad2(monthIndex0 + 1);
-  const dd = pad2(day);
-  return `${mm}/${dd}/${year}`;
+function formatDobDate(d: Date) {
+  const mm = pad2(d.getMonth() + 1);
+  const dd = pad2(d.getDate());
+  const yyyy = d.getFullYear();
+  return `${mm}/${dd}/${yyyy}`;
 }
 
-function parseDobToParts(s: string): { monthIndex0: number; day: number; year: number } | null {
+function parseDobToDate(s: string): Date | null {
   const m = s.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (!m) return null;
   const mm = Number(m[1]);
   const dd = Number(m[2]);
   const yyyy = Number(m[3]);
+
   if (mm < 1 || mm > 12) return null;
   if (dd < 1 || dd > 31) return null;
   if (yyyy < 1900 || yyyy > 3000) return null;
-  return { monthIndex0: mm - 1, day: dd, year: yyyy };
-}
 
-function daysInMonth(year: number, monthIndex0: number) {
-  return new Date(year, monthIndex0 + 1, 0).getDate();
+  const d = new Date(yyyy, mm - 1, dd);
+  if (d.getFullYear() !== yyyy || d.getMonth() !== mm - 1 || d.getDate() !== dd) return null;
+
+  return d;
 }
 
 // ✅ Local part validation: must be 9XXXXXXXXX (10 digits starting with 9)
@@ -123,19 +126,11 @@ export default function PersonalDetailsForm({
   // modals
   const [genderOpen, setGenderOpen] = useState(false);
 
-  // ✅ DOB modal + step modals
-  const [dobOpen, setDobOpen] = useState(false);
-  const [monthOpen, setMonthOpen] = useState(false);
-  const [dayOpen, setDayOpen] = useState(false);
-  const [yearOpen, setYearOpen] = useState(false);
-
   const selectedGenderLabel =
     genderOptions.find((g) => g.id === gender)?.label ?? "Select your gender";
 
-  // ✅ local phone state (digits only after +63)
+  // ✅ local phone state
   const [localPhone, setLocalPhone] = useState("");
-
-  // ✅ show validation only after user touches the field
   const [contactTouched, setContactTouched] = useState(false);
 
   useEffect(() => {
@@ -143,15 +138,8 @@ export default function PersonalDetailsForm({
     setLocalPhone(local);
   }, [contactNumber]);
 
-  /**
-   * ✅ NO MORE forcing 9:
-   * - keep digits only
-   * - max 10 digits
-   * - store as "+63 XXXXXXXXXX"
-   */
   const commitPhone = (nextLocal10: string) => {
     const cleaned = digitsOnly(nextLocal10).slice(0, 10);
-
     setLocalPhone(cleaned);
 
     if (!cleaned) {
@@ -161,117 +149,48 @@ export default function PersonalDetailsForm({
     setContactNumber(formatFullPH(cleaned));
   };
 
-  // ✅ show error if user already touched and current input is invalid
   const showPhoneError =
     contactTouched && localPhone.length > 0 && !isValidLocalMobile10(localPhone);
 
-  /** ---------------- DOB 3-PART PICKER ---------------- **/
-  const monthOptions = useMemo(
-    () => [
-      "January",
-      "February",
-      "March",
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December",
-    ],
-    []
-  );
+  /** ---------------- DOB PICKER ---------------- **/
+  // Android: real popup calendar
+  const [androidDobOpen, setAndroidDobOpen] = useState(false);
 
-  const now = useMemo(() => new Date(), []);
-  const currentYear = now.getFullYear();
-  const currentMonthIndex0 = now.getMonth(); // 0..11
-  const currentDay = now.getDate(); // 1..31
+  // iOS: inline calendar shown/hidden under the input
+  const [iosInlineOpen, setIosInlineOpen] = useState(false);
 
-  // choose a reasonable year range
-  const yearOptions = useMemo(() => {
-    const minYear = currentYear - 90; // 90 yrs back
-    const maxYear = currentYear; // ✅ up to current year only
-    const arr: number[] = [];
-    for (let y = maxYear; y >= minYear; y--) arr.push(y); // descending
-    return arr;
-  }, [currentYear]);
-
-  // Local draft values for modal (user can cancel without changing dob)
-  const parsed = useMemo(() => parseDobToParts(dob), [dob]);
-
-  const [draftMonth, setDraftMonth] = useState<number>(parsed?.monthIndex0 ?? 0);
-  const [draftDay, setDraftDay] = useState<number>(parsed?.day ?? 1);
-  const [draftYear, setDraftYear] = useState<number>(parsed?.year ?? (currentYear - 18));
-
-  // when dob changes externally, update draft
-  useEffect(() => {
-    const p = parseDobToParts(dob);
-    if (p) {
-      setDraftMonth(p.monthIndex0);
-      setDraftDay(p.day);
-      setDraftYear(p.year);
-    }
-  }, [dob]);
-
-  // ✅ helper: is current year/month selected?
-  const isCurrentYear = draftYear === currentYear;
-  const isCurrentMonthInCurrentYear = isCurrentYear && draftMonth === currentMonthIndex0;
-
-  // ✅ clamp month/day if user ends up in the future
-  useEffect(() => {
-    if (isCurrentYear && draftMonth > currentMonthIndex0) {
-      setDraftMonth(currentMonthIndex0);
-      return;
-    }
-
-    const maxInMonth = daysInMonth(draftYear, draftMonth);
-    let allowedMaxDay = maxInMonth;
-
-    if (isCurrentMonthInCurrentYear) {
-      allowedMaxDay = Math.min(allowedMaxDay, currentDay);
-    }
-
-    if (draftDay > allowedMaxDay) setDraftDay(allowedMaxDay);
-    if (draftDay < 1) setDraftDay(1);
-  }, [
-    draftYear,
-    draftMonth,
-    draftDay,
-    isCurrentYear,
-    isCurrentMonthInCurrentYear,
-    currentMonthIndex0,
-    currentDay,
-    currentYear,
-  ]);
-
-  const dayOptions = useMemo(() => {
-    const maxInMonth = daysInMonth(draftYear, draftMonth);
-    let maxAllowed = maxInMonth;
-
-    if (draftYear === currentYear && draftMonth === currentMonthIndex0) {
-      maxAllowed = Math.min(maxAllowed, currentDay);
-    }
-
-    const arr: number[] = [];
-    for (let d = 1; d <= maxAllowed; d++) arr.push(d);
-    return arr;
-  }, [draftYear, draftMonth, currentYear, currentMonthIndex0, currentDay]);
+  const minDobDate = useMemo(() => new Date(1900, 0, 1), []);
+  const maxDobDate = useMemo(() => new Date(), []);
 
   const dobDisplay = useMemo(() => {
     if (dob?.trim()?.length) return dob;
     return "MM/DD/YYYY";
   }, [dob]);
 
-  const draftDobLabel = useMemo(() => {
-    return `${monthOptions[draftMonth]} ${draftDay}, ${draftYear}`;
-  }, [draftMonth, draftDay, draftYear, monthOptions]);
+  const onDobPress = () => {
+    if (Platform.OS === "android") {
+      setAndroidDobOpen(true);
+      return;
+    }
+    // iOS: toggle inline calendar
+    setIosInlineOpen((v) => !v);
+  };
 
-  const saveDobFromDraft = () => {
-    const formatted = formatDobParts(draftMonth, draftDay, draftYear);
-    setDob(formatted);
-    setDobOpen(false);
+  const onChangeAndroid = (event: DateTimePickerEvent, selected?: Date) => {
+    // closes automatically on Android (OK/dismiss)
+    setAndroidDobOpen(false);
+
+    if (event.type === "dismissed") return;
+    if (selected) setDob(formatDobDate(selected));
+  };
+
+  const onChangeIosInline = (_event: DateTimePickerEvent, selected?: Date) => {
+    // inline calendar always "changes" when user taps a date
+    if (selected) {
+      setDob(formatDobDate(selected));
+      // ✅ auto-close after picking
+      setIosInlineOpen(false);
+    }
   };
 
   return (
@@ -286,7 +205,7 @@ export default function PersonalDetailsForm({
             placeholder="Enter your legal first name"
             placeholderTextColor={Colors.placeholder}
             autoCapitalize="words"
-            maxLength={16} // ✅ limit to 16
+            maxLength={16}
             style={[
               styles.input,
               firstFocused ? styles.inputFocused : styles.inputIdle,
@@ -305,7 +224,7 @@ export default function PersonalDetailsForm({
             placeholder="Enter your legal last name"
             placeholderTextColor={Colors.placeholder}
             autoCapitalize="words"
-            maxLength={16} // ✅ limit to 16
+            maxLength={16}
             style={[
               styles.input,
               lastFocused ? styles.inputFocused : styles.inputIdle,
@@ -315,12 +234,12 @@ export default function PersonalDetailsForm({
           />
         </View>
 
-        {/* ✅ DOB (opens custom picker modal) */}
+        {/* ✅ DOB */}
         <View style={styles.fieldBlock}>
           <Text style={styles.label}>Date of Birth</Text>
 
           <Pressable
-            onPress={() => setDobOpen(true)}
+            onPress={onDobPress}
             hitSlop={10}
             style={[
               styles.input,
@@ -346,9 +265,45 @@ export default function PersonalDetailsForm({
 
             <Ionicons name="calendar-outline" size={scale(18)} color="#6B7280" />
           </Pressable>
+
+          {/* ✅ iOS Inline Calendar (no modal, no spinner) */}
+          {Platform.OS === "ios" && iosInlineOpen && (
+            <View
+              style={{
+                marginTop: vscale(10),
+                borderWidth: 1.4,
+                borderColor: "#E5E7EB",
+                borderRadius: scale(14),
+                overflow: "hidden",
+                backgroundColor: "#FFFFFF",
+              }}
+            >
+              <DateTimePicker
+                value={parseDobToDate(dob) ?? new Date(2000, 0, 1)}
+                mode="date"
+                display="inline"
+                minimumDate={minDobDate}
+                maximumDate={maxDobDate}
+                onChange={onChangeIosInline}
+                style={{ alignSelf: "stretch" }}
+              />
+            </View>
+          )}
         </View>
 
-        {/* ✅ CONTACT NUMBER (fixed +63 prefix, NO forcing 9, show red validation text) */}
+        {/* ✅ Android Calendar Popup */}
+        {Platform.OS === "android" && androidDobOpen && (
+          <DateTimePicker
+            value={parseDobToDate(dob) ?? new Date(2000, 0, 1)}
+            mode="date"
+            display="calendar"
+            minimumDate={minDobDate}
+            maximumDate={maxDobDate}
+            onChange={onChangeAndroid}
+          />
+        )}
+
+        {/* ✅ CONTACT NUMBER */}
         <View style={styles.fieldBlock}>
           <Text style={styles.label}>Contact Number</Text>
 
@@ -386,9 +341,7 @@ export default function PersonalDetailsForm({
                 color: Colors.text,
                 paddingVertical: 0,
               }}
-              onFocus={() => {
-                setContactFocused(true);
-              }}
+              onFocus={() => setContactFocused(true)}
               onBlur={() => {
                 setContactFocused(false);
                 setContactTouched(true);
@@ -408,7 +361,10 @@ export default function PersonalDetailsForm({
           <Pressable
             onPress={() => setGenderOpen(true)}
             hitSlop={10}
-            style={({ pressed }) => [styles.select, pressed ? { opacity: 0.95 } : null]}
+            style={({ pressed }) => [
+              styles.select,
+              pressed ? { opacity: 0.95 } : null,
+            ]}
           >
             <Text style={styles.selectText} numberOfLines={1}>
               {selectedGenderLabel}
@@ -419,219 +375,6 @@ export default function PersonalDetailsForm({
 
         <View style={{ height: vscale(80) }} />
       </View>
-
-      {/* ---------------- DOB MAIN MODAL ---------------- */}
-      <Modal
-        visible={dobOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDobOpen(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setDobOpen(false)}>
-          <Pressable style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Select Date of Birth</Text>
-
-            <View style={{ marginBottom: vscale(10) }}>
-              <Text style={{ color: "#111827", fontWeight: "800", fontSize: scale(13) }}>
-                {draftDobLabel}
-              </Text>
-              <Text style={{ color: "#6B7280", marginTop: vscale(4), fontSize: scale(12) }}>
-                Pick Month, Day, and Year separately.
-              </Text>
-            </View>
-
-            <View style={{ gap: vscale(10) }}>
-              <Pressable
-                onPress={() => setMonthOpen(true)}
-                style={[styles.select, { borderColor: "#E5E7EB" }]}
-              >
-                <Text style={[styles.selectText, { color: "#111827" }]}>
-                  Month: {monthOptions[draftMonth]}
-                </Text>
-                <Ionicons name="chevron-down" size={scale(18)} color="#6B7280" />
-              </Pressable>
-
-              <Pressable
-                onPress={() => setDayOpen(true)}
-                style={[styles.select, { borderColor: "#E5E7EB" }]}
-              >
-                <Text style={[styles.selectText, { color: "#111827" }]}>
-                  Day: {draftDay}
-                </Text>
-                <Ionicons name="chevron-down" size={scale(18)} color="#6B7280" />
-              </Pressable>
-
-              <Pressable
-                onPress={() => setYearOpen(true)}
-                style={[styles.select, { borderColor: "#E5E7EB" }]}
-              >
-                <Text style={[styles.selectText, { color: "#111827" }]}>
-                  Year: {draftYear}
-                </Text>
-                <Ionicons name="chevron-down" size={scale(18)} color="#6B7280" />
-              </Pressable>
-            </View>
-
-            <View style={{ marginTop: vscale(12) }}>
-              <Pressable onPress={saveDobFromDraft} style={styles.modalCancel}>
-                <Text style={[styles.modalCancelText, { color: "#111827" }]}>Save</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setDobOpen(false)}
-                style={[styles.modalCancel, { marginTop: vscale(8) }]}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </Pressable>
-            </View>
-
-            {/* ---------- Month Picker Modal ---------- */}
-            <Modal
-              visible={monthOpen}
-              transparent
-              animationType="fade"
-              onRequestClose={() => setMonthOpen(false)}
-            >
-              <Pressable style={styles.modalOverlay} onPress={() => setMonthOpen(false)}>
-                <Pressable style={styles.modalSheet} onPress={() => {}}>
-                  <Text style={styles.modalTitle}>Select Month</Text>
-                  <ScrollView style={{ maxHeight: vscale(320) }}>
-                    {monthOptions.map((label, idx) => {
-                      const active = idx === draftMonth;
-
-                      const isFutureMonth = draftYear === currentYear && idx > currentMonthIndex0;
-                      const disabled = isFutureMonth;
-
-                      return (
-                        <Pressable
-                          key={label}
-                          onPress={() => {
-                            if (disabled) return;
-                            setDraftMonth(idx);
-                            setMonthOpen(false);
-                          }}
-                          style={({ pressed }) => [
-                            styles.modalItem,
-                            active ? styles.modalItemActive : null,
-                            disabled ? { opacity: 0.45 } : null,
-                            pressed && !disabled ? { opacity: 0.92 } : null,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.modalItemText,
-                              active ? styles.modalItemTextActive : null,
-                            ]}
-                          >
-                            {label}
-                          </Text>
-                          {active ? (
-                            <Ionicons name="checkmark" size={scale(18)} color={activeBlue} />
-                          ) : null}
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-
-                  <Pressable onPress={() => setMonthOpen(false)} style={styles.modalCancel}>
-                    <Text style={styles.modalCancelText}>Cancel</Text>
-                  </Pressable>
-                </Pressable>
-              </Pressable>
-            </Modal>
-
-            {/* ---------- Day Picker Modal ---------- */}
-            <Modal
-              visible={dayOpen}
-              transparent
-              animationType="fade"
-              onRequestClose={() => setDayOpen(false)}
-            >
-              <Pressable style={styles.modalOverlay} onPress={() => setDayOpen(false)}>
-                <Pressable style={styles.modalSheet} onPress={() => {}}>
-                  <Text style={styles.modalTitle}>Select Day</Text>
-                  <ScrollView style={{ maxHeight: vscale(320) }}>
-                    {dayOptions.map((d) => {
-                      const active = d === draftDay;
-
-                      return (
-                        <Pressable
-                          key={String(d)}
-                          onPress={() => {
-                            setDraftDay(d);
-                            setDayOpen(false);
-                          }}
-                          style={({ pressed }) => [
-                            styles.modalItem,
-                            active ? styles.modalItemActive : null,
-                            pressed ? { opacity: 0.92 } : null,
-                          ]}
-                        >
-                          <Text style={[styles.modalItemText, active ? styles.modalItemTextActive : null]}>
-                            {d}
-                          </Text>
-                          {active ? (
-                            <Ionicons name="checkmark" size={scale(18)} color={activeBlue} />
-                          ) : null}
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-
-                  <Pressable onPress={() => setDayOpen(false)} style={styles.modalCancel}>
-                    <Text style={styles.modalCancelText}>Cancel</Text>
-                  </Pressable>
-                </Pressable>
-              </Pressable>
-            </Modal>
-
-            {/* ---------- Year Picker Modal ---------- */}
-            <Modal
-              visible={yearOpen}
-              transparent
-              animationType="fade"
-              onRequestClose={() => setYearOpen(false)}
-            >
-              <Pressable style={styles.modalOverlay} onPress={() => setYearOpen(false)}>
-                <Pressable style={styles.modalSheet} onPress={() => {}}>
-                  <Text style={styles.modalTitle}>Select Year</Text>
-                  <ScrollView style={{ maxHeight: vscale(320) }}>
-                    {yearOptions.map((y) => {
-                      const active = y === draftYear;
-
-                      return (
-                        <Pressable
-                          key={String(y)}
-                          onPress={() => {
-                            setDraftYear(y);
-                            setYearOpen(false);
-                          }}
-                          style={({ pressed }) => [
-                            styles.modalItem,
-                            active ? styles.modalItemActive : null,
-                            pressed ? { opacity: 0.92 } : null,
-                          ]}
-                        >
-                          <Text style={[styles.modalItemText, active ? styles.modalItemTextActive : null]}>
-                            {y}
-                          </Text>
-                          {active ? (
-                            <Ionicons name="checkmark" size={scale(18)} color={activeBlue} />
-                          ) : null}
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-
-                  <Pressable onPress={() => setYearOpen(false)} style={styles.modalCancel}>
-                    <Text style={styles.modalCancelText}>Cancel</Text>
-                  </Pressable>
-                </Pressable>
-              </Pressable>
-            </Modal>
-          </Pressable>
-        </Pressable>
-      </Modal>
 
       {/* ---------------- Gender Modal ---------------- */}
       <Modal
@@ -659,7 +402,12 @@ export default function PersonalDetailsForm({
                     pressed ? { opacity: 0.92 } : null,
                   ]}
                 >
-                  <Text style={[styles.modalItemText, active ? styles.modalItemTextActive : null]}>
+                  <Text
+                    style={[
+                      styles.modalItemText,
+                      active ? styles.modalItemTextActive : null,
+                    ]}
+                  >
                     {opt.label}
                   </Text>
 

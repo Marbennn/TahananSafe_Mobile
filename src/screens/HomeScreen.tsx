@@ -1,5 +1,5 @@
 // src/screens/HomeScreen.tsx
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -28,8 +28,10 @@ import FabTutorialOverlay from "../components/Tutorial/FabTutorialOverlay";
 // ✅ Auth context (real logged in user)
 import { useAuth } from "../auth/AuthContext";
 
-// ✅ use existing session token + me API
+// ✅ session token fallback
 import { getAccessToken } from "../auth/session";
+
+// ✅ /me API
 import { getMeApi } from "../api/pin";
 
 // ✅ Use ReportItem type (same object your ReportDetailScreen expects)
@@ -139,7 +141,13 @@ function parseDateSmart(input?: string): Date | null {
 function normalizeStatus(dbStatus?: string): ReportItem["status"] {
   const s = String(dbStatus ?? "").trim().toLowerCase();
   if (s === "submitted" || s === "pending") return "PENDING";
-  if (s === "ongoing" || s === "on going" || s === "on-going" || s === "in_progress" || s === "in progress")
+  if (
+    s === "ongoing" ||
+    s === "on going" ||
+    s === "on-going" ||
+    s === "in_progress" ||
+    s === "in progress"
+  )
     return "ONGOING";
   if (s === "cancelled" || s === "canceled") return "CANCELLED";
   if (s === "resolved" || s === "done" || s === "completed") return "RESOLVED";
@@ -171,8 +179,8 @@ export default function HomeScreen({
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
-  // ✅ real user from AuthContext
-  const { user, setUser, token } = useAuth() as any;
+  // ✅ IMPORTANT: AuthContext fields are accessToken + refreshMe (not "token")
+  const { user, setUser, accessToken, refreshMe } = useAuth() as any;
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
@@ -183,38 +191,50 @@ export default function HomeScreen({
     setShowFabTutorial(true);
   }, []);
 
-  // ✅ Fetch real profile once to populate AuthContext.user
-  useEffect(() => {
-    let mounted = true;
+  /**
+   * ✅ Fix: Always sync profile from /me after auth changes.
+   * This prevents "User" showing even though DB already has firstName.
+   */
+  const syncingRef = useRef(false);
 
-    (async () => {
-      try {
-        const existingFirst = typeof user?.firstName === "string" ? user.firstName.trim() : "";
-        if (existingFirst.length > 0) return;
+  const syncProfile = useCallback(async () => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
 
-        const t = await getAccessToken();
-        if (!t) return;
+    try {
+      const t = accessToken || (await getAccessToken());
+      if (!t) return;
 
-        const me = await getMeApi({ accessToken: t });
-        const apiUser: any = me?.user ?? me;
+      const me = await getMeApi({ accessToken: t });
+      const apiUser: any = me?.user ?? me;
 
-        const firstName =
-          (typeof apiUser?.firstName === "string" && apiUser.firstName.trim()) ||
-          (typeof apiUser?.profile?.firstName === "string" && apiUser.profile.firstName.trim()) ||
-          (typeof apiUser?.personalInfo?.firstName === "string" && apiUser.personalInfo.firstName.trim()) ||
-          "";
+      const nextFirst =
+        (typeof apiUser?.firstName === "string" && apiUser.firstName.trim()) || "";
+      const nextLast =
+        (typeof apiUser?.lastName === "string" && apiUser.lastName.trim()) || "";
 
-        const lastName =
-          (typeof apiUser?.lastName === "string" && apiUser.lastName.trim()) ||
-          (typeof apiUser?.profile?.lastName === "string" && apiUser.profile.lastName.trim()) ||
-          (typeof apiUser?.personalInfo?.lastName === "string" && apiUser.personalInfo.lastName.trim()) ||
-          "";
+      const nextEmail = typeof apiUser?.email === "string" ? apiUser.email : "";
+      const nextId = String(apiUser?._id ?? apiUser?.id ?? "");
 
+      // Decide if we should overwrite context user
+      const curEmail = typeof user?.email === "string" ? user.email : "";
+      const curId = String(user?._id ?? user?.id ?? "");
+      const curFirst = typeof user?.firstName === "string" ? user.firstName.trim() : "";
+
+      const accountChanged =
+        (nextEmail && curEmail && nextEmail !== curEmail) ||
+        (nextId && curId && nextId !== curId);
+
+      const missingNameInContext = !curFirst;
+      const haveNameFromApi = !!nextFirst;
+
+      // ✅ Update if account changed OR context is missing firstName but API has it
+      if (accountChanged || (missingNameInContext && haveNameFromApi)) {
         const nextUser = {
-          _id: String(apiUser?._id ?? apiUser?.id ?? ""),
-          email: String(apiUser?.email ?? ""),
-          firstName,
-          lastName,
+          _id: nextId,
+          email: nextEmail,
+          firstName: nextFirst,
+          lastName: nextLast,
           gender: apiUser?.gender,
           phoneNumber: apiUser?.phoneNumber,
           dateOfBirth: apiUser?.dateOfBirth,
@@ -223,19 +243,24 @@ export default function HomeScreen({
           profileImage: apiUser?.profileImage,
         };
 
-        if (!mounted) return;
         if (nextUser.email || nextUser._id || nextUser.firstName) {
           setUser(nextUser as any);
         }
-      } catch {
-        // ignore (home should still load)
       }
-    })();
+    } catch {
+      // ignore (home should still load)
+    } finally {
+      syncingRef.current = false;
+    }
+  }, [accessToken, user, setUser]);
 
-    return () => {
-      mounted = false;
-    };
-  }, [user, setUser]);
+  // Run when home mounts and when accessToken changes
+  useEffect(() => {
+    syncProfile();
+    // Also ask AuthContext to refresh its own storage if available
+    // (safe even if accessToken is null)
+    refreshMe?.().catch?.(() => {});
+  }, [syncProfile, refreshMe, accessToken]);
 
   // ✅ LIVE CLOCK
   const [now, setNow] = useState<Date>(() => new Date());
@@ -295,17 +320,15 @@ export default function HomeScreen({
         Accept: "application/json",
       };
 
-      // ✅ Bearer token
-      const access = token || (await getAccessToken());
+      // ✅ Bearer token (use AuthContext token first)
+      const access = accessToken || (await getAccessToken());
       if (access) headers.Authorization = `Bearer ${access}`;
 
-      // ✅ Use the same endpoint your ReportScreen uses
       const url = `${API_BASE_URL}/api/mobile/v1/reports/my`;
 
       const res = await fetch(url, { method: "GET", headers });
       const txt = await res.text().catch(() => "");
       if (!res.ok) {
-        // don’t crash home; just show empty logs
         return;
       }
 
@@ -385,7 +408,6 @@ export default function HomeScreen({
         } as ReportItem;
       });
 
-      // ✅ newest first, show top 2
       mapped.sort((a, b) => {
         const ta = new Date(a.createdAt || 0).getTime();
         const tb = new Date(b.createdAt || 0).getTime();
@@ -396,7 +418,7 @@ export default function HomeScreen({
     } finally {
       setLoadingReports(false);
     }
-  }, [token]);
+  }, [accessToken]);
 
   useEffect(() => {
     fetchRecentReports();
@@ -597,7 +619,6 @@ export default function HomeScreen({
 
             <Pressable
               onPress={() => {
-                // ✅ jump to reports list
                 onTabChange?.("Reports");
               }}
               hitSlop={10}
@@ -617,7 +638,6 @@ export default function HomeScreen({
               </View>
             ) : (
               logs.map((item) => {
-                // ✅ find the matching ReportItem (for detail screen)
                 const full = recentReports.find((r) => r.id === item.id);
 
                 return (
@@ -626,11 +646,6 @@ export default function HomeScreen({
                     item={item}
                     onPress={() => {
                       if (!full) return;
-
-                      // ✅ IMPORTANT FIX:
-                      // DO NOT navigation.navigate("ReportDetailScreen")
-                      // because it is NOT a registered navigator screen.
-                      // Use MainShell callback instead.
                       onOpenReport?.(full);
                     }}
                   />
