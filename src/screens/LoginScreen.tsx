@@ -29,6 +29,9 @@ import ForgotPasswordEmailOtpModal from "../components/LoginScreen/ForgotPasswor
 import ForgotPasswordNewPasswordModal from "../components/LoginScreen/ForgotPasswordNewPasswordModal";
 import ForgotPasswordSuccessModal from "../components/LoginScreen/ForgotPasswordSuccessModal";
 
+// ✅ NEW: separated legal modal
+import LegalModal, { type LegalMode } from "../components/LoginScreen/LegalModal";
+
 type Props = {
   onGoSignup: () => void;
   onLoginSuccess: () => void;
@@ -105,7 +108,11 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   // ✅ Forgot password flow
   const [forgotStep, setForgotStep] = useState<ForgotStep>("none");
   const [resetEmail, setResetEmail] = useState("");
-  const [resetToken, setResetToken] = useState(""); // ✅ NEW
+  const [resetToken, setResetToken] = useState("");
+
+  // ✅ Legal modal state (separated)
+  const [legalOpen, setLegalOpen] = useState(false);
+  const [legalMode, setLegalMode] = useState<LegalMode>("terms");
 
   const closeForgotFlow = () => {
     setForgotStep("none");
@@ -114,6 +121,10 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   };
 
   const handleBack = () => {
+    if (legalOpen) {
+      setLegalOpen(false);
+      return;
+    }
     if (verifyOpen) {
       setVerifyOpen(false);
       return;
@@ -130,7 +141,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     onGoSignup();
   };
 
-  // ✅ Called by LoginCard after user types email+password
   const handleLoginPressed = async (email: string, password: string) => {
     if (sendingOtp) return;
 
@@ -140,7 +150,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       setSendingOtp(true);
       console.log(`${TAG} handleLoginPressed START`, { email: emailNorm });
 
-      // ✅ Backend now blocks non-user roles (403)
       await loginRequest(emailNorm, password);
 
       setVerifyEmail(emailNorm);
@@ -151,7 +160,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     } catch (err: any) {
       const msg = err?.message || "Something went wrong.";
 
-      // Optional: slightly nicer message for role restriction
       const pretty =
         /role|allowed|access denied|not allowed/i.test(msg) || msg.includes("403")
           ? "This account is not allowed to login in the mobile app. Please use a USER account."
@@ -174,7 +182,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     try {
       console.log(`${TAG} resend START`, { verifyEmail });
 
-      // ✅ Backend still blocks non-user roles
       await loginRequest(verifyEmail, verifyPassword);
 
       Alert.alert("Resent", "Verification code resent to your email.");
@@ -203,10 +210,15 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     setForgotStep("emailOtp");
   };
 
-  const handleTerms = () =>
-    Alert.alert("Terms of use", "Open Terms of use screen/link.");
-  const handlePrivacy = () =>
-    Alert.alert("Privacy Policy", "Open Privacy Policy screen/link.");
+  // ✅ Open legal modal
+  const handleTerms = () => {
+    setLegalMode("terms");
+    setLegalOpen(true);
+  };
+  const handlePrivacy = () => {
+    setLegalMode("privacy");
+    setLegalOpen(true);
+  };
 
   // ✅ OTP verified => receive resetToken from modal
   const handleForgotOtpVerified = (token: string) => {
@@ -268,6 +280,15 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* ✅ NEW: Separated Legal Modal */}
+      <LegalModal
+        visible={legalOpen}
+        mode={legalMode}
+        onClose={() => setLegalOpen(false)}
+        scale={scale}
+        vscale={vscale}
+      />
 
       {/* ✅ Login OTP modal */}
       <EnterVerificationModal
