@@ -15,6 +15,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
+// ✅ Biometrics
+import * as LocalAuthentication from "expo-local-authentication";
+
+// ✅ SecureStore (for refresh token saved after OTP verify)
+import * as SecureStore from "expo-secure-store";
+
 // ✅ React Navigation
 import { useNavigation } from "@react-navigation/native";
 import type { NavigationProp, ParamListBase } from "@react-navigation/native";
@@ -29,8 +35,11 @@ import ForgotPasswordEmailOtpModal from "../components/LoginScreen/ForgotPasswor
 import ForgotPasswordNewPasswordModal from "../components/LoginScreen/ForgotPasswordNewPasswordModal";
 import ForgotPasswordSuccessModal from "../components/LoginScreen/ForgotPasswordSuccessModal";
 
-// ✅ NEW: separated legal modal
+// ✅ Legal modal
 import LegalModal, { type LegalMode } from "../components/LoginScreen/LegalModal";
+
+// ✅ Session storage (AsyncStorage)
+import { saveTokens, setLoggedIn } from "../auth/session";
 
 type Props = {
   onGoSignup: () => void;
@@ -45,27 +54,22 @@ type ForgotStep = "none" | "emailOtp" | "newpass" | "success";
 
 const TAG = "[LoginScreen]";
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+
 const LOGIN_PATH = "/api/mobile/v1/login";
+const REFRESH_PATH = "/api/mobile/v1/refresh-token";
 
-type LoginSendOtpResponse = {
-  message?: string;
-};
+// Backend response shapes (loose)
+type LoginCheckResponse = { message?: string };
+type LoginSendOtpResponse = { message?: string };
 
-async function loginRequest(email: string, password: string) {
-  const url = `${API_URL}${LOGIN_PATH}`;
-  console.log(`${TAG} loginRequest URL:`, url);
-  console.log(`${TAG} loginRequest email:`, email);
-
+async function postJson(url: string, body: any) {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(body),
   });
 
   const raw = await res.text().catch(() => "");
-  console.log(`${TAG} loginRequest status:`, res.status);
-  console.log(`${TAG} loginRequest raw:`, raw);
-
   let data: any = {};
   if (raw) {
     try {
@@ -74,6 +78,57 @@ async function loginRequest(email: string, password: string) {
       data = {};
     }
   }
+
+  return { res, raw, data };
+}
+
+/**
+ * ✅ NEW: check credentials ONLY (NO OTP email)
+ * Calls: POST /login with { purpose: "check" }
+ */
+async function loginCheckRequest(email: string, password: string) {
+  const url = `${API_URL}${LOGIN_PATH}`;
+  console.log(`${TAG} loginCheck URL:`, url);
+  console.log(`${TAG} loginCheck email:`, email);
+
+  const { res, raw, data } = await postJson(url, {
+    email,
+    password,
+    purpose: "check",
+  });
+
+  console.log(`${TAG} loginCheck status:`, res.status);
+  console.log(`${TAG} loginCheck raw:`, raw);
+
+  if (!res.ok) {
+    const msg =
+      data?.message ||
+      (res.status === 403
+        ? "Access denied."
+        : `Login check failed (HTTP ${res.status})`);
+    throw new Error(msg);
+  }
+
+  return data as LoginCheckResponse;
+}
+
+/**
+ * ✅ Sends OTP email
+ * Calls: POST /login with { purpose: "otp" } (or default)
+ */
+async function loginSendOtpRequest(email: string, password: string) {
+  const url = `${API_URL}${LOGIN_PATH}`;
+  console.log(`${TAG} loginSendOtp URL:`, url);
+  console.log(`${TAG} loginSendOtp email:`, email);
+
+  const { res, raw, data } = await postJson(url, {
+    email,
+    password,
+    purpose: "otp",
+  });
+
+  console.log(`${TAG} loginSendOtp status:`, res.status);
+  console.log(`${TAG} loginSendOtp raw:`, raw);
 
   if (!res.ok) {
     const msg =
@@ -85,6 +140,106 @@ async function loginRequest(email: string, password: string) {
   }
 
   return data as LoginSendOtpResponse;
+}
+
+async function refreshAccessToken(refreshToken: string) {
+  const url = `${API_URL}${REFRESH_PATH}`;
+  console.log(`${TAG} refresh URL:`, url);
+
+  const { res, raw, data } = await postJson(url, { refreshToken });
+
+  console.log(`${TAG} refresh status:`, res.status);
+  console.log(`${TAG} refresh raw:`, raw);
+
+  if (!res.ok) {
+    const msg = data?.message || `Refresh failed (HTTP ${res.status})`;
+    throw new Error(msg);
+  }
+
+  if (!data?.accessToken) {
+    throw new Error("Refresh did not return accessToken.");
+  }
+
+  return data.accessToken as string;
+}
+
+/** SecureStore keys must only contain: A-Z a-z 0-9 . - _ */
+function safeKeyPart(input: string) {
+  return String(input || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, "_");
+}
+
+/** Must match EnterVerificationModal.tsx */
+function refreshKeyForEmail(email: string) {
+  return `tahanansafe_refresh_${safeKeyPart(email)}`;
+}
+
+async function getRefreshTokenForEmail(email: string): Promise<string | null> {
+  const key = refreshKeyForEmail(email);
+  try {
+    const v = await SecureStore.getItemAsync(key);
+    console.log(`${TAG} SecureStore refresh lookup`, { key, found: !!v });
+    return v ?? null;
+  } catch (e: any) {
+    console.log(`${TAG} SecureStore get refresh failed:`, e?.message);
+    return null;
+  }
+}
+
+async function runBiometricsGate(): Promise<{
+  ok: boolean;
+  reason:
+    | "success"
+    | "not_available"
+    | "not_enrolled"
+    | "failed"
+    | "cancelled"
+    | "lockout"
+    | "unknown";
+}> {
+  try {
+    const hasHardware = await LocalAuthentication.hasHardwareAsync();
+    const enrolled = await LocalAuthentication.isEnrolledAsync();
+
+    console.log(`${TAG} biometrics hw/enrolled:`, { hasHardware, enrolled });
+
+    if (!hasHardware) return { ok: false, reason: "not_available" };
+    if (!enrolled) return { ok: false, reason: "not_enrolled" };
+
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage:
+        Platform.OS === "ios"
+          ? "Use Face ID to continue"
+          : "Use fingerprint to continue",
+      cancelLabel: "Cancel",
+      disableDeviceFallback: true,
+    });
+
+    console.log(`${TAG} biometrics result:`, result);
+
+    if (result.success) return { ok: true, reason: "success" };
+
+    const err = (result as any)?.error as string | undefined;
+
+    if (
+      err === "user_cancel" ||
+      err === "system_cancel" ||
+      err === "app_cancel"
+    ) {
+      return { ok: false, reason: "cancelled" };
+    }
+
+    if (err === "lockout") {
+      return { ok: false, reason: "lockout" };
+    }
+
+    return { ok: false, reason: "failed" };
+  } catch (e: any) {
+    console.log(`${TAG} biometrics exception:`, e?.message || e);
+    return { ok: false, reason: "unknown" };
+  }
 }
 
 export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
@@ -99,10 +254,10 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const backIconSize = scale(22);
   const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
 
-  // ✅ Login OTP modal state
+  // ✅ OTP modal state
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState<string>("");
-  const [verifyPassword, setVerifyPassword] = useState<string>(""); // only for resend
+  const [verifyPassword, setVerifyPassword] = useState<string>(""); // for resend
   const [sendingOtp, setSendingOtp] = useState(false);
 
   // ✅ Forgot password flow
@@ -110,7 +265,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const [resetEmail, setResetEmail] = useState("");
   const [resetToken, setResetToken] = useState("");
 
-  // ✅ Legal modal state (separated)
+  // ✅ Legal modal
   const [legalOpen, setLegalOpen] = useState(false);
   const [legalMode, setLegalMode] = useState<LegalMode>("terms");
 
@@ -141,6 +296,13 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     onGoSignup();
   };
 
+  const openOtpModal = (emailNorm: string, password: string) => {
+    setVerifyEmail(emailNorm);
+    setVerifyPassword(password);
+    setVerifyOpen(true);
+    console.log(`${TAG} OTP modal opened`);
+  };
+
   const handleLoginPressed = async (email: string, password: string) => {
     if (sendingOtp) return;
 
@@ -150,18 +312,49 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       setSendingOtp(true);
       console.log(`${TAG} handleLoginPressed START`, { email: emailNorm });
 
-      await loginRequest(emailNorm, password);
+      // ✅ STEP 1: Always validate email+password FIRST (NO OTP EMAIL)
+      await loginCheckRequest(emailNorm, password);
 
-      setVerifyEmail(emailNorm);
-      setVerifyPassword(password);
-      setVerifyOpen(true);
+      // ✅ STEP 2: If refresh token exists, try biometrics quick-login (NO OTP)
+      const storedRefresh = await getRefreshTokenForEmail(emailNorm);
 
-      console.log(`${TAG} OTP modal opened`);
+      if (storedRefresh) {
+        const bio = await runBiometricsGate();
+
+        if (bio.ok) {
+          console.log(`${TAG} biometrics SUCCESS -> refresh token login`);
+
+          const newAccess = await refreshAccessToken(storedRefresh);
+
+          await saveTokens({ accessToken: newAccess });
+          await setLoggedIn(true);
+
+          console.log(`${TAG} refreshed access token saved -> go Home`);
+          onLoginSuccess();
+          return;
+        }
+
+        console.log(`${TAG} biometrics not ok (${bio.reason}) -> send OTP fallback`);
+
+        if (bio.reason === "lockout") {
+          Alert.alert(
+            "Biometrics Locked",
+            "Biometrics is temporarily locked. Please unlock your phone using your passcode once, then try again."
+          );
+        }
+      } else {
+        console.log(`${TAG} no stored refresh token yet -> OTP required`);
+      }
+
+      // ✅ STEP 3: Only NOW send OTP email (fallback / first-time login)
+      await loginSendOtpRequest(emailNorm, password);
+      openOtpModal(emailNorm, password);
     } catch (err: any) {
       const msg = err?.message || "Something went wrong.";
 
       const pretty =
-        /role|allowed|access denied|not allowed/i.test(msg) || msg.includes("403")
+        /role|allowed|access denied|not allowed/i.test(msg) ||
+        msg.includes("403")
           ? "This account is not allowed to login in the mobile app. Please use a USER account."
           : msg;
 
@@ -181,15 +374,14 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
 
     try {
       console.log(`${TAG} resend START`, { verifyEmail });
-
-      await loginRequest(verifyEmail, verifyPassword);
-
+      await loginSendOtpRequest(verifyEmail, verifyPassword);
       Alert.alert("Resent", "Verification code resent to your email.");
       console.log(`${TAG} resend END`);
     } catch (err: any) {
       const msg = err?.message || "Something went wrong.";
       const pretty =
-        /role|allowed|access denied|not allowed/i.test(msg) || msg.includes("403")
+        /role|allowed|access denied|not allowed/i.test(msg) ||
+        msg.includes("403")
           ? "This account is not allowed to login in the mobile app. Please use a USER account."
           : msg;
 
@@ -203,14 +395,12 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     onLoginSuccess();
   };
 
-  // ✅ Forgot password start
   const handleForgotPassword = () => {
     setResetEmail("");
     setResetToken("");
     setForgotStep("emailOtp");
   };
 
-  // ✅ Open legal modal
   const handleTerms = () => {
     setLegalMode("terms");
     setLegalOpen(true);
@@ -220,13 +410,11 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     setLegalOpen(true);
   };
 
-  // ✅ OTP verified => receive resetToken from modal
   const handleForgotOtpVerified = (token: string) => {
     setResetToken(token);
     setForgotStep("newpass");
   };
 
-  // ✅ New password modal success
   const handleResetSuccess = () => {
     setForgotStep("success");
   };
@@ -281,7 +469,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* ✅ NEW: Separated Legal Modal */}
       <LegalModal
         visible={legalOpen}
         mode={legalMode}
@@ -290,7 +477,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         vscale={vscale}
       />
 
-      {/* ✅ Login OTP modal */}
       <EnterVerificationModal
         visible={verifyOpen}
         email={verifyEmail}
@@ -300,7 +486,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         onVerified={handleVerified}
       />
 
-      {/* ✅ Forgot Password: Email + OTP */}
       <ForgotPasswordEmailOtpModal
         visible={forgotStep === "emailOtp"}
         email={resetEmail}
@@ -312,7 +497,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         initialSeconds={34}
       />
 
-      {/* ✅ New password modal */}
       <ForgotPasswordNewPasswordModal
         visible={forgotStep === "newpass"}
         email={resetEmail}
@@ -324,7 +508,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         vscale={vscale}
       />
 
-      {/* ✅ Success modal */}
       <ForgotPasswordSuccessModal
         visible={forgotStep === "success"}
         onClose={closeForgotFlow}
@@ -337,7 +520,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
 
 function createStyles(
   scale: (n: number) => number,
-  vscale: (n: number) => number,
+  vscale: (n: number) => number
 ) {
   return StyleSheet.create({
     flex: { flex: 1 },

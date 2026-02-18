@@ -16,6 +16,8 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../../theme/colors";
 
+import * as SecureStore from "expo-secure-store";
+
 import ChecklistBadge from "../ChecklistBadge";
 
 // ✅ use YOUR app session storage (same keys Splash/App uses)
@@ -47,6 +49,21 @@ function clamp(n: number, min: number, max: number) {
 const TAG = "[Login EnterVerificationModal]";
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
 const VERIFY_LOGIN_OTP_PATH = "/api/mobile/v1/verify-login-otp";
+
+// ✅ SecureStore keys must contain only: A-Z a-z 0-9 . - _
+// So we sanitize email and DO NOT use "@"
+function safeKeyPart(input: string) {
+  return String(input || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, "_");
+}
+
+// ✅ key for storing per-email refresh token used by biometric quick-login
+function refreshKeyForEmail(email: string) {
+  // ✅ removed "@" prefix
+  return `tahanansafe_refresh_${safeKeyPart(email)}`;
+}
 
 async function verifyLoginOtpRequest(email: string, otp: string) {
   const url = `${API_URL}${VERIFY_LOGIN_OTP_PATH}`;
@@ -182,11 +199,12 @@ export default function EnterVerificationModal({
     if (!canContinue) return;
 
     const e = String(email || "").trim().toLowerCase();
-    if (!e)
+    if (!e) {
       return Alert.alert(
         "Missing Email",
         "Email is required for OTP verification."
       );
+    }
 
     const otp = code.trim();
     if (otp.length !== 4) return;
@@ -198,11 +216,22 @@ export default function EnterVerificationModal({
       // 1) verify OTP -> get tokens
       const data = await verifyLoginOtpRequest(e, otp);
 
-      // 2) save tokens to your app session storage (correct keys)
+      // 2) save tokens to your app session storage (AsyncStorage)
       await saveTokens({
         accessToken: data.accessToken,
         refreshToken: data.refreshToken,
       });
+
+      // ✅ 2.5) ALSO store refresh token in SecureStore for biometric quick-login
+      if (data?.refreshToken) {
+        const key = refreshKeyForEmail(e);
+        try {
+          await SecureStore.setItemAsync(key, data.refreshToken);
+          console.log(`${TAG} refreshToken saved to SecureStore`, { key });
+        } catch (err: any) {
+          console.log(`${TAG} SecureStore save refreshToken failed:`, err?.message);
+        }
+      }
 
       // 3) mark logged in (persist)
       await setLoggedIn(true);
@@ -213,7 +242,6 @@ export default function EnterVerificationModal({
         await setHasPin(!!me.user.hasPin);
         console.log(`${TAG} hasPin set:`, !!me.user.hasPin);
       } catch (err: any) {
-        // fallback so app won't get stuck
         await setHasPin(false);
         console.log(`${TAG} getMe failed, default hasPin=false`, err?.message);
       }

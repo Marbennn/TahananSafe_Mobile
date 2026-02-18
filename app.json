@@ -15,8 +15,10 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Use Face ID to login securely."
-      }
+        "NSFaceIDUsageDescription": "Use Face ID to login securely.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.angelgeloo0918.firstproject"
     },
     "android": {
       "adaptiveIcon": {
@@ -31,6 +33,11 @@
     "plugins": [
       "@react-native-community/datetimepicker",
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d1348907-6805-42cd-bd5c-e86fef9033f7"
+      }
+    }
   }
 }
