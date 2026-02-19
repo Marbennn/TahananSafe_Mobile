@@ -62,6 +62,132 @@ const REFRESH_PATH = "/api/mobile/v1/refresh-token";
 type LoginCheckResponse = { message?: string };
 type LoginSendOtpResponse = { message?: string };
 
+const INVALID_CREDENTIALS_TITLE = "Invalid Credentials";
+const INVALID_CREDENTIALS_BODY = "Invalid Credentials";
+
+function showInvalidCredentials() {
+  Alert.alert(INVALID_CREDENTIALS_TITLE, INVALID_CREDENTIALS_BODY);
+}
+
+/**
+ * ============================
+ * ✅ Client-side Rate Limiting (Device-local)
+ * - Uses SecureStore so it persists across reloads
+ * - Not security, but good UX / anti-spam
+ * ============================
+ */
+const RL_KEYS = {
+  LOGIN_ATTEMPTS: "rl_login_attempts_v1",
+  OTP_SENDS: "rl_otp_sends_v1",
+  RESEND_LAST_MS: "rl_resend_last_ms_v1",
+};
+
+type WindowCounter = {
+  windowStartMs: number;
+  count: number;
+};
+
+// TUNING (feel free to adjust)
+const RL = {
+  // login attempts (tap login)
+  LOGIN_MAX: 5,
+  LOGIN_WINDOW_MS: 2 * 60 * 1000, // 2 minutes
+
+  // otp send (purpose=otp) — includes resend calls
+  OTP_SEND_MAX: 3,
+  OTP_SEND_WINDOW_MS: 5 * 60 * 1000, // 5 minutes
+
+  // resend minimum gap
+  RESEND_MIN_GAP_MS: 30 * 1000, // 30 seconds
+};
+
+function nowMs() {
+  return Date.now();
+}
+
+async function readJson<T>(key: string): Promise<T | null> {
+  try {
+    const raw = await SecureStore.getItemAsync(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function writeJson(key: string, value: any) {
+  try {
+    await SecureStore.setItemAsync(key, JSON.stringify(value));
+  } catch {
+    // ignore
+  }
+}
+
+function remainingMs(windowStartMs: number, windowMs: number) {
+  const elapsed = nowMs() - windowStartMs;
+  return Math.max(0, windowMs - elapsed);
+}
+
+function formatCooldown(ms: number) {
+  const s = Math.ceil(ms / 1000);
+  if (s <= 60) return `${s}s`;
+  const m = Math.ceil(s / 60);
+  return `${m}m`;
+}
+
+/**
+ * ✅ Increments a counter in a rolling window.
+ * Returns:
+ * - allowed: boolean
+ * - retryAfterMs: number (if blocked)
+ */
+async function hitWindowCounter(
+  key: string,
+  limit: number,
+  windowMs: number
+): Promise<{ allowed: boolean; retryAfterMs: number; count: number }> {
+  const current = (await readJson<WindowCounter>(key)) || {
+    windowStartMs: nowMs(),
+    count: 0,
+  };
+
+  const elapsed = nowMs() - current.windowStartMs;
+
+  // reset window if expired
+  const next =
+    elapsed >= windowMs
+      ? { windowStartMs: nowMs(), count: 1 }
+      : { windowStartMs: current.windowStartMs, count: current.count + 1 };
+
+  await writeJson(key, next);
+
+  if (next.count > limit) {
+    const retryAfterMs = remainingMs(next.windowStartMs, windowMs);
+    return { allowed: false, retryAfterMs, count: next.count };
+  }
+
+  return { allowed: true, retryAfterMs: 0, count: next.count };
+}
+
+async function canResend(): Promise<{ ok: boolean; waitMs: number }> {
+  const last = await SecureStore.getItemAsync(RL_KEYS.RESEND_LAST_MS);
+  const lastMs = last ? Number(last) : 0;
+  const diff = nowMs() - lastMs;
+
+  if (lastMs && diff < RL.RESEND_MIN_GAP_MS) {
+    return { ok: false, waitMs: RL.RESEND_MIN_GAP_MS - diff };
+  }
+  return { ok: true, waitMs: 0 };
+}
+
+async function markResendNow() {
+  try {
+    await SecureStore.setItemAsync(RL_KEYS.RESEND_LAST_MS, String(nowMs()));
+  } catch {
+    // ignore
+  }
+}
+
 async function postJson(url: string, body: any) {
   const res = await fetch(url, {
     method: "POST",
@@ -83,7 +209,7 @@ async function postJson(url: string, body: any) {
 }
 
 /**
- * ✅ NEW: check credentials ONLY (NO OTP email)
+ * ✅ check credentials ONLY (NO OTP email)
  * Calls: POST /login with { purpose: "check" }
  */
 async function loginCheckRequest(email: string, password: string) {
@@ -114,7 +240,7 @@ async function loginCheckRequest(email: string, password: string) {
 
 /**
  * ✅ Sends OTP email
- * Calls: POST /login with { purpose: "otp" } (or default)
+ * Calls: POST /login with { purpose: "otp" }
  */
 async function loginSendOtpRequest(email: string, password: string) {
   const url = `${API_URL}${LOGIN_PATH}`;
@@ -306,14 +432,39 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const handleLoginPressed = async (email: string, password: string) => {
     if (sendingOtp) return;
 
-    const emailNorm = String(email).trim().toLowerCase();
+    const emailNorm = String(email ?? "").trim().toLowerCase();
+    const passwordNorm = String(password ?? "");
+
+    // ✅ Any missing fields => show Invalid Credentials only
+    if (!emailNorm || !passwordNorm) {
+      showInvalidCredentials();
+      return;
+    }
+
+    // ✅ Client-side login attempt rate limit
+    const loginHit = await hitWindowCounter(
+      RL_KEYS.LOGIN_ATTEMPTS,
+      RL.LOGIN_MAX,
+      RL.LOGIN_WINDOW_MS
+    );
+    if (!loginHit.allowed) {
+      // keep your rule: errors show Invalid Credentials only
+      // (but we can show a cooldown message without revealing credential validity)
+      Alert.alert(
+        "Please wait",
+        `Too many attempts. Try again in ${formatCooldown(
+          loginHit.retryAfterMs
+        )}.`
+      );
+      return;
+    }
 
     try {
       setSendingOtp(true);
       console.log(`${TAG} handleLoginPressed START`, { email: emailNorm });
 
       // ✅ STEP 1: Always validate email+password FIRST (NO OTP EMAIL)
-      await loginCheckRequest(emailNorm, password);
+      await loginCheckRequest(emailNorm, passwordNorm);
 
       // ✅ STEP 2: If refresh token exists, try biometrics quick-login (NO OTP)
       const storedRefresh = await getRefreshTokenForEmail(emailNorm);
@@ -334,32 +485,36 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
           return;
         }
 
-        console.log(`${TAG} biometrics not ok (${bio.reason}) -> send OTP fallback`);
-
-        if (bio.reason === "lockout") {
-          Alert.alert(
-            "Biometrics Locked",
-            "Biometrics is temporarily locked. Please unlock your phone using your passcode once, then try again."
-          );
-        }
+        console.log(
+          `${TAG} biometrics not ok (${bio.reason}) -> send OTP fallback`
+        );
       } else {
         console.log(`${TAG} no stored refresh token yet -> OTP required`);
       }
 
-      // ✅ STEP 3: Only NOW send OTP email (fallback / first-time login)
-      await loginSendOtpRequest(emailNorm, password);
-      openOtpModal(emailNorm, password);
+      // ✅ Client-side OTP send rate limit (covers first-time OTP + fallback)
+      const otpHit = await hitWindowCounter(
+        RL_KEYS.OTP_SENDS,
+        RL.OTP_SEND_MAX,
+        RL.OTP_SEND_WINDOW_MS
+      );
+      if (!otpHit.allowed) {
+        Alert.alert(
+          "Please wait",
+          `Too many OTP requests. Try again in ${formatCooldown(
+            otpHit.retryAfterMs
+          )}.`
+        );
+        return;
+      }
+
+      // ✅ STEP 3: Only NOW send OTP email
+      await loginSendOtpRequest(emailNorm, passwordNorm);
+      openOtpModal(emailNorm, passwordNorm);
     } catch (err: any) {
-      const msg = err?.message || "Something went wrong.";
-
-      const pretty =
-        /role|allowed|access denied|not allowed/i.test(msg) ||
-        msg.includes("403")
-          ? "This account is not allowed to login in the mobile app. Please use a USER account."
-          : msg;
-
-      console.log(`${TAG} handleLoginPressed ERROR:`, msg);
-      Alert.alert("Login Failed", pretty);
+      console.log(`${TAG} handleLoginPressed ERROR:`, err?.message || err);
+      // ✅ Requirement: everything shows Invalid Credentials only
+      showInvalidCredentials();
     } finally {
       setSendingOtp(false);
       console.log(`${TAG} handleLoginPressed END`);
@@ -367,26 +522,50 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   };
 
   const handleResend = async () => {
+    // ✅ Requirement: everything shows Invalid Credentials only
     if (!verifyEmail || !verifyPassword) {
-      Alert.alert("Resend Failed", "Missing login info. Please login again.");
+      showInvalidCredentials();
+      return;
+    }
+
+    // ✅ Client-side resend cooldown
+    const resendOk = await canResend();
+    if (!resendOk.ok) {
+      Alert.alert(
+        "Please wait",
+        `You can resend again in ${formatCooldown(resendOk.waitMs)}.`
+      );
+      return;
+    }
+
+    // ✅ Also count it against OTP_SENDS window
+    const otpHit = await hitWindowCounter(
+      RL_KEYS.OTP_SENDS,
+      RL.OTP_SEND_MAX,
+      RL.OTP_SEND_WINDOW_MS
+    );
+    if (!otpHit.allowed) {
+      Alert.alert(
+        "Please wait",
+        `Too many OTP requests. Try again in ${formatCooldown(
+          otpHit.retryAfterMs
+        )}.`
+      );
       return;
     }
 
     try {
       console.log(`${TAG} resend START`, { verifyEmail });
       await loginSendOtpRequest(verifyEmail, verifyPassword);
+
+      await markResendNow();
+
+      // ✅ Success message is allowed (not an error)
       Alert.alert("Resent", "Verification code resent to your email.");
       console.log(`${TAG} resend END`);
     } catch (err: any) {
-      const msg = err?.message || "Something went wrong.";
-      const pretty =
-        /role|allowed|access denied|not allowed/i.test(msg) ||
-        msg.includes("403")
-          ? "This account is not allowed to login in the mobile app. Please use a USER account."
-          : msg;
-
-      console.log(`${TAG} resend ERROR:`, msg);
-      Alert.alert("Resend Failed", pretty);
+      console.log(`${TAG} resend ERROR:`, err?.message || err);
+      showInvalidCredentials();
     }
   };
 
