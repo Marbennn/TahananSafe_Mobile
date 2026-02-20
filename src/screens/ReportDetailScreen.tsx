@@ -14,6 +14,8 @@ import {
   Alert,
   Image,
   useWindowDimensions,
+  Animated,
+  Easing,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -92,7 +94,7 @@ export default function ReportDetailScreen({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
-  // ✅ keep responsive scaling
+  // ✅ responsive scaling
   const wScale = Math.min(Math.max(width / 375, 0.9), 1.25);
   const hScale = Math.min(Math.max(height / 812, 0.9), 1.2);
 
@@ -106,16 +108,21 @@ export default function ReportDetailScreen({
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [view, setView] = useState<ViewKey>("details");
 
-  const NAV_BASE_HEIGHT = 78;
-  const FAB_SIZE = 62;
+  // ✅ scale nav/fab a bit too (responsive)
+  const NAV_BASE_HEIGHT = vscale(78);
+  const FAB_SIZE = scale(62);
 
-  const bottomPad = Math.max(insets.bottom, 10);
+  const bottomPad = Math.max(insets.bottom, vscale(10));
   const navHeight = NAV_BASE_HEIGHT + bottomPad;
 
-  const chevronBottom = navHeight + 90;
-  const fabBottom = navHeight - FAB_SIZE / 2 - 10;
+  const chevronBottom = navHeight + vscale(90);
+  const fabBottom = navHeight - FAB_SIZE / 2 - vscale(10);
 
-  const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + 6;
+  // ✅ IMPORTANT: Reserve bottom space so content never goes behind BottomNavBar
+  const RESERVED_BOTTOM = navHeight + vscale(18);
+
+  // ✅ better keyboard behavior (so reply row won't hide behind nav)
+  const keyboardOffset = Platform.OS === "ios" ? navHeight : 0;
 
   const handleTab = (key: TabKey) => {
     setActiveTab(key);
@@ -126,7 +133,6 @@ export default function ReportDetailScreen({
   const longPressFab = () => onQuickExit?.();
 
   const threadScrollRef = useRef<ScrollView | null>(null);
-
   const [draft, setDraft] = useState("");
 
   // ✅ threads
@@ -135,13 +141,38 @@ export default function ReportDetailScreen({
   const [messages, setMessages] = useState<ThreadMsg[]>([]);
   const [threadsError, setThreadsError] = useState("");
 
-  // ✅ details from backend
+  // ✅ details
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [detail, setDetail] = useState<ReportDetailDto | null>(null);
 
   // ✅ report id
   const reportId = (report as any)?.id || (report as any)?._id || "";
+
+  // =========================
+  // ✅ Smooth segmented pill
+  // =========================
+  const SEG_PAD = scale(3);
+  const [segWidth, setSegWidth] = useState(0);
+
+  const segAnim = useRef(new Animated.Value(view === "details" ? 0 : 1)).current;
+
+  useEffect(() => {
+    Animated.timing(segAnim, {
+      toValue: view === "details" ? 0 : 1,
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+
+  const innerWidth = Math.max(segWidth - SEG_PAD * 2, 0);
+  const indicatorWidth = innerWidth / 2;
+  const translateX = segAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, indicatorWidth],
+  });
 
   const loadDetail = async () => {
     if (!reportId) return;
@@ -246,12 +277,10 @@ export default function ReportDetailScreen({
   const dateLabel = detail?.dateStr || (report as any)?.dateStr || report.dateLeft || "—";
   const timeLabel = detail?.timeStr || (report as any)?.timeStr || report.timeLeft || "—";
 
-  // ✅ photos
   const photosRaw = ((detail?.photos ?? (report as any)?.photos) || []) as any[];
 
   const photoUrls = useMemo(() => {
-    const urls = photosRaw.map((p) => buildReportPhotoUrl(reportId, p)).filter(Boolean) as string[];
-    return urls;
+    return photosRaw.map((p) => buildReportPhotoUrl(reportId, p)).filter(Boolean) as string[];
   }, [photosRaw, reportId]);
 
   const threadHeader = useMemo(() => {
@@ -264,7 +293,7 @@ export default function ReportDetailScreen({
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.page}>
-        {/* Top bar (match screenshot: small centered title) */}
+        {/* Top bar */}
         <View style={[styles.topBar, { paddingTop: Math.max(insets.top, vscale(6)) }]}>
           <Pressable onPress={onBack} hitSlop={12} style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}>
             <Ionicons name="chevron-back" size={scale(22)} color={PRIMARY} />
@@ -275,31 +304,28 @@ export default function ReportDetailScreen({
           <View style={{ width: scale(36), height: scale(36) }} />
         </View>
 
-        {/* Segmented tabs (pill like screenshot) */}
+        {/* Segmented tabs */}
         <View style={styles.segmentWrap}>
-          <View style={styles.segmentPill}>
-            <Pressable
-              onPress={() => setView("details")}
-              style={({ pressed }) => [
-                styles.segmentBtn,
-                view === "details" && styles.segmentBtnActive,
-                pressed && { transform: [{ scale: 0.99 }] },
+          <View style={styles.segmentPill} onLayout={(e) => setSegWidth(e.nativeEvent.layout.width)}>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.segmentIndicator,
+                {
+                  width: indicatorWidth,
+                  transform: [{ translateX }],
+                },
               ]}
-            >
-              <Text style={[styles.segmentText, view === "details" && styles.segmentTextActive]} numberOfLines={1}>
+            />
+
+            <Pressable onPress={() => setView("details")} style={({ pressed }) => [styles.segmentBtn, pressed && { transform: [{ scale: 0.99 }] }]}>
+              <Text style={[styles.segmentTextGhost, view === "details" && styles.segmentTextActive]} numberOfLines={1}>
                 Incident Details
               </Text>
             </Pressable>
 
-            <Pressable
-              onPress={() => setView("threads")}
-              style={({ pressed }) => [
-                styles.segmentBtn,
-                view === "threads" && styles.segmentBtnActiveGhost,
-                pressed && { transform: [{ scale: 0.99 }] },
-              ]}
-            >
-              <Text style={[styles.segmentTextGhost, view === "threads" && styles.segmentTextGhostActive]} numberOfLines={1}>
+            <Pressable onPress={() => setView("threads")} style={({ pressed }) => [styles.segmentBtn, pressed && { transform: [{ scale: 0.99 }] }]}>
+              <Text style={[styles.segmentTextGhost, view === "threads" && styles.segmentTextActive]} numberOfLines={1}>
                 Threads
               </Text>
             </Pressable>
@@ -310,10 +336,15 @@ export default function ReportDetailScreen({
         {view === "details" ? (
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: CONTENT_BOTTOM_PAD }]}
+            contentContainerStyle={[
+              styles.scrollContent,
+              {
+                // ✅ reserve space for bottom nav (fix overlap)
+                paddingBottom: RESERVED_BOTTOM,
+              },
+            ]}
           >
             <View style={styles.detailsCard}>
-              {/* Loading / Error */}
               {loadingDetail ? (
                 <View style={styles.centerState}>
                   <ActivityIndicator />
@@ -328,7 +359,6 @@ export default function ReportDetailScreen({
                 </View>
               ) : null}
 
-              {/* Header line: "Incident Detail: PENDING" like screenshot */}
               <Text style={styles.detailsHeader}>
                 Incident Detail: <Text style={styles.statusText}>{statusLabel}</Text>
               </Text>
@@ -336,18 +366,11 @@ export default function ReportDetailScreen({
               <Text style={styles.incidentTitle}>{incidentTitle}</Text>
               <Text style={styles.incidentNarrative}>{incidentNarrative}</Text>
 
-              {/* Evidence row (3 boxes) */}
               <View style={styles.evidenceRow}>
                 {photoUrls.length > 0 ? (
                   photoUrls.slice(0, 3).map((u, i) => (
                     <View key={i} style={styles.evidenceBox}>
-                      <Image
-                        source={{ uri: u }}
-                        style={styles.evidenceImg}
-                        resizeMode="cover"
-                        onError={() => console.log("[ReportDetailScreen] Image failed:", u)}
-                        onLoad={() => console.log("[ReportDetailScreen] Image loaded:", u)}
-                      />
+                      <Image source={{ uri: u }} style={styles.evidenceImg} resizeMode="cover" />
                     </View>
                   ))
                 ) : (
@@ -361,14 +384,12 @@ export default function ReportDetailScreen({
                 )}
               </View>
 
-              {/* Witness */}
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Witness</Text>
                 <Text style={styles.witnessName}>{witnessName}</Text>
                 <Text style={styles.witnessRole}>{witnessRole}</Text>
               </View>
 
-              {/* Meta row (match screenshot: left date/location, right time) */}
               <View style={styles.metaGrid}>
                 <View style={styles.metaCol}>
                   <Text style={styles.metaLabel}>Date: {dateLabel}</Text>
@@ -380,15 +401,19 @@ export default function ReportDetailScreen({
                 </View>
               </View>
 
-              {/* Footer: Alert no. */}
               <Text style={styles.alertFooter}>
                 Alert no. <Text style={styles.alertNo}>{String((report as any)?.alertNo ?? reportId ?? "")}</Text>
               </Text>
             </View>
           </ScrollView>
         ) : (
-          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            <View style={[styles.threadOuter, { paddingBottom: CONTENT_BOTTOM_PAD }]}>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            keyboardVerticalOffset={keyboardOffset}
+          >
+            {/* ✅ reserve space for bottom nav (fix overlap) */}
+            <View style={[styles.threadOuter, { paddingBottom: RESERVED_BOTTOM }]}>
               <View style={styles.threadCard}>
                 <Text style={styles.threadHeaderText}>{threadHeader}</Text>
 
@@ -494,7 +519,6 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     safe: { flex: 1, backgroundColor: BG },
     page: { flex: 1, backgroundColor: BG },
 
-    // --- Top bar like screenshot ---
     topBar: {
       paddingHorizontal: scale(14),
       paddingBottom: vscale(10),
@@ -510,13 +534,12 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       justifyContent: "center",
     },
     topTitle: {
-      fontSize: scale(18), // ✅ screenshot-like (not huge)
+      fontSize: scale(18),
       fontWeight: "900",
       color: TEXT_DARK,
       letterSpacing: 0.2,
     },
 
-    // --- Segmented pill like screenshot ---
     segmentWrap: {
       paddingHorizontal: scale(14),
       paddingTop: vscale(2),
@@ -530,15 +553,15 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       borderColor: BORDER,
       flexDirection: "row",
       padding: scale(3),
+      position: "relative",
+      overflow: "hidden",
     },
-    segmentBtn: {
-      flex: 1,
+    segmentIndicator: {
+      position: "absolute",
+      left: 0,
+      top: scale(3),
+      bottom: scale(3),
       borderRadius: vscale(16),
-      alignItems: "center",
-      justifyContent: "center",
-      paddingHorizontal: scale(6),
-    },
-    segmentBtnActive: {
       backgroundColor: "#0A3F79",
       shadowColor: "#000",
       shadowOpacity: 0.12,
@@ -546,25 +569,23 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       shadowOffset: { width: 0, height: 6 },
       elevation: 3,
     },
-    segmentBtnActiveGhost: { backgroundColor: "transparent" },
-
-    segmentText: {
-      fontSize: scale(11),
-      fontWeight: "900",
-      color: "#FFFFFF",
+    segmentBtn: {
+      flex: 1,
+      borderRadius: vscale(16),
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: scale(6),
+      zIndex: 2,
     },
-    segmentTextActive: { color: "#FFFFFF" },
-
     segmentTextGhost: {
       fontSize: scale(11),
       fontWeight: "900",
       color: PRIMARY,
     },
-    segmentTextGhostActive: { color: PRIMARY },
+    segmentTextActive: { color: "#FFFFFF" },
 
     scrollContent: { paddingHorizontal: scale(14), paddingTop: vscale(6) },
 
-    // --- Card like screenshot ---
     detailsCard: {
       borderWidth: 1,
       borderColor: BORDER,
@@ -586,10 +607,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       color: TEXT_DARK,
       marginBottom: vscale(10),
     },
-    statusText: {
-      color: TEXT_DARK,
-      fontWeight: "900",
-    },
+    statusText: { color: TEXT_DARK, fontWeight: "900" },
 
     incidentTitle: {
       fontSize: scale(12.5),
@@ -668,7 +686,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
     alertNo: { color: PRIMARY, fontWeight: "900" },
 
-    // --- Threads styling (kept clean) ---
+    // Threads
     threadOuter: { flex: 1, paddingHorizontal: scale(14), paddingTop: vscale(6) },
     threadCard: {
       flex: 1,

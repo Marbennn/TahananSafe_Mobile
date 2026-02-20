@@ -141,13 +141,10 @@ export default function IncidentLogScreen({
   const s = useMemo(() => clamp(screenWidth / 375, 0.9, 1.2), [screenWidth]);
 
   const [mode, setMode] = useState<Mode>("complain");
-
   const [incidentType, setIncidentType] = useState<IncidentTypeValue>("Other");
 
   const [details, setDetails] = useState("");
-
   const [offenderName, setOffenderName] = useState("");
-
   const [witnessName, setWitnessName] = useState("");
   const [witnessType, setWitnessType] = useState("");
 
@@ -261,56 +258,107 @@ export default function IncidentLogScreen({
     }
   };
 
+  // ===================== PHOTO HELPERS (UPDATED) =====================
+  const canAddMorePhotos = () => photos.length < MAX_PHOTOS;
+
+  const mergeAndLimitPhotos = (newUris: string[]) => {
+    if (!newUris || newUris.length === 0) return;
+
+    setPhotos((prev) => {
+      const merged = Array.from(new Set([...prev, ...newUris]));
+      const sliced = merged.slice(0, MAX_PHOTOS);
+      log("Photos state updated", { prevCount: prev.length, newCount: sliced.length });
+      return sliced;
+    });
+  };
+
+  const pickFromGallery = async () => {
+    if (submitting) return;
+
+    if (!canAddMorePhotos()) {
+      Alert.alert("Max reached", `You can only add up to ${MAX_PHOTOS} photos.`);
+      return;
+    }
+
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    log("MediaLibrary permission result", perm);
+
+    if (perm.status !== "granted") {
+      Alert.alert("Permission needed", "Please allow photo access so you can upload images.");
+      return;
+    }
+
+    const remaining = MAX_PHOTOS - photos.length;
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.8,
+      allowsMultipleSelection: true,
+      selectionLimit: remaining,
+    });
+
+    log("ImagePicker gallery canceled", result.canceled);
+    if (result.canceled) return;
+
+    const newUris = (result.assets ?? []).map((a) => a.uri).filter(Boolean);
+    log("Picked gallery photo URIs count", newUris.length);
+
+    mergeAndLimitPhotos(newUris);
+  };
+
+  const takePhoto = async () => {
+    if (submitting) return;
+
+    if (!canAddMorePhotos()) {
+      Alert.alert("Max reached", `You can only add up to ${MAX_PHOTOS} photos.`);
+      return;
+    }
+
+    const camPerm = await ImagePicker.requestCameraPermissionsAsync();
+    log("Camera permission result", camPerm);
+
+    if (camPerm.status !== "granted") {
+      Alert.alert("Permission needed", "Please allow camera access so you can take a photo.");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.8,
+    });
+
+    log("Camera canceled", result.canceled);
+    if (result.canceled) return;
+
+    const uri = result.assets?.[0]?.uri;
+    if (!uri) return;
+
+    mergeAndLimitPhotos([uri]);
+  };
+
+  // ✅ Now Add Photo shows option picker
   const onAddPhoto = async () => {
     try {
       if (submitting) return;
 
-      if (photos.length >= MAX_PHOTOS) {
+      if (!canAddMorePhotos()) {
         Alert.alert("Max reached", `You can only add up to ${MAX_PHOTOS} photos.`);
         return;
       }
 
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      log("ImagePicker permission result", perm);
-
-      if (perm.status !== "granted") {
-        Alert.alert(
-          "Permission needed",
-          "Please allow photo access so you can upload images."
-        );
-        return;
-      }
-
-      const remaining = MAX_PHOTOS - photos.length;
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 0.8,
-        allowsMultipleSelection: true,
-        selectionLimit: remaining,
-      });
-
-      log("ImagePicker result.canceled", result.canceled);
-
-      if (result.canceled) return;
-
-      const newUris = (result.assets ?? []).map((a) => a.uri).filter(Boolean);
-      log("Picked photo URIs count", newUris.length);
-
-      if (newUris.length === 0) return;
-
-      setPhotos((prev) => {
-        const merged = Array.from(new Set([...prev, ...newUris]));
-        const sliced = merged.slice(0, MAX_PHOTOS);
-        log("Photos state updated", { prevCount: prev.length, newCount: sliced.length });
-        return sliced;
-      });
+      Alert.alert("Add Photo", "Choose a source:", [
+        { text: "Take a Picture", onPress: () => void takePhoto() },
+        { text: "Upload from Gallery", onPress: () => void pickFromGallery() },
+        { text: "Cancel", style: "cancel" },
+      ]);
     } catch (e) {
       log("onAddPhoto ERROR", e);
-      Alert.alert("Error", "Could not open your gallery. Please try again.");
+      Alert.alert("Error", "Could not open photo options. Please try again.");
     }
   };
+  // ================================================================
 
   const removePhotoAt = (index: number) => {
     if (submitting) return;
