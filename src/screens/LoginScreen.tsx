@@ -18,7 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 // ✅ Biometrics
 import * as LocalAuthentication from "expo-local-authentication";
 
-// ✅ SecureStore (for refresh token saved after OTP verify)
+// ✅ SecureStore
 import * as SecureStore from "expo-secure-store";
 
 // ✅ React Navigation
@@ -38,7 +38,7 @@ import ForgotPasswordSuccessModal from "../components/LoginScreen/ForgotPassword
 // ✅ Legal modal
 import LegalModal, { type LegalMode } from "../components/LoginScreen/LegalModal";
 
-// ✅ Session storage (AsyncStorage)
+// ✅ Session storage
 import { saveTokens, setLoggedIn } from "../auth/session";
 
 type Props = {
@@ -69,11 +69,13 @@ function showInvalidCredentials() {
   Alert.alert(INVALID_CREDENTIALS_TITLE, INVALID_CREDENTIALS_BODY);
 }
 
+function showServerUnavailable() {
+  Alert.alert("Server unavailable", "Please try again. (Tunnel/Server issue)");
+}
+
 /**
  * ============================
  * ✅ Client-side Rate Limiting (Device-local)
- * - Uses SecureStore so it persists across reloads
- * - Not security, but good UX / anti-spam
  * ============================
  */
 const RL_KEYS = {
@@ -87,17 +89,14 @@ type WindowCounter = {
   count: number;
 };
 
-// TUNING (feel free to adjust)
+// TUNING
 const RL = {
-  // login attempts (tap login)
   LOGIN_MAX: 5,
   LOGIN_WINDOW_MS: 2 * 60 * 1000, // 2 minutes
 
-  // otp send (purpose=otp) — includes resend calls
   OTP_SEND_MAX: 3,
   OTP_SEND_WINDOW_MS: 5 * 60 * 1000, // 5 minutes
 
-  // resend minimum gap
   RESEND_MIN_GAP_MS: 30 * 1000, // 30 seconds
 };
 
@@ -135,12 +134,6 @@ function formatCooldown(ms: number) {
   return `${m}m`;
 }
 
-/**
- * ✅ Increments a counter in a rolling window.
- * Returns:
- * - allowed: boolean
- * - retryAfterMs: number (if blocked)
- */
 async function hitWindowCounter(
   key: string,
   limit: number,
@@ -153,7 +146,6 @@ async function hitWindowCounter(
 
   const elapsed = nowMs() - current.windowStartMs;
 
-  // reset window if expired
   const next =
     elapsed >= windowMs
       ? { windowStartMs: nowMs(), count: 1 }
@@ -210,7 +202,6 @@ async function postJson(url: string, body: any) {
 
 /**
  * ✅ check credentials ONLY (NO OTP email)
- * Calls: POST /login with { purpose: "check" }
  */
 async function loginCheckRequest(email: string, password: string) {
   const url = `${API_URL}${LOGIN_PATH}`;
@@ -240,7 +231,6 @@ async function loginCheckRequest(email: string, password: string) {
 
 /**
  * ✅ Sends OTP email
- * Calls: POST /login with { purpose: "otp" }
  */
 async function loginSendOtpRequest(email: string, password: string) {
   const url = `${API_URL}${LOGIN_PATH}`;
@@ -268,6 +258,14 @@ async function loginSendOtpRequest(email: string, password: string) {
   return data as LoginSendOtpResponse;
 }
 
+class HttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function refreshAccessToken(refreshToken: string) {
   const url = `${API_URL}${REFRESH_PATH}`;
   console.log(`${TAG} refresh URL:`, url);
@@ -279,11 +277,11 @@ async function refreshAccessToken(refreshToken: string) {
 
   if (!res.ok) {
     const msg = data?.message || `Refresh failed (HTTP ${res.status})`;
-    throw new Error(msg);
+    throw new HttpError(res.status, msg);
   }
 
   if (!data?.accessToken) {
-    throw new Error("Refresh did not return accessToken.");
+    throw new HttpError(500, "Refresh did not return accessToken.");
   }
 
   return data.accessToken as string;
@@ -302,6 +300,30 @@ function refreshKeyForEmail(email: string) {
   return `tahanansafe_refresh_${safeKeyPart(email)}`;
 }
 
+/** ✅ per-email biometrics opt-in key */
+function bioOptInKeyForEmail(email: string) {
+  return `tahanansafe_bio_optin_${safeKeyPart(email)}`;
+}
+
+async function getBioOptInForEmail(email: string): Promise<boolean> {
+  const key = bioOptInKeyForEmail(email);
+  try {
+    const v = await SecureStore.getItemAsync(key);
+    return v === "1";
+  } catch {
+    return false;
+  }
+}
+
+async function setBioOptInForEmail(email: string, enabled: boolean) {
+  const key = bioOptInKeyForEmail(email);
+  try {
+    await SecureStore.setItemAsync(key, enabled ? "1" : "0");
+  } catch {
+    // ignore
+  }
+}
+
 async function getRefreshTokenForEmail(email: string): Promise<string | null> {
   const key = refreshKeyForEmail(email);
   try {
@@ -311,6 +333,16 @@ async function getRefreshTokenForEmail(email: string): Promise<string | null> {
   } catch (e: any) {
     console.log(`${TAG} SecureStore get refresh failed:`, e?.message);
     return null;
+  }
+}
+
+async function deleteRefreshTokenForEmail(email: string) {
+  const key = refreshKeyForEmail(email);
+  try {
+    await SecureStore.deleteItemAsync(key);
+    console.log(`${TAG} SecureStore refresh deleted`, { key });
+  } catch (e: any) {
+    console.log(`${TAG} SecureStore delete refresh failed:`, e?.message);
   }
 }
 
@@ -386,6 +418,10 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const [verifyPassword, setVerifyPassword] = useState<string>(""); // for resend
   const [sendingOtp, setSendingOtp] = useState(false);
 
+  // ✅ Track if this login is "first time" (no refresh token existed before OTP)
+  const [pendingFirstLoginBioPrompt, setPendingFirstLoginBioPrompt] =
+    useState(false);
+
   // ✅ Forgot password flow
   const [forgotStep, setForgotStep] = useState<ForgotStep>("none");
   const [resetEmail, setResetEmail] = useState("");
@@ -429,27 +465,65 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     console.log(`${TAG} OTP modal opened`);
   };
 
+  const maybeAskBiometricsOptIn = async (emailNorm: string) => {
+    try {
+      // If user already decided before, don't ask again
+      const alreadyOpted = await SecureStore.getItemAsync(
+        bioOptInKeyForEmail(emailNorm)
+      );
+      if (alreadyOpted === "1" || alreadyOpted === "0") {
+        return;
+      }
+
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+
+      // If device can't do biometrics, just silently skip asking
+      if (!hasHardware || !enrolled) return;
+
+      Alert.alert(
+        "Enable Biometrics?",
+        Platform.OS === "ios"
+          ? "Do you want to use Face ID for faster login next time?"
+          : "Do you want to use fingerprint for faster login next time?",
+        [
+          {
+            text: "Not now",
+            style: "cancel",
+            onPress: () => {
+              setBioOptInForEmail(emailNorm, false);
+            },
+          },
+          {
+            text: "Enable",
+            onPress: () => {
+              setBioOptInForEmail(emailNorm, true);
+            },
+          },
+        ]
+      );
+    } catch {
+      // ignore
+    }
+  };
+
   const handleLoginPressed = async (email: string, password: string) => {
     if (sendingOtp) return;
 
     const emailNorm = String(email ?? "").trim().toLowerCase();
     const passwordNorm = String(password ?? "");
 
-    // ✅ Any missing fields => show Invalid Credentials only
     if (!emailNorm || !passwordNorm) {
       showInvalidCredentials();
       return;
     }
 
-    // ✅ Client-side login attempt rate limit
     const loginHit = await hitWindowCounter(
       RL_KEYS.LOGIN_ATTEMPTS,
       RL.LOGIN_MAX,
       RL.LOGIN_WINDOW_MS
     );
     if (!loginHit.allowed) {
-      // keep your rule: errors show Invalid Credentials only
-      // (but we can show a cooldown message without revealing credential validity)
       Alert.alert(
         "Please wait",
         `Too many attempts. Try again in ${formatCooldown(
@@ -463,36 +537,63 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       setSendingOtp(true);
       console.log(`${TAG} handleLoginPressed START`, { email: emailNorm });
 
-      // ✅ STEP 1: Always validate email+password FIRST (NO OTP EMAIL)
+      // ✅ STEP 1: validate credentials FIRST
       await loginCheckRequest(emailNorm, passwordNorm);
 
-      // ✅ STEP 2: If refresh token exists, try biometrics quick-login (NO OTP)
+      // ✅ STEP 2: If refresh exists AND user opted in -> biometrics quick login
       const storedRefresh = await getRefreshTokenForEmail(emailNorm);
+      const bioOptedIn = await getBioOptInForEmail(emailNorm);
 
-      if (storedRefresh) {
+      if (storedRefresh && bioOptedIn) {
         const bio = await runBiometricsGate();
 
         if (bio.ok) {
           console.log(`${TAG} biometrics SUCCESS -> refresh token login`);
 
-          const newAccess = await refreshAccessToken(storedRefresh);
+          try {
+            const newAccess = await refreshAccessToken(storedRefresh);
 
-          await saveTokens({ accessToken: newAccess });
-          await setLoggedIn(true);
+            await saveTokens({ accessToken: newAccess });
+            await setLoggedIn(true);
 
-          console.log(`${TAG} refreshed access token saved -> go Home`);
-          onLoginSuccess();
-          return;
+            console.log(`${TAG} refreshed access token saved -> go Home`);
+            onLoginSuccess();
+            return;
+          } catch (e: any) {
+            // ✅ IMPORTANT: Refresh errors are NOT invalid credentials
+            const status = e?.status;
+
+            console.log(`${TAG} refresh failed -> fallback to OTP`, {
+              status,
+              message: e?.message,
+            });
+
+            if (status === 401) {
+              // refresh token expired/invalid -> delete it so we don't loop forever
+              await deleteRefreshTokenForEmail(emailNorm);
+            }
+
+            if (status === 503) {
+              showServerUnavailable();
+            }
+            // continue to OTP fallback below
+          }
+        } else {
+          console.log(
+            `${TAG} biometrics not ok (${bio.reason}) -> send OTP fallback`
+          );
         }
-
-        console.log(
-          `${TAG} biometrics not ok (${bio.reason}) -> send OTP fallback`
-        );
       } else {
-        console.log(`${TAG} no stored refresh token yet -> OTP required`);
+        if (storedRefresh && !bioOptedIn) {
+          console.log(
+            `${TAG} refresh exists but user did not opt-in to biometrics -> OTP`
+          );
+        } else {
+          console.log(`${TAG} no stored refresh token yet -> OTP required`);
+        }
       }
 
-      // ✅ Client-side OTP send rate limit (covers first-time OTP + fallback)
+      // ✅ STEP 3: send OTP
       const otpHit = await hitWindowCounter(
         RL_KEYS.OTP_SENDS,
         RL.OTP_SEND_MAX,
@@ -508,12 +609,13 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         return;
       }
 
-      // ✅ STEP 3: Only NOW send OTP email
+      // ✅ Determine if this is the "first time" (no refresh token existed BEFORE OTP)
+      setPendingFirstLoginBioPrompt(!storedRefresh);
+
       await loginSendOtpRequest(emailNorm, passwordNorm);
       openOtpModal(emailNorm, passwordNorm);
     } catch (err: any) {
       console.log(`${TAG} handleLoginPressed ERROR:`, err?.message || err);
-      // ✅ Requirement: everything shows Invalid Credentials only
       showInvalidCredentials();
     } finally {
       setSendingOtp(false);
@@ -522,13 +624,11 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   };
 
   const handleResend = async () => {
-    // ✅ Requirement: everything shows Invalid Credentials only
     if (!verifyEmail || !verifyPassword) {
       showInvalidCredentials();
       return;
     }
 
-    // ✅ Client-side resend cooldown
     const resendOk = await canResend();
     if (!resendOk.ok) {
       Alert.alert(
@@ -538,7 +638,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       return;
     }
 
-    // ✅ Also count it against OTP_SENDS window
     const otpHit = await hitWindowCounter(
       RL_KEYS.OTP_SENDS,
       RL.OTP_SEND_MAX,
@@ -560,7 +659,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
 
       await markResendNow();
 
-      // ✅ Success message is allowed (not an error)
       Alert.alert("Resent", "Verification code resent to your email.");
       console.log(`${TAG} resend END`);
     } catch (err: any) {
@@ -569,8 +667,16 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     }
   };
 
-  const handleVerified = (_code: string) => {
+  // ✅ Called after OTP verified
+  const handleVerified = async (_code: string) => {
     setVerifyOpen(false);
+
+    // Only ask on first successful login for this account on this device
+    if (pendingFirstLoginBioPrompt && verifyEmail) {
+      await maybeAskBiometricsOptIn(verifyEmail);
+    }
+
+    setPendingFirstLoginBioPrompt(false);
     onLoginSuccess();
   };
 

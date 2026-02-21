@@ -141,7 +141,7 @@ export default function PinScreen({ onVerified, onForgotPin, onBack }: Props) {
             >
               <Ionicons
                 name="backspace-outline"
-                size={scale(26)}   // ⬅️ increased size
+                size={scale(26)}
                 color={BLUE}
               />
             </Pressable>

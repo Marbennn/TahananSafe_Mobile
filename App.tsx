@@ -231,31 +231,74 @@ function MainShell({
   return null;
 }
 
+/* ===================== HELPERS ===================== */
+
+async function bootstrapAfterLogin({
+  navigation,
+  auth,
+}: {
+  navigation: any;
+  auth: any;
+}) {
+  await setLoggedIn(true);
+
+  try {
+    const token = await getAccessToken();
+    if (token) {
+      const me = await getMeApi({ accessToken: token });
+
+      // ✅ IMPORTANT: update AuthContext user so GreetingCard updates
+      try {
+        auth?.setUser?.(me.user);
+      } catch {
+        // ignore
+      }
+
+      const hasPin = !!me.user.hasPin;
+      await setHasPin(hasPin);
+
+      if (hasPin) {
+        if (isPinUnlockedThisRun()) {
+          navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+          return;
+        }
+        navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
+        return;
+      }
+
+      const userId = String(me.user._id);
+      const skipped = await isPinSkippedForUser(userId);
+      if (skipped) {
+        navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+        return;
+      }
+
+      navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] });
+      return;
+    }
+  } catch {}
+
+  navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+}
+
 /* ===================== MAIN SCREEN WRAPPER (FIX) ===================== */
-/**
- * ✅ This wrapper lets us call AuthContext.logout() properly.
- * That clears @tahanansafe_user so GreetingCard won't show the previous account.
- */
+
 function MainScreenWrapper({ navigation, route }: { navigation: any; route: any }) {
   const { logout: authLogout } = useAuth() as any;
 
-  // ✅ Receive incoming report param
   const incomingReport: ReportItem | null = route?.params?.openReport ?? null;
 
   return (
     <MainShell
       onLogout={async () => {
-        // ✅ reset in-memory pin unlock
         resetPinUnlockedThisRun();
 
-        // ✅ IMPORTANT: clear AuthContext + @tahanansafe_user
         try {
           await authLogout();
         } catch {
           // ignore
         }
 
-        // ✅ keep your session flags/tokens consistent too
         await setLoggedIn(false);
         await setHasPin(false);
 
@@ -264,7 +307,6 @@ function MainScreenWrapper({ navigation, route }: { navigation: any; route: any 
       onOpenNotifications={() => navigation.navigate("Notifications")}
       incomingReport={incomingReport}
       clearIncomingReport={() => {
-        // ✅ clear route param so it won't re-open again
         try {
           navigation.setParams({ openReport: undefined });
         } catch {
@@ -273,6 +315,191 @@ function MainScreenWrapper({ navigation, route }: { navigation: any; route: any 
       }}
     />
   );
+}
+
+/* ===================== ✅ NEW: PIN SCREEN WRAPPER (SWITCH ACCOUNT FIX) ===================== */
+
+function PinScreenWrapper({ navigation }: { navigation: any }) {
+  const auth = useAuth() as any;
+
+  const handleBack = async () => {
+    // ✅ THIS is the fix:
+    // Back from PIN means user wants to switch account -> full logout.
+    resetPinUnlockedThisRun();
+
+    try {
+      await auth.logout();
+    } catch {
+      // ignore
+    }
+
+    await setLoggedIn(false);
+    await setHasPin(false);
+
+    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+  };
+
+  return (
+    <PinScreen
+      onBack={handleBack}
+      onForgotPin={() => {
+        Alert.alert("Forgot PIN", "Recovery coming soon.");
+      }}
+      onVerified={async (pin) => {
+        try {
+          const token = await getAccessToken();
+          if (!token) {
+            await setLoggedIn(false);
+            resetPinUnlockedThisRun();
+            try {
+              await auth.logout();
+            } catch {}
+            navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
+            return;
+          }
+
+          await verifyPinApi({ accessToken: token, pin });
+
+          setPinUnlockedThisRun(true);
+          navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+        } catch (e: any) {
+          Alert.alert("Invalid PIN", e?.message || "Try again.");
+        }
+      }}
+    />
+  );
+}
+
+/* ===================== AUTH FLOW WRAPPER (HOOK-SAFE) ===================== */
+
+function AuthFlowWrapper({ navigation }: { navigation: any }) {
+  const auth = useAuth() as any;
+
+  return (
+    <AuthFlowShell
+      onExitToOnboarding={() => navigation.goBack()}
+      onGoLogin={() => navigation.navigate("Login")}
+      onAuthDone={async () => {
+        await bootstrapAfterLogin({ navigation, auth });
+      }}
+    />
+  );
+}
+
+/* ===================== LOGIN WRAPPER (HOOK-SAFE) ===================== */
+
+function LoginWrapper({ navigation }: { navigation: any }) {
+  const auth = useAuth() as any;
+
+  return (
+    <LoginScreen
+      onGoSignup={() => navigation.replace("AuthFlow")}
+      onLoginSuccess={async () => {
+        await bootstrapAfterLogin({ navigation, auth });
+      }}
+    />
+  );
+}
+
+/* ===================== SPLASH WRAPPER ===================== */
+
+function AppSplashScreenWrapper({
+  onGoMain,
+  onGoPin,
+  onGoCreatePin,
+  onGoOnboarding,
+  onGoAuthFlow,
+}: {
+  onGoMain: () => void;
+  onGoPin: () => void;
+  onGoCreatePin: () => void;
+  onGoOnboarding: () => void;
+  onGoAuthFlow: () => void;
+}) {
+  const auth = useAuth() as any;
+
+  React.useEffect(() => {
+    let mounted = true;
+
+    const t = setTimeout(async () => {
+      try {
+        const seenOnboarding = await isOnboardingSeen();
+        if (!mounted) return;
+
+        const logged = await isLoggedIn();
+        if (!mounted) return;
+
+        if (!logged) {
+          // ✅ ensure context user cleared if not logged
+          try {
+            auth?.setUser?.(null);
+          } catch {}
+
+          if (!seenOnboarding) onGoOnboarding();
+          else onGoAuthFlow();
+          return;
+        }
+
+        const token = await getAccessToken();
+        if (!token) {
+          try {
+            auth?.setUser?.(null);
+          } catch {}
+
+          if (!seenOnboarding) onGoOnboarding();
+          else onGoAuthFlow();
+          return;
+        }
+
+        const me = await getMeApi({ accessToken: token });
+
+        // ✅ keep GreetingCard correct on cold-start
+        try {
+          auth?.setUser?.(me.user);
+        } catch {}
+
+        const hasPin = !!me.user.hasPin;
+        await setHasPin(hasPin);
+        if (!mounted) return;
+
+        if (hasPin) {
+          if (isPinUnlockedThisRun()) onGoMain();
+          else onGoPin();
+          return;
+        }
+
+        const userId = String(me.user._id);
+        const skipped = await isPinSkippedForUser(userId);
+        if (skipped) {
+          onGoMain();
+          return;
+        }
+
+        onGoCreatePin();
+      } catch {
+        if (!mounted) return;
+
+        try {
+          try {
+            auth?.setUser?.(null);
+          } catch {}
+
+          const seenOnboarding = await isOnboardingSeen();
+          if (!seenOnboarding) onGoOnboarding();
+          else onGoAuthFlow();
+        } catch {
+          onGoOnboarding();
+        }
+      }
+    }, 1200);
+
+    return () => {
+      mounted = false;
+      clearTimeout(t);
+    };
+  }, [onGoMain, onGoPin, onGoCreatePin, onGoOnboarding, onGoAuthFlow]);
+
+  return <AppSplashScreen />;
 }
 
 /* ===================== APP ROOT ===================== */
@@ -311,86 +538,11 @@ export default function App() {
               </Stack.Screen>
 
               <Stack.Screen name="AuthFlow">
-                {({ navigation }) => (
-                  <AuthFlowShell
-                    onExitToOnboarding={() => navigation.goBack()}
-                    onGoLogin={() => navigation.navigate("Login")}
-                    onAuthDone={async () => {
-                      await setLoggedIn(true);
-
-                      try {
-                        const token = await getAccessToken();
-                        if (token) {
-                          const me = await getMeApi({ accessToken: token });
-                          const hasPin = !!me.user.hasPin;
-                          await setHasPin(hasPin);
-
-                          if (hasPin) {
-                            if (isPinUnlockedThisRun()) {
-                              navigation.reset({ index: 0, routes: [{ name: "Main" }] });
-                              return;
-                            }
-                            navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
-                            return;
-                          }
-
-                          const userId = String(me.user._id);
-                          const skipped = await isPinSkippedForUser(userId);
-                          if (skipped) {
-                            navigation.reset({ index: 0, routes: [{ name: "Main" }] });
-                            return;
-                          }
-
-                          navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] });
-                          return;
-                        }
-                      } catch {}
-
-                      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
-                    }}
-                  />
-                )}
+                {({ navigation }) => <AuthFlowWrapper navigation={navigation} />}
               </Stack.Screen>
 
               <Stack.Screen name="Login">
-                {({ navigation }) => (
-                  <LoginScreen
-                    onGoSignup={() => navigation.replace("AuthFlow")}
-                    onLoginSuccess={async () => {
-                      await setLoggedIn(true);
-
-                      try {
-                        const token = await getAccessToken();
-                        if (token) {
-                          const me = await getMeApi({ accessToken: token });
-                          const hasPin = !!me.user.hasPin;
-                          await setHasPin(hasPin);
-
-                          if (hasPin) {
-                            if (isPinUnlockedThisRun()) {
-                              navigation.reset({ index: 0, routes: [{ name: "Main" }] });
-                              return;
-                            }
-                            navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
-                            return;
-                          }
-
-                          const userId = String(me.user._id);
-                          const skipped = await isPinSkippedForUser(userId);
-                          if (skipped) {
-                            navigation.reset({ index: 0, routes: [{ name: "Main" }] });
-                            return;
-                          }
-
-                          navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] });
-                          return;
-                        }
-                      } catch {}
-
-                      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
-                    }}
-                  />
-                )}
+                {({ navigation }) => <LoginWrapper navigation={navigation} />}
               </Stack.Screen>
 
               <Stack.Screen name="CreatePin">
@@ -409,32 +561,7 @@ export default function App() {
               </Stack.Screen>
 
               <Stack.Screen name="Pin">
-                {({ navigation }) => (
-                  <PinScreen
-                    onBack={() => navigation.reset({ index: 0, routes: [{ name: "Login" }] })}
-                    onForgotPin={() => {
-                      Alert.alert("Forgot PIN", "Recovery coming soon.");
-                    }}
-                    onVerified={async (pin) => {
-                      try {
-                        const token = await getAccessToken();
-                        if (!token) {
-                          await setLoggedIn(false);
-                          resetPinUnlockedThisRun();
-                          navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
-                          return;
-                        }
-
-                        await verifyPinApi({ accessToken: token, pin });
-
-                        setPinUnlockedThisRun(true);
-                        navigation.reset({ index: 0, routes: [{ name: "Main" }] });
-                      } catch (e: any) {
-                        Alert.alert("Invalid PIN", e?.message || "Try again.");
-                      }
-                    }}
-                  />
-                )}
+                {({ navigation }) => <PinScreenWrapper navigation={navigation} />}
               </Stack.Screen>
 
               <Stack.Screen name="Main">
@@ -454,87 +581,6 @@ export default function App() {
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
-}
-
-/* ===================== SPLASH WRAPPER ===================== */
-
-function AppSplashScreenWrapper({
-  onGoMain,
-  onGoPin,
-  onGoCreatePin,
-  onGoOnboarding,
-  onGoAuthFlow,
-}: {
-  onGoMain: () => void;
-  onGoPin: () => void;
-  onGoCreatePin: () => void;
-  onGoOnboarding: () => void;
-  onGoAuthFlow: () => void;
-}) {
-  React.useEffect(() => {
-    let mounted = true;
-
-    const t = setTimeout(async () => {
-      try {
-        const seenOnboarding = await isOnboardingSeen();
-        if (!mounted) return;
-
-        const logged = await isLoggedIn();
-        if (!mounted) return;
-
-        if (!logged) {
-          if (!seenOnboarding) onGoOnboarding();
-          else onGoAuthFlow();
-          return;
-        }
-
-        const token = await getAccessToken();
-        if (!token) {
-          if (!seenOnboarding) onGoOnboarding();
-          else onGoAuthFlow();
-          return;
-        }
-
-        const me = await getMeApi({ accessToken: token });
-        const hasPin = !!me.user.hasPin;
-
-        await setHasPin(hasPin);
-        if (!mounted) return;
-
-        if (hasPin) {
-          if (isPinUnlockedThisRun()) onGoMain();
-          else onGoPin();
-          return;
-        }
-
-        const userId = String(me.user._id);
-        const skipped = await isPinSkippedForUser(userId);
-        if (skipped) {
-          onGoMain();
-          return;
-        }
-
-        onGoCreatePin();
-      } catch {
-        if (!mounted) return;
-
-        try {
-          const seenOnboarding = await isOnboardingSeen();
-          if (!seenOnboarding) onGoOnboarding();
-          else onGoAuthFlow();
-        } catch {
-          onGoOnboarding();
-        }
-      }
-    }, 1200);
-
-    return () => {
-      mounted = false;
-      clearTimeout(t);
-    };
-  }, [onGoMain, onGoPin, onGoCreatePin, onGoOnboarding, onGoAuthFlow]);
-
-  return <AppSplashScreen />;
 }
 
 const styles = StyleSheet.create({
