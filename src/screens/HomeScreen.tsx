@@ -16,6 +16,8 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import { Colors } from "../theme/colors";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 
@@ -27,7 +29,7 @@ import HomeScreenLogo from "../../assets/HomeScreen/NewLogo.svg";
 // ✅ Tutorial overlay
 import FabTutorialOverlay from "../components/Tutorial/FabTutorialOverlay";
 
-// ✅ Auth context (real logged in user)
+// ✅ Auth context
 import { useAuth } from "../auth/AuthContext";
 
 // ✅ session token fallback
@@ -36,7 +38,7 @@ import { getAccessToken } from "../auth/session";
 // ✅ /me API
 import { getMeApi } from "../api/pin";
 
-// ✅ Use ReportItem type (same object your ReportDetailScreen expects)
+// ✅ Use ReportItem type
 import type { ReportItem } from "./ReportScreen";
 
 type Props = {
@@ -46,12 +48,14 @@ type Props = {
 
   onOpenNotifications?: () => void;
 
-  // ✅ NEW: used to open ReportDetailScreen via MainShell state (NO navigation.navigate)
   onOpenReport?: (report: ReportItem) => void;
 };
 
 const BG = "#F5FAFE";
 const TEXT_DARK = "#0B2B45";
+
+// ✅ once-only tutorial key
+const FAB_TUTORIAL_SEEN_KEY = "tahanansafe_fab_tutorial_seen_v1";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -78,7 +82,7 @@ function makeDateLine(d: Date) {
   return `${weekday} | ${monthDayYear} | ${time}`;
 }
 
-// ✅ Use your Expo .env variable (ngrok or LAN IP)
+// ✅ API base
 function getApiBaseUrl() {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
 
@@ -124,7 +128,6 @@ function formatFullDate(d: Date) {
 function parseDateSmart(input?: string): Date | null {
   if (!input) return null;
 
-  // mm/dd/yyyy
   const mdY = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
   const match = input.match(mdY);
   if (match) {
@@ -156,7 +159,6 @@ function normalizeStatus(dbStatus?: string): ReportItem["status"] {
   return "PENDING";
 }
 
-// ✅ Safer photo mapping (fixes "[object Object]" issue)
 function normalizePhoto(p: any): string {
   if (!p) return "";
   if (typeof p === "string") return p;
@@ -181,32 +183,60 @@ export default function HomeScreen({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
-  // ✅ IMPORTANT: AuthContext fields are accessToken + refreshMe (not "token")
+  // ✅ AuthContext
   const { user, setUser, accessToken, refreshMe } = useAuth() as any;
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // ✅ Tutorial overlay state
+  // ✅ Tutorial
   const [showFabTutorial, setShowFabTutorial] = useState(false);
+  const tutorialBootRef = useRef(false);
 
-  useEffect(() => {
-    setShowFabTutorial(true);
-  }, []);
-
-  /**
-   * ✅ Fix: Always sync profile from /me after auth changes.
-   * This prevents "User" showing even though DB already has firstName.
-   */
-  const syncingRef = useRef(false);
-
-  const syncProfile = useCallback(async () => {
-    if (syncingRef.current) return;
-    syncingRef.current = true;
+  const showFabTutorialOnce = useCallback(async () => {
+    if (tutorialBootRef.current) return;
+    tutorialBootRef.current = true;
 
     try {
-      const t = accessToken || (await getAccessToken());
-      if (!t) return;
+      const seen = await AsyncStorage.getItem(FAB_TUTORIAL_SEEN_KEY);
+      if (seen === "1") return;
 
+      setShowFabTutorial(true);
+      await AsyncStorage.setItem(FAB_TUTORIAL_SEEN_KEY, "1");
+    } catch {
+      setShowFabTutorial(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    showFabTutorialOnce();
+  }, [showFabTutorialOnce]);
+
+  // =========================
+  // ✅ FIXED: /me spam loop guard
+  // =========================
+  const userRef = useRef<any>(null);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  const lastMeSyncAtRef = useRef<number>(0);
+  const lastTokenRef = useRef<string>("");
+
+  const syncProfile = useCallback(async () => {
+    // throttle: at least 8 seconds between calls
+    const now = Date.now();
+    if (now - lastMeSyncAtRef.current < 8000) return;
+
+    const t = accessToken || (await getAccessToken());
+    if (!t) return;
+
+    // if token didn't change AND we already synced recently, skip
+    if (lastTokenRef.current === t && now - lastMeSyncAtRef.current < 30000) return;
+
+    lastTokenRef.current = t;
+    lastMeSyncAtRef.current = now;
+
+    try {
       const me = await getMeApi({ accessToken: t });
       const apiUser: any = me?.user ?? me;
 
@@ -218,9 +248,10 @@ export default function HomeScreen({
       const nextEmail = typeof apiUser?.email === "string" ? apiUser.email : "";
       const nextId = String(apiUser?._id ?? apiUser?.id ?? "");
 
-      const curEmail = typeof user?.email === "string" ? user.email : "";
-      const curId = String(user?._id ?? user?.id ?? "");
-      const curFirst = typeof user?.firstName === "string" ? user.firstName.trim() : "";
+      const cur = userRef.current;
+      const curEmail = typeof cur?.email === "string" ? cur.email : "";
+      const curId = String(cur?._id ?? cur?.id ?? "");
+      const curFirst = typeof cur?.firstName === "string" ? cur.firstName.trim() : "";
 
       const accountChanged =
         (nextEmail && curEmail && nextEmail !== curEmail) ||
@@ -229,6 +260,7 @@ export default function HomeScreen({
       const missingNameInContext = !curFirst;
       const haveNameFromApi = !!nextFirst;
 
+      // ✅ Only setUser if needed (prevents render loop)
       if (accountChanged || (missingNameInContext && haveNameFromApi)) {
         const nextUser = {
           _id: nextId,
@@ -249,19 +281,18 @@ export default function HomeScreen({
       }
     } catch {
       // ignore
-    } finally {
-      syncingRef.current = false;
     }
-  }, [accessToken, user, setUser]);
+  }, [accessToken, setUser]);
 
+  // ✅ Run sync when token changes / first mount only
   useEffect(() => {
     syncProfile();
+    // optional: refreshMe only once per token change
     refreshMe?.().catch?.(() => {});
   }, [syncProfile, refreshMe, accessToken]);
 
   // ✅ LIVE CLOCK
   const [now, setNow] = useState<Date>(() => new Date());
-
   useEffect(() => {
     setNow(new Date());
     const id = setInterval(() => setNow(new Date()), 60 * 1000);
@@ -277,7 +308,7 @@ export default function HomeScreen({
     return "User";
   }, [user]);
 
-  // ✅ scale based on common mobile width (375)
+  // ✅ scale
   const s = useMemo(() => clamp(width / 375, 0.9, 1.25), [width]);
   const fs = useMemo(() => clamp(s * 1.06, 0.95, 1.3), [s]);
 
@@ -305,7 +336,7 @@ export default function HomeScreen({
 
   const notifCount = 69;
 
-  // ✅ Recent logs state (real from backend)
+  // ✅ Recent reports
   const [recentReports, setRecentReports] = useState<ReportItem[]>([]);
   const [loadingReports, setLoadingReports] = useState(false);
 
@@ -444,75 +475,43 @@ export default function HomeScreen({
   // =========================
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  // height like your screenshot
   const SHEET_HEIGHT = useMemo(() => clamp(Math.round(height * 0.34), 250, 340), [height]);
-
-  // translateY: closed => SHEET_HEIGHT, open => 0
   const sheetY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
 
-  // ✅ Chevron animations
-  const chevronOpen = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
-  const chevronBounce = useRef(new Animated.Value(0)).current; // -1..0..1 bounce
+  const chevronOpen = useRef(new Animated.Value(0)).current;
+  const chevronBounce = useRef(new Animated.Value(0)).current;
 
   const startChevronBounce = useCallback(() => {
     chevronBounce.setValue(0);
     Animated.loop(
       Animated.sequence([
-        Animated.timing(chevronBounce, {
-          toValue: -1,
-          duration: 650,
-          useNativeDriver: true,
-        }),
-        Animated.timing(chevronBounce, {
-          toValue: 0,
-          duration: 650,
-          useNativeDriver: true,
-        }),
+        Animated.timing(chevronBounce, { toValue: -1, duration: 650, useNativeDriver: true }),
+        Animated.timing(chevronBounce, { toValue: 0, duration: 650, useNativeDriver: true }),
       ])
     ).start();
   }, [chevronBounce]);
 
   const stopChevronBounce = useCallback(() => {
-    chevronBounce.stopAnimation(() => {
-      chevronBounce.setValue(0);
-    });
+    chevronBounce.stopAnimation(() => chevronBounce.setValue(0));
   }, [chevronBounce]);
 
   useEffect(() => {
-    // Bounce only when sheet is CLOSED
     if (!sheetOpen) startChevronBounce();
     else stopChevronBounce();
   }, [sheetOpen, startChevronBounce, stopChevronBounce]);
 
   const openSheet = useCallback(() => {
     setSheetOpen(true);
-
     Animated.parallel([
-      Animated.timing(sheetY, {
-        toValue: 0,
-        duration: 240,
-        useNativeDriver: true,
-      }),
-      Animated.timing(chevronOpen, {
-        toValue: 1,
-        duration: 220,
-        useNativeDriver: true,
-      }),
+      Animated.timing(sheetY, { toValue: 0, duration: 240, useNativeDriver: true }),
+      Animated.timing(chevronOpen, { toValue: 1, duration: 220, useNativeDriver: true }),
     ]).start();
   }, [sheetY, chevronOpen]);
 
   const closeSheet = useCallback(() => {
     Animated.parallel([
-      Animated.timing(sheetY, {
-        toValue: SHEET_HEIGHT,
-        duration: 220,
-        useNativeDriver: true,
-      }),
-      Animated.timing(chevronOpen, {
-        toValue: 0,
-        duration: 180,
-        useNativeDriver: true,
-      }),
+      Animated.timing(sheetY, { toValue: SHEET_HEIGHT, duration: 220, useNativeDriver: true }),
+      Animated.timing(chevronOpen, { toValue: 0, duration: 180, useNativeDriver: true }),
     ]).start(({ finished }) => {
       if (finished) setSheetOpen(false);
     });
@@ -524,8 +523,6 @@ export default function HomeScreen({
       onPanResponderMove: (_, g) => {
         const next = clamp(g.dy, 0, SHEET_HEIGHT);
         sheetY.setValue(next);
-
-        // rotate chevron based on drag (optional, feels nice)
         const t = clamp(next / SHEET_HEIGHT, 0, 1);
         chevronOpen.setValue(1 - t);
       },
@@ -534,16 +531,8 @@ export default function HomeScreen({
         if (shouldClose) closeSheet();
         else {
           Animated.parallel([
-            Animated.timing(sheetY, {
-              toValue: 0,
-              duration: 190,
-              useNativeDriver: true,
-            }),
-            Animated.timing(chevronOpen, {
-              toValue: 1,
-              duration: 190,
-              useNativeDriver: true,
-            }),
+            Animated.timing(sheetY, { toValue: 0, duration: 190, useNativeDriver: true }),
+            Animated.timing(chevronOpen, { toValue: 1, duration: 190, useNativeDriver: true }),
           ]).start();
         }
       },
@@ -559,31 +548,14 @@ export default function HomeScreen({
     })
   ).current;
 
-  // ✅ keep chevron above nav/FAB
   const CHEVRON_LIFT = useMemo(() => clamp(Math.round(24 * s), 18, 34), [s]);
-  const chevronHandleBottom = useMemo(() => {
-    return navHeight + FAB_SIZE * 0.55 + CHEVRON_LIFT;
-  }, [navHeight, FAB_SIZE, CHEVRON_LIFT]);
+  const chevronHandleBottom = useMemo(() => navHeight + FAB_SIZE * 0.55 + CHEVRON_LIFT, [navHeight, FAB_SIZE, CHEVRON_LIFT]);
 
-  // ✅ STICK TO BOTTOM:
-  // remove outer paddingBottom gap; instead add safe-area padding INSIDE card
   const SHEET_TOTAL_HEIGHT = useMemo(() => SHEET_HEIGHT + bottomPad, [SHEET_HEIGHT, bottomPad]);
 
-  // Chevron animated styles
-  const chevronRotate = chevronOpen.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "180deg"], // closed (up), open (down)
-  });
-
-  const bounceY = chevronBounce.interpolate({
-    inputRange: [-1, 0],
-    outputRange: [-4, 0],
-  });
-
-  const chevronScale = chevronOpen.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 0.98],
-  });
+  const chevronRotate = chevronOpen.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] });
+  const bounceY = chevronBounce.interpolate({ inputRange: [-1, 0], outputRange: [-4, 0] });
+  const chevronScale = chevronOpen.interpolate({ inputRange: [0, 1], outputRange: [1, 0.98] });
 
   const styles = useMemo(
     () =>
@@ -600,11 +572,7 @@ export default function HomeScreen({
           justifyContent: "space-between",
         },
 
-        logoWrap: {
-          height: logoH,
-          width: logoW,
-          justifyContent: "center",
-        },
+        logoWrap: { height: logoH, width: logoW, justifyContent: "center" },
 
         rightActions: {
           flexDirection: "row",
@@ -642,10 +610,7 @@ export default function HomeScreen({
           lineHeight: clamp(Math.round(13 * fs), 11, 15),
         },
 
-        scrollContent: {
-          paddingTop: clamp(Math.round(10 * s), 8, 12),
-          rowGap: GAP,
-        },
+        scrollContent: { paddingTop: clamp(Math.round(10 * s), 8, 12), rowGap: GAP },
 
         sectionRow: {
           marginTop: clamp(Math.round(6 * s), 4, 8),
@@ -655,48 +620,14 @@ export default function HomeScreen({
           justifyContent: "space-between",
         },
 
-        sectionTitle: {
-          fontSize: clamp(Math.round(14 * fs), 13, 16),
-          fontWeight: "900",
-          color: TEXT_DARK,
-        },
+        sectionTitle: { fontSize: clamp(Math.round(14 * fs), 13, 16), fontWeight: "900", color: TEXT_DARK },
+        seeMore: { fontSize: clamp(Math.round(13 * fs), 12, 15), fontWeight: "900", color: Colors.link },
 
-        seeMore: {
-          fontSize: clamp(Math.round(13 * fs), 12, 15),
-          fontWeight: "900",
-          color: Colors.link,
-        },
+        logsWrap: { paddingHorizontal: PAD, paddingTop: clamp(Math.round(10 * s), 8, 12), gap: clamp(Math.round(12 * s), 10, 14) },
+        miniCenter: { paddingHorizontal: PAD, paddingTop: 10, alignItems: "center", justifyContent: "center" },
+        emptyHint: { fontSize: clamp(Math.round(12 * fs), 11, 14), fontWeight: "800", color: "#64748B", textAlign: "center" },
 
-        logsWrap: {
-          paddingHorizontal: PAD,
-          paddingTop: clamp(Math.round(10 * s), 8, 12),
-          gap: clamp(Math.round(12 * s), 10, 14),
-        },
-
-        miniCenter: {
-          paddingHorizontal: PAD,
-          paddingTop: 10,
-          alignItems: "center",
-          justifyContent: "center",
-        },
-
-        emptyHint: {
-          fontSize: clamp(Math.round(12 * fs), 11, 14),
-          fontWeight: "800",
-          color: "#64748B",
-          textAlign: "center",
-        },
-
-        // ✅ Chevron handle (always visible)
-        chevronHandleWrap: {
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: chevronHandleBottom,
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 60,
-        },
+        chevronHandleWrap: { position: "absolute", left: 0, right: 0, bottom: chevronHandleBottom, alignItems: "center", justifyContent: "center", zIndex: 60 },
         chevronHandle: {
           width: clamp(Math.round(54 * s), 46, 64),
           height: clamp(Math.round(26 * s), 22, 30),
@@ -713,31 +644,17 @@ export default function HomeScreen({
           elevation: 6,
         },
 
-        // ✅ Sheet modal backdrop
-        backdrop: {
-          flex: 1,
-          backgroundColor: "rgba(0,0,0,0.18)",
-        },
+        backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.18)" },
 
-        // ✅ Stick sheet to the bottom (no bottom gap)
-        sheetOuter: {
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: SHEET_TOTAL_HEIGHT,
-          paddingHorizontal: 0,
-          justifyContent: "flex-end", // ensures card is pinned to bottom
-        },
+        sheetOuter: { position: "absolute", left: 0, right: 0, bottom: 0, height: SHEET_TOTAL_HEIGHT, paddingHorizontal: 0, justifyContent: "flex-end" },
 
-        // ✅ full-width sheet with only top corners rounded
         sheetCard: {
-          height: SHEET_TOTAL_HEIGHT, // same as outer so it truly touches bottom
+          height: SHEET_TOTAL_HEIGHT,
           borderTopLeftRadius: 28,
           borderTopRightRadius: 28,
           backgroundColor: "#FFFFFF",
           paddingTop: clamp(Math.round(12 * s), 10, 14),
-          paddingBottom: bottomPad + clamp(Math.round(14 * s), 12, 16), // safe-area INSIDE
+          paddingBottom: bottomPad + clamp(Math.round(14 * s), 12, 16),
           paddingHorizontal: clamp(Math.round(18 * s), 16, 22),
           shadowColor: "#000",
           shadowOpacity: 0.14,
@@ -768,37 +685,12 @@ export default function HomeScreen({
           marginBottom: clamp(Math.round(12 * s), 10, 12),
         },
 
-        actionText: {
-          fontSize: clamp(Math.round(16 * fs), 14, 18),
-          fontWeight: "900",
-          color: "#FFFFFF",
-        },
-
-        actionIcon: {
-          marginTop: 1,
-        },
-
-        dangerBtn: {
-          backgroundColor: "#0B2B45",
-        },
-
-        actionGroup: {
-          gap: clamp(Math.round(10 * s), 8, 12),
-        },
+        actionText: { fontSize: clamp(Math.round(16 * fs), 14, 18), fontWeight: "900", color: "#FFFFFF" },
+        actionIcon: { marginTop: 1 },
+        dangerBtn: { backgroundColor: "#0B2B45" },
+        actionGroup: { gap: clamp(Math.round(10 * s), 8, 12) },
       }),
-    [
-      PAD,
-      GAP,
-      s,
-      fs,
-      logoW,
-      logoH,
-      iconBtnSize,
-      HEADER_TOP_PAD,
-      chevronHandleBottom,
-      SHEET_TOTAL_HEIGHT,
-      bottomPad,
-    ]
+    [PAD, GAP, s, fs, logoW, logoH, iconBtnSize, HEADER_TOP_PAD, chevronHandleBottom, SHEET_TOTAL_HEIGHT, bottomPad]
   );
 
   return (
@@ -816,28 +708,23 @@ export default function HomeScreen({
             <Pressable
               onPress={onOpenNotifications ?? (() => {})}
               hitSlop={12}
-              style={({ pressed }) => [
-                styles.iconBtn,
-                pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
-              ]}
+              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
             >
               <Ionicons name="notifications-outline" size={notifIconSize} color={TEXT_DARK} />
               {notifCount > 0 ? (
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {notifCount > 99 ? "99+" : String(notifCount)}
-                  </Text>
+                  <Text style={styles.badgeText}>{notifCount > 99 ? "99+" : String(notifCount)}</Text>
                 </View>
               ) : null}
             </Pressable>
 
             <Pressable
-              onPress={() => {}}
+              onPress={() => {
+                if (sheetOpen) closeSheet();
+                setShowFabTutorial(true);
+              }}
               hitSlop={12}
-              style={({ pressed }) => [
-                styles.iconBtn,
-                pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
-              ]}
+              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
             >
               <Ionicons name="help-circle-outline" size={helpIconSize} color={TEXT_DARK} />
             </Pressable>
@@ -854,12 +741,7 @@ export default function HomeScreen({
           <View style={styles.sectionRow}>
             <Text style={styles.sectionTitle}>Recent Logs</Text>
 
-            <Pressable
-              onPress={() => {
-                onTabChange?.("Reports");
-              }}
-              hitSlop={10}
-            >
+            <Pressable onPress={() => onTabChange?.("Reports")} hitSlop={10}>
               <Text style={styles.seeMore}>See more</Text>
             </Pressable>
           </View>
@@ -876,7 +758,6 @@ export default function HomeScreen({
             ) : (
               logs.map((item) => {
                 const full = recentReports.find((r) => r.id === item.id);
-
                 return (
                   <RecentLogCard
                     key={item.id}
@@ -890,34 +771,19 @@ export default function HomeScreen({
               })
             )}
           </View>
-
-          {/* ✅ QuickActions hidden */}
         </ScrollView>
 
-        {/* ✅ Chevron handle (tap OR swipe up) */}
+        {/* ✅ Chevron handle */}
         <View style={styles.chevronHandleWrap} {...handleHandlePan.panHandlers}>
           <Pressable
             onPress={() => {
-              // if already open, close
               if (sheetOpen) closeSheet();
               else openSheet();
             }}
             hitSlop={14}
-            style={({ pressed }) => [
-              styles.chevronHandle,
-              pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
-            ]}
+            style={({ pressed }) => [styles.chevronHandle, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
           >
-            <Animated.View
-              style={{
-                transform: [
-                  { translateY: bounceY },
-                  { rotate: chevronRotate },
-                  { scale: chevronScale },
-                ],
-              }}
-            >
-              {/* When rotated 180deg, it becomes a "down" chevron */}
+            <Animated.View style={{ transform: [{ translateY: bounceY }, { rotate: chevronRotate }, { scale: chevronScale }] }}>
               <Ionicons name="chevron-up" size={22} color={TEXT_DARK} />
             </Animated.View>
           </Pressable>
@@ -926,7 +792,10 @@ export default function HomeScreen({
         {/* ✅ Bottom Nav */}
         <BottomNavBar
           activeTab={activeTab}
-          onTabPress={handleTab}
+          onTabPress={(key) => {
+            setActiveTab(key);
+            onTabChange?.(key);
+          }}
           navHeight={navHeight}
           paddingBottom={bottomPad}
           chevronBottom={chevronBottom}
@@ -953,22 +822,14 @@ export default function HomeScreen({
         {/* ✅ Swipe-up Sheet Modal */}
         <Modal visible={sheetOpen} transparent animationType="none" onRequestClose={closeSheet}>
           <Pressable style={styles.backdrop} onPress={closeSheet} />
-
-          {/* ✅ pinned to bottom, animates only translateY */}
           <Animated.View style={[styles.sheetOuter, { transform: [{ translateY: sheetY }] }]}>
             <View style={styles.sheetCard} {...handlePan.panHandlers}>
               <View style={styles.sheetGrabber} />
 
               <View style={styles.actionGroup}>
                 <Pressable
-                  onPress={() => {
-                    closeSheet();
-                    // TODO: connect to your Alert flow
-                  }}
-                  style={({ pressed }) => [
-                    styles.actionBtn,
-                    pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
-                  ]}
+                  onPress={() => closeSheet()}
+                  style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
                 >
                   <Ionicons name="warning-outline" size={20} color="#fff" style={styles.actionIcon} />
                   <Text style={styles.actionText}>Alert</Text>
@@ -977,12 +838,9 @@ export default function HomeScreen({
                 <Pressable
                   onPress={() => {
                     closeSheet();
-                    onQuickExit?.(); // reuse your quick-exit logic for "Hide App"
+                    onQuickExit?.();
                   }}
-                  style={({ pressed }) => [
-                    styles.actionBtn,
-                    pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
-                  ]}
+                  style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
                 >
                   <Ionicons name="eye-off-outline" size={20} color="#fff" style={styles.actionIcon} />
                   <Text style={styles.actionText}>Hide App</Text>
@@ -991,13 +849,9 @@ export default function HomeScreen({
                 <Pressable
                   onPress={() => {
                     closeSheet();
-                    onQuickExit?.(); // replace with real signout handler if needed
+                    onQuickExit?.();
                   }}
-                  style={({ pressed }) => [
-                    styles.actionBtn,
-                    styles.dangerBtn,
-                    pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
-                  ]}
+                  style={({ pressed }) => [styles.actionBtn, styles.dangerBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
                 >
                   <Ionicons name="log-out-outline" size={20} color="#fff" style={styles.actionIcon} />
                   <Text style={styles.actionText}>Sign Out</Text>
