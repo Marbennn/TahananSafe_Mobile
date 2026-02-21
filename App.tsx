@@ -1,6 +1,6 @@
 // App.tsx
 import "react-native-gesture-handler";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { enableScreens } from "react-native-screens";
@@ -59,7 +59,10 @@ type RootStackParamList = {
   Login: undefined;
   CreatePin: undefined;
   Pin: undefined;
-  Main: undefined;
+
+  // ✅ UPDATED: Main can receive openReport
+  Main: { openReport?: ReportItem } | undefined;
+
   Notifications: undefined;
 };
 
@@ -94,9 +97,16 @@ function formatDateLine(createdAt?: string) {
 function MainShell({
   onLogout,
   onOpenNotifications,
+
+  // ✅ NEW: report passed from NotificationsScreen via navigation.navigate("Main", { openReport })
+  incomingReport,
+  clearIncomingReport,
 }: {
   onLogout: () => void;
   onOpenNotifications: () => void;
+
+  incomingReport?: ReportItem | null;
+  clearIncomingReport: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>("Home");
 
@@ -122,6 +132,20 @@ function MainShell({
     setActiveTab("Reports");
   };
 
+  // ✅ IMPORTANT: Auto-open report detail when coming from Notifications tap
+  useEffect(() => {
+    if (!incomingReport) return;
+
+    try {
+      setSelectedReport(incomingReport);
+      setActiveTab("Reports");
+      setReportStep("detail");
+    } finally {
+      // prevent reopening on future renders
+      clearIncomingReport();
+    }
+  }, [incomingReport, clearIncomingReport]);
+
   if (activeTab === "Home") {
     return (
       <HomeScreen
@@ -136,11 +160,7 @@ function MainShell({
 
   if (activeTab === "Inbox") {
     return (
-      <InboxScreen
-        initialTab="Inbox"
-        onQuickExit={handleQuickExit}
-        onTabChange={handleTabChange}
-      />
+      <InboxScreen initialTab="Inbox" onQuickExit={handleQuickExit} onTabChange={handleTabChange} />
     );
   }
 
@@ -216,8 +236,11 @@ function MainShell({
  * ✅ This wrapper lets us call AuthContext.logout() properly.
  * That clears @tahanansafe_user so GreetingCard won't show the previous account.
  */
-function MainScreenWrapper({ navigation }: { navigation: any }) {
+function MainScreenWrapper({ navigation, route }: { navigation: any; route: any }) {
   const { logout: authLogout } = useAuth() as any;
+
+  // ✅ Receive incoming report param
+  const incomingReport: ReportItem | null = route?.params?.openReport ?? null;
 
   return (
     <MainShell
@@ -239,6 +262,15 @@ function MainScreenWrapper({ navigation }: { navigation: any }) {
         navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
       }}
       onOpenNotifications={() => navigation.navigate("Notifications")}
+      incomingReport={incomingReport}
+      clearIncomingReport={() => {
+        // ✅ clear route param so it won't re-open again
+        try {
+          navigation.setParams({ openReport: undefined });
+        } catch {
+          // ignore
+        }
+      }}
     />
   );
 }
@@ -259,19 +291,13 @@ export default function App() {
               <Stack.Screen name="Splash">
                 {({ navigation }) => (
                   <AppSplashScreenWrapper
-                    onGoMain={() =>
-                      navigation.reset({ index: 0, routes: [{ name: "Main" }] })
-                    }
-                    onGoPin={() =>
-                      navigation.reset({ index: 0, routes: [{ name: "Pin" }] })
-                    }
+                    onGoMain={() => navigation.reset({ index: 0, routes: [{ name: "Main" }] })}
+                    onGoPin={() => navigation.reset({ index: 0, routes: [{ name: "Pin" }] })}
                     onGoCreatePin={() =>
                       navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] })
                     }
                     onGoOnboarding={() => navigation.replace("OnboardingPager")}
-                    onGoAuthFlow={() =>
-                      navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })
-                    }
+                    onGoAuthFlow={() => navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })}
                   />
                 )}
               </Stack.Screen>
@@ -279,9 +305,7 @@ export default function App() {
               <Stack.Screen name="OnboardingPager">
                 {({ navigation }) => (
                   <OnboardingPagerScreen
-                    onDone={() =>
-                      navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })
-                    }
+                    onDone={() => navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })}
                   />
                 )}
               </Stack.Screen>
@@ -414,7 +438,9 @@ export default function App() {
               </Stack.Screen>
 
               <Stack.Screen name="Main">
-                {({ navigation }) => <MainScreenWrapper navigation={navigation} />}
+                {({ navigation, route }) => (
+                  <MainScreenWrapper navigation={navigation} route={route} />
+                )}
               </Stack.Screen>
 
               <Stack.Screen name="Notifications">

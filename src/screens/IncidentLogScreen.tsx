@@ -140,6 +140,7 @@ export default function IncidentLogScreen({
   const { width: screenWidth } = useWindowDimensions();
   const s = useMemo(() => clamp(screenWidth / 375, 0.9, 1.2), [screenWidth]);
 
+  // ✅ Mode still exists internally, but UI button is removed.
   const [mode, setMode] = useState<Mode>("complain");
   const [incidentType, setIncidentType] = useState<IncidentTypeValue>("Other");
 
@@ -158,6 +159,7 @@ export default function IncidentLogScreen({
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationGranted, setLocationGranted] = useState<boolean | null>(null);
 
+  // ✅ If you ever setMode("emergency") somewhere else, this keeps incidentType aligned.
   React.useEffect(() => {
     if (mode === "emergency") setIncidentType("Emergency");
     else setIncidentType("Other");
@@ -190,15 +192,6 @@ export default function IncidentLogScreen({
 
   const [showPreview, setShowPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  const openModePicker = () => {
-    if (submitting) return;
-    Alert.alert("Mode", "Choose one:", [
-      { text: "Complain", onPress: () => setMode("complain") },
-      { text: "Emergency", onPress: () => setMode("emergency") },
-      { text: "Cancel", style: "cancel" },
-    ]);
-  };
 
   const requestAndSetCurrentLocation = async (opts?: { silent?: boolean }) => {
     if (submitting) return;
@@ -505,28 +498,7 @@ export default function IncidentLogScreen({
           <View style={{ width: 36, height: 36 }} />
         </View>
 
-        {/* mode pill */}
-        <View style={styles.pillWrap}>
-          <Pressable
-            disabled={submitting}
-            onPress={openModePicker}
-            style={({ pressed }) => [
-              styles.pillShadow,
-              (pressed || submitting) && { opacity: 0.95 },
-            ]}
-          >
-            <LinearGradient
-              colors={Colors.gradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.pill}
-            >
-              <Text style={styles.pillText}>
-                {mode === "emergency" ? "Emergency" : "Complain"}
-              </Text>
-            </LinearGradient>
-          </Pressable>
-        </View>
+        {/* ✅ Mode button removed entirely */}
 
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -751,32 +723,6 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "900",
     color: TEXT_DARK,
-    letterSpacing: 0.2,
-  },
-
-  pillWrap: {
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 16,
-  },
-  pillShadow: {
-    borderRadius: 24,
-    shadowColor: SHADOW,
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 3,
-  },
-  pill: {
-    height: 46,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  pillText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "900",
     letterSpacing: 0.2,
   },
 

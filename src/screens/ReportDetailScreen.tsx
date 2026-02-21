@@ -16,6 +16,7 @@ import {
   useWindowDimensions,
   Animated,
   Easing,
+  Keyboard,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -118,11 +119,28 @@ export default function ReportDetailScreen({
   const chevronBottom = navHeight + vscale(90);
   const fabBottom = navHeight - FAB_SIZE / 2 - vscale(10);
 
-  // ✅ IMPORTANT: Reserve bottom space so content never goes behind BottomNavBar
+  // ✅ IMPORTANT: Reserve bottom space so content never goes behind BottomNavBar (when keyboard is NOT visible)
   const RESERVED_BOTTOM = navHeight + vscale(18);
 
-  // ✅ better keyboard behavior (so reply row won't hide behind nav)
-  const keyboardOffset = Platform.OS === "ios" ? navHeight : 0;
+  // ✅ track keyboard visibility to avoid "double push" (KAV + RESERVED_BOTTOM)
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const subShow = Keyboard.addListener(showEvt, () => setIsKeyboardVisible(true));
+    const subHide = Keyboard.addListener(hideEvt, () => setIsKeyboardVisible(false));
+
+    return () => {
+      subShow.remove();
+      subHide.remove();
+    };
+  }, []);
+
+  // ✅ better keyboard behavior (reply row won't hide behind nav)
+  // NOTE: Don't offset by navHeight (that causes weird lift). Offset should match header/top area.
+  const keyboardOffset = Platform.OS === "ios" ? Math.max(insets.top, vscale(6)) + vscale(44) : 0;
 
   const handleTab = (key: TabKey) => {
     setActiveTab(key);
@@ -269,9 +287,14 @@ export default function ReportDetailScreen({
     "No details provided.";
 
   const witnessName = detail?.witnessName || (report as any)?.witnessName || "—";
-  const witnessRole = detail?.witnessType || (report as any)?.witnessRole || (report as any)?.witnessType || "—";
+  const witnessRole =
+    detail?.witnessType ||
+    (report as any)?.witnessRole ||
+    (report as any)?.witnessType ||
+    "—";
 
-  const locationLabel = detail?.locationStr || (report as any)?.locationStr || (report as any)?.location || "—";
+  const locationLabel =
+    detail?.locationStr || (report as any)?.locationStr || (report as any)?.location || "—";
   const statusLabel = prettyStatus(detail?.status || (report as any)?.status);
 
   const dateLabel = detail?.dateStr || (report as any)?.dateStr || report.dateLeft || "—";
@@ -288,6 +311,11 @@ export default function ReportDetailScreen({
     return `${locShort}\n${dateLabel}, ${timeLabel}`;
   }, [locationLabel, dateLabel, timeLabel]);
 
+  // ✅ IMPORTANT:
+  // When keyboard is visible, DON'T add RESERVED_BOTTOM (KAV already handles vertical shift).
+  // When keyboard hidden, keep RESERVED_BOTTOM so content never hides behind BottomNavBar.
+  const threadsBottomPad = isKeyboardVisible ? vscale(10) : RESERVED_BOTTOM;
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
@@ -295,7 +323,11 @@ export default function ReportDetailScreen({
       <View style={styles.page}>
         {/* Top bar */}
         <View style={[styles.topBar, { paddingTop: Math.max(insets.top, vscale(6)) }]}>
-          <Pressable onPress={onBack} hitSlop={12} style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}>
+          <Pressable
+            onPress={onBack}
+            hitSlop={12}
+            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
+          >
             <Ionicons name="chevron-back" size={scale(22)} color={PRIMARY} />
           </Pressable>
 
@@ -306,7 +338,10 @@ export default function ReportDetailScreen({
 
         {/* Segmented tabs */}
         <View style={styles.segmentWrap}>
-          <View style={styles.segmentPill} onLayout={(e) => setSegWidth(e.nativeEvent.layout.width)}>
+          <View
+            style={styles.segmentPill}
+            onLayout={(e) => setSegWidth(e.nativeEvent.layout.width)}
+          >
             <Animated.View
               pointerEvents="none"
               style={[
@@ -318,14 +353,38 @@ export default function ReportDetailScreen({
               ]}
             />
 
-            <Pressable onPress={() => setView("details")} style={({ pressed }) => [styles.segmentBtn, pressed && { transform: [{ scale: 0.99 }] }]}>
-              <Text style={[styles.segmentTextGhost, view === "details" && styles.segmentTextActive]} numberOfLines={1}>
+            <Pressable
+              onPress={() => setView("details")}
+              style={({ pressed }) => [
+                styles.segmentBtn,
+                pressed && { transform: [{ scale: 0.99 }] },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.segmentTextGhost,
+                  view === "details" && styles.segmentTextActive,
+                ]}
+                numberOfLines={1}
+              >
                 Incident Details
               </Text>
             </Pressable>
 
-            <Pressable onPress={() => setView("threads")} style={({ pressed }) => [styles.segmentBtn, pressed && { transform: [{ scale: 0.99 }] }]}>
-              <Text style={[styles.segmentTextGhost, view === "threads" && styles.segmentTextActive]} numberOfLines={1}>
+            <Pressable
+              onPress={() => setView("threads")}
+              style={({ pressed }) => [
+                styles.segmentBtn,
+                pressed && { transform: [{ scale: 0.99 }] },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.segmentTextGhost,
+                  view === "threads" && styles.segmentTextActive,
+                ]}
+                numberOfLines={1}
+              >
                 Threads
               </Text>
             </Pressable>
@@ -352,8 +411,21 @@ export default function ReportDetailScreen({
                 </View>
               ) : detailError ? (
                 <View style={styles.centerState}>
-                  <Text style={[styles.stateText, { color: "#EF4444", textAlign: "center" }]}>{detailError}</Text>
-                  <Pressable onPress={loadDetail} style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.95 }]}>
+                  <Text
+                    style={[
+                      styles.stateText,
+                      { color: "#EF4444", textAlign: "center" },
+                    ]}
+                  >
+                    {detailError}
+                  </Text>
+                  <Pressable
+                    onPress={loadDetail}
+                    style={({ pressed }) => [
+                      styles.retryBtn,
+                      pressed && { opacity: 0.95 },
+                    ]}
+                  >
                     <Text style={styles.retryText}>Retry</Text>
                   </Pressable>
                 </View>
@@ -370,7 +442,11 @@ export default function ReportDetailScreen({
                 {photoUrls.length > 0 ? (
                   photoUrls.slice(0, 3).map((u, i) => (
                     <View key={i} style={styles.evidenceBox}>
-                      <Image source={{ uri: u }} style={styles.evidenceImg} resizeMode="cover" />
+                      <Image
+                        source={{ uri: u }}
+                        style={styles.evidenceImg}
+                        resizeMode="cover"
+                      />
                     </View>
                   ))
                 ) : (
@@ -397,12 +473,17 @@ export default function ReportDetailScreen({
                 </View>
 
                 <View style={styles.metaColRight}>
-                  <Text style={[styles.metaLabel, { textAlign: "right" }]}>Time: {timeLabel}</Text>
+                  <Text style={[styles.metaLabel, { textAlign: "right" }]}>
+                    Time: {timeLabel}
+                  </Text>
                 </View>
               </View>
 
               <Text style={styles.alertFooter}>
-                Alert no. <Text style={styles.alertNo}>{String((report as any)?.alertNo ?? reportId ?? "")}</Text>
+                Alert no.{" "}
+                <Text style={styles.alertNo}>
+                  {String((report as any)?.alertNo ?? reportId ?? "")}
+                </Text>
               </Text>
             </View>
           </ScrollView>
@@ -412,8 +493,8 @@ export default function ReportDetailScreen({
             behavior={Platform.OS === "ios" ? "padding" : undefined}
             keyboardVerticalOffset={keyboardOffset}
           >
-            {/* ✅ reserve space for bottom nav (fix overlap) */}
-            <View style={[styles.threadOuter, { paddingBottom: RESERVED_BOTTOM }]}>
+            {/* ✅ only reserve bottom space when keyboard is hidden */}
+            <View style={[styles.threadOuter, { paddingBottom: threadsBottomPad }]}>
               <View style={styles.threadCard}>
                 <Text style={styles.threadHeaderText}>{threadHeader}</Text>
 
@@ -424,8 +505,16 @@ export default function ReportDetailScreen({
                   </View>
                 ) : threadsError ? (
                   <View style={styles.centerState}>
-                    <Text style={[styles.stateText, { color: "#EF4444" }]}>{threadsError}</Text>
-                    <Pressable onPress={loadThreads} style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.95 }]}>
+                    <Text style={[styles.stateText, { color: "#EF4444" }]}>
+                      {threadsError}
+                    </Text>
+                    <Pressable
+                      onPress={loadThreads}
+                      style={({ pressed }) => [
+                        styles.retryBtn,
+                        pressed && { opacity: 0.95 },
+                      ]}
+                    >
                       <Text style={styles.retryText}>Retry</Text>
                     </Pressable>
                   </View>
@@ -435,7 +524,11 @@ export default function ReportDetailScreen({
                       threadScrollRef.current = r;
                     }}
                     style={styles.threadScroll}
-                    contentContainerStyle={styles.threadScrollContent}
+                    contentContainerStyle={[
+                      styles.threadScrollContent,
+                      // ✅ ensure last message never hides behind replyRow
+                      { paddingBottom: vscale(12) + vscale(52) },
+                    ]}
                     showsVerticalScrollIndicator
                     nestedScrollEnabled
                     keyboardShouldPersistTaps="handled"
@@ -452,14 +545,31 @@ export default function ReportDetailScreen({
                             </Text>
                           ) : null}
 
-                          <View style={[styles.msgRow, isLeft ? styles.msgRowLeft : styles.msgRowRight]}>
-                            <View style={[styles.bubble, isLeft ? styles.bubbleLeft : styles.bubbleRight]}>
+                          <View
+                            style={[
+                              styles.msgRow,
+                              isLeft ? styles.msgRowLeft : styles.msgRowRight,
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.bubble,
+                                isLeft ? styles.bubbleLeft : styles.bubbleRight,
+                              ]}
+                            >
                               <Text style={styles.bubbleText}>{m.text}</Text>
                             </View>
                           </View>
 
                           {!isLeft ? (
-                            <Text style={[styles.msgTime, { textAlign: "right", marginTop: vscale(4) }]}>{m.time}</Text>
+                            <Text
+                              style={[
+                                styles.msgTime,
+                                { textAlign: "right", marginTop: vscale(4) },
+                              ]}
+                            >
+                              {m.time}
+                            </Text>
                           ) : null}
                         </View>
                       );
@@ -477,6 +587,13 @@ export default function ReportDetailScreen({
                     returnKeyType="send"
                     onSubmitEditing={onSend}
                     editable={!sending}
+                    blurOnSubmit={false}
+                    multiline={false}
+                    // ✅ helps vertical centering + avoids iOS weird padding feel
+                    textAlignVertical="center"
+                    {...(Platform.OS === "android"
+                      ? { includeFontPadding: false as any }
+                      : null)}
                   />
 
                   <Pressable
@@ -484,10 +601,17 @@ export default function ReportDetailScreen({
                     disabled={sending}
                     style={({ pressed }) => [
                       styles.sendBtn,
-                      (pressed || sending) && { transform: [{ scale: 0.98 }], opacity: 0.95 },
+                      (pressed || sending) && {
+                        transform: [{ scale: 0.98 }],
+                        opacity: 0.95,
+                      },
                     ]}
                   >
-                    {sending ? <ActivityIndicator color="#FFFFFF" /> : <Ionicons name="send" size={scale(18)} color="#FFFFFF" />}
+                    {sending ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Ionicons name="send" size={scale(18)} color="#FFFFFF" />
+                    )}
                   </Pressable>
                 </View>
               </View>
@@ -742,17 +866,29 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
     bubbleLeft: { backgroundColor: "#E9EEF6" },
     bubbleRight: { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E5E7EB" },
-    bubbleText: { fontSize: scale(10.5), fontWeight: "700", color: "#374151", lineHeight: vscale(14) },
+    bubbleText: {
+      fontSize: scale(10.5),
+      fontWeight: "700",
+      color: "#374151",
+      lineHeight: vscale(14),
+    },
 
-    replyRow: { flexDirection: "row", alignItems: "center", gap: scale(10), marginTop: vscale(10) },
+    replyRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(10),
+      marginTop: vscale(10),
+    },
     replyInput: {
       flex: 1,
+      minHeight: vscale(40),
       height: vscale(40),
       borderRadius: scale(20),
       borderWidth: 1,
       borderColor: BORDER,
       backgroundColor: "#F7FBFF",
       paddingHorizontal: scale(14),
+      paddingVertical: 0,
       fontSize: scale(10.5),
       fontWeight: "700",
       color: "#111827",
@@ -771,7 +907,12 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       elevation: 4,
     },
 
-    centerState: { alignItems: "center", justifyContent: "center", gap: vscale(10), paddingVertical: vscale(20) },
+    centerState: {
+      alignItems: "center",
+      justifyContent: "center",
+      gap: vscale(10),
+      paddingVertical: vscale(20),
+    },
     stateText: { fontSize: scale(10.5), fontWeight: "800", color: "#64748B" },
     retryBtn: {
       paddingHorizontal: scale(14),

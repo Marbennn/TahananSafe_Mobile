@@ -10,6 +10,9 @@ import {
   useWindowDimensions,
   ActivityIndicator,
   Platform,
+  Animated,
+  PanResponder,
+  Modal,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -18,7 +21,6 @@ import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 
 import GreetingCard from "../components/HomeScreen/GreetingCard";
 import RecentLogCard, { LogItem } from "../components/HomeScreen/RecentLogCard";
-import QuickActions from "../components/HomeScreen/QuickActions";
 
 import HomeScreenLogo from "../../assets/HomeScreen/NewLogo.svg";
 
@@ -177,7 +179,7 @@ export default function HomeScreen({
   onOpenReport,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
 
   // ✅ IMPORTANT: AuthContext fields are accessToken + refreshMe (not "token")
   const { user, setUser, accessToken, refreshMe } = useAuth() as any;
@@ -216,7 +218,6 @@ export default function HomeScreen({
       const nextEmail = typeof apiUser?.email === "string" ? apiUser.email : "";
       const nextId = String(apiUser?._id ?? apiUser?.id ?? "");
 
-      // Decide if we should overwrite context user
       const curEmail = typeof user?.email === "string" ? user.email : "";
       const curId = String(user?._id ?? user?.id ?? "");
       const curFirst = typeof user?.firstName === "string" ? user.firstName.trim() : "";
@@ -228,7 +229,6 @@ export default function HomeScreen({
       const missingNameInContext = !curFirst;
       const haveNameFromApi = !!nextFirst;
 
-      // ✅ Update if account changed OR context is missing firstName but API has it
       if (accountChanged || (missingNameInContext && haveNameFromApi)) {
         const nextUser = {
           _id: nextId,
@@ -248,17 +248,14 @@ export default function HomeScreen({
         }
       }
     } catch {
-      // ignore (home should still load)
+      // ignore
     } finally {
       syncingRef.current = false;
     }
   }, [accessToken, user, setUser]);
 
-  // Run when home mounts and when accessToken changes
   useEffect(() => {
     syncProfile();
-    // Also ask AuthContext to refresh its own storage if available
-    // (safe even if accessToken is null)
     refreshMe?.().catch?.(() => {});
   }, [syncProfile, refreshMe, accessToken]);
 
@@ -320,7 +317,6 @@ export default function HomeScreen({
         Accept: "application/json",
       };
 
-      // ✅ Bearer token (use AuthContext token first)
       const access = accessToken || (await getAccessToken());
       if (access) headers.Authorization = `Bearer ${access}`;
 
@@ -328,9 +324,7 @@ export default function HomeScreen({
 
       const res = await fetch(url, { method: "GET", headers });
       const txt = await res.text().catch(() => "");
-      if (!res.ok) {
-        return;
-      }
+      if (!res.ok) return;
 
       let json: any = {};
       try {
@@ -386,21 +380,18 @@ export default function HomeScreen({
         return {
           id,
           groupLabel: "",
-
           title: incidentType || "Incident Report",
           detail: detailLine,
           dateLeft: leftDate,
           timeLeft: leftTime,
           dateRight: rightDate,
           timeRight: rightTime,
-
           status: statusNorm,
           witnessName: doc?.witnessName ? String(doc.witnessName) : "",
           witnessType: doc?.witnessType ? String(doc.witnessType) : "",
           location: doc?.locationStr ? String(doc.locationStr) : "",
           incidentTypeLabel: incidentType,
           alertNo: doc?.complainId ? `#${String(doc.complainId)}` : `#${String(id).slice(-4)}`,
-
           offenderName,
           photos,
           createdAt: createdAtIso,
@@ -447,6 +438,152 @@ export default function HomeScreen({
   const helpIconSize = clamp(Math.round(22 * s), 20, 26);
 
   const HEADER_TOP_PAD = useMemo(() => clamp(Math.round(6 * s), 2, 10), [s]);
+
+  // =========================
+  // ✅ Swipe-up Quick Actions Sheet
+  // =========================
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  // height like your screenshot
+  const SHEET_HEIGHT = useMemo(() => clamp(Math.round(height * 0.34), 250, 340), [height]);
+
+  // translateY: closed => SHEET_HEIGHT, open => 0
+  const sheetY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
+
+  // ✅ Chevron animations
+  const chevronOpen = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
+  const chevronBounce = useRef(new Animated.Value(0)).current; // -1..0..1 bounce
+
+  const startChevronBounce = useCallback(() => {
+    chevronBounce.setValue(0);
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(chevronBounce, {
+          toValue: -1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.timing(chevronBounce, {
+          toValue: 0,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [chevronBounce]);
+
+  const stopChevronBounce = useCallback(() => {
+    chevronBounce.stopAnimation(() => {
+      chevronBounce.setValue(0);
+    });
+  }, [chevronBounce]);
+
+  useEffect(() => {
+    // Bounce only when sheet is CLOSED
+    if (!sheetOpen) startChevronBounce();
+    else stopChevronBounce();
+  }, [sheetOpen, startChevronBounce, stopChevronBounce]);
+
+  const openSheet = useCallback(() => {
+    setSheetOpen(true);
+
+    Animated.parallel([
+      Animated.timing(sheetY, {
+        toValue: 0,
+        duration: 240,
+        useNativeDriver: true,
+      }),
+      Animated.timing(chevronOpen, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [sheetY, chevronOpen]);
+
+  const closeSheet = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(sheetY, {
+        toValue: SHEET_HEIGHT,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.timing(chevronOpen, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) setSheetOpen(false);
+    });
+  }, [sheetY, SHEET_HEIGHT, chevronOpen]);
+
+  const handlePan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6 && Math.abs(g.dx) < 20,
+      onPanResponderMove: (_, g) => {
+        const next = clamp(g.dy, 0, SHEET_HEIGHT);
+        sheetY.setValue(next);
+
+        // rotate chevron based on drag (optional, feels nice)
+        const t = clamp(next / SHEET_HEIGHT, 0, 1);
+        chevronOpen.setValue(1 - t);
+      },
+      onPanResponderRelease: (_, g) => {
+        const shouldClose = g.dy > 60 || g.vy > 0.9;
+        if (shouldClose) closeSheet();
+        else {
+          Animated.parallel([
+            Animated.timing(sheetY, {
+              toValue: 0,
+              duration: 190,
+              useNativeDriver: true,
+            }),
+            Animated.timing(chevronOpen, {
+              toValue: 1,
+              duration: 190,
+              useNativeDriver: true,
+            }),
+          ]).start();
+        }
+      },
+    })
+  ).current;
+
+  const handleHandlePan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6 && Math.abs(g.dx) < 20,
+      onPanResponderRelease: (_, g) => {
+        if (g.dy < -30 || g.vy < -0.9) openSheet();
+      },
+    })
+  ).current;
+
+  // ✅ keep chevron above nav/FAB
+  const CHEVRON_LIFT = useMemo(() => clamp(Math.round(24 * s), 18, 34), [s]);
+  const chevronHandleBottom = useMemo(() => {
+    return navHeight + FAB_SIZE * 0.55 + CHEVRON_LIFT;
+  }, [navHeight, FAB_SIZE, CHEVRON_LIFT]);
+
+  // ✅ STICK TO BOTTOM:
+  // remove outer paddingBottom gap; instead add safe-area padding INSIDE card
+  const SHEET_TOTAL_HEIGHT = useMemo(() => SHEET_HEIGHT + bottomPad, [SHEET_HEIGHT, bottomPad]);
+
+  // Chevron animated styles
+  const chevronRotate = chevronOpen.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "180deg"], // closed (up), open (down)
+  });
+
+  const bounceY = chevronBounce.interpolate({
+    inputRange: [-1, 0],
+    outputRange: [-4, 0],
+  });
+
+  const chevronScale = chevronOpen.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.98],
+  });
 
   const styles = useMemo(
     () =>
@@ -549,8 +686,119 @@ export default function HomeScreen({
           color: "#64748B",
           textAlign: "center",
         },
+
+        // ✅ Chevron handle (always visible)
+        chevronHandleWrap: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: chevronHandleBottom,
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 60,
+        },
+        chevronHandle: {
+          width: clamp(Math.round(54 * s), 46, 64),
+          height: clamp(Math.round(26 * s), 22, 30),
+          borderRadius: 999,
+          backgroundColor: "#F0F6FF",
+          borderWidth: 1,
+          borderColor: "#E7EEF7",
+          alignItems: "center",
+          justifyContent: "center",
+          shadowColor: "#000",
+          shadowOpacity: 0.12,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 6,
+        },
+
+        // ✅ Sheet modal backdrop
+        backdrop: {
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.18)",
+        },
+
+        // ✅ Stick sheet to the bottom (no bottom gap)
+        sheetOuter: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: SHEET_TOTAL_HEIGHT,
+          paddingHorizontal: 0,
+          justifyContent: "flex-end", // ensures card is pinned to bottom
+        },
+
+        // ✅ full-width sheet with only top corners rounded
+        sheetCard: {
+          height: SHEET_TOTAL_HEIGHT, // same as outer so it truly touches bottom
+          borderTopLeftRadius: 28,
+          borderTopRightRadius: 28,
+          backgroundColor: "#FFFFFF",
+          paddingTop: clamp(Math.round(12 * s), 10, 14),
+          paddingBottom: bottomPad + clamp(Math.round(14 * s), 12, 16), // safe-area INSIDE
+          paddingHorizontal: clamp(Math.round(18 * s), 16, 22),
+          shadowColor: "#000",
+          shadowOpacity: 0.14,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: -6 },
+          elevation: 12,
+        },
+
+        sheetGrabber: {
+          alignSelf: "center",
+          width: clamp(Math.round(64 * s), 56, 72),
+          height: 6,
+          borderRadius: 999,
+          backgroundColor: "#D7E3F2",
+          marginBottom: clamp(Math.round(14 * s), 12, 16),
+        },
+
+        actionBtn: {
+          width: "100%",
+          borderRadius: 18,
+          backgroundColor: "#083B67",
+          paddingVertical: clamp(Math.round(16 * s), 14, 18),
+          paddingHorizontal: clamp(Math.round(14 * s), 12, 16),
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 10,
+          marginBottom: clamp(Math.round(12 * s), 10, 12),
+        },
+
+        actionText: {
+          fontSize: clamp(Math.round(16 * fs), 14, 18),
+          fontWeight: "900",
+          color: "#FFFFFF",
+        },
+
+        actionIcon: {
+          marginTop: 1,
+        },
+
+        dangerBtn: {
+          backgroundColor: "#0B2B45",
+        },
+
+        actionGroup: {
+          gap: clamp(Math.round(10 * s), 8, 12),
+        },
       }),
-    [PAD, GAP, s, fs, logoW, logoH, iconBtnSize, HEADER_TOP_PAD]
+    [
+      PAD,
+      GAP,
+      s,
+      fs,
+      logoW,
+      logoH,
+      iconBtnSize,
+      HEADER_TOP_PAD,
+      chevronHandleBottom,
+      SHEET_TOTAL_HEIGHT,
+      bottomPad,
+    ]
   );
 
   return (
@@ -573,11 +821,7 @@ export default function HomeScreen({
                 pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
               ]}
             >
-              <Ionicons
-                name="notifications-outline"
-                size={notifIconSize}
-                color={TEXT_DARK}
-              />
+              <Ionicons name="notifications-outline" size={notifIconSize} color={TEXT_DARK} />
               {notifCount > 0 ? (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>
@@ -595,11 +839,7 @@ export default function HomeScreen({
                 pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
               ]}
             >
-              <Ionicons
-                name="help-circle-outline"
-                size={helpIconSize}
-                color={TEXT_DARK}
-              />
+              <Ionicons name="help-circle-outline" size={helpIconSize} color={TEXT_DARK} />
             </Pressable>
           </View>
         </View>
@@ -607,10 +847,7 @@ export default function HomeScreen({
         <ScrollView
           showsVerticalScrollIndicator={false}
           scrollIndicatorInsets={{ bottom: CONTENT_BOTTOM_PAD }}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: CONTENT_BOTTOM_PAD },
-          ]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: CONTENT_BOTTOM_PAD }]}
         >
           <GreetingCard greeting={greeting} dateLine={dateLine} userName={userName} />
 
@@ -654,14 +891,39 @@ export default function HomeScreen({
             )}
           </View>
 
-          <QuickActions
-            onSignOut={() => onQuickExit?.()}
-            onHideApp={() => onQuickExit?.()}
-            onAlert={() => {}}
-            onProfile={() => {}}
-          />
+          {/* ✅ QuickActions hidden */}
         </ScrollView>
 
+        {/* ✅ Chevron handle (tap OR swipe up) */}
+        <View style={styles.chevronHandleWrap} {...handleHandlePan.panHandlers}>
+          <Pressable
+            onPress={() => {
+              // if already open, close
+              if (sheetOpen) closeSheet();
+              else openSheet();
+            }}
+            hitSlop={14}
+            style={({ pressed }) => [
+              styles.chevronHandle,
+              pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+            ]}
+          >
+            <Animated.View
+              style={{
+                transform: [
+                  { translateY: bounceY },
+                  { rotate: chevronRotate },
+                  { scale: chevronScale },
+                ],
+              }}
+            >
+              {/* When rotated 180deg, it becomes a "down" chevron */}
+              <Ionicons name="chevron-up" size={22} color={TEXT_DARK} />
+            </Animated.View>
+          </Pressable>
+        </View>
+
+        {/* ✅ Bottom Nav */}
         <BottomNavBar
           activeTab={activeTab}
           onTabPress={handleTab}
@@ -675,6 +937,7 @@ export default function HomeScreen({
           centerLabel="Incident Log"
         />
 
+        {/* ✅ Fab tutorial overlay */}
         <FabTutorialOverlay
           visible={showFabTutorial}
           onClose={() => setShowFabTutorial(false)}
@@ -686,6 +949,63 @@ export default function HomeScreen({
           title="Create an Incident Log"
           message="Tap the + button to add a new report."
         />
+
+        {/* ✅ Swipe-up Sheet Modal */}
+        <Modal visible={sheetOpen} transparent animationType="none" onRequestClose={closeSheet}>
+          <Pressable style={styles.backdrop} onPress={closeSheet} />
+
+          {/* ✅ pinned to bottom, animates only translateY */}
+          <Animated.View style={[styles.sheetOuter, { transform: [{ translateY: sheetY }] }]}>
+            <View style={styles.sheetCard} {...handlePan.panHandlers}>
+              <View style={styles.sheetGrabber} />
+
+              <View style={styles.actionGroup}>
+                <Pressable
+                  onPress={() => {
+                    closeSheet();
+                    // TODO: connect to your Alert flow
+                  }}
+                  style={({ pressed }) => [
+                    styles.actionBtn,
+                    pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
+                  ]}
+                >
+                  <Ionicons name="warning-outline" size={20} color="#fff" style={styles.actionIcon} />
+                  <Text style={styles.actionText}>Alert</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    closeSheet();
+                    onQuickExit?.(); // reuse your quick-exit logic for "Hide App"
+                  }}
+                  style={({ pressed }) => [
+                    styles.actionBtn,
+                    pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
+                  ]}
+                >
+                  <Ionicons name="eye-off-outline" size={20} color="#fff" style={styles.actionIcon} />
+                  <Text style={styles.actionText}>Hide App</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    closeSheet();
+                    onQuickExit?.(); // replace with real signout handler if needed
+                  }}
+                  style={({ pressed }) => [
+                    styles.actionBtn,
+                    styles.dangerBtn,
+                    pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
+                  ]}
+                >
+                  <Ionicons name="log-out-outline" size={20} color="#fff" style={styles.actionIcon} />
+                  <Text style={styles.actionText}>Sign Out</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Animated.View>
+        </Modal>
       </View>
     </SafeAreaView>
   );
