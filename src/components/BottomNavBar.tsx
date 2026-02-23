@@ -29,7 +29,7 @@ type Props = {
   navHeight: number;
   paddingBottom: number;
 
-  // compatibility (not used here but kept so HomeScreen doesn't break)
+  // compatibility (kept so other screens don't break)
   chevronBottom: number;
   fabBottom: number;
 
@@ -44,7 +44,7 @@ type Props = {
 };
 
 const NAV_BG = "#FFFFFF";
-const BORDER = "#E7EEF7";
+const INACTIVE = "#9AA4B2";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -52,7 +52,7 @@ function clamp(n: number, min: number, max: number) {
 
 function makeScale(width: number) {
   const baseW = 375;
-  const s = clamp((width / baseW) * 1.03, 0.88, 1.25);
+  const s = clamp(width / baseW, 0.86, 1.2);
   return { s };
 }
 
@@ -71,59 +71,86 @@ export default function BottomNavBar({
   const { width } = useWindowDimensions();
   const { s } = useMemo(() => makeScale(width), [width]);
 
-  const iconSize = useMemo(() => clamp(Math.round(22 * s), 20, 26), [s]);
-  const fabIconSize = useMemo(() => clamp(Math.round(30 * s), 26, 34), [s]);
+  const EXTRA_BAR_HEIGHT = useMemo(
+    () => clamp(Math.round(12 * s), 10, 18),
+    [s]
+  );
 
-  const labelFont = useMemo(() => {
-    if (width < 350) return clamp(Math.round(9 * s), 8, 10);
-    return clamp(Math.round(10 * s), 9, 12);
-  }, [s, width]);
+  const iconSize = useMemo(() => clamp(Math.round(22 * s), 19, 26), [s]);
+  const labelFont = useMemo(() => clamp(Math.round(10 * s), 9, 12), [s]);
+  const labelMarginTop = useMemo(() => clamp(Math.round(3 * s), 2, 4), [s]);
 
-  const labelMarginTop = useMemo(() => clamp(Math.round(4 * s), 3, 6), [s]);
-
-  const navPaddingTop = useMemo(() => clamp(Math.round(10 * s), 8, 14), [s]);
+  const navPaddingTop = useMemo(() => clamp(Math.round(12 * s), 10, 16), [s]);
   const navPaddingHorizontal = useMemo(
-    () => clamp(Math.round(4 * s), 2, 10),
+    () => clamp(Math.round(8 * s), 6, 14),
     [s]
   );
   const itemPaddingBottom = useMemo(
-    () => clamp(Math.round(6 * s), 4, 10),
+    () => clamp(Math.round(12 * s), 10, 16),
     [s]
   );
 
-  const fabSize = useMemo(
-    () => clamp(Math.round(fabSizeProp * s), 54, 76),
-    [fabSizeProp, s]
+  // FAB sizing
+  const fabSize = useMemo(() => {
+    const raw = fabSizeProp * s;
+    if (width < 360) return clamp(Math.round(raw), 52, 62);
+    if (width < 400) return clamp(Math.round(raw), 56, 68);
+    return clamp(Math.round(raw), 60, 76);
+  }, [fabSizeProp, s, width]);
+
+  const fabIconSize = useMemo(() => {
+    const raw = 30 * s;
+    if (width < 360) return clamp(Math.round(raw), 24, 28);
+    if (width < 400) return clamp(Math.round(raw), 26, 30);
+    return clamp(Math.round(raw), 28, 34);
+  }, [s, width]);
+
+  const cutoutSize = useMemo(
+    () => clamp(Math.round(fabSize * 1.42), fabSize + 22, fabSize + 40),
+    [fabSize]
   );
 
-  const navBaseHeight = Math.max(0, navHeight - paddingBottom);
+  // ✅ button position (ONLY button uses this)
+  const fabLift = useMemo(() => {
+    const base = clamp(Math.round(fabSize * 0.86), 30, 54);
+    if (width < 360) return clamp(Math.round(base * 0.93), 28, 50);
+    if (width < 400) return clamp(Math.round(base * 0.96), 29, 52);
+    return base;
+  }, [fabSize, width]);
 
-  const NOTCH_DIAMETER = fabSize + clamp(Math.round(22 * s), 18, 26);
-  const NOTCH_RADIUS = NOTCH_DIAMETER / 2;
+  const effectiveNavHeight = useMemo(
+    () => navHeight + EXTRA_BAR_HEIGHT,
+    [navHeight, EXTRA_BAR_HEIGHT]
+  );
 
-  const fabAnchorBottom = paddingBottom + (navBaseHeight - fabSize / 2);
+  const centerLabelBottom = useMemo(
+    () => clamp(Math.round(12 * s), 10, 16),
+    [s]
+  );
 
-  // how far the FAB is pushed down into the bar
-  const FAB_DOWN_BY = clamp(Math.round(20 * s), 14, 26);
-  const fabBottomFixed = fabAnchorBottom - FAB_DOWN_BY;
+  const cutoutVisibleHeight = useMemo(() => {
+    const h = cutoutSize * 0.55;
+    return clamp(
+      Math.round(h),
+      Math.round(cutoutSize * 0.5),
+      Math.round(cutoutSize * 0.65)
+    );
+  }, [cutoutSize]);
 
-  const HALO_SIZE = fabSize + clamp(Math.round(18 * s), 14, 22);
-  const HALO_DOWN_BY = clamp(Math.round(22 * s), 16, 28);
-  const haloBottom =
-    fabAnchorBottom - (HALO_SIZE - fabSize) / 2 - HALO_DOWN_BY;
+  // ✅ halo internal upward shift (within the clip)
+  const haloUp = useMemo(() => {
+    const base = clamp(Math.round(fabSize * 0.18), 10, 20);
+    if (width < 360) return clamp(Math.round(base * 0.9), 9, 18);
+    return base;
+  }, [fabSize, width]);
 
-  const BORDER_GAP = NOTCH_DIAMETER + clamp(Math.round(12 * s), 10, 16);
+  const haloLiftExtra = useMemo(() => {
+    return clamp(Math.round(60 * s), 8, 80);
+  }, [s]);
 
-  /**
-   * ✅ KEY FIX:
-   * Reserve vertical space in the center slot equal to the amount the FAB overlaps into the bar.
-   * This pushes the "Incident Log" label down so it won't be covered by the FAB.
-   */
-  const centerTopReserve = useMemo(() => {
-    const overlapIntoBar = Math.max(0, FAB_DOWN_BY - clamp(Math.round(6 * s), 4, 10));
-    // add a little extra breathing space
-    return clamp(Math.round(overlapIntoBar + 10 * s), 14, 34);
-  }, [FAB_DOWN_BY, s]);
+  // Base bottom anchor shared logic
+  const baseBottom =
+    paddingBottom + (effectiveNavHeight - paddingBottom) - fabLift;
 
   const styles = useMemo(
     () =>
@@ -141,61 +168,29 @@ export default function BottomNavBar({
           left: 0,
           right: 0,
           bottom: 0,
+          height: effectiveNavHeight,
+          paddingBottom,
           backgroundColor: NAV_BG,
+          borderTopWidth: 0,
           flexDirection: "row",
           alignItems: "flex-end",
-          paddingTop: navPaddingTop,
+          paddingTop: navPaddingTop + EXTRA_BAR_HEIGHT * 0.25,
           paddingHorizontal: navPaddingHorizontal,
-        },
-
-        topBorderRow: {
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: 0,
-          height: 1,
-          flexDirection: "row",
-          alignItems: "center",
-        },
-        topBorderSeg: {
-          flex: 1,
-          height: 1,
-          backgroundColor: BORDER,
-        },
-
-        notchRow: {
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: 0,
-          alignItems: "center",
-          justifyContent: "flex-start",
-        },
-        notchMask: {
-          overflow: "hidden",
-          backgroundColor: "transparent",
-        },
-        notchCircle: {
-          position: "absolute",
-          left: 0,
-          backgroundColor: NAV_BG,
-          borderWidth: 1,
-          borderColor: BORDER,
-          borderBottomWidth: 0,
+          zIndex: 1,
         },
 
         item: {
           flex: 1,
           alignItems: "center",
           justifyContent: "center",
-          paddingBottom: itemPaddingBottom,
+          paddingBottom: itemPaddingBottom + EXTRA_BAR_HEIGHT * 0.35,
           minWidth: 0,
         },
 
         label: {
           marginTop: labelMarginTop,
           fontSize: labelFont,
-          color: "#9AA4B2",
+          color: INACTIVE,
           fontWeight: "600",
           includeFontPadding: false,
         },
@@ -204,34 +199,82 @@ export default function BottomNavBar({
           fontWeight: "800",
         },
 
-        /**
-         * ✅ FIXED CENTER SLOT:
-         * - align to bottom
-         * - reserve top padding so FAB doesn't cover the label
-         */
         centerSlot: {
           flex: 1,
           minWidth: 0,
+          position: "relative",
           alignItems: "center",
-          justifyContent: "flex-end",
-          paddingBottom: itemPaddingBottom,
-          paddingTop: centerTopReserve,
+          justifyContent: "center",
+          paddingBottom: itemPaddingBottom + EXTRA_BAR_HEIGHT * 0.35,
         },
 
-        fabWrap: {
+        centerLabel: {
+          position: "absolute",
+          bottom: centerLabelBottom,
+          fontSize: labelFont,
+          color: INACTIVE,
+          fontWeight: "600",
+          includeFontPadding: false,
+        },
+
+        haloLayer: {
           position: "absolute",
           left: 0,
           right: 0,
+          bottom: baseBottom + haloLiftExtra,
           alignItems: "center",
           justifyContent: "center",
+          zIndex: 9,
+          pointerEvents: "none",
         },
 
-        fabHalo: {
+        cutoutClip: {
+          position: "absolute",
+          top: -haloUp,
+          width: cutoutSize,
+          height: cutoutVisibleHeight,
+          overflow: "hidden",
+          alignItems: "center",
+          justifyContent: "flex-start",
+        },
+
+        /**
+         * ✅ HALO (white half circle) WITHOUT edge color:
+         * - NO shadow
+         * - NO elevation
+         * - NO border
+         */
+        cutout: {
+          width: cutoutSize,
+          height: cutoutSize,
+          borderRadius: cutoutSize / 2,
           backgroundColor: NAV_BG,
           borderWidth: 0,
+          ...(Platform.OS === "ios"
+            ? {
+                shadowColor: "transparent",
+                shadowOpacity: 0,
+                shadowRadius: 0,
+                shadowOffset: { width: 0, height: 0 },
+              }
+            : { elevation: 0 }),
+        },
+
+        fabLayer: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: baseBottom,
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 10,
         },
 
         fabPressable: {
+          width: fabSize,
+          height: fabSize,
+          borderRadius: fabSize / 2,
+          overflow: "hidden",
           ...Platform.select({
             ios: {
               shadowColor: "#000",
@@ -251,12 +294,22 @@ export default function BottomNavBar({
         },
       }),
     [
+      effectiveNavHeight,
+      paddingBottom,
       navPaddingTop,
       navPaddingHorizontal,
       itemPaddingBottom,
       labelMarginTop,
       labelFont,
-      centerTopReserve,
+      fabSize,
+      fabLift,
+      cutoutSize,
+      EXTRA_BAR_HEIGHT,
+      centerLabelBottom,
+      cutoutVisibleHeight,
+      haloUp,
+      haloLiftExtra,
+      baseBottom,
     ]
   );
 
@@ -274,31 +327,7 @@ export default function BottomNavBar({
         </View>
       ) : null}
 
-      <View style={[styles.navWrap, { height: navHeight, paddingBottom }]}>
-        <View pointerEvents="none" style={styles.topBorderRow}>
-          <View style={styles.topBorderSeg} />
-          <View style={{ width: BORDER_GAP }} />
-          <View style={styles.topBorderSeg} />
-        </View>
-
-        <View pointerEvents="none" style={styles.notchRow}>
-          <View
-            style={[styles.notchMask, { width: NOTCH_DIAMETER, height: NOTCH_RADIUS }]}
-          >
-            <View
-              style={[
-                styles.notchCircle,
-                {
-                  width: NOTCH_DIAMETER,
-                  height: NOTCH_DIAMETER,
-                  borderRadius: NOTCH_RADIUS,
-                  top: -NOTCH_RADIUS,
-                },
-              ]}
-            />
-          </View>
-        </View>
-
+      <View style={styles.navWrap}>
         <NavItem
           icon="home-outline"
           label="Home"
@@ -321,9 +350,12 @@ export default function BottomNavBar({
           itemStyle={styles.item}
         />
 
-        <View style={styles.centerSlot}>
+        <View style={styles.centerSlot} pointerEvents="none">
           <Text
-            style={[styles.label, activeTab === "Incident" && styles.labelActive]}
+            style={[
+              styles.centerLabel,
+              activeTab === "Incident" && styles.labelActive,
+            ]}
             numberOfLines={1}
             allowFontScaling={false}
           >
@@ -354,39 +386,30 @@ export default function BottomNavBar({
         />
       </View>
 
-      <View style={[styles.fabWrap, { bottom: haloBottom }]} pointerEvents="none">
-        <View
-          style={[
-            styles.fabHalo,
-            {
-              width: HALO_SIZE,
-              height: HALO_SIZE,
-              borderRadius: HALO_SIZE / 2,
-            },
-          ]}
-        />
+      {/* ✅ HALO only */}
+      <View style={styles.haloLayer}>
+        <View style={styles.cutoutClip}>
+          <View style={styles.cutout} />
+        </View>
       </View>
 
-      <View style={[styles.fabWrap, { bottom: fabBottomFixed }]}>
+      {/* ✅ FAB only */}
+      <View style={styles.fabLayer} pointerEvents="box-none">
         <Pressable
           onPress={onFabPress}
           onLongPress={onFabLongPress}
           delayLongPress={350}
           style={({ pressed }) => [
             styles.fabPressable,
-            { width: fabSize, height: fabSize, borderRadius: fabSize / 2 },
             pressed && { transform: [{ scale: 0.98 }] },
           ]}
         >
-          <View style={[styles.fabInner, { borderRadius: fabSize / 2 }]}>
+          <View style={styles.fabInner}>
             <LinearGradient
               colors={Colors.gradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={[
-                StyleSheet.absoluteFillObject,
-                { borderRadius: fabSize / 2 },
-              ]}
+              style={StyleSheet.absoluteFillObject}
             />
             <Ionicons name="add" size={fabIconSize} color="#FFFFFF" />
           </View>

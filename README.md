@@ -23,8 +23,7 @@ npx expo install expo-location
 npx expo install expo-local-authentication expo-secure-store
 
 
-# Download ngrok in browser
-# For Real Mobile Testing(Run on cmd)
-ngrok config add-authtoken 39QPKKhDmSFzloA77UuULLbkFw4_4bASfyaPhvhoLjv7AV7zx
-# then start ngrok server
-ngrok http 8000
+# Download Cloudflared on (CMD)
+winget install Cloudflare.cloudflared
+# then start CloudFlared server
+cloudflared tunnel --url http://localhost:8000
