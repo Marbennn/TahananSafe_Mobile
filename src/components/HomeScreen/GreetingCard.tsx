@@ -24,7 +24,7 @@ type Props = {
 
 const SLIDE_COUNT = 2;
 
-// ✅ REAL SVG ratio (your svgs are viewBox="0 0 408 170")
+// ✅ REAL SVG ratio (viewBox="0 0 408 170")
 const SVG_RATIO = 170 / 408;
 
 // ✅ Make card a bit shorter than the SVG height (cropped vertically)
@@ -36,29 +36,37 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function makeScale(width: number) {
+  const baseW = 375;
+  // small phones benefit from slightly smaller scale
+  const s = clamp((width / baseW) * 1.03, 0.88, 1.26);
+  const fs = clamp(s * 1.06, 0.92, 1.32);
+  return { s, fs };
+}
+
 export default function GreetingCard({
   greeting,
   dateLine,
   userName = "User",
 }: Props) {
   const { width: screenW } = useWindowDimensions();
+  const { s, fs } = useMemo(() => makeScale(screenW), [screenW]);
 
   const dpr = PixelRatio.get();
   const snapToPx = useCallback((v: number) => Math.round(v * dpr) / dpr, [dpr]);
 
-  const s = useMemo(() => clamp(screenW / 375, 0.9, 1.25), [screenW]);
-
   const MH = useMemo(() => clamp(Math.round(14 * s), 12, 18), [s]);
   const R = useMemo(() => clamp(Math.round(16 * s), 14, 18), [s]);
 
-  const cardWApprox = useMemo(
-    () => Math.max(1, Math.round(screenW - MH * 2)),
-    [screenW, MH]
-  );
+  const cardWApprox = useMemo(() => {
+    // also cap max width to keep nice on tablets
+    const raw = Math.round(screenW - MH * 2);
+    return clamp(raw, 1, 560);
+  }, [screenW, MH]);
 
   const CARD_H = useMemo(() => {
     const h = Math.round(cardWApprox * SVG_RATIO * HEIGHT_FACTOR);
-    return clamp(h, 118, 175);
+    return clamp(h, 112, 180);
   }, [cardWApprox]);
 
   const SEAM = useMemo(() => 2 / dpr, [dpr]);
@@ -187,6 +195,14 @@ export default function GreetingCard({
     [translateX, w]
   );
 
+  const rightCropPad = useMemo(() => {
+    // Instead of a fixed 110*s, crop based on actual card width
+    // Keeps text safe on small phones.
+    const pct = 0.34; // ~34% reserved for right art area
+    const px = Math.round(cardWApprox * pct);
+    return clamp(px, Math.round(86 * s), Math.round(150 * s));
+  }, [cardWApprox, s]);
+
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -230,23 +246,23 @@ export default function GreetingCard({
         },
 
         left: {
-          paddingRight: clamp(Math.round(110 * s), 90, 150),
+          paddingRight: rightCropPad,
           marginTop: clamp(Math.round(14 * s), 10, 18),
         },
 
         title: {
           color: "#fff",
-          fontSize: clamp(Math.round(16 * s), 14, 18),
+          fontSize: clamp(Math.round(16 * fs), 14, 19),
           fontWeight: "900",
           marginBottom: clamp(Math.round(4 * s), 3, 6),
-          lineHeight: clamp(Math.round(20 * s), 18, 22),
+          lineHeight: clamp(Math.round(20 * fs), 18, 24),
         },
 
         sub: {
           color: "rgba(255,255,255,0.85)",
-          fontSize: clamp(Math.round(11 * s), 10, 13),
+          fontSize: clamp(Math.round(11 * fs), 10, 13),
           fontWeight: "700",
-          lineHeight: clamp(Math.round(14 * s), 12, 16),
+          lineHeight: clamp(Math.round(14 * fs), 12, 17),
         },
 
         dotsRow: {
@@ -271,7 +287,7 @@ export default function GreetingCard({
           backgroundColor: "#FFFFFF",
         },
       }),
-    [s, CARD_H, MH, R]
+    [s, fs, CARD_H, MH, R, rightCropPad]
   );
 
   const trackW = size.w * SLIDE_COUNT;
@@ -296,19 +312,11 @@ export default function GreetingCard({
             ]}
           >
             <View style={{ width: size.w, height: size.h, overflow: "hidden" }}>
-              <GreetingCardSvg
-                width={size.w}
-                height={size.h}
-                preserveAspectRatio="xMidYMid slice"
-              />
+              <GreetingCardSvg width={size.w} height={size.h} preserveAspectRatio="xMidYMid slice" />
             </View>
 
             <View style={{ width: size.w, height: size.h, overflow: "hidden" }}>
-              <Carousel2Svg
-                width={size.w}
-                height={size.h}
-                preserveAspectRatio="xMidYMid slice"
-              />
+              <Carousel2Svg width={size.w} height={size.h} preserveAspectRatio="xMidYMid slice" />
             </View>
 
             <View
@@ -326,14 +334,11 @@ export default function GreetingCard({
         ) : null}
 
         <View style={styles.overlay} pointerEvents="box-none">
-          <Animated.View
-            style={[styles.left, { opacity: greetingOpacity }]}
-            pointerEvents="none"
-          >
-            <Text style={styles.title} numberOfLines={1}>
+          <Animated.View style={[styles.left, { opacity: greetingOpacity }]} pointerEvents="none">
+            <Text style={styles.title} numberOfLines={1} allowFontScaling={false}>
               {greeting}, {userName}!
             </Text>
-            <Text style={styles.sub} numberOfLines={1}>
+            <Text style={styles.sub} numberOfLines={1} allowFontScaling={false}>
               {dateLine}
             </Text>
           </Animated.View>

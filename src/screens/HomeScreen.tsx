@@ -61,6 +61,18 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+// ✅ more stable scale for small phones
+function makeScale(width: number, height: number) {
+  const baseW = 375;
+  const baseH = 812;
+  const scaleW = width / baseW;
+  const scaleH = height / baseH;
+  // use smaller dimension influence to avoid "too big" on short devices
+  const s = clamp(Math.min(scaleW, scaleH) * 1.04, 0.88, 1.28);
+  const fs = clamp(s * 1.06, 0.92, 1.32);
+  return { s, fs };
+}
+
 function makeGreeting(d: Date) {
   const h = d.getHours();
   if (h < 12) return "Good morning";
@@ -183,6 +195,8 @@ export default function HomeScreen({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
+  const { s, fs } = useMemo(() => makeScale(width, height), [width, height]);
+
   // ✅ AuthContext
   const { user, setUser, accessToken, refreshMe } = useAuth() as any;
 
@@ -224,17 +238,17 @@ export default function HomeScreen({
 
   const syncProfile = useCallback(async () => {
     // throttle: at least 8 seconds between calls
-    const now = Date.now();
-    if (now - lastMeSyncAtRef.current < 8000) return;
+    const nowMs = Date.now();
+    if (nowMs - lastMeSyncAtRef.current < 8000) return;
 
     const t = accessToken || (await getAccessToken());
     if (!t) return;
 
     // if token didn't change AND we already synced recently, skip
-    if (lastTokenRef.current === t && now - lastMeSyncAtRef.current < 30000) return;
+    if (lastTokenRef.current === t && nowMs - lastMeSyncAtRef.current < 30000) return;
 
     lastTokenRef.current = t;
-    lastMeSyncAtRef.current = now;
+    lastMeSyncAtRef.current = nowMs;
 
     try {
       const me = await getMeApi({ accessToken: t });
@@ -287,7 +301,6 @@ export default function HomeScreen({
   // ✅ Run sync when token changes / first mount only
   useEffect(() => {
     syncProfile();
-    // optional: refreshMe only once per token change
     refreshMe?.().catch?.(() => {});
   }, [syncProfile, refreshMe, accessToken]);
 
@@ -307,10 +320,6 @@ export default function HomeScreen({
     if (typeof fn === "string" && fn.trim().length > 0) return fn.trim();
     return "User";
   }, [user]);
-
-  // ✅ scale
-  const s = useMemo(() => clamp(width / 375, 0.9, 1.25), [width]);
-  const fs = useMemo(() => clamp(s * 1.06, 0.95, 1.3), [s]);
 
   const NAV_BASE_HEIGHT = 78;
   const FAB_SIZE = 62;
@@ -461,14 +470,15 @@ export default function HomeScreen({
   const PAD = useMemo(() => clamp(Math.round(16 * s), 12, 20), [s]);
   const GAP = useMemo(() => clamp(Math.round(16 * s), 12, 18), [s]);
 
-  const logoW = clamp(Math.round(width * 0.48), 150, 230);
-  const logoH = clamp(Math.round(36 * s), 30, 42);
+  const logoW = clamp(Math.round(width * 0.48), 140, 230);
+  const logoH = clamp(Math.round(36 * s), 28, 42);
 
   const iconBtnSize = clamp(Math.round(38 * s), 34, 44);
   const notifIconSize = clamp(Math.round(20 * s), 18, 24);
   const helpIconSize = clamp(Math.round(22 * s), 20, 26);
 
   const HEADER_TOP_PAD = useMemo(() => clamp(Math.round(6 * s), 2, 10), [s]);
+  const ACTION_GAP = useMemo(() => clamp(Math.round(14 * s), 10, 16), [s]);
 
   // =========================
   // ✅ Swipe-up Quick Actions Sheet
@@ -549,7 +559,10 @@ export default function HomeScreen({
   ).current;
 
   const CHEVRON_LIFT = useMemo(() => clamp(Math.round(24 * s), 18, 34), [s]);
-  const chevronHandleBottom = useMemo(() => navHeight + FAB_SIZE * 0.55 + CHEVRON_LIFT, [navHeight, FAB_SIZE, CHEVRON_LIFT]);
+  const chevronHandleBottom = useMemo(
+    () => navHeight + FAB_SIZE * 0.55 + CHEVRON_LIFT,
+    [navHeight, FAB_SIZE, CHEVRON_LIFT]
+  );
 
   const SHEET_TOTAL_HEIGHT = useMemo(() => SHEET_HEIGHT + bottomPad, [SHEET_HEIGHT, bottomPad]);
 
@@ -577,8 +590,8 @@ export default function HomeScreen({
         rightActions: {
           flexDirection: "row",
           alignItems: "center",
-          gap: clamp(Math.round(14 * s), 10, 16),
         },
+        rightActionSpacer: { width: ACTION_GAP },
 
         iconBtn: {
           width: iconBtnSize,
@@ -610,7 +623,11 @@ export default function HomeScreen({
           lineHeight: clamp(Math.round(13 * fs), 11, 15),
         },
 
-        scrollContent: { paddingTop: clamp(Math.round(10 * s), 8, 12), rowGap: GAP },
+        scroll: { flex: 1 },
+        scrollContent: {
+          paddingTop: clamp(Math.round(10 * s), 8, 12),
+          paddingBottom: CONTENT_BOTTOM_PAD,
+        },
 
         sectionRow: {
           marginTop: clamp(Math.round(6 * s), 4, 8),
@@ -623,11 +640,25 @@ export default function HomeScreen({
         sectionTitle: { fontSize: clamp(Math.round(14 * fs), 13, 16), fontWeight: "900", color: TEXT_DARK },
         seeMore: { fontSize: clamp(Math.round(13 * fs), 12, 15), fontWeight: "900", color: Colors.link },
 
-        logsWrap: { paddingHorizontal: PAD, paddingTop: clamp(Math.round(10 * s), 8, 12), gap: clamp(Math.round(12 * s), 10, 14) },
+        logsWrap: {
+          paddingHorizontal: PAD,
+          paddingTop: clamp(Math.round(10 * s), 8, 12),
+        },
+
+        logsGap: { height: GAP },
+
         miniCenter: { paddingHorizontal: PAD, paddingTop: 10, alignItems: "center", justifyContent: "center" },
         emptyHint: { fontSize: clamp(Math.round(12 * fs), 11, 14), fontWeight: "800", color: "#64748B", textAlign: "center" },
 
-        chevronHandleWrap: { position: "absolute", left: 0, right: 0, bottom: chevronHandleBottom, alignItems: "center", justifyContent: "center", zIndex: 60 },
+        chevronHandleWrap: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: chevronHandleBottom,
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 60,
+        },
         chevronHandle: {
           width: clamp(Math.round(54 * s), 46, 64),
           height: clamp(Math.round(26 * s), 22, 30),
@@ -646,7 +677,14 @@ export default function HomeScreen({
 
         backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.18)" },
 
-        sheetOuter: { position: "absolute", left: 0, right: 0, bottom: 0, height: SHEET_TOTAL_HEIGHT, paddingHorizontal: 0, justifyContent: "flex-end" },
+        sheetOuter: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: SHEET_TOTAL_HEIGHT,
+          justifyContent: "flex-end",
+        },
 
         sheetCard: {
           height: SHEET_TOTAL_HEIGHT,
@@ -681,16 +719,28 @@ export default function HomeScreen({
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
-          gap: 10,
           marginBottom: clamp(Math.round(12 * s), 10, 12),
         },
 
         actionText: { fontSize: clamp(Math.round(16 * fs), 14, 18), fontWeight: "900", color: "#FFFFFF" },
-        actionIcon: { marginTop: 1 },
+        actionIcon: { marginTop: 1, marginRight: 10 },
         dangerBtn: { backgroundColor: "#0B2B45" },
-        actionGroup: { gap: clamp(Math.round(10 * s), 8, 12) },
       }),
-    [PAD, GAP, s, fs, logoW, logoH, iconBtnSize, HEADER_TOP_PAD, chevronHandleBottom, SHEET_TOTAL_HEIGHT, bottomPad]
+    [
+      PAD,
+      GAP,
+      s,
+      fs,
+      logoW,
+      logoH,
+      iconBtnSize,
+      HEADER_TOP_PAD,
+      ACTION_GAP,
+      chevronHandleBottom,
+      SHEET_TOTAL_HEIGHT,
+      bottomPad,
+      CONTENT_BOTTOM_PAD,
+    ]
   );
 
   return (
@@ -708,15 +758,22 @@ export default function HomeScreen({
             <Pressable
               onPress={onOpenNotifications ?? (() => {})}
               hitSlop={12}
-              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
+              ]}
             >
               <Ionicons name="notifications-outline" size={notifIconSize} color={TEXT_DARK} />
               {notifCount > 0 ? (
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{notifCount > 99 ? "99+" : String(notifCount)}</Text>
+                  <Text style={styles.badgeText} allowFontScaling={false}>
+                    {notifCount > 99 ? "99+" : String(notifCount)}
+                  </Text>
                 </View>
               ) : null}
             </Pressable>
+
+            <View style={styles.rightActionSpacer} />
 
             <Pressable
               onPress={() => {
@@ -724,7 +781,10 @@ export default function HomeScreen({
                 setShowFabTutorial(true);
               }}
               hitSlop={12}
-              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
+              ]}
             >
               <Ionicons name="help-circle-outline" size={helpIconSize} color={TEXT_DARK} />
             </Pressable>
@@ -732,17 +792,22 @@ export default function HomeScreen({
         </View>
 
         <ScrollView
+          style={styles.scroll}
           showsVerticalScrollIndicator={false}
           scrollIndicatorInsets={{ bottom: CONTENT_BOTTOM_PAD }}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: CONTENT_BOTTOM_PAD }]}
+          contentContainerStyle={styles.scrollContent}
         >
           <GreetingCard greeting={greeting} dateLine={dateLine} userName={userName} />
 
           <View style={styles.sectionRow}>
-            <Text style={styles.sectionTitle}>Recent Logs</Text>
+            <Text style={styles.sectionTitle} allowFontScaling={false}>
+              Recent Logs
+            </Text>
 
             <Pressable onPress={() => onTabChange?.("Reports")} hitSlop={10}>
-              <Text style={styles.seeMore}>See more</Text>
+              <Text style={styles.seeMore} allowFontScaling={false}>
+                See more
+              </Text>
             </Pressable>
           </View>
 
@@ -753,20 +818,24 @@ export default function HomeScreen({
               </View>
             ) : logs.length === 0 ? (
               <View style={styles.miniCenter}>
-                <Text style={styles.emptyHint}>No recent reports.</Text>
+                <Text style={styles.emptyHint} allowFontScaling={false}>
+                  No recent reports.
+                </Text>
               </View>
             ) : (
-              logs.map((item) => {
+              logs.map((item, idx) => {
                 const full = recentReports.find((r) => r.id === item.id);
                 return (
-                  <RecentLogCard
-                    key={item.id}
-                    item={item}
-                    onPress={() => {
-                      if (!full) return;
-                      onOpenReport?.(full);
-                    }}
-                  />
+                  <View key={item.id}>
+                    <RecentLogCard
+                      item={item}
+                      onPress={() => {
+                        if (!full) return;
+                        onOpenReport?.(full);
+                      }}
+                    />
+                    {idx !== logs.length - 1 ? <View style={styles.logsGap} /> : null}
+                  </View>
                 );
               })
             )}
@@ -781,9 +850,16 @@ export default function HomeScreen({
               else openSheet();
             }}
             hitSlop={14}
-            style={({ pressed }) => [styles.chevronHandle, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
+            style={({ pressed }) => [
+              styles.chevronHandle,
+              pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+            ]}
           >
-            <Animated.View style={{ transform: [{ translateY: bounceY }, { rotate: chevronRotate }, { scale: chevronScale }] }}>
+            <Animated.View
+              style={{
+                transform: [{ translateY: bounceY }, { rotate: chevronRotate }, { scale: chevronScale }],
+              }}
+            >
               <Ionicons name="chevron-up" size={22} color={TEXT_DARK} />
             </Animated.View>
           </Pressable>
@@ -826,37 +902,51 @@ export default function HomeScreen({
             <View style={styles.sheetCard} {...handlePan.panHandlers}>
               <View style={styles.sheetGrabber} />
 
-              <View style={styles.actionGroup}>
-                <Pressable
-                  onPress={() => closeSheet()}
-                  style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
-                >
-                  <Ionicons name="warning-outline" size={20} color="#fff" style={styles.actionIcon} />
-                  <Text style={styles.actionText}>Alert</Text>
-                </Pressable>
+              <Pressable
+                onPress={() => closeSheet()}
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
+                ]}
+              >
+                <Ionicons name="warning-outline" size={20} color="#fff" style={styles.actionIcon} />
+                <Text style={styles.actionText} allowFontScaling={false}>
+                  Alert
+                </Text>
+              </Pressable>
 
-                <Pressable
-                  onPress={() => {
-                    closeSheet();
-                    onQuickExit?.();
-                  }}
-                  style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
-                >
-                  <Ionicons name="eye-off-outline" size={20} color="#fff" style={styles.actionIcon} />
-                  <Text style={styles.actionText}>Hide App</Text>
-                </Pressable>
+              <Pressable
+                onPress={() => {
+                  closeSheet();
+                  onQuickExit?.();
+                }}
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
+                ]}
+              >
+                <Ionicons name="eye-off-outline" size={20} color="#fff" style={styles.actionIcon} />
+                <Text style={styles.actionText} allowFontScaling={false}>
+                  Hide App
+                </Text>
+              </Pressable>
 
-                <Pressable
-                  onPress={() => {
-                    closeSheet();
-                    onQuickExit?.();
-                  }}
-                  style={({ pressed }) => [styles.actionBtn, styles.dangerBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
-                >
-                  <Ionicons name="log-out-outline" size={20} color="#fff" style={styles.actionIcon} />
-                  <Text style={styles.actionText}>Sign Out</Text>
-                </Pressable>
-              </View>
+              <Pressable
+                onPress={() => {
+                  closeSheet();
+                  onQuickExit?.();
+                }}
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  styles.dangerBtn,
+                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
+                ]}
+              >
+                <Ionicons name="log-out-outline" size={20} color="#fff" style={styles.actionIcon} />
+                <Text style={styles.actionText} allowFontScaling={false}>
+                  Sign Out
+                </Text>
+              </Pressable>
             </View>
           </Animated.View>
         </Modal>

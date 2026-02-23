@@ -1,12 +1,6 @@
 // src/components/HomeScreen/RecentLogCard.tsx
 import React, { useMemo } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  useWindowDimensions,
-} from "react-native";
+import { View, Text, StyleSheet, Pressable, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../theme/colors";
 
@@ -31,18 +25,25 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function makeScale(width: number) {
+  const baseW = 375;
+  const s = clamp((width / baseW) * 1.03, 0.88, 1.18);
+  const fs = clamp(s * 1.06, 0.92, 1.28);
+  return { s, fs };
+}
+
 export default function RecentLogCard({ item, onPress }: Props) {
   const { width } = useWindowDimensions();
+  const { s, fs } = useMemo(() => makeScale(width), [width]);
 
-  // ✅ scale based on common mobile width (375)
-  const s = useMemo(() => clamp(width / 375, 0.9, 1.15), [width]);
-
-  // ✅ small font bump (keeps layout stable)
-  const fs = useMemo(() => clamp(s * 1.06, 0.95, 1.25), [s]);
+  const detailLines = width < 360 ? 3 : 2;
 
   const S = useMemo(() => {
-    const padV = Math.round(16 * s);
-    const padH = Math.round(14 * s);
+    const padV = clamp(Math.round(16 * s), 12, 18);
+    const padH = clamp(Math.round(14 * s), 12, 18);
+
+    const barW = clamp(Math.round(4 * s), 3, 4);
+    const gap = clamp(Math.round(12 * s), 10, 14);
 
     return StyleSheet.create({
       card: {
@@ -51,7 +52,7 @@ export default function RecentLogCard({ item, onPress }: Props) {
         borderRadius: 16,
         paddingVertical: padV,
         paddingHorizontal: padH,
-        minHeight: Math.round(96 * s),
+        minHeight: clamp(Math.round(96 * s), 86, 112),
         borderWidth: 1,
         borderColor: CARD_BORDER,
         shadowColor: "#000",
@@ -62,33 +63,32 @@ export default function RecentLogCard({ item, onPress }: Props) {
       },
 
       leftBar: {
-        width: 4,
+        width: barW,
         borderRadius: 999,
         backgroundColor: Colors.primary,
-        marginRight: Math.round(12 * s),
+        marginRight: gap,
         alignSelf: "stretch",
       },
 
       body: {
         flex: 1,
-        paddingRight: Math.round(10 * s),
+        minWidth: 0, // ✅ important to prevent text causing horizontal overflow
+        paddingRight: clamp(Math.round(8 * s), 6, 10),
       },
 
-      // ✅ slightly bigger
       title: {
-        fontSize: Math.round(14 * fs),
+        fontSize: clamp(Math.round(14 * fs), 12, 16),
         fontWeight: "900",
         color: Colors.primary,
-        marginBottom: Math.round(4 * s),
+        marginBottom: clamp(Math.round(4 * s), 3, 6),
       },
 
-      // ✅ slightly bigger
       detail: {
-        fontSize: Math.round(12 * fs),
+        fontSize: clamp(Math.round(12 * fs), 11, 14),
         fontWeight: "600",
         color: Colors.timestamp,
-        lineHeight: Math.round(17 * fs),
-        marginBottom: Math.round(10 * s),
+        lineHeight: clamp(Math.round(17 * fs), 15, 19),
+        marginBottom: clamp(Math.round(10 * s), 8, 12),
       },
 
       metaRow: {
@@ -98,29 +98,28 @@ export default function RecentLogCard({ item, onPress }: Props) {
       },
 
       metaCol: {
-        gap: Math.round(3 * s),
+        flexShrink: 1,
       },
       metaColRight: {
         alignItems: "flex-end",
-        gap: Math.round(3 * s),
+        flexShrink: 1,
       },
 
-      // ✅ slightly bigger
       metaDate: {
-        fontSize: Math.round(11 * fs),
+        fontSize: clamp(Math.round(11 * fs), 10, 12),
         fontWeight: "700",
         color: Colors.timestamp,
       },
       metaTime: {
-        fontSize: Math.round(11 * fs),
+        fontSize: clamp(Math.round(11 * fs), 10, 12),
         fontWeight: "900",
         color: Colors.heading,
       },
 
       chevWrap: {
-        width: Math.round(22 * s),
+        width: clamp(Math.round(22 * s), 18, 26),
         alignItems: "flex-end",
-        paddingTop: Math.round(6 * s),
+        paddingTop: clamp(Math.round(6 * s), 4, 8),
         justifyContent: "flex-start",
       },
     });
@@ -129,37 +128,34 @@ export default function RecentLogCard({ item, onPress }: Props) {
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        S.card,
-        pressed && { opacity: 0.92, transform: [{ scale: 0.995 }] },
-      ]}
+      style={({ pressed }) => [S.card, pressed && { opacity: 0.92, transform: [{ scale: 0.995 }] }]}
     >
       <View style={S.leftBar} />
 
       <View style={S.body}>
-        <Text style={S.title} numberOfLines={1}>
+        <Text style={S.title} numberOfLines={1} allowFontScaling={false}>
           {item.title}
         </Text>
 
-        <Text style={S.detail} numberOfLines={2}>
+        <Text style={S.detail} numberOfLines={detailLines} allowFontScaling={false}>
           {item.detail}
         </Text>
 
         <View style={S.metaRow}>
           <View style={S.metaCol}>
-            <Text style={S.metaDate} numberOfLines={1}>
+            <Text style={S.metaDate} numberOfLines={1} allowFontScaling={false}>
               {item.dateLeft}
             </Text>
-            <Text style={S.metaTime} numberOfLines={1}>
+            <Text style={S.metaTime} numberOfLines={1} allowFontScaling={false}>
               {item.timeLeft}
             </Text>
           </View>
 
           <View style={S.metaColRight}>
-            <Text style={S.metaDate} numberOfLines={1}>
+            <Text style={S.metaDate} numberOfLines={1} allowFontScaling={false}>
               {item.dateRight}
             </Text>
-            <Text style={S.metaTime} numberOfLines={1}>
+            <Text style={S.metaTime} numberOfLines={1} allowFontScaling={false}>
               {item.timeRight}
             </Text>
           </View>
@@ -167,11 +163,7 @@ export default function RecentLogCard({ item, onPress }: Props) {
       </View>
 
       <View style={S.chevWrap}>
-        <Ionicons
-          name="chevron-forward"
-          size={Math.round(18 * s)}
-          color={Colors.heading}
-        />
+        <Ionicons name="chevron-forward" size={clamp(Math.round(18 * s), 16, 20)} color={Colors.heading} />
       </View>
     </Pressable>
   );

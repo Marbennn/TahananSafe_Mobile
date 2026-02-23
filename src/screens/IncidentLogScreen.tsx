@@ -22,6 +22,12 @@ import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { Colors } from "../theme/colors";
 
+// ✅ Speech-to-text (voice input)
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from "expo-speech-recognition";
+
 // ✅ API
 import { submitIncident } from "../api/incidents";
 
@@ -131,6 +137,57 @@ function formatAddressFromReverseGeocode(
 }
 /* ============================================================ */
 
+// Speech-to-text helpers
+const SPEECH_LANG = "en-US";
+
+function safeTrim(s: string) {
+  return (s ?? "").replace(/\s+/g, " ").trim();
+}
+
+function joinWithSpace(a: string, b: string) {
+  const aa = safeTrim(a);
+  const bb = safeTrim(b);
+  if (!aa) return bb;
+  if (!bb) return aa;
+  return `${aa} ${bb}`;
+}
+
+/**
+ * ✅ Fix: expo-speech-recognition usually returns:
+ *   event.results[0]?.transcript
+ * But some implementations may return nested arrays (web-ish):
+ *   event.results[0][0]?.transcript
+ * We support both.
+ */
+function extractTranscriptFromEvent(event: any): string {
+  try {
+    const results = event?.results;
+
+    // ✅ common shape: [{ transcript: "..." }, ...]
+    if (Array.isArray(results) && results.length > 0) {
+      const r0 = results[0];
+
+      if (r0 && typeof r0 === "object" && typeof r0.transcript === "string") {
+        return r0.transcript;
+      }
+
+      // ✅ fallback: [[{ transcript: "..." }]]
+      if (Array.isArray(r0) && r0.length > 0) {
+        const alt0 = r0[0];
+        if (alt0 && typeof alt0 === "object" && typeof alt0.transcript === "string") {
+          return alt0.transcript;
+        }
+      }
+    }
+
+    // ✅ last fallback
+    if (typeof event?.transcript === "string") return event.transcript;
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
 export default function IncidentLogScreen({
   onBack,
   onProceedConfirm,
@@ -149,6 +206,8 @@ export default function IncidentLogScreen({
   const [witnessName, setWitnessName] = useState("");
   const [witnessType, setWitnessType] = useState("");
 
+  const detailsInputRef = React.useRef<TextInput>(null);
+
   // ✅ REAL current date/time (LIVE update every 2 seconds)
   const [dateStr, setDateStr] = useState(() => formatDateMMDDYYYY(new Date()));
   const [timeStr, setTimeStr] = useState(() => formatTime12h(new Date()));
@@ -158,6 +217,15 @@ export default function IncidentLogScreen({
 
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationGranted, setLocationGranted] = useState<boolean | null>(null);
+
+  // ✅ Speech-to-text state
+  const [recognizing, setRecognizing] = useState(false);
+  const [speechPreview, setSpeechPreview] = useState("");
+  const [speechError, setSpeechError] = useState<string | null>(null);
+
+  // Base text before we started speaking (so interim results append correctly)
+  const speechBaseRef = React.useRef("");
+  const lastFinalRef = React.useRef("");
 
   // ✅ If you ever setMode("emergency") somewhere else, this keeps incidentType aligned.
   React.useEffect(() => {
@@ -183,6 +251,116 @@ export default function IncidentLogScreen({
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Stop recognition on unmount
+  React.useEffect(() => {
+    return () => {
+      try {
+        ExpoSpeechRecognitionModule.abort();
+      } catch {
+        // ignore
+      }
+    };
+  }, []);
+
+  // Speech recognition events
+  useSpeechRecognitionEvent("start", () => {
+    setRecognizing(true);
+    setSpeechError(null);
+  });
+
+  useSpeechRecognitionEvent("end", () => {
+    setRecognizing(false);
+    setSpeechPreview("");
+    lastFinalRef.current = "";
+  });
+
+  useSpeechRecognitionEvent("result", (event: any) => {
+    const t = safeTrim(extractTranscriptFromEvent(event));
+    if (!t) return;
+
+    const isFinal = event?.isFinal === true;
+
+    if (isFinal) {
+      // ✅ Commit final into base, so next speech continues from here
+      const newBase = joinWithSpace(speechBaseRef.current, t);
+
+      speechBaseRef.current = newBase;
+      lastFinalRef.current = t;
+
+      setDetails(newBase);
+      setSpeechPreview("");
+      return;
+    }
+
+    // interim
+    setSpeechPreview(t);
+    setDetails(joinWithSpace(speechBaseRef.current, t));
+  });
+
+  useSpeechRecognitionEvent("error", (event: any) => {
+    const msg = event?.message || "Speech recognition error";
+    log("Speech error", event);
+    setRecognizing(false);
+    setSpeechPreview("");
+    setSpeechError(String(msg));
+    Alert.alert("Voice Input Error", String(msg));
+  });
+
+  const startVoiceInput = async () => {
+    try {
+      setSpeechError(null);
+
+      const available = ExpoSpeechRecognitionModule.isRecognitionAvailable?.();
+      if (available === false) {
+        Alert.alert(
+          "Voice Input Unavailable",
+          "Speech recognition is not available on this device."
+        );
+        return;
+      }
+
+      const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!perm?.granted) {
+        Alert.alert(
+          "Permission Needed",
+          "Please allow microphone and speech recognition permissions."
+        );
+        return;
+      }
+
+      // ✅ Focus the Incident Detail box so user sees text being inserted
+      detailsInputRef.current?.focus?.();
+
+      speechBaseRef.current = safeTrim(details);
+      lastFinalRef.current = "";
+      setSpeechPreview("");
+
+      ExpoSpeechRecognitionModule.start({
+        lang: SPEECH_LANG,
+        interimResults: true,
+        continuous: false,
+      });
+    } catch (e: any) {
+      log("startVoiceInput ERROR", e);
+      Alert.alert("Voice Input Error", e?.message || "Could not start voice input.");
+    }
+  };
+
+  const stopVoiceInput = async () => {
+    try {
+      ExpoSpeechRecognitionModule.stop();
+    } catch (e: any) {
+      log("stopVoiceInput ERROR", e);
+      setRecognizing(false);
+    }
+  };
+
+  const toggleVoiceInput = async () => {
+    if (submitting) return;
+    if (recognizing) await stopVoiceInput();
+    else await startVoiceInput();
+  };
 
   const FOOTER_H = 72 * s;
   const CONTENT_BOTTOM_PAD = Math.max(insets.bottom, 10) + FOOTER_H + 16;
@@ -381,6 +559,10 @@ export default function IncidentLogScreen({
     setWitnessName("");
     setWitnessType("");
     setPhotos([]);
+    setSpeechPreview("");
+    setSpeechError(null);
+    speechBaseRef.current = "";
+    lastFinalRef.current = "";
   };
 
   const submitToBackend = async (): Promise<SubmitIncidentResponse> => {
@@ -418,6 +600,11 @@ export default function IncidentLogScreen({
 
   const onSubmit = async () => {
     if (submitting) return;
+
+    if (recognizing) {
+      Alert.alert("Voice input active", "Please stop voice input before submitting.");
+      return;
+    }
 
     if (mode === "emergency") {
       if (!details.trim()) {
@@ -498,8 +685,6 @@ export default function IncidentLogScreen({
           <View style={{ width: 36, height: 36 }} />
         </View>
 
-        {/* ✅ Mode button removed entirely */}
-
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
@@ -508,16 +693,49 @@ export default function IncidentLogScreen({
           ]}
         >
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>
-              {detailsLabel} <Text style={styles.required}>*</Text>
-            </Text>
+            <View style={styles.detailsHeaderRow}>
+              <Text style={styles.sectionTitle}>
+                {detailsLabel} <Text style={styles.required}>*</Text>
+              </Text>
+
+              <Pressable
+                disabled={submitting}
+                onPress={toggleVoiceInput}
+                hitSlop={10}
+                style={({ pressed }) => [
+                  styles.micBtn,
+                  recognizing && styles.micBtnActive,
+                  (pressed || submitting) && { opacity: 0.9 },
+                ]}
+              >
+                <Ionicons
+                  name={recognizing ? "mic" : "mic-outline"}
+                  size={16}
+                  color={recognizing ? "#FFFFFF" : Colors.primary}
+                />
+                <Text style={[styles.micText, recognizing && { color: "#FFFFFF" }]}>
+                  {recognizing ? "Listening..." : "Voice"}
+                </Text>
+              </Pressable>
+            </View>
+
+            {!!speechError && (
+              <Text style={styles.speechErrorText}>{speechError}</Text>
+            )}
 
             {/* Details */}
             <View style={[styles.input, styles.textArea]}>
               <TextInput
+                ref={detailsInputRef}
                 editable={!submitting}
                 value={details}
-                onChangeText={setDetails}
+                onChangeText={(t) => {
+                  setDetails(t);
+                  if (!recognizing) {
+                    speechBaseRef.current = safeTrim(t);
+                    lastFinalRef.current = "";
+                  }
+                }}
                 placeholder="A detailed explanation of what happened, including actions, sequence of events, and any relevant details observed during the incident."
                 placeholderTextColor="#9AA7B5"
                 multiline
@@ -525,6 +743,12 @@ export default function IncidentLogScreen({
                 style={styles.textAreaInput}
               />
             </View>
+
+            {recognizing && (
+              <Text style={styles.speechHint}>
+                Speak now. Tap “Listening...” to stop.
+              </Text>
+            )}
 
             {/* Add Photo */}
             <View style={styles.photoRow}>
@@ -745,15 +969,57 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
 
+  detailsHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 10,
+  },
+
   sectionTitle: {
     fontSize: 14,
     fontWeight: "900",
     color: TEXT_DARK,
-    marginBottom: 10,
   },
   required: {
     color: "#E11D48",
     fontWeight: "900",
+  },
+
+  micBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: BORDER,
+    paddingHorizontal: 12,
+    height: 34,
+    borderRadius: 12,
+  },
+  micBtnActive: {
+    backgroundColor: "#EF4444",
+    borderColor: "#EF4444",
+  },
+  micText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: Colors.primary,
+  },
+  speechHint: {
+    marginTop: -4,
+    marginBottom: 10,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#52677A",
+  },
+  speechErrorText: {
+    marginTop: -6,
+    marginBottom: 10,
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#E11D48",
   },
 
   input: {
