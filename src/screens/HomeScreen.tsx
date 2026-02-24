@@ -41,6 +41,9 @@ import { getMeApi } from "../api/pin";
 // ✅ Use ReportItem type
 import type { ReportItem } from "./ReportScreen";
 
+// ✅ HIDE APP helper
+import { hideApp } from "../utils/hideApp";
+
 type Props = {
   onQuickExit?: () => void;
   onTabChange?: (tab: TabKey) => void;
@@ -918,7 +921,8 @@ export default function HomeScreen({
               <Pressable
                 onPress={() => {
                   closeSheet();
-                  onQuickExit?.();
+                  // ✅ HIDE APP: send to background (Android)
+                  hideApp();
                 }}
                 style={({ pressed }) => [
                   styles.actionBtn,
