@@ -4,7 +4,7 @@
 # How To Run in terminal
 npm install expo
 "Run on ios"
-npx expo start -c --tunnel
+npx expo start -c --dev-client --tunnel
 "Run on android"
 npx expo start -c
 
@@ -27,3 +27,9 @@ npx expo install expo-local-authentication expo-secure-store
 winget install Cloudflare.cloudflared
 # then start CloudFlared server
 cloudflared tunnel --url http://localhost:8000
+# For Instaling Pre Build
+cd C:\Users\INTEL\OneDrive\Documents\GitHub\TahananSafe_Mobile
+
+cd android
+
+ cmd /c "set ""JAVA_HOME=C:\Program Files\Java\jdk-17.0.2"" && set ""PATH=%JAVA_HOME%\bin;%PATH%"" && gradlew.bat :app:installDebug"

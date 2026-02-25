@@ -16,9 +16,6 @@ import com.facebook.react.defaults.DefaultReactNativeHost
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 
-// ✅ Add this import
-import com.angelgeloo0918.firstproject.HideAppPackage
-
 class MainApplication : Application(), ReactApplication {
 
   override val reactNativeHost: ReactNativeHost = ReactNativeHostWrapper(
@@ -29,7 +26,7 @@ class MainApplication : Application(), ReactApplication {
               // Packages that cannot be autolinked yet can be added manually here, for example:
               // add(MyReactNativePackage())
 
-              // ✅ Register your custom native module package
+              // ✅ Register our custom native module package
               add(HideAppPackage())
             }
 

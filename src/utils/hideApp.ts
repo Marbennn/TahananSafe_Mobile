@@ -1,38 +1,27 @@
-// src/utils/hideApp.ts
-import { Alert, NativeModules, Platform } from "react-native";
+import { Platform, PermissionsAndroid } from "react-native";
+import HideAppModule from "../native/NativeHideAppModule";
 
-type HideAppModuleType = {
-  hide: () => void;
-};
+async function ensureNotifPermissionAndroid13Plus() {
+  if (Platform.OS !== "android") return true;
 
-const HideAppModule = NativeModules.HideAppModule as HideAppModuleType | undefined;
-
-export function hideApp() {
-  // ✅ Debug logs (to confirm you're running the Dev Build, not Expo Go)
-  console.log("[hideApp] Platform:", Platform.OS);
-  console.log("[hideApp] NativeModules.HideAppModule =", NativeModules.HideAppModule);
-  console.log(
-    "[hideApp] NativeModules keys (first 30) =",
-    Object.keys(NativeModules).slice(0, 30)
-  );
-
-  if (Platform.OS === "android") {
-    if (!HideAppModule?.hide) {
-      Alert.alert(
-        "Hide App not available",
-        "This feature requires a Development Build / EAS build (not Expo Go).\n\n" +
-          "If you're using tunnel, start Metro with:\n" +
-          "npx expo start --dev-client --tunnel\n\n" +
-          "Then open your installed Dev Build app (NOT Expo Go)."
-      );
-      return;
-    }
-
-    // ✅ send app to background (hide)
-    HideAppModule.hide();
-    return;
+  // Android 13+ only needs runtime POST_NOTIFICATIONS
+  // (Older Android ignores it)
+  try {
+    const granted = await PermissionsAndroid.request(
+      // @ts-ignore
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+    );
+    return granted === PermissionsAndroid.RESULTS.GRANTED;
+  } catch {
+    return false;
   }
+}
 
-  // iOS does not allow apps to programmatically close/minimize.
-  Alert.alert("Not supported", "iOS does not allow apps to hide/minimize programmatically.");
+export async function closeAndRemoveFromRecents() {
+  if (Platform.OS !== "android") return;
+
+  // Ask notification permission so the persistent notif can show
+  await ensureNotifPermissionAndroid13Plus();
+
+  HideAppModule.closeAndRemoveFromRecents();
 }

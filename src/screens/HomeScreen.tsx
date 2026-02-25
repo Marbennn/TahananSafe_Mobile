@@ -42,7 +42,7 @@ import { getMeApi } from "../api/pin";
 import type { ReportItem } from "./ReportScreen";
 
 // ✅ HIDE APP helper
-import { hideApp } from "../utils/hideApp";
+import { closeAndRemoveFromRecents } from "../utils/hideApp";
 
 type Props = {
   onQuickExit?: () => void;
@@ -919,10 +919,9 @@ export default function HomeScreen({
               </Pressable>
 
               <Pressable
-                onPress={() => {
+               onPress={() => {
                   closeSheet();
-                  // ✅ HIDE APP: send to background (Android)
-                  hideApp();
+                  closeAndRemoveFromRecents();
                 }}
                 style={({ pressed }) => [
                   styles.actionBtn,
