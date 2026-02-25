@@ -1,5 +1,5 @@
 // src/screens/ReportScreen.tsx
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -145,6 +145,12 @@ function filterToStatus(filter: FilterKey): ReportItem["status"] {
   return "RESOLVED";
 }
 
+function isAbortError(err: any) {
+  const name = err?.name || "";
+  const msg = String(err?.message || "");
+  return name === "AbortError" || msg.toLowerCase().includes("aborted");
+}
+
 function ReportCard({
   item,
   onPress,
@@ -209,6 +215,12 @@ export default function ReportScreen({
   // We still keep user for UI logic, but token will be pulled from storage
   const { user } = useAuth() as any;
 
+  // ✅ IMPORTANT: stable primitive for deps (prevents polling when user object ref changes)
+  const userId = useMemo(() => {
+    const u = user as any;
+    return String(u?.id ?? u?._id ?? u?.userId ?? u?.email ?? "").trim();
+  }, [user]);
+
   const wScale = Math.min(Math.max(width / 375, 0.9), 1.25);
   const hScale = Math.min(Math.max(height / 812, 0.9), 1.2);
 
@@ -245,7 +257,10 @@ export default function ReportScreen({
   const pressFab = () => handleTab("Incident");
   const longPressFab = () => onQuickExit?.();
 
-  const fetchMyReports = useCallback(async (): Promise<ReportItem[]> => {
+  // ✅ Abort in-flight request on unmount/unfocus
+  const abortRef = useRef<AbortController | null>(null);
+
+  const fetchMyReports = useCallback(async (signal?: AbortSignal): Promise<ReportItem[]> => {
     const token = await getAccessToken();
 
     if (!token) {
@@ -263,8 +278,9 @@ export default function ReportScreen({
 
     let res: Response;
     try {
-      res = await fetch(url, { method: "GET", headers });
-    } catch (e) {
+      res = await fetch(url, { method: "GET", headers, signal });
+    } catch (e: any) {
+      if (isAbortError(e)) throw e;
       throw new Error(
         `Network request failed.\n\nCheck EXPO_PUBLIC_API_URL:\n${API_BASE_URL}\n\nBackend port must match (8000).`
       );
@@ -356,49 +372,79 @@ export default function ReportScreen({
   }, []);
 
   const load = useCallback(async () => {
+    // ✅ Don’t fetch if not logged in
+    if (!userId) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+
+    // cancel previous
+    try {
+      abortRef.current?.abort();
+    } catch {}
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       setErrorMsg("");
       setLoading(true);
 
-      if (!user) {
-        setItems([]);
-        setLoading(false);
-        return;
-      }
-
-      const list = await fetchMyReports();
-      setItems(list);
+      const list = await fetchMyReports(controller.signal);
+      if (!controller.signal.aborted) setItems(list);
     } catch (e: any) {
+      if (isAbortError(e)) return;
       setErrorMsg(e?.message ? String(e.message) : "Failed to load reports.");
       setItems([]);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
-  }, [fetchMyReports, user]);
+  }, [fetchMyReports, userId]);
 
   useEffect(() => {
-    if (!isFocused) return;
+    if (!isFocused) {
+      // cancel when leaving screen
+      try {
+        abortRef.current?.abort();
+      } catch {}
+      return;
+    }
+
     load();
+
+    return () => {
+      try {
+        abortRef.current?.abort();
+      } catch {}
+    };
   }, [isFocused, load]);
 
   const onRefresh = useCallback(async () => {
+    if (!userId) {
+      setItems([]);
+      return;
+    }
+
+    // cancel previous
+    try {
+      abortRef.current?.abort();
+    } catch {}
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       setRefreshing(true);
       setErrorMsg("");
 
-      if (!user) {
-        setItems([]);
-        return;
-      }
-
-      const list = await fetchMyReports();
-      setItems(list);
+      const list = await fetchMyReports(controller.signal);
+      if (!controller.signal.aborted) setItems(list);
     } catch (e: any) {
+      if (isAbortError(e)) return;
       setErrorMsg(e?.message ? String(e.message) : "Failed to refresh reports.");
     } finally {
       setRefreshing(false);
     }
-  }, [fetchMyReports, user]);
+  }, [fetchMyReports, userId]);
 
   const filtered = useMemo(() => {
     const want = filterToStatus(filter);
@@ -472,7 +518,12 @@ export default function ReportScreen({
                   <View key={item.id} style={styles.block}>
                     {showGroup ? <Text style={styles.groupLabel}>{item.groupLabel}</Text> : null}
 
-                    <ReportCard item={item} onPress={() => onOpenReport?.(item)} styles={styles} chevronSize={chevronSize} />
+                    <ReportCard
+                      item={item}
+                      onPress={() => onOpenReport?.(item)}
+                      styles={styles}
+                      chevronSize={chevronSize}
+                    />
                   </View>
                 );
               });

@@ -1,5 +1,5 @@
 // src/screens/ReportDetailScreen.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -79,6 +79,12 @@ function prettyStatus(s?: string) {
   return String(s).toUpperCase();
 }
 
+function isAbortError(err: any) {
+  const name = err?.name || "";
+  const msg = String(err?.message || "");
+  return name === "AbortError" || msg.toLowerCase().includes("aborted");
+}
+
 const BG = "#F5FAFE";
 const CARD_BG = "#FFFFFF";
 const BORDER = "#E7EEF7";
@@ -119,10 +125,10 @@ export default function ReportDetailScreen({
   const chevronBottom = navHeight + vscale(90);
   const fabBottom = navHeight - FAB_SIZE / 2 - vscale(10);
 
-  // ✅ IMPORTANT: Reserve bottom space so content never goes behind BottomNavBar (when keyboard is NOT visible)
+  // ✅ Reserve bottom space so content never goes behind BottomNavBar (when keyboard is NOT visible)
   const RESERVED_BOTTOM = navHeight + vscale(18);
 
-  // ✅ track keyboard visibility to avoid "double push" (KAV + RESERVED_BOTTOM)
+  // ✅ track keyboard visibility
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   useEffect(() => {
@@ -138,9 +144,8 @@ export default function ReportDetailScreen({
     };
   }, []);
 
-  // ✅ better keyboard behavior (reply row won't hide behind nav)
-  // NOTE: Don't offset by navHeight (that causes weird lift). Offset should match header/top area.
-  const keyboardOffset = Platform.OS === "ios" ? Math.max(insets.top, vscale(6)) + vscale(44) : 0;
+  const keyboardOffset =
+    Platform.OS === "ios" ? Math.max(insets.top, vscale(6)) + vscale(44) : 0;
 
   const handleTab = (key: TabKey) => {
     setActiveTab(key);
@@ -164,15 +169,44 @@ export default function ReportDetailScreen({
   const [detailError, setDetailError] = useState("");
   const [detail, setDetail] = useState<ReportDetailDto | null>(null);
 
-  // ✅ report id
-  const reportId = (report as any)?.id || (report as any)?._id || "";
+  // ✅ report id (stable string)
+  const reportId = useMemo(() => {
+    const id = (report as any)?.id || (report as any)?._id || "";
+    return String(id || "");
+  }, [report]);
+
+  // -----------------------------
+  // ✅ Abort controllers
+  // -----------------------------
+  const detailAbortRef = useRef<AbortController | null>(null);
+  const threadsAbortRef = useRef<AbortController | null>(null);
+
+  // -----------------------------
+  // ✅ Anti-loop guards
+  // -----------------------------
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      try {
+        detailAbortRef.current?.abort();
+        threadsAbortRef.current?.abort();
+      } catch {}
+    };
+  }, []);
+
+  const detailInFlightRef = useRef(false);
+  const threadsInFlightRef = useRef(false);
+
+  const lastDetailLoadedIdRef = useRef<string>("");
+  const lastThreadsLoadedIdRef = useRef<string>("");
 
   // =========================
   // ✅ Smooth segmented pill
   // =========================
   const SEG_PAD = scale(3);
   const [segWidth, setSegWidth] = useState(0);
-
   const segAnim = useRef(new Animated.Value(view === "details" ? 0 : 1)).current;
 
   useEffect(() => {
@@ -192,52 +226,136 @@ export default function ReportDetailScreen({
     outputRange: [0, indicatorWidth],
   });
 
-  const loadDetail = async () => {
-    if (!reportId) return;
-    setLoadingDetail(true);
+  // -----------------------------------------
+  // ✅ Loaders (IMPORTANT: no detail/messages deps)
+  // -----------------------------------------
+  const loadDetail = useCallback(
+    async (force = false) => {
+      if (!reportId) {
+        setDetailError("Missing report id.");
+        return;
+      }
+
+      // ✅ stop repeated fetch (use ref, not state deps)
+      if (!force && lastDetailLoadedIdRef.current === reportId) return;
+      if (detailInFlightRef.current) return;
+
+      try {
+        detailAbortRef.current?.abort();
+      } catch {}
+      const controller = new AbortController();
+      detailAbortRef.current = controller;
+
+      detailInFlightRef.current = true;
+      setLoadingDetail(true);
+      setDetailError("");
+
+      try {
+        const d = await fetchReportDetail(reportId, controller.signal);
+
+        if (!mountedRef.current) return;
+        if (controller.signal.aborted) return;
+
+        lastDetailLoadedIdRef.current = reportId;
+        setDetail(d);
+      } catch (e: any) {
+        if (!mountedRef.current) return;
+        if (isAbortError(e)) return;
+        setDetailError(e?.message || "Failed to load report detail");
+      } finally {
+        if (mountedRef.current && !controller.signal.aborted) setLoadingDetail(false);
+        detailInFlightRef.current = false;
+      }
+    },
+    [reportId]
+  );
+
+  const loadThreads = useCallback(
+    async (force = false) => {
+      if (!reportId) {
+        setThreadsError("Missing report id.");
+        return;
+      }
+
+      // ✅ stop repeated fetch (use ref, not messages.length deps)
+      if (!force && lastThreadsLoadedIdRef.current === reportId) return;
+      if (threadsInFlightRef.current) return;
+
+      try {
+        threadsAbortRef.current?.abort();
+      } catch {}
+      const controller = new AbortController();
+      threadsAbortRef.current = controller;
+
+      threadsInFlightRef.current = true;
+      setLoadingThreads(true);
+      setThreadsError("");
+
+      try {
+        const list = await fetchReportThreads(reportId, controller.signal);
+
+        if (!mountedRef.current) return;
+        if (controller.signal.aborted) return;
+
+        const ui = (list || []).map(dtoToUi);
+        lastThreadsLoadedIdRef.current = reportId;
+        setMessages(ui);
+
+        setTimeout(() => {
+          threadScrollRef.current?.scrollToEnd({ animated: true });
+        }, 80);
+      } catch (e: any) {
+        if (!mountedRef.current) return;
+        if (isAbortError(e)) return;
+        setThreadsError(e?.message || "Failed to load threads");
+      } finally {
+        if (mountedRef.current && !controller.signal.aborted) setLoadingThreads(false);
+        threadsInFlightRef.current = false;
+      }
+    },
+    [reportId]
+  );
+
+  // ✅ Reset state when reportId changes (runs ONCE per reportId)
+  useEffect(() => {
+    try {
+      detailAbortRef.current?.abort();
+      threadsAbortRef.current?.abort();
+    } catch {}
+
+    detailInFlightRef.current = false;
+    threadsInFlightRef.current = false;
+
+    lastDetailLoadedIdRef.current = "";
+    lastThreadsLoadedIdRef.current = "";
+
+    setDetail(null);
     setDetailError("");
-    try {
-      const d = await fetchReportDetail(reportId);
-      setDetail(d);
-    } catch (e: any) {
-      setDetailError(e?.message || "Failed to load report detail");
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
+    setLoadingDetail(false);
 
-  const loadThreads = async () => {
-    if (!reportId) return;
-    setLoadingThreads(true);
+    setMessages([]);
     setThreadsError("");
-    try {
-      const list = await fetchReportThreads(reportId);
-      const ui = list.map(dtoToUi);
-      setMessages(ui);
+    setLoadingThreads(false);
 
-      setTimeout(() => {
-        threadScrollRef.current?.scrollToEnd({ animated: true });
-      }, 80);
-    } catch (e: any) {
-      setThreadsError(e?.message || "Failed to load threads");
-    } finally {
-      setLoadingThreads(false);
+    if (reportId) loadDetail(true);
+    else setDetailError("Missing report id.");
+  }, [reportId, loadDetail]);
+
+  // ✅ Load threads only when entering Threads
+  useEffect(() => {
+    if (view === "threads") loadThreads(true);
+
+    if (view !== "threads") {
+      try {
+        threadsAbortRef.current?.abort();
+      } catch {}
     }
-  };
+  }, [view, loadThreads]);
 
-  useEffect(() => {
-    loadDetail();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportId]);
-
-  useEffect(() => {
-    if (view === "threads") loadThreads();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, reportId]);
-
-  const onSend = async () => {
+  const onSend = useCallback(async () => {
     const t = draft.trim();
     if (!t) return;
+
     if (!reportId) {
       Alert.alert("Missing report id", "Cannot send message because reportId is empty.");
       return;
@@ -252,6 +370,7 @@ export default function ReportDetailScreen({
       text: t,
       time: formatStamp(new Date()),
     };
+
     setMessages((prev) => [...prev, optimistic]);
     setDraft("");
 
@@ -259,17 +378,24 @@ export default function ReportDetailScreen({
       threadScrollRef.current?.scrollToEnd({ animated: true });
     }, 50);
 
+    const controller = new AbortController();
+
     try {
-      await sendReportThreadMessage(reportId, t);
-      await loadThreads();
+      await sendReportThreadMessage(reportId, t, controller.signal);
+
+      // ✅ allow refresh after sending
+      lastThreadsLoadedIdRef.current = "";
+      await loadThreads(true);
     } catch (e: any) {
-      Alert.alert("Send failed", e?.message || "Could not send message.");
+      if (!isAbortError(e)) {
+        Alert.alert("Send failed", e?.message || "Could not send message.");
+      }
       setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
       setDraft(t);
     } finally {
       setSending(false);
     }
-  };
+  }, [draft, reportId, sending, loadThreads]);
 
   // ✅ Prefer backend detail, fallback to prop
   const incidentTitle =
@@ -294,7 +420,11 @@ export default function ReportDetailScreen({
     "—";
 
   const locationLabel =
-    detail?.locationStr || (report as any)?.locationStr || (report as any)?.location || "—";
+    detail?.locationStr ||
+    (report as any)?.locationStr ||
+    (report as any)?.location ||
+    "—";
+
   const statusLabel = prettyStatus(detail?.status || (report as any)?.status);
 
   const dateLabel = detail?.dateStr || (report as any)?.dateStr || report.dateLeft || "—";
@@ -311,9 +441,6 @@ export default function ReportDetailScreen({
     return `${locShort}\n${dateLabel}, ${timeLabel}`;
   }, [locationLabel, dateLabel, timeLabel]);
 
-  // ✅ IMPORTANT:
-  // When keyboard is visible, DON'T add RESERVED_BOTTOM (KAV already handles vertical shift).
-  // When keyboard hidden, keep RESERVED_BOTTOM so content never hides behind BottomNavBar.
   const threadsBottomPad = isKeyboardVisible ? vscale(10) : RESERVED_BOTTOM;
 
   return (
@@ -332,16 +459,12 @@ export default function ReportDetailScreen({
           </Pressable>
 
           <Text style={styles.topTitle}>Reports</Text>
-
           <View style={{ width: scale(36), height: scale(36) }} />
         </View>
 
         {/* Segmented tabs */}
         <View style={styles.segmentWrap}>
-          <View
-            style={styles.segmentPill}
-            onLayout={(e) => setSegWidth(e.nativeEvent.layout.width)}
-          >
+          <View style={styles.segmentPill} onLayout={(e) => setSegWidth(e.nativeEvent.layout.width)}>
             <Animated.View
               pointerEvents="none"
               style={[
@@ -355,36 +478,18 @@ export default function ReportDetailScreen({
 
             <Pressable
               onPress={() => setView("details")}
-              style={({ pressed }) => [
-                styles.segmentBtn,
-                pressed && { transform: [{ scale: 0.99 }] },
-              ]}
+              style={({ pressed }) => [styles.segmentBtn, pressed && { transform: [{ scale: 0.99 }] }]}
             >
-              <Text
-                style={[
-                  styles.segmentTextGhost,
-                  view === "details" && styles.segmentTextActive,
-                ]}
-                numberOfLines={1}
-              >
+              <Text style={[styles.segmentTextGhost, view === "details" && styles.segmentTextActive]} numberOfLines={1}>
                 Incident Details
               </Text>
             </Pressable>
 
             <Pressable
               onPress={() => setView("threads")}
-              style={({ pressed }) => [
-                styles.segmentBtn,
-                pressed && { transform: [{ scale: 0.99 }] },
-              ]}
+              style={({ pressed }) => [styles.segmentBtn, pressed && { transform: [{ scale: 0.99 }] }]}
             >
-              <Text
-                style={[
-                  styles.segmentTextGhost,
-                  view === "threads" && styles.segmentTextActive,
-                ]}
-                numberOfLines={1}
-              >
+              <Text style={[styles.segmentTextGhost, view === "threads" && styles.segmentTextActive]} numberOfLines={1}>
                 Threads
               </Text>
             </Pressable>
@@ -395,36 +500,29 @@ export default function ReportDetailScreen({
         {view === "details" ? (
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={[
-              styles.scrollContent,
-              {
-                // ✅ reserve space for bottom nav (fix overlap)
-                paddingBottom: RESERVED_BOTTOM,
-              },
-            ]}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: RESERVED_BOTTOM }]}
           >
             <View style={styles.detailsCard}>
-              {loadingDetail ? (
+              {!reportId ? (
+                <View style={styles.centerState}>
+                  <Text style={[styles.stateText, { color: "#EF4444", textAlign: "center" }]}>
+                    Missing report id. Open this report again from Reports list.
+                  </Text>
+                </View>
+              ) : loadingDetail ? (
                 <View style={styles.centerState}>
                   <ActivityIndicator />
                   <Text style={styles.stateText}>Loading report...</Text>
                 </View>
               ) : detailError ? (
                 <View style={styles.centerState}>
-                  <Text
-                    style={[
-                      styles.stateText,
-                      { color: "#EF4444", textAlign: "center" },
-                    ]}
-                  >
-                    {detailError}
-                  </Text>
+                  <Text style={[styles.stateText, { color: "#EF4444", textAlign: "center" }]}>{detailError}</Text>
                   <Pressable
-                    onPress={loadDetail}
-                    style={({ pressed }) => [
-                      styles.retryBtn,
-                      pressed && { opacity: 0.95 },
-                    ]}
+                    onPress={() => {
+                      lastDetailLoadedIdRef.current = "";
+                      loadDetail(true);
+                    }}
+                    style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.95 }]}
                   >
                     <Text style={styles.retryText}>Retry</Text>
                   </Pressable>
@@ -442,11 +540,7 @@ export default function ReportDetailScreen({
                 {photoUrls.length > 0 ? (
                   photoUrls.slice(0, 3).map((u, i) => (
                     <View key={i} style={styles.evidenceBox}>
-                      <Image
-                        source={{ uri: u }}
-                        style={styles.evidenceImg}
-                        resizeMode="cover"
-                      />
+                      <Image source={{ uri: u }} style={styles.evidenceImg} resizeMode="cover" />
                     </View>
                   ))
                 ) : (
@@ -473,17 +567,13 @@ export default function ReportDetailScreen({
                 </View>
 
                 <View style={styles.metaColRight}>
-                  <Text style={[styles.metaLabel, { textAlign: "right" }]}>
-                    Time: {timeLabel}
-                  </Text>
+                  <Text style={[styles.metaLabel, { textAlign: "right" }]}>Time: {timeLabel}</Text>
                 </View>
               </View>
 
               <Text style={styles.alertFooter}>
                 Alert no.{" "}
-                <Text style={styles.alertNo}>
-                  {String((report as any)?.alertNo ?? reportId ?? "")}
-                </Text>
+                <Text style={styles.alertNo}>{String((report as any)?.alertNo ?? reportId ?? "")}</Text>
               </Text>
             </View>
           </ScrollView>
@@ -493,27 +583,30 @@ export default function ReportDetailScreen({
             behavior={Platform.OS === "ios" ? "padding" : undefined}
             keyboardVerticalOffset={keyboardOffset}
           >
-            {/* ✅ only reserve bottom space when keyboard is hidden */}
             <View style={[styles.threadOuter, { paddingBottom: threadsBottomPad }]}>
               <View style={styles.threadCard}>
                 <Text style={styles.threadHeaderText}>{threadHeader}</Text>
 
-                {loadingThreads ? (
+                {!reportId ? (
+                  <View style={styles.centerState}>
+                    <Text style={[styles.stateText, { color: "#EF4444", textAlign: "center" }]}>
+                      Missing report id. Cannot load threads.
+                    </Text>
+                  </View>
+                ) : loadingThreads ? (
                   <View style={styles.centerState}>
                     <ActivityIndicator />
                     <Text style={styles.stateText}>Loading threads...</Text>
                   </View>
                 ) : threadsError ? (
                   <View style={styles.centerState}>
-                    <Text style={[styles.stateText, { color: "#EF4444" }]}>
-                      {threadsError}
-                    </Text>
+                    <Text style={[styles.stateText, { color: "#EF4444" }]}>{threadsError}</Text>
                     <Pressable
-                      onPress={loadThreads}
-                      style={({ pressed }) => [
-                        styles.retryBtn,
-                        pressed && { opacity: 0.95 },
-                      ]}
+                      onPress={() => {
+                        lastThreadsLoadedIdRef.current = "";
+                        loadThreads(true);
+                      }}
+                      style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.95 }]}
                     >
                       <Text style={styles.retryText}>Retry</Text>
                     </Pressable>
@@ -524,11 +617,7 @@ export default function ReportDetailScreen({
                       threadScrollRef.current = r;
                     }}
                     style={styles.threadScroll}
-                    contentContainerStyle={[
-                      styles.threadScrollContent,
-                      // ✅ ensure last message never hides behind replyRow
-                      { paddingBottom: vscale(12) + vscale(52) },
-                    ]}
+                    contentContainerStyle={[styles.threadScrollContent, { paddingBottom: vscale(12) + vscale(52) }]}
                     showsVerticalScrollIndicator
                     nestedScrollEnabled
                     keyboardShouldPersistTaps="handled"
@@ -545,31 +634,14 @@ export default function ReportDetailScreen({
                             </Text>
                           ) : null}
 
-                          <View
-                            style={[
-                              styles.msgRow,
-                              isLeft ? styles.msgRowLeft : styles.msgRowRight,
-                            ]}
-                          >
-                            <View
-                              style={[
-                                styles.bubble,
-                                isLeft ? styles.bubbleLeft : styles.bubbleRight,
-                              ]}
-                            >
+                          <View style={[styles.msgRow, isLeft ? styles.msgRowLeft : styles.msgRowRight]}>
+                            <View style={[styles.bubble, isLeft ? styles.bubbleLeft : styles.bubbleRight]}>
                               <Text style={styles.bubbleText}>{m.text}</Text>
                             </View>
                           </View>
 
                           {!isLeft ? (
-                            <Text
-                              style={[
-                                styles.msgTime,
-                                { textAlign: "right", marginTop: vscale(4) },
-                              ]}
-                            >
-                              {m.time}
-                            </Text>
+                            <Text style={[styles.msgTime, { textAlign: "right", marginTop: vscale(4) }]}>{m.time}</Text>
                           ) : null}
                         </View>
                       );
@@ -586,32 +658,23 @@ export default function ReportDetailScreen({
                     style={styles.replyInput}
                     returnKeyType="send"
                     onSubmitEditing={onSend}
-                    editable={!sending}
+                    editable={!sending && !!reportId}
                     blurOnSubmit={false}
                     multiline={false}
-                    // ✅ helps vertical centering + avoids iOS weird padding feel
                     textAlignVertical="center"
-                    {...(Platform.OS === "android"
-                      ? { includeFontPadding: false as any }
-                      : null)}
+                    {...(Platform.OS === "android" ? { includeFontPadding: false as any } : null)}
                   />
 
                   <Pressable
                     onPress={onSend}
-                    disabled={sending}
+                    disabled={sending || !reportId}
                     style={({ pressed }) => [
                       styles.sendBtn,
-                      (pressed || sending) && {
-                        transform: [{ scale: 0.98 }],
-                        opacity: 0.95,
-                      },
+                      (pressed || sending) && { transform: [{ scale: 0.98 }], opacity: 0.95 },
+                      !reportId && { opacity: 0.5 },
                     ]}
                   >
-                    {sending ? (
-                      <ActivityIndicator color="#FFFFFF" />
-                    ) : (
-                      <Ionicons name="send" size={scale(18)} color="#FFFFFF" />
-                    )}
+                    {sending ? <ActivityIndicator color="#FFFFFF" /> : <Ionicons name="send" size={scale(18)} color="#FFFFFF" />}
                   </Pressable>
                 </View>
               </View>
@@ -701,11 +764,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       paddingHorizontal: scale(6),
       zIndex: 2,
     },
-    segmentTextGhost: {
-      fontSize: scale(11),
-      fontWeight: "900",
-      color: PRIMARY,
-    },
+    segmentTextGhost: { fontSize: scale(11), fontWeight: "900", color: PRIMARY },
     segmentTextActive: { color: "#FFFFFF" },
 
     scrollContent: { paddingHorizontal: scale(14), paddingTop: vscale(6) },
@@ -725,20 +784,10 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       minHeight: vscale(260),
     },
 
-    detailsHeader: {
-      fontSize: scale(11),
-      fontWeight: "900",
-      color: TEXT_DARK,
-      marginBottom: vscale(10),
-    },
+    detailsHeader: { fontSize: scale(11), fontWeight: "900", color: TEXT_DARK, marginBottom: vscale(10) },
     statusText: { color: TEXT_DARK, fontWeight: "900" },
 
-    incidentTitle: {
-      fontSize: scale(12.5),
-      fontWeight: "900",
-      color: TEXT_DARK,
-      marginBottom: vscale(6),
-    },
+    incidentTitle: { fontSize: scale(12.5), fontWeight: "900", color: TEXT_DARK, marginBottom: vscale(6) },
     incidentNarrative: {
       fontSize: scale(10.5),
       fontWeight: "700",
@@ -748,11 +797,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       marginBottom: vscale(12),
     },
 
-    evidenceRow: {
-      flexDirection: "row",
-      gap: scale(10),
-      marginBottom: vscale(12),
-    },
+    evidenceRow: { flexDirection: "row", gap: scale(10), marginBottom: vscale(12) },
     evidenceBox: {
       flex: 1,
       height: vscale(62),
@@ -777,40 +822,18 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
 
     section: { marginTop: vscale(2), marginBottom: vscale(12) },
-    sectionTitle: {
-      fontSize: scale(11),
-      fontWeight: "900",
-      color: TEXT_DARK,
-      marginBottom: vscale(6),
-    },
-    witnessName: {
-      fontSize: scale(11),
-      fontWeight: "900",
-      color: TEXT_DARK,
-      marginBottom: vscale(2),
-    },
+    sectionTitle: { fontSize: scale(11), fontWeight: "900", color: TEXT_DARK, marginBottom: vscale(6) },
+    witnessName: { fontSize: scale(11), fontWeight: "900", color: TEXT_DARK, marginBottom: vscale(2) },
     witnessRole: { fontSize: scale(10), fontWeight: "800", color: "#9AA7B8" },
 
-    metaGrid: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      gap: scale(10),
-      marginTop: vscale(4),
-    },
+    metaGrid: { flexDirection: "row", justifyContent: "space-between", gap: scale(10), marginTop: vscale(4) },
     metaCol: { flex: 1, gap: vscale(6) },
     metaColRight: { width: scale(120), justifyContent: "flex-start" },
     metaLabel: { fontSize: scale(10), fontWeight: "900", color: TEXT_MUTED },
 
-    alertFooter: {
-      marginTop: vscale(12),
-      fontSize: scale(9.5),
-      fontWeight: "900",
-      color: "#9AA7B8",
-      textAlign: "center",
-    },
+    alertFooter: { marginTop: vscale(12), fontSize: scale(9.5), fontWeight: "900", color: "#9AA7B8", textAlign: "center" },
     alertNo: { color: PRIMARY, fontWeight: "900" },
 
-    // Threads
     threadOuter: { flex: 1, paddingHorizontal: scale(14), paddingTop: vscale(6) },
     threadCard: {
       flex: 1,
@@ -825,13 +848,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       shadowOffset: { width: 0, height: 10 },
       elevation: 3,
     },
-    threadHeaderText: {
-      fontSize: scale(10),
-      fontWeight: "900",
-      color: "#9AA7B8",
-      marginBottom: vscale(10),
-      lineHeight: vscale(14),
-    },
+    threadHeaderText: { fontSize: scale(10), fontWeight: "900", color: "#9AA7B8", marginBottom: vscale(10), lineHeight: vscale(14) },
 
     threadScroll: {
       flex: 1,
@@ -845,40 +862,19 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     threadScrollContent: { paddingBottom: vscale(12) },
 
     msgBlock: { marginBottom: vscale(12) },
-    msgTopLine: {
-      fontSize: scale(9.5),
-      fontWeight: "900",
-      color: "#6B7280",
-      marginBottom: vscale(6),
-      lineHeight: vscale(12),
-    },
+    msgTopLine: { fontSize: scale(9.5), fontWeight: "900", color: "#6B7280", marginBottom: vscale(6), lineHeight: vscale(12) },
     msgTime: { fontSize: scale(8.5), fontWeight: "800", color: "#94A3B8" },
 
     msgRow: { flexDirection: "row", alignItems: "flex-end" },
     msgRowLeft: { justifyContent: "flex-start" },
     msgRowRight: { justifyContent: "flex-end" },
 
-    bubble: {
-      maxWidth: "78%",
-      borderRadius: scale(14),
-      paddingHorizontal: scale(12),
-      paddingVertical: vscale(10),
-    },
+    bubble: { maxWidth: "78%", borderRadius: scale(14), paddingHorizontal: scale(12), paddingVertical: vscale(10) },
     bubbleLeft: { backgroundColor: "#E9EEF6" },
     bubbleRight: { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E5E7EB" },
-    bubbleText: {
-      fontSize: scale(10.5),
-      fontWeight: "700",
-      color: "#374151",
-      lineHeight: vscale(14),
-    },
+    bubbleText: { fontSize: scale(10.5), fontWeight: "700", color: "#374151", lineHeight: vscale(14) },
 
-    replyRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: scale(10),
-      marginTop: vscale(10),
-    },
+    replyRow: { flexDirection: "row", alignItems: "center", gap: scale(10), marginTop: vscale(10) },
     replyInput: {
       flex: 1,
       minHeight: vscale(40),
@@ -907,12 +903,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       elevation: 4,
     },
 
-    centerState: {
-      alignItems: "center",
-      justifyContent: "center",
-      gap: vscale(10),
-      paddingVertical: vscale(20),
-    },
+    centerState: { alignItems: "center", justifyContent: "center", gap: vscale(10), paddingVertical: vscale(20) },
     stateText: { fontSize: scale(10.5), fontWeight: "800", color: "#64748B" },
     retryBtn: {
       paddingHorizontal: scale(14),

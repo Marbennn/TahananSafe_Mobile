@@ -31,11 +31,22 @@ export type ReportDetailDto = {
   updatedAt?: string;
 };
 
+async function parseJsonSafe(res: Response) {
+  const text = await res.text().catch(() => "");
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return { message: text };
+  }
+}
+
 /**
  * ✅ NEW: Get logged-in user's reports
  * Backend: GET /api/mobile/v1/reports/my
+ *
+ * ✅ UPDATED: accepts optional AbortSignal
  */
-export async function fetchMyReports(): Promise<ReportDetailDto[]> {
+export async function fetchMyReports(signal?: AbortSignal): Promise<ReportDetailDto[]> {
   const token = await getAccessToken();
 
   const headers: Record<string, string> = { Accept: "application/json" };
@@ -44,15 +55,10 @@ export async function fetchMyReports(): Promise<ReportDetailDto[]> {
   const res = await fetch(`${API_URL}/api/mobile/v1/reports/my`, {
     method: "GET",
     headers,
+    signal,
   });
 
-  const text = await res.text();
-  let data: any;
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = { message: text };
-  }
+  const data = await parseJsonSafe(res);
 
   if (!res.ok) {
     throw new Error(data?.message || `Failed (${res.status})`);
@@ -67,34 +73,35 @@ export async function fetchMyReports(): Promise<ReportDetailDto[]> {
  * ✅ Get single report detail.
  * NOTE: You did NOT show a mobile detail endpoint,
  * so we try common ones safely.
+ *
+ * ✅ UPDATED: accepts optional AbortSignal
  */
-export async function fetchReportDetail(reportId: string): Promise<ReportDetailDto> {
+export async function fetchReportDetail(
+  reportId: string,
+  signal?: AbortSignal
+): Promise<ReportDetailDto> {
   const token = await getAccessToken();
 
   const headers: Record<string, string> = { Accept: "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
 
   // Try: GET /api/mobile/incidents/:id  (you mounted incidentRoute at /api/mobile/incidents)
-  let res = await fetch(`${API_URL}/api/mobile/incidents/${reportId}`, {
+  let res = await fetch(`${API_URL}/api/mobile/incidents/${encodeURIComponent(reportId)}`, {
     method: "GET",
     headers,
+    signal,
   });
 
   // Fallback: GET /api/mobile/v1/reports/:id  (if you later add it)
   if (res.status === 404) {
-    res = await fetch(`${API_URL}/api/mobile/v1/reports/${reportId}`, {
+    res = await fetch(`${API_URL}/api/mobile/v1/reports/${encodeURIComponent(reportId)}`, {
       method: "GET",
       headers,
+      signal,
     });
   }
 
-  const text = await res.text();
-  let data: any;
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = { message: text };
-  }
+  const data = await parseJsonSafe(res);
 
   if (!res.ok) {
     throw new Error(data?.message || `Failed (${res.status})`);
@@ -105,25 +112,31 @@ export async function fetchReportDetail(reportId: string): Promise<ReportDetailD
   return (data?.report || data?.incident || data) as ReportDetailDto;
 }
 
-export async function fetchReportThreads(reportId: string): Promise<ThreadDto[]> {
+/**
+ * ✅ Get report threads
+ *
+ * ✅ UPDATED: accepts optional AbortSignal
+ */
+export async function fetchReportThreads(
+  reportId: string,
+  signal?: AbortSignal
+): Promise<ThreadDto[]> {
   const token = await getAccessToken();
 
   const headers: Record<string, string> = { Accept: "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
 
   // You mounted threads at: app.use("/api/mobile/reports", reportThreadRoute);
-  const res = await fetch(`${API_URL}/api/mobile/reports/${reportId}/threads`, {
-    method: "GET",
-    headers,
-  });
+  const res = await fetch(
+    `${API_URL}/api/mobile/reports/${encodeURIComponent(reportId)}/threads`,
+    {
+      method: "GET",
+      headers,
+      signal,
+    }
+  );
 
-  const text = await res.text();
-  let data: any;
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = { message: text };
-  }
+  const data = await parseJsonSafe(res);
 
   if (!res.ok) {
     throw new Error(data?.message || `Failed (${res.status})`);
@@ -132,7 +145,16 @@ export async function fetchReportThreads(reportId: string): Promise<ThreadDto[]>
   return (data?.threads || []) as ThreadDto[];
 }
 
-export async function sendReportThreadMessage(reportId: string, message: string) {
+/**
+ * ✅ Send a message to report threads
+ *
+ * ✅ UPDATED: accepts optional AbortSignal
+ */
+export async function sendReportThreadMessage(
+  reportId: string,
+  message: string,
+  signal?: AbortSignal
+) {
   const token = await getAccessToken();
 
   const headers: Record<string, string> = {
@@ -141,19 +163,17 @@ export async function sendReportThreadMessage(reportId: string, message: string)
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${API_URL}/api/mobile/reports/${reportId}/threads`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ text: message }),
-  });
+  const res = await fetch(
+    `${API_URL}/api/mobile/reports/${encodeURIComponent(reportId)}/threads`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ text: message }),
+      signal,
+    }
+  );
 
-  const text = await res.text();
-  let data: any;
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = { message: text };
-  }
+  const data = await parseJsonSafe(res);
 
   if (!res.ok) {
     throw new Error(data?.message || `Failed (${res.status})`);
@@ -184,7 +204,6 @@ export function buildReportPhotoUrl(reportId: string, photo: any): string | null
     if (s.startsWith("http://") || s.startsWith("https://")) {
       // But if it contains localhost/127, rewrite to API_URL origin
       if (s.includes("localhost") || s.includes("127.0.0.1")) {
-        // keep only path part
         try {
           const u = new URL(s);
           return `${API_URL}${u.pathname}${u.search}`;
