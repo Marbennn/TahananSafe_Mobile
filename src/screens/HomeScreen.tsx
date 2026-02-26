@@ -16,6 +16,8 @@ import {
   AppState,
   AppStateStatus,
   DeviceEventEmitter, // ✅ ADDED
+  Linking, // ✅ ADDED
+  Alert, // ✅ ADDED
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -357,6 +359,23 @@ export default function HomeScreen({
 
   const pressFab = () => handleTab("Incident");
   const longPressFab = () => onQuickExit?.();
+
+  // =========================
+  // ✅ Emergency Call Buttons (911 / 117)
+  // =========================
+  const callEmergency = useCallback(async (num: "911" | "117") => {
+    try {
+      const url = `tel:${num}`;
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        Alert.alert("Calling not supported", "This device cannot place phone calls.");
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert("Call failed", "Unable to start the call on this device.");
+    }
+  }, []);
 
   // =========================
   // ✅ Notifications badge logic (UPDATED to auto-refresh)
@@ -742,6 +761,59 @@ export default function HomeScreen({
         logsWrap: { paddingHorizontal: PAD, paddingTop: clamp(Math.round(10 * s), 8, 12) },
         logsGap: { height: GAP },
 
+        // ✅ NEW: Emergency buttons under Recent Logs
+        emergencyWrap: {
+          paddingHorizontal: PAD,
+          paddingTop: clamp(Math.round(12 * s), 10, 14),
+        },
+        emergencyRow: {
+          flexDirection: "row",
+          gap: clamp(Math.round(12 * s), 10, 14),
+        },
+        emergencyBtn: {
+          flex: 1,
+          borderRadius: 20,
+          paddingVertical: clamp(Math.round(16 * s), 14, 18),
+          paddingHorizontal: clamp(Math.round(14 * s), 12, 16),
+          alignItems: "center",
+          justifyContent: "center",
+          shadowColor: "#000",
+          shadowOpacity: 0.12,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 7,
+        },
+        emergencyBtn911: {
+          backgroundColor: "#8B0000",
+        },
+        emergencyBtn117: {
+          backgroundColor: "#daa520",
+        },
+        emergencyTop: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          marginBottom: 6,
+        },
+        emergencyNum: {
+          fontSize: clamp(Math.round(26 * fs), 22, 30),
+          fontWeight: "900",
+          color: "#FFFFFF",
+          letterSpacing: 0.6,
+        },
+        emergencyLabel: {
+          fontSize: clamp(Math.round(12 * fs), 11, 14),
+          fontWeight: "900",
+          color: "rgba(255,255,255,0.95)",
+        },
+        emergencySub: {
+          fontSize: clamp(Math.round(11 * fs), 10, 13),
+          fontWeight: "800",
+          color: "rgba(255,255,255,0.92)",
+          textAlign: "center",
+        },
+
         miniCenter: { paddingHorizontal: PAD, paddingTop: 10, alignItems: "center", justifyContent: "center" },
         emptyHint: {
           fontSize: clamp(Math.round(12 * fs), 11, 14),
@@ -936,6 +1008,57 @@ export default function HomeScreen({
               })
             )}
           </View>
+
+          {/* ✅ NEW: Emergency call buttons (under Recent Logs) */}
+          <View style={styles.emergencyWrap}>
+            <View style={styles.emergencyRow}>
+              <Pressable
+                onPress={() => callEmergency("911")}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.emergencyBtn,
+                  styles.emergencyBtn911,
+                  pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
+                ]}
+              >
+                <View style={styles.emergencyTop}>
+                  <Ionicons name="call" size={20} color="#fff" />
+                  <Text style={styles.emergencyNum} allowFontScaling={false}>
+                    911
+                  </Text>
+                </View>
+                <Text style={styles.emergencyLabel} allowFontScaling={false}>
+                  Emergency Hotline
+                </Text>
+                <Text style={styles.emergencySub} allowFontScaling={false}>
+                  Tap to call immediately
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => callEmergency("117")}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.emergencyBtn,
+                  styles.emergencyBtn117,
+                  pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
+                ]}
+              >
+                <View style={styles.emergencyTop}>
+                  <Ionicons name="call" size={20} color="#fff" />
+                  <Text style={styles.emergencyNum} allowFontScaling={false}>
+                    117
+                  </Text>
+                </View>
+                <Text style={styles.emergencyLabel} allowFontScaling={false}>
+                  Police Assistance
+                </Text>
+                <Text style={styles.emergencySub} allowFontScaling={false}>
+                  Tap to call immediately
+                </Text>
+              </Pressable>
+            </View>
+          </View>
         </ScrollView>
 
         {/* ✅ Chevron handle */}
@@ -991,7 +1114,13 @@ export default function HomeScreen({
             <View style={styles.sheetCard} {...handlePan.panHandlers}>
               <View style={styles.sheetGrabber} />
 
-              <Pressable onPress={() => closeSheet()} style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}>
+              <Pressable
+                onPress={() => closeSheet()}
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
+                ]}
+              >
                 <Ionicons name="warning-outline" size={20} color="#fff" style={styles.actionIcon} />
                 <Text style={styles.actionText} allowFontScaling={false}>
                   Alert
@@ -1003,7 +1132,10 @@ export default function HomeScreen({
                   closeSheet();
                   closeAndRemoveFromRecents();
                 }}
-                style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
+                ]}
               >
                 <Ionicons name="eye-off-outline" size={20} color="#fff" style={styles.actionIcon} />
                 <Text style={styles.actionText} allowFontScaling={false}>
@@ -1016,7 +1148,11 @@ export default function HomeScreen({
                   closeSheet();
                   onQuickExit?.();
                 }}
-                style={({ pressed }) => [styles.actionBtn, styles.dangerBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  styles.dangerBtn,
+                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
+                ]}
               >
                 <Ionicons name="log-out-outline" size={20} color="#fff" style={styles.actionIcon} />
                 <Text style={styles.actionText} allowFontScaling={false}>
