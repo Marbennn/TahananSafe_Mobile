@@ -1,7 +1,18 @@
 // src/components/IncidentLogConfirmationScreen/IncidentPreviewCard.tsx
-import React from "react";
-import { View, Text, StyleSheet, Image } from "react-native";
+import React, { useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  useWindowDimensions,
+  Modal,
+  Pressable,
+  StatusBar,
+  Platform,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export type IncidentPreviewData = {
   incidentType: string;
@@ -12,84 +23,179 @@ export type IncidentPreviewData = {
   timeStr: string;
   locationStr: string;
 
-  // ✅ existing (still supported)
   photoCount?: number;
-
-  // ✅ NEW: real image URIs from IncidentLogScreen
   photos?: string[];
-  mode?: "complain" | "emergency"; // optional (safe)
+  mode?: "complain" | "emergency";
 };
 
-type Props = {
-  data: IncidentPreviewData;
-};
+type Props = { data: IncidentPreviewData };
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
 
 export default function IncidentPreviewCard({ data }: Props) {
+  const insets = useSafeAreaInsets();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const s = useMemo(() => clamp(screenWidth / 375, 0.9, 1.22), [screenWidth]);
+
+  const [expandedUri, setExpandedUri] = useState<string | null>(null);
+
   const incidentType = data.incidentType?.trim() ? data.incidentType : "—";
   const details = data.details?.trim() ? data.details : "—";
 
   const witnessName = data.witnessName?.trim() ? data.witnessName : "—";
   const witnessType = data.witnessType?.trim() ? data.witnessType : "—";
 
-  // ✅ Prefer real photos if provided; otherwise fall back to photoCount placeholders
   const photos = Array.isArray(data.photos) ? data.photos.filter(Boolean).slice(0, 3) : [];
   const fallbackCount = Math.min(Math.max(data.photoCount ?? 0, 0), 3);
 
+  const PHOTO_H = Math.round(96 * s);
+  const RADIUS = Math.round(18 * s);
+  const ICON_SIZE = Math.round(32 * s);
+
+  const TITLE = Math.round(16.5 * s);
+  const TYPE_LINE = Math.round(15 * s);
+  const DETAILS = Math.round(14.5 * s);
+  const WITNESS_NAME = Math.round(15 * s);
+  const WITNESS_TYPE = Math.round(14 * s);
+  const META_LABEL = Math.round(14 * s);
+  const META_VALUE = Math.round(14 * s);
+
+  const CARD_PAD = Math.round(17 * s);
+  const TITLE_MB = Math.round(10 * s);
+  const DETAILS_LH = Math.round(22 * s);
+  const SECTION_GAP = Math.round(16 * s);
+
+  const closeExpanded = () => setExpandedUri(null);
+
   return (
-    <View style={styles.card}>
-      {/* Incident Detail */}
-      <Text style={styles.sectionTitle}>Incident Detail</Text>
+    <>
+      <View style={[styles.card, { padding: CARD_PAD }]}>
+        {/* Incident Detail */}
+        <Text style={[styles.sectionTitle, { fontSize: TITLE, marginBottom: TITLE_MB }]}>
+          Incident Detail
+        </Text>
 
-      <Text style={styles.smallLine}>{incidentType}</Text>
+        <Text style={[styles.smallLine, { fontSize: TYPE_LINE, marginBottom: Math.round(8 * s) }]}>
+          {incidentType}
+        </Text>
 
-      <Text style={styles.detailsItalic}>{details}</Text>
+        <Text style={[styles.detailsItalic, { fontSize: DETAILS, lineHeight: DETAILS_LH }]}>
+          {details}
+        </Text>
 
-      {/* Photos */}
-      <View style={styles.photoRow}>
-        {[0, 1, 2].map((i) => {
-          const uri = photos[i];
+        {/* Photos */}
+        <View style={[styles.photoRow, { marginTop: Math.round(8 * s) }]}>
+          {[0, 1, 2].map((i) => {
+            const uri = photos[i];
 
-          return (
-            <View key={i} style={styles.photoBox}>
-              {uri ? (
-                <Image source={{ uri }} style={styles.photoImg} />
-              ) : (
-                <Ionicons
-                  name="image-outline"
-                  size={22}
-                  color={photos.length > 0 ? "#E1E7F0" : i < fallbackCount ? "#A7B3C2" : "#E1E7F0"}
-                />
-              )}
-            </View>
-          );
-        })}
-      </View>
-
-      {/* Witness */}
-      <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Witness</Text>
-
-      <Text style={styles.witnessName}>{witnessName}</Text>
-      <Text style={styles.witnessType}>{witnessType}</Text>
-
-      {/* Meta row: Date left, Time right */}
-      <View style={styles.metaRow}>
-        <View style={styles.metaPair}>
-          <Text style={styles.metaLabel}>Date:</Text>
-          <Text style={styles.metaValue}>{data.dateStr || "—"}</Text>
+            return (
+              <Pressable
+                key={i}
+                disabled={!uri}
+                onPress={() => uri && setExpandedUri(uri)}
+                style={[
+                  styles.photoBox,
+                  {
+                    height: PHOTO_H,
+                    borderRadius: RADIUS,
+                  },
+                ]}
+              >
+                {uri ? (
+                  <Image source={{ uri }} style={styles.photoImg} />
+                ) : (
+                  <Ionicons
+                    name="image-outline"
+                    size={ICON_SIZE}
+                    color={photos.length > 0 ? "#E1E7F0" : i < fallbackCount ? "#A7B3C2" : "#E1E7F0"}
+                  />
+                )}
+              </Pressable>
+            );
+          })}
         </View>
 
-        <View style={styles.metaPair}>
-          <Text style={styles.metaLabel}>Time:</Text>
-          <Text style={styles.metaValue}>{data.timeStr || "—"}</Text>
+        {/* Witness */}
+        <Text
+          style={[
+            styles.sectionTitle,
+            { marginTop: SECTION_GAP, fontSize: TITLE, marginBottom: TITLE_MB },
+          ]}
+        >
+          Witness
+        </Text>
+
+        <Text style={[styles.witnessName, { fontSize: WITNESS_NAME }]}>{witnessName}</Text>
+        <Text style={[styles.witnessType, { fontSize: WITNESS_TYPE }]}>{witnessType}</Text>
+
+        {/* Meta row */}
+        <View style={[styles.metaRow, { marginTop: Math.round(14 * s) }]}>
+          <View style={styles.metaPair}>
+            <Text style={[styles.metaLabel, { fontSize: META_LABEL }]}>Date:</Text>
+            <Text style={[styles.metaValue, { fontSize: META_VALUE }]}>{data.dateStr || "—"}</Text>
+          </View>
+
+          <View style={styles.metaPair}>
+            <Text style={[styles.metaLabel, { fontSize: META_LABEL }]}>Time:</Text>
+            <Text style={[styles.metaValue, { fontSize: META_VALUE }]}>{data.timeStr || "—"}</Text>
+          </View>
+        </View>
+
+        {/* Location */}
+        <View style={[styles.locationRow, { marginTop: Math.round(10 * s) }]}>
+          <Text style={[styles.metaLabel, { fontSize: META_LABEL }]}>Location:</Text>
+          <Text style={[styles.metaValue, { fontSize: META_VALUE, flex: 1 }]} numberOfLines={3}>
+            {data.locationStr || "—"}
+          </Text>
         </View>
       </View>
 
-      {/* Location */}
-      <View style={styles.locationRow}>
-        <Text style={styles.metaLabel}>Location:</Text>
-        <Text style={styles.metaValue}>{data.locationStr || "—"}</Text>
-      </View>
-    </View>
+      {/* ✅ Fullscreen Image Modal */}
+      <Modal
+        visible={!!expandedUri}
+        transparent
+        animationType="fade"
+        // ✅ IMPORTANT: Android back button will call this
+        onRequestClose={closeExpanded}
+        statusBarTranslucent={Platform.OS === "android"}
+      >
+        <StatusBar barStyle="light-content" />
+
+        {/* ✅ Tap outside image to close */}
+        <Pressable style={styles.modalContainer} onPress={closeExpanded}>
+          {/* ✅ Close button always visible (safe area) */}
+          <Pressable
+            onPress={closeExpanded}
+            hitSlop={12}
+            style={[
+              styles.closeBtn,
+              {
+                top: Math.max(insets.top, 12),
+                right: Math.max(insets.right, 12),
+              },
+            ]}
+          >
+            <Ionicons name="close" size={30} color="#FFF" />
+          </Pressable>
+
+          {/* ✅ Prevent background-press from triggering when tapping image */}
+          <Pressable onPress={() => {}} style={styles.imageWrap}>
+            {expandedUri && (
+              <Image
+                source={{ uri: expandedUri }}
+                style={{
+                  width: screenWidth,
+                  height: screenHeight,
+                  resizeMode: "contain",
+                }}
+              />
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
@@ -103,7 +209,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BORDER,
     borderRadius: 16,
-    padding: 16,
     shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 12,
@@ -112,43 +217,32 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    fontSize: 12,
     fontWeight: "900",
     color: TEXT_DARK,
-    marginBottom: 10,
   },
-
   smallLine: {
-    fontSize: 11,
     fontWeight: "900",
     color: TEXT_MUTED,
-    marginBottom: 8,
   },
-
   detailsItalic: {
-    fontSize: 11,
     fontStyle: "italic",
     fontWeight: "700",
     color: TEXT_DARK,
-    lineHeight: 16,
     marginBottom: 10,
   },
 
   photoRow: {
     flexDirection: "row",
     gap: 10,
-    marginTop: 6,
   },
   photoBox: {
     flex: 1,
-    height: 62,
-    borderRadius: 14,
     borderWidth: 1,
     borderColor: BORDER,
     backgroundColor: "#F2F6FF",
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden", // ✅ important for rounded image
+    overflow: "hidden",
   },
   photoImg: {
     width: "100%",
@@ -157,19 +251,16 @@ const styles = StyleSheet.create({
   },
 
   witnessName: {
-    fontSize: 11,
     fontWeight: "900",
     color: TEXT_DARK,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   witnessType: {
-    fontSize: 10,
     fontWeight: "800",
     color: TEXT_MUTED,
   },
 
   metaRow: {
-    marginTop: 14,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -177,23 +268,41 @@ const styles = StyleSheet.create({
   metaPair: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
   },
   metaLabel: {
-    fontSize: 11,
     fontWeight: "900",
     color: TEXT_MUTED,
   },
   metaValue: {
-    fontSize: 11,
     fontWeight: "900",
     color: TEXT_DARK,
+    flexShrink: 1,
   },
 
   locationRow: {
-    marginTop: 8,
     flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    justifyContent: "center",
     alignItems: "center",
-    gap: 6,
+  },
+
+  imageWrap: {
+    flex: 1,
+    width: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  closeBtn: {
+    position: "absolute",
+    zIndex: 10,
+    padding: 8,
   },
 });
