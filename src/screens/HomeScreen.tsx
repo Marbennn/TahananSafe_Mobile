@@ -13,10 +13,15 @@ import {
   Animated,
   PanResponder,
   Modal,
+  AppState,
+  AppStateStatus,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
+// ✅ NEW: refresh when Home regains focus
+import { useFocusEffect } from "@react-navigation/native";
 
 import { Colors } from "../theme/colors";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
@@ -44,6 +49,9 @@ import type { ReportItem } from "./ReportScreen";
 // ✅ HIDE APP helper
 import { closeAndRemoveFromRecents } from "../utils/hideApp";
 
+// ✅ NEW: Use same API as NotificationsScreen (source of truth)
+import { fetchMyNotifications } from "../api/notifications";
+
 type Props = {
   onQuickExit?: () => void;
   onTabChange?: (tab: TabKey) => void;
@@ -59,6 +67,9 @@ const TEXT_DARK = "#0B2B45";
 
 // ✅ once-only tutorial key
 const FAB_TUTORIAL_SEEN_KEY = "tahanansafe_fab_tutorial_seen_v1";
+
+// ✅ local “seen notifications” marker (kept, not removed)
+const NOTIF_LAST_SEEN_KEY = "tahanansafe_notif_last_seen_v1";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -346,7 +357,72 @@ export default function HomeScreen({
   const pressFab = () => handleTab("Incident");
   const longPressFab = () => onQuickExit?.();
 
-  const notifCount = 69;
+  // =========================
+  // ✅ Notifications badge logic (UPDATED to use fetchMyNotifications)
+  // =========================
+  const [notifCount, setNotifCount] = useState<number>(0);
+
+  // kept (not removed) - may still be useful elsewhere
+  const countUnreadFromList = useCallback((list: any[]) => {
+    return list.reduce((acc, n) => {
+      const isRead = n?.isRead === true || n?.read === true || n?.seen === true;
+      return acc + (isRead ? 0 : 1);
+    }, 0);
+  }, []);
+
+  const fetchNotifCount = useCallback(async () => {
+    try {
+      // ✅ Use the SAME API used by NotificationsScreen
+      const list = await fetchMyNotifications(80);
+
+      // ✅ Count via "unread" boolean (your NotificationItem type)
+      const unread = list.filter((n) => n.unread).length;
+
+      setNotifCount(unread > 0 ? unread : 0);
+    } catch {
+      setNotifCount(0);
+    }
+  }, []);
+
+  // Refresh notif count on mount
+  useEffect(() => {
+    fetchNotifCount();
+  }, [fetchNotifCount]);
+
+  // Refresh when app becomes active again (foreground)
+  useEffect(() => {
+    let mounted = true;
+    const onChange = (state: AppStateStatus) => {
+      if (!mounted) return;
+      if (state === "active") fetchNotifCount();
+    };
+    const sub = AppState.addEventListener("change", onChange);
+    return () => {
+      mounted = false;
+      sub.remove();
+    };
+  }, [fetchNotifCount]);
+
+  // ✅ NEW: refresh when HomeScreen regains focus (after closing Notifications screen)
+  useFocusEffect(
+    useCallback(() => {
+      fetchNotifCount();
+      return () => {};
+    }, [fetchNotifCount])
+  );
+
+  const handleOpenNotifications = useCallback(async () => {
+    // Open notifications screen (your existing callback)
+    onOpenNotifications?.();
+
+    // ❌ DO NOT clear badge here; unread state should be controlled by backend actions
+    // (kept NOTIF_LAST_SEEN_KEY logic but without forcing badge=0)
+    try {
+      await AsyncStorage.setItem(NOTIF_LAST_SEEN_KEY, String(Date.now()));
+    } catch {
+      // ignore
+    }
+  }, [onOpenNotifications]);
 
   // ✅ Recent reports
   const [recentReports, setRecentReports] = useState<ReportItem[]>([]);
@@ -759,7 +835,7 @@ export default function HomeScreen({
 
           <View style={styles.rightActions}>
             <Pressable
-              onPress={onOpenNotifications ?? (() => {})}
+              onPress={handleOpenNotifications}
               hitSlop={12}
               style={({ pressed }) => [
                 styles.iconBtn,
@@ -767,6 +843,8 @@ export default function HomeScreen({
               ]}
             >
               <Ionicons name="notifications-outline" size={notifIconSize} color={TEXT_DARK} />
+
+              {/* ✅ Badge only shows when there are unread/new notifications */}
               {notifCount > 0 ? (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText} allowFontScaling={false}>
@@ -919,7 +997,7 @@ export default function HomeScreen({
               </Pressable>
 
               <Pressable
-               onPress={() => {
+                onPress={() => {
                   closeSheet();
                   closeAndRemoveFromRecents();
                 }}
