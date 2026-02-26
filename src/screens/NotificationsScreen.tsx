@@ -20,10 +20,10 @@ import { Colors } from "../theme/colors";
 import { useNavigation } from "@react-navigation/native";
 
 import {
-  fetchMyNotifications,
-  markAllNotificationsRead,
-  toggleNotificationRead,
-  clearAllNotifications,
+  fetchMyNotificationsCombined,
+  markAllNotificationsReadCombined,
+  toggleNotificationReadCombined,
+  clearAllNotificationsCombined,
   type NotificationItem,
   type NotifType,
 } from "../api/notifications";
@@ -75,10 +75,7 @@ function formatTimeLabel(isoOrAny: string) {
   if (isSameDay) return `Today • ${time}`;
   if (isYesterday) return `Yesterday • ${time}`;
 
-  const months = [
-    "Jan","Feb","Mar","Apr","May","Jun",
-    "Jul","Aug","Sep","Oct","Nov","Dec"
-  ];
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${months[d.getMonth()]} ${d.getDate()} • ${time}`;
 }
 
@@ -125,7 +122,7 @@ async function parseJsonSafe(res: Response) {
   }
 }
 
-// ✅ Fetch report detail (owned by user) using your backend:
+// ✅ Fetch report detail (owned by user)
 // GET /api/mobile/v1/reports/:id  -> { report: incident }
 async function fetchMyReportDetailAsReportItem(incidentId: string): Promise<ReportItem> {
   const token = await getAccessToken();
@@ -160,7 +157,6 @@ async function fetchMyReportDetailAsReportItem(incidentId: string): Promise<Repo
     ? doc.photos.map((p: any) => normalizePhoto(p)).filter(Boolean)
     : [];
 
-  // minimal mapping that ReportDetailScreen can display
   const mapped: ReportItem = {
     id,
     groupLabel: "",
@@ -217,7 +213,7 @@ export default function NotificationsScreen({ onBack }: Props) {
     try {
       setErrorMsg("");
       setLoading(true);
-      const list = await fetchMyNotifications(80);
+      const list = await fetchMyNotificationsCombined(80);
       const mapped = list.map((n) => ({ ...n, time: formatTimeLabel(n.time) }));
       setItems(mapped);
     } catch (e: any) {
@@ -236,7 +232,7 @@ export default function NotificationsScreen({ onBack }: Props) {
     try {
       setRefreshing(true);
       setErrorMsg("");
-      const list = await fetchMyNotifications(80);
+      const list = await fetchMyNotificationsCombined(80);
       setItems(list.map((n) => ({ ...n, time: formatTimeLabel(n.time) })));
     } catch (e: any) {
       setErrorMsg(e?.message ? String(e.message) : "Failed to refresh notifications.");
@@ -248,7 +244,7 @@ export default function NotificationsScreen({ onBack }: Props) {
   const markAllRead = useCallback(async () => {
     try {
       setItems((prev) => prev.map((x) => ({ ...x, unread: false })));
-      await markAllNotificationsRead();
+      await markAllNotificationsReadCombined();
     } catch (e: any) {
       await load();
       setErrorMsg(e?.message ? String(e.message) : "Failed to mark all as read.");
@@ -258,42 +254,35 @@ export default function NotificationsScreen({ onBack }: Props) {
   const clearAll = useCallback(async () => {
     try {
       setItems([]);
-      await clearAllNotifications();
+      await clearAllNotificationsCombined();
     } catch (e: any) {
       await load();
       setErrorMsg(e?.message ? String(e.message) : "Failed to clear notifications.");
     }
   }, [load]);
 
-  // ✅ When user taps a notification:
-  // - mark as read (only if unread)
-  // - if has incidentId -> fetch report detail -> navigate to Main with param openReport
   const openNotification = useCallback(
     async (n: NotificationItem) => {
       try {
         if (openingId) return;
         setOpeningId(n.id);
 
-        // mark read only if unread (toggle endpoint)
+        // mark read only if unread
         if (n.unread) {
           setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, unread: false } : x)));
           try {
-            await toggleNotificationRead(n.id);
+            await toggleNotificationReadCombined(n.id);
           } catch {
-            // non-fatal; continue
+            // non-fatal
           }
         }
 
         if (!n.incidentId) {
-          // if it's system notif, just do nothing
           return;
         }
 
         const report = await fetchMyReportDetailAsReportItem(n.incidentId);
-
-        // ✅ Navigate back to Main and tell MainShell to open this report
         navigation.navigate("Main", { openReport: report });
-
       } catch (e: any) {
         const msg = e?.message ? String(e.message) : "Failed to open notification.";
         Alert.alert("Open failed", msg);
@@ -366,16 +355,13 @@ export default function NotificationsScreen({ onBack }: Props) {
             <ActivityIndicator size="large" color={Colors.primary} />
             <Text style={styles.centerHint}>Loading notifications…</Text>
             <Text style={styles.smallHint} numberOfLines={2}>
-              {Platform.OS === "android" ? "Android" : "iOS"} • using Bearer token
+              {Platform.OS === "android" ? "Android" : "iOS"} • combined (local + backend)
             </Text>
           </View>
         ) : errorMsg ? (
           <View style={styles.centerBox}>
             <Text style={styles.errorText}>{errorMsg}</Text>
-            <Pressable
-              onPress={load}
-              style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.9 }]}
-            >
+            <Pressable onPress={load} style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.9 }]}>
               <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           </View>
@@ -409,10 +395,7 @@ export default function NotificationsScreen({ onBack }: Props) {
 
                   <View style={{ flex: 1 }}>
                     <View style={styles.titleRow}>
-                      <Text
-                        style={[styles.cardTitle, n.unread && styles.cardTitleUnread]}
-                        numberOfLines={1}
-                      >
+                      <Text style={[styles.cardTitle, n.unread && styles.cardTitleUnread]} numberOfLines={1}>
                         {n.title}
                       </Text>
                       {n.unread ? <View style={styles.dot} /> : null}

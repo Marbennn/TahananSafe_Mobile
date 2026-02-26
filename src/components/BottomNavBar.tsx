@@ -7,7 +7,9 @@ import {
   Pressable,
   Platform,
   useWindowDimensions,
+  Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
@@ -45,6 +47,16 @@ type Props = {
 
 const NAV_BG = "#FFFFFF";
 const INACTIVE = "#9AA4B2";
+
+/* ===================== RATE LIMIT (10 seconds) ===================== */
+const INCIDENT_SUBMIT_COOLDOWN_MS = 10_000;
+const INCIDENT_LAST_SUBMIT_KEY = "tahanansafe_last_incident_submit_at_v1";
+
+function formatSecondsCeil(ms: number) {
+  const s = Math.ceil(ms / 1000);
+  return s <= 0 ? 0 : s;
+}
+/* ============================================================ */
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -313,6 +325,32 @@ export default function BottomNavBar({
     ]
   );
 
+  // ✅ FAB press handler with cooldown popup
+  const handleFabPress = async () => {
+    try {
+      const now = Date.now();
+      const raw = await AsyncStorage.getItem(INCIDENT_LAST_SUBMIT_KEY);
+      const last = raw ? Number(raw) : 0;
+
+      const elapsed = now - (Number.isFinite(last) ? last : 0);
+      const remaining = INCIDENT_SUBMIT_COOLDOWN_MS - elapsed;
+
+      if (remaining > 0) {
+        const secs = formatSecondsCeil(remaining);
+        Alert.alert(
+          "Please wait",
+          `You can report again in ${secs} second${secs === 1 ? "" : "s"}.`
+        );
+        return;
+      }
+
+      onFabPress();
+    } catch {
+      // If storage fails, don't block user
+      onFabPress();
+    }
+  };
+
   return (
     <>
       {Chevron ? (
@@ -396,7 +434,7 @@ export default function BottomNavBar({
       {/* ✅ FAB only */}
       <View style={styles.fabLayer} pointerEvents="box-none">
         <Pressable
-          onPress={onFabPress}
+          onPress={handleFabPress}
           onLongPress={onFabLongPress}
           delayLongPress={350}
           style={({ pressed }) => [

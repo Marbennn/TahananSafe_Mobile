@@ -15,6 +15,7 @@ import {
   Modal,
   AppState,
   AppStateStatus,
+  DeviceEventEmitter, // ✅ ADDED
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -50,7 +51,7 @@ import type { ReportItem } from "./ReportScreen";
 import { closeAndRemoveFromRecents } from "../utils/hideApp";
 
 // ✅ NEW: Use same API as NotificationsScreen (source of truth)
-import { fetchMyNotifications } from "../api/notifications";
+import { fetchMyNotificationsCombined } from "../api/notifications";
 
 type Props = {
   onQuickExit?: () => void;
@@ -70,6 +71,9 @@ const FAB_TUTORIAL_SEEN_KEY = "tahanansafe_fab_tutorial_seen_v1";
 
 // ✅ local “seen notifications” marker (kept, not removed)
 const NOTIF_LAST_SEEN_KEY = "tahanansafe_notif_last_seen_v1";
+
+// ✅ ADDED: must match NotificationsScreen.tsx emit name
+const NOTIF_CHANGED_EVENT = "tahanan:notifChanged";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -268,10 +272,8 @@ export default function HomeScreen({
       const me = await getMeApi({ accessToken: t });
       const apiUser: any = me?.user ?? me;
 
-      const nextFirst =
-        (typeof apiUser?.firstName === "string" && apiUser.firstName.trim()) || "";
-      const nextLast =
-        (typeof apiUser?.lastName === "string" && apiUser.lastName.trim()) || "";
+      const nextFirst = (typeof apiUser?.firstName === "string" && apiUser.firstName.trim()) || "";
+      const nextLast = (typeof apiUser?.lastName === "string" && apiUser.lastName.trim()) || "";
 
       const nextEmail = typeof apiUser?.email === "string" ? apiUser.email : "";
       const nextId = String(apiUser?._id ?? apiUser?.id ?? "");
@@ -282,8 +284,7 @@ export default function HomeScreen({
       const curFirst = typeof cur?.firstName === "string" ? cur.firstName.trim() : "";
 
       const accountChanged =
-        (nextEmail && curEmail && nextEmail !== curEmail) ||
-        (nextId && curId && nextId !== curId);
+        (nextEmail && curEmail && nextEmail !== curEmail) || (nextId && curId && nextId !== curId);
 
       const missingNameInContext = !curFirst;
       const haveNameFromApi = !!nextFirst;
@@ -358,7 +359,7 @@ export default function HomeScreen({
   const longPressFab = () => onQuickExit?.();
 
   // =========================
-  // ✅ Notifications badge logic (UPDATED to use fetchMyNotifications)
+  // ✅ Notifications badge logic (UPDATED to auto-refresh)
   // =========================
   const [notifCount, setNotifCount] = useState<number>(0);
 
@@ -372,24 +373,20 @@ export default function HomeScreen({
 
   const fetchNotifCount = useCallback(async () => {
     try {
-      // ✅ Use the SAME API used by NotificationsScreen
-      const list = await fetchMyNotifications(80);
-
-      // ✅ Count via "unread" boolean (your NotificationItem type)
+      const list = await fetchMyNotificationsCombined(80);
       const unread = list.filter((n) => n.unread).length;
-
       setNotifCount(unread > 0 ? unread : 0);
     } catch {
       setNotifCount(0);
     }
   }, []);
 
-  // Refresh notif count on mount
+  // ✅ Refresh notif count on mount
   useEffect(() => {
     fetchNotifCount();
   }, [fetchNotifCount]);
 
-  // Refresh when app becomes active again (foreground)
+  // ✅ Refresh when app becomes active again (foreground)
   useEffect(() => {
     let mounted = true;
     const onChange = (state: AppStateStatus) => {
@@ -403,7 +400,7 @@ export default function HomeScreen({
     };
   }, [fetchNotifCount]);
 
-  // ✅ NEW: refresh when HomeScreen regains focus (after closing Notifications screen)
+  // ✅ Refresh when HomeScreen regains focus (after closing Notifications screen)
   useFocusEffect(
     useCallback(() => {
       fetchNotifCount();
@@ -411,12 +408,38 @@ export default function HomeScreen({
     }, [fetchNotifCount])
   );
 
+  // ✅ ADDED: Listen to notifications updates from NotificationsScreen
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(NOTIF_CHANGED_EVENT, () => {
+      fetchNotifCount();
+    });
+    return () => sub.remove();
+  }, [fetchNotifCount]);
+
+  // ✅ ADDED: Poll while Home is focused (catches status updates while staying on Home)
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+
+      // refresh immediately on focus
+      fetchNotifCount();
+
+      const id = setInterval(() => {
+        if (!alive) return;
+        fetchNotifCount();
+      }, 15000); // 15 seconds
+
+      return () => {
+        alive = false;
+        clearInterval(id);
+      };
+    }, [fetchNotifCount])
+  );
+
   const handleOpenNotifications = useCallback(async () => {
-    // Open notifications screen (your existing callback)
     onOpenNotifications?.();
 
-    // ❌ DO NOT clear badge here; unread state should be controlled by backend actions
-    // (kept NOTIF_LAST_SEEN_KEY logic but without forcing badge=0)
+    // keep marker (but don't clear badge)
     try {
       await AsyncStorage.setItem(NOTIF_LAST_SEEN_KEY, String(Date.now()));
     } catch {
@@ -666,10 +689,7 @@ export default function HomeScreen({
 
         logoWrap: { height: logoH, width: logoW, justifyContent: "center" },
 
-        rightActions: {
-          flexDirection: "row",
-          alignItems: "center",
-        },
+        rightActions: { flexDirection: "row", alignItems: "center" },
         rightActionSpacer: { width: ACTION_GAP },
 
         iconBtn: {
@@ -719,15 +739,16 @@ export default function HomeScreen({
         sectionTitle: { fontSize: clamp(Math.round(14 * fs), 13, 16), fontWeight: "900", color: TEXT_DARK },
         seeMore: { fontSize: clamp(Math.round(13 * fs), 12, 15), fontWeight: "900", color: Colors.link },
 
-        logsWrap: {
-          paddingHorizontal: PAD,
-          paddingTop: clamp(Math.round(10 * s), 8, 12),
-        },
-
+        logsWrap: { paddingHorizontal: PAD, paddingTop: clamp(Math.round(10 * s), 8, 12) },
         logsGap: { height: GAP },
 
         miniCenter: { paddingHorizontal: PAD, paddingTop: 10, alignItems: "center", justifyContent: "center" },
-        emptyHint: { fontSize: clamp(Math.round(12 * fs), 11, 14), fontWeight: "800", color: "#64748B", textAlign: "center" },
+        emptyHint: {
+          fontSize: clamp(Math.round(12 * fs), 11, 14),
+          fontWeight: "800",
+          color: "#64748B",
+          textAlign: "center",
+        },
 
         chevronHandleWrap: {
           position: "absolute",
@@ -837,10 +858,7 @@ export default function HomeScreen({
             <Pressable
               onPress={handleOpenNotifications}
               hitSlop={12}
-              style={({ pressed }) => [
-                styles.iconBtn,
-                pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
-              ]}
+              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
             >
               <Ionicons name="notifications-outline" size={notifIconSize} color={TEXT_DARK} />
 
@@ -862,10 +880,7 @@ export default function HomeScreen({
                 setShowFabTutorial(true);
               }}
               hitSlop={12}
-              style={({ pressed }) => [
-                styles.iconBtn,
-                pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
-              ]}
+              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
             >
               <Ionicons name="help-circle-outline" size={helpIconSize} color={TEXT_DARK} />
             </Pressable>
@@ -931,16 +946,9 @@ export default function HomeScreen({
               else openSheet();
             }}
             hitSlop={14}
-            style={({ pressed }) => [
-              styles.chevronHandle,
-              pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
-            ]}
+            style={({ pressed }) => [styles.chevronHandle, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
           >
-            <Animated.View
-              style={{
-                transform: [{ translateY: bounceY }, { rotate: chevronRotate }, { scale: chevronScale }],
-              }}
-            >
+            <Animated.View style={{ transform: [{ translateY: bounceY }, { rotate: chevronRotate }, { scale: chevronScale }] }}>
               <Ionicons name="chevron-up" size={22} color={TEXT_DARK} />
             </Animated.View>
           </Pressable>
@@ -983,13 +991,7 @@ export default function HomeScreen({
             <View style={styles.sheetCard} {...handlePan.panHandlers}>
               <View style={styles.sheetGrabber} />
 
-              <Pressable
-                onPress={() => closeSheet()}
-                style={({ pressed }) => [
-                  styles.actionBtn,
-                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
-                ]}
-              >
+              <Pressable onPress={() => closeSheet()} style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}>
                 <Ionicons name="warning-outline" size={20} color="#fff" style={styles.actionIcon} />
                 <Text style={styles.actionText} allowFontScaling={false}>
                   Alert
@@ -1001,10 +1003,7 @@ export default function HomeScreen({
                   closeSheet();
                   closeAndRemoveFromRecents();
                 }}
-                style={({ pressed }) => [
-                  styles.actionBtn,
-                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
-                ]}
+                style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
               >
                 <Ionicons name="eye-off-outline" size={20} color="#fff" style={styles.actionIcon} />
                 <Text style={styles.actionText} allowFontScaling={false}>
@@ -1017,11 +1016,7 @@ export default function HomeScreen({
                   closeSheet();
                   onQuickExit?.();
                 }}
-                style={({ pressed }) => [
-                  styles.actionBtn,
-                  styles.dangerBtn,
-                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
-                ]}
+                style={({ pressed }) => [styles.actionBtn, styles.dangerBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
               >
                 <Ionicons name="log-out-outline" size={20} color="#fff" style={styles.actionIcon} />
                 <Text style={styles.actionText} allowFontScaling={false}>

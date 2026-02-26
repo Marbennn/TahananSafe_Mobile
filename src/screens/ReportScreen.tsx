@@ -19,9 +19,10 @@ import { useIsFocused } from "@react-navigation/native";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { Colors } from "../theme/colors";
 import { useAuth } from "../auth/AuthContext";
-
-// ✅ IMPORTANT: use the same token source as submitIncident()
 import { getAccessToken } from "../auth/session";
+
+// ✅ NEW: local status-change notifications
+import { syncLocalReportStatusNotifications } from "../api/notifications";
 
 type FilterKey = "Pending" | "On going" | "Cancelled" | "Resolved";
 
@@ -53,7 +54,6 @@ const BG = "#F5FAFE";
 const BORDER = "#E7EEF7";
 const TEXT_DARK = "#0B2B45";
 
-// ✅ Use your Expo .env variable (ngrok or LAN IP)
 function getApiBaseUrl() {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
 
@@ -100,7 +100,6 @@ function toShortMonthName(mIndex: number) {
 function parseDateSmart(input?: string): Date | null {
   if (!input) return null;
 
-  // mm/dd/yyyy
   const mdY = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
   const match = input.match(mdY);
   if (match) {
@@ -212,10 +211,8 @@ export default function ReportScreen({
   const isFocused = useIsFocused();
   const { width, height } = useWindowDimensions();
 
-  // We still keep user for UI logic, but token will be pulled from storage
   const { user } = useAuth() as any;
 
-  // ✅ IMPORTANT: stable primitive for deps (prevents polling when user object ref changes)
   const userId = useMemo(() => {
     const u = user as any;
     return String(u?.id ?? u?._id ?? u?.userId ?? u?.email ?? "").trim();
@@ -257,14 +254,12 @@ export default function ReportScreen({
   const pressFab = () => handleTab("Incident");
   const longPressFab = () => onQuickExit?.();
 
-  // ✅ Abort in-flight request on unmount/unfocus
   const abortRef = useRef<AbortController | null>(null);
 
   const fetchMyReports = useCallback(async (signal?: AbortSignal): Promise<ReportItem[]> => {
     const token = await getAccessToken();
 
     if (!token) {
-      // ✅ Give a clean message instead of raw JSON
       throw new Error("Please login again. (Missing access token)");
     }
 
@@ -300,7 +295,6 @@ export default function ReportScreen({
     }
 
     const rawList = Array.isArray(data) ? data : data?.incidents ?? [];
-
     const today = new Date();
 
     const mapped: ReportItem[] = rawList.map((doc: any) => {
@@ -372,14 +366,12 @@ export default function ReportScreen({
   }, []);
 
   const load = useCallback(async () => {
-    // ✅ Don’t fetch if not logged in
     if (!userId) {
       setItems([]);
       setLoading(false);
       return;
     }
 
-    // cancel previous
     try {
       abortRef.current?.abort();
     } catch {}
@@ -391,6 +383,22 @@ export default function ReportScreen({
       setLoading(true);
 
       const list = await fetchMyReports(controller.signal);
+
+      // ✅ NEW: generate local notifications for status changes
+      try {
+        await syncLocalReportStatusNotifications(
+          list.map((r) => ({
+            id: r.id,
+            title: r.title,
+            status: r.status,
+            updatedAt: r.updatedAt,
+            createdAt: r.createdAt,
+          }))
+        );
+      } catch {
+        // ignore (non-blocking)
+      }
+
       if (!controller.signal.aborted) setItems(list);
     } catch (e: any) {
       if (isAbortError(e)) return;
@@ -403,7 +411,6 @@ export default function ReportScreen({
 
   useEffect(() => {
     if (!isFocused) {
-      // cancel when leaving screen
       try {
         abortRef.current?.abort();
       } catch {}
@@ -425,7 +432,6 @@ export default function ReportScreen({
       return;
     }
 
-    // cancel previous
     try {
       abortRef.current?.abort();
     } catch {}
@@ -437,6 +443,20 @@ export default function ReportScreen({
       setErrorMsg("");
 
       const list = await fetchMyReports(controller.signal);
+
+      // ✅ NEW: generate local notifications for status changes
+      try {
+        await syncLocalReportStatusNotifications(
+          list.map((r) => ({
+            id: r.id,
+            title: r.title,
+            status: r.status,
+            updatedAt: r.updatedAt,
+            createdAt: r.createdAt,
+          }))
+        );
+      } catch {}
+
       if (!controller.signal.aborted) setItems(list);
     } catch (e: any) {
       if (isAbortError(e)) return;

@@ -20,6 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Colors } from "../theme/colors";
 
 // ✅ Speech-to-text (voice input)
@@ -78,6 +79,16 @@ type SubmitIncidentResponse = {
     createdAt?: string;
   };
 };
+
+/* ===================== RATE LIMIT (10 seconds) ===================== */
+const INCIDENT_SUBMIT_COOLDOWN_MS = 10_000;
+const INCIDENT_LAST_SUBMIT_KEY = "tahanansafe_last_incident_submit_at_v1";
+
+function formatSecondsCeil(ms: number) {
+  const s = Math.ceil(ms / 1000);
+  return s <= 0 ? 0 : s;
+}
+/* ============================================================ */
 
 /* ===================== DATE/TIME HELPERS ===================== */
 function pad2(n: number) {
@@ -226,6 +237,72 @@ export default function IncidentLogScreen({
   // Base text before we started speaking (so interim results append correctly)
   const speechBaseRef = React.useRef("");
   const lastFinalRef = React.useRef("");
+
+  // ✅ rate limit cache (avoid reading AsyncStorage too often)
+  const lastSubmitAtRef = React.useRef<number>(0);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(INCIDENT_LAST_SUBMIT_KEY);
+        const parsed = raw ? Number(raw) : 0;
+        if (Number.isFinite(parsed) && parsed > 0) lastSubmitAtRef.current = parsed;
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
+
+  const getRemainingCooldownMs = React.useCallback(async () => {
+    const now = Date.now();
+
+    // Use ref first
+    let last = lastSubmitAtRef.current || 0;
+
+    // If ref empty, try storage once
+    if (!last) {
+      try {
+        const raw = await AsyncStorage.getItem(INCIDENT_LAST_SUBMIT_KEY);
+        const parsed = raw ? Number(raw) : 0;
+        if (Number.isFinite(parsed) && parsed > 0) {
+          last = parsed;
+          lastSubmitAtRef.current = parsed;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const elapsed = now - last;
+    const remaining = INCIDENT_SUBMIT_COOLDOWN_MS - elapsed;
+    return remaining > 0 ? remaining : 0;
+  }, []);
+
+  const blockIfCoolingDown = React.useCallback(
+    async (actionLabel = "report") => {
+      const remaining = await getRemainingCooldownMs();
+      if (remaining > 0) {
+        const secs = formatSecondsCeil(remaining);
+        Alert.alert(
+          "Please wait",
+          `You can ${actionLabel} again in ${secs} second${secs === 1 ? "" : "s"}.`
+        );
+        return true; // blocked
+      }
+      return false;
+    },
+    [getRemainingCooldownMs]
+  );
+
+  const markSubmittedNow = React.useCallback(async () => {
+    const now = Date.now();
+    lastSubmitAtRef.current = now;
+    try {
+      await AsyncStorage.setItem(INCIDENT_LAST_SUBMIT_KEY, String(now));
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // ✅ If you ever setMode("emergency") somewhere else, this keeps incidentType aligned.
   React.useEffect(() => {
@@ -583,6 +660,9 @@ export default function IncidentLogScreen({
     try {
       const res = (await submitIncident(payload as any)) as SubmitIncidentResponse;
 
+      // ✅ mark cooldown only AFTER successful submit
+      await markSubmittedNow();
+
       Alert.alert(
         mode === "emergency" ? "Emergency Sent" : "Complaint Secured",
         "Your report has been submitted."
@@ -606,20 +686,21 @@ export default function IncidentLogScreen({
       return;
     }
 
-    if (mode === "emergency") {
-      if (!details.trim()) {
-        Alert.alert("Incomplete", "Please fill in the required fields.");
-        return;
-      }
-      await submitToBackend();
-      return;
-    }
-
     if (!details.trim()) {
       Alert.alert("Incomplete", "Please fill in the required fields.");
       return;
     }
 
+    // ✅ rate limit before allowing submit/preview flow
+    const blocked = await blockIfCoolingDown("submit a report");
+    if (blocked) return;
+
+    if (mode === "emergency") {
+      await submitToBackend();
+      return;
+    }
+
+    // complain -> preview/confirm flow
     if (onProceedConfirm) {
       onProceedConfirm(buildPreviewData());
       return;
@@ -630,6 +711,10 @@ export default function IncidentLogScreen({
 
   const onConfirmComplaint = async () => {
     if (submitting) return;
+
+    // ✅ rate limit again here (covers cases where user stayed in preview, etc.)
+    const blocked = await blockIfCoolingDown("submit a report");
+    if (blocked) return null as any;
 
     const res = await submitToBackend();
 
