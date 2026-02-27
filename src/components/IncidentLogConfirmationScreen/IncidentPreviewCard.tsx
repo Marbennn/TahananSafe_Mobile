@@ -67,88 +67,122 @@ export default function IncidentPreviewCard({ data }: Props) {
   const DETAILS_LH = Math.round(22 * s);
   const SECTION_GAP = Math.round(16 * s);
 
+  // ✅ Fixed card height (same behavior as before)
+  const CARD_H = useMemo(() => {
+    const target = screenHeight * 0.66;
+    return Math.round(clamp(target, 460, 640));
+  }, [screenHeight]);
+
   const closeExpanded = () => setExpandedUri(null);
 
   return (
     <>
-      <View style={[styles.card, { padding: CARD_PAD }]}>
-        {/* Incident Detail */}
-        <Text style={[styles.sectionTitle, { fontSize: TITLE, marginBottom: TITLE_MB }]}>
-          Incident Detail
-        </Text>
+      <View style={[styles.card, { padding: CARD_PAD, height: CARD_H }]}>
+        {/* ✅ This wrapper uses flex so we can push meta down */}
+        <View style={{ flex: 1 }}>
+          {/* Top content (Incident details + photos + witness) */}
+          <View>
+            {/* Incident Detail */}
+            <Text style={[styles.sectionTitle, { fontSize: TITLE, marginBottom: TITLE_MB }]}>
+              Incident Detail
+            </Text>
 
-        <Text style={[styles.smallLine, { fontSize: TYPE_LINE, marginBottom: Math.round(8 * s) }]}>
-          {incidentType}
-        </Text>
+            <Text
+              style={[styles.smallLine, { fontSize: TYPE_LINE, marginBottom: Math.round(8 * s) }]}
+              numberOfLines={1}
+            >
+              {incidentType}
+            </Text>
 
-        <Text style={[styles.detailsItalic, { fontSize: DETAILS, lineHeight: DETAILS_LH }]}>
-          {details}
-        </Text>
+            <Text
+              style={[styles.detailsItalic, { fontSize: DETAILS, lineHeight: DETAILS_LH }]}
+              numberOfLines={4}
+            >
+              {details}
+            </Text>
 
-        {/* Photos */}
-        <View style={[styles.photoRow, { marginTop: Math.round(8 * s) }]}>
-          {[0, 1, 2].map((i) => {
-            const uri = photos[i];
+            {/* Photos */}
+            <View style={[styles.photoRow, { marginTop: Math.round(8 * s) }]}>
+              {[0, 1, 2].map((i) => {
+                const uri = photos[i];
 
-            return (
-              <Pressable
-                key={i}
-                disabled={!uri}
-                onPress={() => uri && setExpandedUri(uri)}
-                style={[
-                  styles.photoBox,
-                  {
-                    height: PHOTO_H,
-                    borderRadius: RADIUS,
-                  },
-                ]}
-              >
-                {uri ? (
-                  <Image source={{ uri }} style={styles.photoImg} />
-                ) : (
-                  <Ionicons
-                    name="image-outline"
-                    size={ICON_SIZE}
-                    color={photos.length > 0 ? "#E1E7F0" : i < fallbackCount ? "#A7B3C2" : "#E1E7F0"}
-                  />
-                )}
-              </Pressable>
-            );
-          })}
-        </View>
+                return (
+                  <Pressable
+                    key={i}
+                    disabled={!uri}
+                    onPress={() => uri && setExpandedUri(uri)}
+                    style={[
+                      styles.photoBox,
+                      {
+                        height: PHOTO_H,
+                        borderRadius: RADIUS,
+                      },
+                    ]}
+                  >
+                    {uri ? (
+                      <Image source={{ uri }} style={styles.photoImg} />
+                    ) : (
+                      <Ionicons
+                        name="image-outline"
+                        size={ICON_SIZE}
+                        color={
+                          photos.length > 0
+                            ? "#E1E7F0"
+                            : i < fallbackCount
+                              ? "#A7B3C2"
+                              : "#E1E7F0"
+                        }
+                      />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
 
-        {/* Witness */}
-        <Text
-          style={[
-            styles.sectionTitle,
-            { marginTop: SECTION_GAP, fontSize: TITLE, marginBottom: TITLE_MB },
-          ]}
-        >
+           {/* Witness */}
+        <View style={{ marginTop: Math.round(48 * s) }}>
+          <Text
+            style={[
+              styles.sectionTitle,
+              { fontSize: TITLE, marginBottom: TITLE_MB },
+            ]}>
           Witness
         </Text>
-
-        <Text style={[styles.witnessName, { fontSize: WITNESS_NAME }]}>{witnessName}</Text>
-        <Text style={[styles.witnessType, { fontSize: WITNESS_TYPE }]}>{witnessType}</Text>
-
-        {/* Meta row */}
-        <View style={[styles.metaRow, { marginTop: Math.round(14 * s) }]}>
-          <View style={styles.metaPair}>
-            <Text style={[styles.metaLabel, { fontSize: META_LABEL }]}>Date:</Text>
-            <Text style={[styles.metaValue, { fontSize: META_VALUE }]}>{data.dateStr || "—"}</Text>
+        <Text style={[styles.witnessName, { fontSize: WITNESS_NAME }]} numberOfLines={1}>
+          {witnessName}
+        </Text>
+        <Text style={[styles.witnessType, { fontSize: WITNESS_TYPE }]} numberOfLines={1}>
+          {witnessType}
+            </Text>
+            </View>
           </View>
 
-          <View style={styles.metaPair}>
-            <Text style={[styles.metaLabel, { fontSize: META_LABEL }]}>Time:</Text>
-            <Text style={[styles.metaValue, { fontSize: META_VALUE }]}>{data.timeStr || "—"}</Text>
-          </View>
-        </View>
+          {/* ✅ Meta block pushed DOWN */}
+          <View style={{ marginTop: "auto", paddingTop: Math.round(18 * s) }}>
+            {/* Date + Time */}
+            <View style={[styles.metaRow, { marginTop: Math.round(14 * s) }]}>
+              <View style={styles.metaPair}>
+                <Text style={[styles.metaLabel, { fontSize: META_LABEL }]}>Date:</Text>
+                <Text style={[styles.metaValue, { fontSize: META_VALUE }]}>{data.dateStr || "—"}</Text>
+              </View>
 
-        {/* Location */}
-        <View style={[styles.locationRow, { marginTop: Math.round(10 * s) }]}>
-          <Text style={[styles.metaLabel, { fontSize: META_LABEL }]}>Location:</Text>
-          <Text style={[styles.metaValue, { fontSize: META_VALUE, flex: 1 }]} numberOfLines={3}>
-            {data.locationStr || "—"}
-          </Text>
+              <View style={styles.metaPair}>
+                <Text style={[styles.metaLabel, { fontSize: META_LABEL }]}>Time:</Text>
+                <Text style={[styles.metaValue, { fontSize: META_VALUE }]}>{data.timeStr || "—"}</Text>
+              </View>
+            </View>
+
+            {/* Location */}
+            <View style={[styles.locationRow, { marginTop: Math.round(10 * s) }]}>
+              <Text style={[styles.metaLabel, { fontSize: META_LABEL }]}>Location:</Text>
+              <Text
+                style={[styles.metaValue, { fontSize: META_VALUE, flex: 1 }]}
+                numberOfLines={3}
+              >
+                {data.locationStr || "—"}
+              </Text>
+            </View>
+          </View>
         </View>
       </View>
 
@@ -157,15 +191,12 @@ export default function IncidentPreviewCard({ data }: Props) {
         visible={!!expandedUri}
         transparent
         animationType="fade"
-        // ✅ IMPORTANT: Android back button will call this
         onRequestClose={closeExpanded}
         statusBarTranslucent={Platform.OS === "android"}
       >
         <StatusBar barStyle="light-content" />
 
-        {/* ✅ Tap outside image to close */}
         <Pressable style={styles.modalContainer} onPress={closeExpanded}>
-          {/* ✅ Close button always visible (safe area) */}
           <Pressable
             onPress={closeExpanded}
             hitSlop={12}
@@ -180,7 +211,6 @@ export default function IncidentPreviewCard({ data }: Props) {
             <Ionicons name="close" size={30} color="#FFF" />
           </Pressable>
 
-          {/* ✅ Prevent background-press from triggering when tapping image */}
           <Pressable onPress={() => {}} style={styles.imageWrap}>
             {expandedUri && (
               <Image
@@ -214,6 +244,7 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 10 },
     elevation: 3,
+    overflow: "hidden",
   },
 
   sectionTitle: {

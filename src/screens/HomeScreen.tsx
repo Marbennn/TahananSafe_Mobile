@@ -218,7 +218,7 @@ export default function HomeScreen({
   const { s, fs } = useMemo(() => makeScale(width, height), [width, height]);
 
   // ✅ AuthContext
-  const { user, setUser, accessToken, refreshMe } = useAuth() as any;
+  const { user, setUser, accessToken, refreshMe, logout } = useAuth() as any;
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
@@ -1144,16 +1144,26 @@ export default function HomeScreen({
               </Pressable>
 
               <Pressable
-                onPress={() => {
-                  closeSheet();
+              onPress={async () => {
+                closeSheet();
+
+                try {
+                  // ✅ real logout: clears tokens + storage (session.ts)
+                  await logout();
+
+                  // optional: parent can still react (navigate to login, etc.)
                   onQuickExit?.();
-                }}
-                style={({ pressed }) => [
-                  styles.actionBtn,
-                  styles.dangerBtn,
-                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
-                ]}
-              >
+                } catch {
+                  // even if something fails, still call parent exit
+                  onQuickExit?.();
+                }
+              }}
+              style={({ pressed }) => [
+                styles.actionBtn,
+                styles.dangerBtn,
+                pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
+              ]}
+            >
                 <Ionicons name="log-out-outline" size={20} color="#fff" style={styles.actionIcon} />
                 <Text style={styles.actionText} allowFontScaling={false}>
                   Sign Out

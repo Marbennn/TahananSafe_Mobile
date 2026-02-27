@@ -30,6 +30,44 @@ function getApiBaseUrl() {
 const API_BASE_URL = getApiBaseUrl();
 
 /** ------------------------------
+ * JWT helpers (no extra libs)
+ * ------------------------------ */
+function base64UrlDecode(input: string) {
+  const pad = input.length % 4 === 0 ? "" : "=".repeat(4 - (input.length % 4));
+  const b64 = (input + pad).replace(/-/g, "+").replace(/_/g, "/");
+  try {
+    // atob is available in RN JS runtime
+    return globalThis.atob(b64);
+  } catch {
+    return "";
+  }
+}
+
+function decodeJwtPayload(token: string): any | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const json = base64UrlDecode(parts[1]);
+  if (!json) return null;
+  try {
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+async function getUserScopeKeySuffix(): Promise<string> {
+  const token = await getAccessToken();
+  if (!token) return "anon";
+
+  const payload = decodeJwtPayload(token) || {};
+  // support common backend fields
+  const uid =
+    String(payload?.userId ?? payload?.id ?? payload?._id ?? payload?.sub ?? "").trim();
+
+  return uid || "anon";
+}
+
+/** ------------------------------
  * Backend helpers
  * ------------------------------ */
 async function authHeaders() {
@@ -57,7 +95,9 @@ async function parseJsonSafe(res: Response) {
 
 export async function fetchMyNotifications(limit = 80): Promise<NotificationItem[]> {
   const headers = await authHeaders();
-  const url = `${API_BASE_URL}/api/mobile/v1/notifications/my?limit=${encodeURIComponent(String(limit))}`;
+  const url = `${API_BASE_URL}/api/mobile/v1/notifications/my?limit=${encodeURIComponent(
+    String(limit)
+  )}`;
 
   let res: Response;
   try {
@@ -134,12 +174,8 @@ export async function fetchMyReportDetailById(reportId: string): Promise<any | n
 }
 
 /** ------------------------------
- * ✅ LOCAL (AsyncStorage) notifications
- * - used for "report status changed" feature
+ * ✅ LOCAL (AsyncStorage) notifications (USER-SCOPED)
  * ------------------------------ */
-
-const STORAGE_LOCAL_NOTIFS_KEY = "tahanansafe_local_notifications_v1";
-const STORAGE_REPORT_STATUS_KEY = "tahanansafe_report_status_cache_v1";
 
 type StatusCache = Record<string, string>; // reportId -> lastKnownStatus
 
@@ -170,22 +206,34 @@ async function writeJsonSafe<T>(key: string, value: T): Promise<void> {
   }
 }
 
+async function localKeys() {
+  const suf = await getUserScopeKeySuffix();
+  return {
+    notifs: `tahanansafe_local_notifications_v1_${suf}`,
+    status: `tahanansafe_report_status_cache_v1_${suf}`,
+  };
+}
+
 async function getLocalNotifications(): Promise<NotificationItem[]> {
-  const list = await readJsonSafe<NotificationItem[]>(STORAGE_LOCAL_NOTIFS_KEY, []);
+  const { notifs } = await localKeys();
+  const list = await readJsonSafe<NotificationItem[]>(notifs, []);
   return Array.isArray(list) ? list : [];
 }
 
 async function setLocalNotifications(list: NotificationItem[]): Promise<void> {
-  await writeJsonSafe(STORAGE_LOCAL_NOTIFS_KEY, list);
+  const { notifs } = await localKeys();
+  await writeJsonSafe(notifs, list);
 }
 
 async function getStatusCache(): Promise<StatusCache> {
-  const cache = await readJsonSafe<StatusCache>(STORAGE_REPORT_STATUS_KEY, {});
+  const { status } = await localKeys();
+  const cache = await readJsonSafe<StatusCache>(status, {});
   return cache && typeof cache === "object" ? cache : {};
 }
 
 async function setStatusCache(cache: StatusCache): Promise<void> {
-  await writeJsonSafe(STORAGE_REPORT_STATUS_KEY, cache);
+  const { status } = await localKeys();
+  await writeJsonSafe(status, cache);
 }
 
 /**
@@ -214,13 +262,11 @@ export async function syncLocalReportStatusNotifications(
 
     const oldStatus = String(prevCache[reportId] ?? "").trim().toUpperCase();
 
-    // First time seeing this report -> just cache it, no notification
     if (!oldStatus) {
       nextCache[reportId] = newStatus;
       continue;
     }
 
-    // Status changed -> create a local notification
     if (oldStatus !== newStatus) {
       nextCache[reportId] = newStatus;
 
@@ -249,7 +295,6 @@ export async function syncLocalReportStatusNotifications(
   }
 
   if (newNotifs.length > 0) {
-    // newest first
     const merged = [...newNotifs, ...existingLocal].slice(0, 200);
     await setLocalNotifications(merged);
   }
@@ -258,16 +303,13 @@ export async function syncLocalReportStatusNotifications(
 }
 
 /**
- * ✅ NotificationsScreen should use these COMBINED functions
- * so it shows both backend notifications + local status-change notifications.
+ * ✅ Combined (remote + local)
  */
 export async function fetchMyNotificationsCombined(limit = 80): Promise<NotificationItem[]> {
   const [remote, local] = await Promise.all([fetchMyNotifications(limit), getLocalNotifications()]);
 
-  // Merge + sort newest first
   const all = [...local, ...remote];
 
-  // Dedupe by id (just in case)
   const seen = new Set<string>();
   const deduped: NotificationItem[] = [];
   for (const n of all) {
@@ -287,7 +329,6 @@ export async function fetchMyNotificationsCombined(limit = 80): Promise<Notifica
 }
 
 export async function markAllNotificationsReadCombined(): Promise<void> {
-  // optimistic local + remote
   const local = await getLocalNotifications();
   if (local.length > 0) {
     await setLocalNotifications(local.map((n) => ({ ...n, unread: false })));
@@ -296,7 +337,6 @@ export async function markAllNotificationsReadCombined(): Promise<void> {
 }
 
 export async function toggleNotificationReadCombined(id: string): Promise<NotificationItem | null> {
-  // If local notif -> toggle locally
   if (String(id).startsWith("local-")) {
     const local = await getLocalNotifications();
     const idx = local.findIndex((n) => n.id === id);
@@ -309,11 +349,11 @@ export async function toggleNotificationReadCombined(id: string): Promise<Notifi
     return updated;
   }
 
-  // else remote
   return await toggleNotificationRead(id);
 }
 
 export async function clearAllNotificationsCombined(): Promise<void> {
   await setLocalNotifications([]);
+  await setStatusCache({});
   await clearAllNotifications();
 }

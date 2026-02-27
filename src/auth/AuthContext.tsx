@@ -1,9 +1,34 @@
 // src/auth/AuthContext.tsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { clearSession, getSession, saveSession, StoredUser } from "./authStorage";
 
 // ✅ use your existing /me api
 import { getMeApi } from "../api/pin";
+
+// ✅ SINGLE source of truth for tokens/session (used by notifications.ts too)
+import {
+  getAccessToken,
+  getRefreshToken,
+  saveTokens,
+  setLoggedIn,
+  isLoggedIn as isLoggedInFlag,
+  clearSession,
+} from "./session";
+
+export type StoredUser = {
+  _id?: string;
+  id?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  name?: string;
+  hasPin?: boolean;
+  profileImage?: string;
+  phoneNumber?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  age?: number;
+  [key: string]: any;
+};
 
 type AuthState = {
   isBooting: boolean;
@@ -14,11 +39,7 @@ type AuthState = {
 };
 
 type AuthContextType = AuthState & {
-  login: (payload: {
-    accessToken: string;
-    refreshToken?: string;
-    user?: StoredUser;
-  }) => Promise<void>;
+  login: (payload: { accessToken: string; refreshToken?: string; user?: StoredUser }) => Promise<void>;
   logout: () => Promise<void>;
   setUser: (u: StoredUser | null) => void;
   refreshMe: () => Promise<void>;
@@ -63,63 +84,45 @@ function normalizeUser(input: any): StoredUser | null {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isBooting, setIsBooting] = useState(true);
 
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [refreshToken, setRefreshToken] = useState<string | null>(null);
+  const [accessToken, setAccessTokenState] = useState<string | null>(null);
+  const [refreshToken, setRefreshTokenState] = useState<string | null>(null);
   const [user, setUser] = useState<StoredUser | null>(null);
 
   const refreshMe = async () => {
-    if (!accessToken) return;
+    const token = accessToken || (await getAccessToken());
+    if (!token) return;
 
     try {
-      const me = await getMeApi({ accessToken });
+      const me = await getMeApi({ accessToken: token });
       const normalized = normalizeUser(me);
-
-      if (normalized) {
-        setUser(normalized);
-
-        // keep storage in sync
-        await saveSession({
-          accessToken,
-          refreshToken: refreshToken ?? undefined,
-          user: normalized,
-        });
-      }
+      if (normalized) setUser(normalized);
     } catch {
-      // ignore - home can still load
+      // ignore
     }
   };
 
-  // ✅ Restore session on app start
+  // ✅ Restore session on app start (from session.ts only)
   useEffect(() => {
     let mounted = true;
 
     (async () => {
       try {
-        const session = await getSession();
+        const token = await getAccessToken();
+        const rToken = await getRefreshToken();
+        const logged = await isLoggedInFlag();
+
         if (!mounted) return;
 
-        if (session.accessToken) setAccessToken(session.accessToken);
-        if (session.refreshToken) setRefreshToken(session.refreshToken);
-        if (session.user) setUser(session.user);
-
-        // ✅ If user missing but token exists -> fetch /me
-        if (session.accessToken && !session.user) {
-          try {
-            const me = await getMeApi({ accessToken: session.accessToken });
-            const normalized = normalizeUser(me);
-            if (!mounted) return;
-
-            if (normalized) {
-              setUser(normalized);
-              await saveSession({
-                accessToken: session.accessToken,
-                refreshToken: session.refreshToken ?? undefined,
-                user: normalized,
-              });
-            }
-          } catch {
-            // ignore
-          }
+        if (logged && token) {
+          setAccessTokenState(token);
+          setRefreshTokenState(rToken);
+          await setLoggedIn(true); // keep flag consistent
+          await refreshMe();
+        } else {
+          // ensure clean state
+          setAccessTokenState(null);
+          setRefreshTokenState(null);
+          setUser(null);
         }
       } finally {
         if (mounted) setIsBooting(false);
@@ -129,49 +132,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       mounted = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = async (payload: {
-    accessToken: string;
-    refreshToken?: string;
-    user?: StoredUser;
-  }) => {
-    setAccessToken(payload.accessToken);
-    setRefreshToken(payload.refreshToken ?? null);
+  const login = async (payload: { accessToken: string; refreshToken?: string; user?: StoredUser }) => {
+    // ✅ wipe any previous account session first
+    await clearSession().catch(() => {});
 
-    const normalized = normalizeUser(payload.user);
-    setUser(normalized);
-
-    await saveSession({
+    // ✅ store tokens where notifications.ts reads them
+    await saveTokens({
       accessToken: payload.accessToken,
       refreshToken: payload.refreshToken,
-      user: normalized ?? null,
     });
+    await setLoggedIn(true);
 
-    // ✅ If login didn't provide user -> fetch /me immediately
-    if (!normalized) {
-      try {
-        const me = await getMeApi({ accessToken: payload.accessToken });
-        const fromMe = normalizeUser(me);
-        if (fromMe) {
-          setUser(fromMe);
-          await saveSession({
-            accessToken: payload.accessToken,
-            refreshToken: payload.refreshToken,
-            user: fromMe,
-          });
-        }
-      } catch {
-        // ignore
-      }
-    }
+    setAccessTokenState(payload.accessToken);
+    setRefreshTokenState(payload.refreshToken ?? null);
+
+    const normalized = normalizeUser(payload.user);
+    if (normalized) setUser(normalized);
+    else await refreshMe(); // if no user payload, fetch /me
   };
 
   const logout = async () => {
-    setAccessToken(null);
-    setRefreshToken(null);
+    setAccessTokenState(null);
+    setRefreshTokenState(null);
     setUser(null);
-    await clearSession();
+
+    await clearSession().catch(() => {});
+    await setLoggedIn(false).catch(() => {});
   };
 
   const value = useMemo<AuthContextType>(

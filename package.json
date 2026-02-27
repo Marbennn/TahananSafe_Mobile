@@ -4,14 +4,12 @@
   "version": "1.0.0",
   "main": "index.js",
   "private": true,
-
   "scripts": {
     "start": "npx expo start",
     "android": "npx expo run:android",
     "ios": "npx expo run:ios",
     "web": "npx expo start --web"
   },
-
   "codegenConfig": {
     "name": "HideAppModuleSpec",
     "type": "modules",
@@ -20,7 +18,6 @@
       "javaPackageName": "com.angelgeloo0918.firstproject"
     }
   },
-
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -47,7 +44,6 @@
     "react-native-screens": "~4.16.0",
     "react-native-svg": "15.12.1"
   },
-
   "devDependencies": {
     "@types/react": "~19.1.10",
     "babel-preset-expo": "^54.0.10",
