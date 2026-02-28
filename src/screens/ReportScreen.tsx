@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Platform,
+  Animated,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -53,6 +54,11 @@ export type ReportItem = {
 const BG = "#F5FAFE";
 const BORDER = "#E7EEF7";
 const TEXT_DARK = "#0B2B45";
+const MUTED = "#64748B";
+const CARD = "#FFFFFF";
+
+// ✅ IMPORTANT: force this to be a normal string (fixes TS literal type error)
+const PRIMARY: string = String((Colors as any).primary ?? "#1E63D0");
 
 function getApiBaseUrl() {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
@@ -150,47 +156,137 @@ function isAbortError(err: any) {
   return name === "AbortError" || msg.toLowerCase().includes("aborted");
 }
 
-function ReportCard({
+function statusLabel(s?: ReportItem["status"]) {
+  if (s === "ONGOING") return "On going";
+  if (s === "CANCELLED") return "Cancelled";
+  if (s === "RESOLVED") return "Resolved";
+  return "Pending";
+}
+
+function statusAccent(s?: ReportItem["status"], primary: string = PRIMARY) {
+  if (s === "RESOLVED") return "#16A34A";
+  if (s === "CANCELLED") return "#DC2626";
+  if (s === "ONGOING") return "#2563EB";
+  return primary;
+}
+
+function statusIcon(s?: ReportItem["status"]) {
+  if (s === "RESOLVED") return "checkmark-circle-outline" as const;
+  if (s === "CANCELLED") return "close-circle-outline" as const;
+  if (s === "ONGOING") return "sync-circle-outline" as const;
+  return "time-outline" as const;
+}
+
+function countByStatus(items: ReportItem[]) {
+  let pending = 0;
+  let ongoing = 0;
+  let cancelled = 0;
+  let resolved = 0;
+
+  for (const it of items) {
+    const s = (it.status ?? "PENDING") as ReportItem["status"];
+    if (s === "PENDING") pending++;
+    else if (s === "ONGOING") ongoing++;
+    else if (s === "CANCELLED") cancelled++;
+    else if (s === "RESOLVED") resolved++;
+  }
+
+  return { pending, ongoing, cancelled, resolved, total: items.length };
+}
+
+function FilterChip({
+  label,
+  active,
+  onPress,
+  styles,
+  accent,
+}: {
+  label: FilterKey;
+  active: boolean;
+  onPress: () => void;
+  styles: ReturnType<typeof makeStyles>;
+  accent: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.chip,
+        { borderColor: active ? "transparent" : BORDER, backgroundColor: active ? accent : "#FFFFFF" },
+        pressed && { opacity: 0.95, transform: [{ scale: 0.99 }] },
+      ]}
+    >
+      <Text style={[styles.chipText, { color: active ? "#FFFFFF" : "#64748B" }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function ReportTicketCard({
   item,
   onPress,
   styles,
   chevronSize,
+  primary,
 }: {
   item: ReportItem;
   onPress?: () => void;
   styles: ReturnType<typeof makeStyles>;
   chevronSize: number;
+  primary: string;
 }) {
+  const accent = statusAccent(item.status, primary);
+  const icon = statusIcon(item.status);
+  const pillText = statusLabel(item.status);
+
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && { opacity: 0.95 }]}>
-      <View style={styles.cardLeftBar} />
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.ticket, pressed && { transform: [{ scale: 0.995 }] }]}>
+      <View style={[styles.ticketAccent, { backgroundColor: accent }]} />
 
-      <View style={styles.cardBody}>
-        <Text style={styles.cardTitle} numberOfLines={1}>
-          {item.title}
-        </Text>
+      <View style={styles.ticketBody}>
+        <View style={styles.ticketTopRow}>
+          <View style={[styles.badge, { backgroundColor: "#EEF6FF" }]}>
+            <Ionicons name={icon} size={styles._iconSize} color={accent} />
+          </View>
 
-        <Text style={styles.cardDetail} numberOfLines={2}>
-          {item.detail}
-        </Text>
+          <View style={{ flex: 1 }}>
+            <View style={styles.ticketTitleRow}>
+              <Text style={[styles.ticketTitle, { color: TEXT_DARK }]} numberOfLines={1}>
+                {item.title}
+              </Text>
 
-        <View style={styles.cardMetaRow}>
-          <Text style={styles.cardMeta}>
-            {item.dateLeft}
-            {"\n"}
-            {item.timeLeft}
-          </Text>
+              {!!item.alertNo && (
+                <View style={[styles.alertPill, { borderColor: BORDER, backgroundColor: "#FFFFFF" }]}>
+                  <Ionicons name="alert-circle-outline" size={styles._miniIcon} color={MUTED} />
+                  <Text style={[styles.alertPillText, { color: MUTED }]} numberOfLines={1}>
+                    {item.alertNo}
+                  </Text>
+                </View>
+              )}
+            </View>
 
-          <Text style={styles.cardMeta}>
-            {item.dateRight}
-            {"\n"}
-            {item.timeRight}
-          </Text>
+            <Text style={styles.ticketDetail} numberOfLines={2}>
+              {item.detail}
+            </Text>
+          </View>
+
+          <Ionicons name="chevron-forward" size={chevronSize} color="#94A3B8" />
         </View>
-      </View>
 
-      <View style={styles.cardChevron}>
-        <Ionicons name="chevron-forward" size={chevronSize} color="#94A3B8" />
+        <View style={styles.ticketBottomRow}>
+          <View style={[styles.statusChip, { backgroundColor: "#EEF6FF", borderColor: BORDER }]}>
+            <View style={[styles.dot, { backgroundColor: accent }]} />
+            <Text style={[styles.statusChipText, { color: accent }]}>{pillText}</Text>
+          </View>
+
+          <View style={styles.metaInline}>
+            <Ionicons name="time-outline" size={styles._miniIcon} color={MUTED} />
+            <Text style={styles.metaInlineText} numberOfLines={1}>
+              Updated: {item.timeRight}
+            </Text>
+          </View>
+        </View>
       </View>
     </Pressable>
   );
@@ -227,7 +323,7 @@ export default function ReportScreen({
   const chevronSize = scale(20);
   const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
 
-  const [activeTab, setActiveTab] = useState<TabKey>(initialTab ?? "Ledger");
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab ?? "Reports");
   const [filter, setFilter] = useState<FilterKey>("Pending");
 
   const [items, setItems] = useState<ReportItem[]>([]);
@@ -244,14 +340,13 @@ export default function ReportScreen({
   const chevronBottom = navHeight + 90;
   const fabBottom = navHeight - FAB_SIZE / 2 - 10;
 
-  const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + 6;
+  const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + vscale(64);
 
   const handleTab = (key: TabKey) => {
     setActiveTab(key);
     onTabChange?.(key);
   };
 
-  const pressFab = () => handleTab("Incident");
   const longPressFab = () => onQuickExit?.();
 
   const abortRef = useRef<AbortController | null>(null);
@@ -384,7 +479,6 @@ export default function ReportScreen({
 
       const list = await fetchMyReports(controller.signal);
 
-      // ✅ NEW: generate local notifications for status changes
       try {
         await syncLocalReportStatusNotifications(
           list.map((r) => ({
@@ -395,9 +489,7 @@ export default function ReportScreen({
             createdAt: r.createdAt,
           }))
         );
-      } catch {
-        // ignore (non-blocking)
-      }
+      } catch {}
 
       if (!controller.signal.aborted) setItems(list);
     } catch (e: any) {
@@ -444,7 +536,6 @@ export default function ReportScreen({
 
       const list = await fetchMyReports(controller.signal);
 
-      // ✅ NEW: generate local notifications for status changes
       try {
         await syncLocalReportStatusNotifications(
           list.map((r) => ({
@@ -466,50 +557,96 @@ export default function ReportScreen({
     }
   }, [fetchMyReports, userId]);
 
+  const counts = useMemo(() => countByStatus(items), [items]);
+
   const filtered = useMemo(() => {
     const want = filterToStatus(filter);
     return items.filter((x) => (x.status ?? "PENDING") === want);
   }, [items, filter]);
+
+  // ✅ Simple tab-change animation (fade + slight slide up)
+  const tabAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    tabAnim.setValue(0);
+    Animated.timing(tabAnim, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [filter, tabAnim]);
+
+  const listAnimStyle = useMemo(() => {
+    const opacity = tabAnim;
+    const translateY = tabAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] });
+    return { opacity, transform: [{ translateY }] };
+  }, [tabAnim]);
+
+  const setFilterAnimated = useCallback(
+    (k: FilterKey) => {
+      if (k === filter) return;
+      // kick a tiny "out" feel before switching
+      Animated.timing(tabAnim, { toValue: 0, duration: 90, useNativeDriver: true }).start(() => {
+        setFilter(k);
+      });
+    },
+    [filter, tabAnim]
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.page}>
-        <View style={styles.topBar}>
-          <Text style={styles.topTitle}>Reports</Text>
-        </View>
+        {/* Header card */}
+        <View style={styles.heroWrap}>
+          <View style={styles.heroCard}>
+            <View style={styles.heroTopRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.heroTitle}>Reports</Text>
+                <Text style={styles.heroSub}>Track your incident progress by status</Text>
+              </View>
+            </View>
 
-        <View style={styles.segmentWrap}>
-          <View style={styles.segmentPill}>
-            {(["Pending", "On going", "Cancelled", "Resolved"] as FilterKey[]).map((k) => {
-              const active = k === filter;
-              return (
-                <Pressable
-                  key={k}
-                  onPress={() => setFilter(k)}
-                  style={({ pressed }) => [
-                    styles.segmentBtn,
-                    active && styles.segmentBtnActive,
-                    pressed && { transform: [{ scale: 0.99 }] },
-                  ]}
-                >
-                  <Text style={[styles.segmentText, active && styles.segmentTextActive]} numberOfLines={1}>
-                    {k}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            <View style={styles.statsRow}>
+              <StatPill label="All" value={counts.total} color={TEXT_DARK} styles={styles} />
+              <StatPill label="Pending" value={counts.pending} color={statusAccent("PENDING", PRIMARY)} styles={styles} />
+              <StatPill
+                label="On going"
+                value={counts.ongoing}
+                color={statusAccent("ONGOING", PRIMARY)}
+                styles={styles}
+              />
+              <StatPill
+                label="Resolved"
+                value={counts.resolved}
+                color={statusAccent("RESOLVED", PRIMARY)}
+                styles={styles}
+              />
+            </View>
           </View>
         </View>
 
+        {/* Filter chips */}
+        <View style={styles.chipsWrap}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsContent}>
+            {(["Pending", "On going", "Cancelled", "Resolved"] as FilterKey[]).map((k) => (
+              <FilterChip
+                key={k}
+                label={k}
+                active={k === filter}
+                onPress={() => setFilterAnimated(k)}
+                styles={styles}
+                accent={statusAccent(filterToStatus(k), PRIMARY)}
+              />
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Body */}
         {loading ? (
           <View style={styles.centerBox}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <ActivityIndicator size="large" color={PRIMARY} />
             <Text style={styles.centerHint}>Loading reports…</Text>
-            <Text style={styles.smallHint} numberOfLines={2}>
-              API: {API_BASE_URL}
-            </Text>
           </View>
         ) : errorMsg ? (
           <View style={styles.centerBox}>
@@ -519,36 +656,45 @@ export default function ReportScreen({
             </Pressable>
           </View>
         ) : filtered.length === 0 ? (
-          <View style={styles.centerBox}>
-            <Text style={styles.centerHint}>No reports found.</Text>
-          </View>
+          <Animated.View style={[styles.centerBox, listAnimStyle]}>
+            <Ionicons name="document-text-outline" size={styles._emptyIcon} color="#94A3B8" />
+            <Text style={styles.centerHint}>No reports found for {filter}.</Text>
+          </Animated.View>
         ) : (
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: CONTENT_BOTTOM_PAD }]}
-          >
-            {(() => {
-              let lastGroup = "";
-              return filtered.map((item) => {
-                const showGroup = item.groupLabel && item.groupLabel !== lastGroup;
-                if (item.groupLabel) lastGroup = item.groupLabel;
+          <Animated.View style={[{ flex: 1 }, listAnimStyle]}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+              contentContainerStyle={[styles.scrollContent, { paddingBottom: CONTENT_BOTTOM_PAD }]}
+            >
+              {(() => {
+                let lastGroup = "";
+                return filtered.map((item) => {
+                  const showGroup = item.groupLabel && item.groupLabel !== lastGroup;
+                  if (item.groupLabel) lastGroup = item.groupLabel;
 
-                return (
-                  <View key={item.id} style={styles.block}>
-                    {showGroup ? <Text style={styles.groupLabel}>{item.groupLabel}</Text> : null}
+                  return (
+                    <View key={item.id} style={styles.block}>
+                      {showGroup ? (
+                        <View style={styles.groupPill}>
+                          <Ionicons name="calendar-outline" size={styles._miniIcon} color={MUTED} />
+                          <Text style={styles.groupPillText}>{item.groupLabel}</Text>
+                        </View>
+                      ) : null}
 
-                    <ReportCard
-                      item={item}
-                      onPress={() => onOpenReport?.(item)}
-                      styles={styles}
-                      chevronSize={chevronSize}
-                    />
-                  </View>
-                );
-              });
-            })()}
-          </ScrollView>
+                      <ReportTicketCard
+                        item={item}
+                        onPress={() => onOpenReport?.(item)}
+                        styles={styles}
+                        chevronSize={chevronSize}
+                        primary={PRIMARY}
+                      />
+                    </View>
+                  );
+                });
+              })()}
+            </ScrollView>
+          </Animated.View>
         )}
 
         <BottomNavBar
@@ -559,7 +705,7 @@ export default function ReportScreen({
           chevronBottom={chevronBottom}
           fabBottom={fabBottom}
           fabSize={FAB_SIZE}
-          onFabPress={pressFab}
+          onFabPress={() => handleTab("Incident")}
           onFabLongPress={longPressFab}
           centerLabel="Incident Log"
         />
@@ -568,167 +714,266 @@ export default function ReportScreen({
   );
 }
 
+function StatPill({
+  label,
+  value,
+  color,
+  styles,
+}: {
+  label: string;
+  value: number;
+  color: string;
+  styles: ReturnType<typeof makeStyles>;
+}) {
+  return (
+    <View style={[styles.statPill, { borderColor: BORDER, backgroundColor: "#FFFFFF" }]}>
+      <Text style={[styles.statValue, { color }]}>{value}</Text>
+      <Text style={[styles.statLabel, { color: MUTED }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 function makeStyles(scale: (n: number) => number, vscale: (n: number) => number) {
-  const SEG_H = vscale(40);
+  const CARD_R = scale(18);
 
-  return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: BG },
-    page: { flex: 1, backgroundColor: BG },
+  const _iconSize = scale(20);
+  const _miniIcon = scale(14);
+  const _emptyIcon = scale(40);
 
-    topBar: {
-      paddingHorizontal: scale(16),
-      paddingTop: vscale(6),
-      paddingBottom: vscale(10),
-      flexDirection: "row",
-      alignItems: "center",
-    },
-    topTitle: {
-      fontSize: scale(28),
-      fontWeight: "900",
-      color: TEXT_DARK,
-    },
+  return Object.assign(
+    StyleSheet.create({
+      safe: { flex: 1, backgroundColor: BG },
+      page: { flex: 1, backgroundColor: BG },
 
-    segmentWrap: {
-      paddingHorizontal: scale(16),
-      paddingTop: vscale(6),
-      paddingBottom: vscale(10),
-    },
-    segmentPill: {
-      height: SEG_H,
-      borderRadius: Math.round(SEG_H / 2),
-      backgroundColor: "#FFFFFF",
-      borderWidth: 1,
-      borderColor: BORDER,
-      flexDirection: "row",
-      overflow: "hidden",
-    },
-    segmentBtn: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      paddingHorizontal: scale(6),
-    },
-    segmentBtnActive: {
-      backgroundColor: Colors.primary,
-    },
-    segmentText: {
-      fontSize: scale(12),
-      fontWeight: "800",
-      color: "#6B7280",
-    },
-    segmentTextActive: {
-      color: "#FFFFFF",
-    },
+      // ===== Hero =====
+      heroWrap: {
+        paddingHorizontal: scale(16),
+        paddingTop: vscale(6),
+        paddingBottom: vscale(10),
+      },
+      heroCard: {
+        borderRadius: CARD_R,
+        borderWidth: 1,
+        borderColor: BORDER,
+        backgroundColor: CARD,
+        paddingHorizontal: scale(14),
+        paddingVertical: vscale(12),
+        // ✅ REMOVED SHADOWS
+        shadowColor: "transparent",
+        shadowOpacity: 0,
+        shadowRadius: 0,
+        shadowOffset: { width: 0, height: 0 },
+        elevation: 0,
+      },
+      heroTopRow: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        gap: scale(10),
+      },
 
-    scrollContent: {
-      paddingHorizontal: scale(16),
-      paddingTop: vscale(6),
-    },
+      heroTitle: {
+        fontSize: scale(28),
+        fontWeight: "900",
+        color: TEXT_DARK,
+      },
 
-    block: {
-      marginBottom: vscale(12),
-      gap: vscale(8),
-    },
+      heroSub: {
+        marginTop: vscale(4),
+        fontSize: scale(12),
+        fontWeight: "400",
+        color: MUTED,
+        lineHeight: scale(16),
+      },
 
-    groupLabel: {
-      fontSize: scale(12),
-      fontWeight: "800",
-      color: "#94A3B8",
-      paddingLeft: scale(2),
-    },
+      statsRow: {
+        marginTop: vscale(12),
+        flexDirection: "row",
+        gap: scale(10),
+      },
+      statPill: {
+        flex: 1,
+        borderWidth: 1,
+        borderRadius: scale(14),
+        paddingVertical: vscale(8),
+        paddingHorizontal: scale(10),
+        alignItems: "center",
+        justifyContent: "center",
+      },
 
-    card: {
-      flexDirection: "row",
-      alignItems: "stretch",
-      borderWidth: 1,
-      borderColor: BORDER,
-      backgroundColor: "#FFFFFF",
-      borderRadius: scale(16),
-      overflow: "hidden",
-      shadowColor: "#000",
-      shadowOpacity: 0.04,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 8 },
-      elevation: 2,
-    },
-    cardLeftBar: {
-      width: scale(4),
-      backgroundColor: Colors.primary,
-    },
-    cardBody: {
-      flex: 1,
-      paddingVertical: vscale(12),
-      paddingLeft: scale(12),
-      paddingRight: scale(10),
-      gap: vscale(6),
-    },
-    cardTitle: {
-      fontSize: scale(15),
-      fontWeight: "900",
-      color: Colors.primary,
-    },
-    cardDetail: {
-      fontSize: scale(13),
-      fontWeight: "700",
-      color: "#6B7280",
-      fontStyle: "italic",
-      lineHeight: vscale(18),
-    },
-    cardMetaRow: {
-      marginTop: vscale(6),
-      flexDirection: "row",
-      justifyContent: "space-between",
-      gap: scale(10),
-    },
-    cardMeta: {
-      fontSize: scale(11),
-      fontWeight: "800",
-      color: "#94A3B8",
-      lineHeight: vscale(14),
-    },
-    cardChevron: {
-      width: scale(38),
-      alignItems: "center",
-      justifyContent: "center",
-      paddingRight: scale(10),
-    },
+      statValue: { fontSize: scale(16), fontWeight: "900" },
+      statLabel: { marginTop: vscale(2), fontSize: scale(10), fontWeight: "900" },
 
-    centerBox: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      paddingHorizontal: scale(20),
-      gap: vscale(10),
-    },
-    centerHint: {
-      fontSize: scale(13),
-      fontWeight: "800",
-      color: "#64748B",
-      textAlign: "center",
-    },
-    smallHint: {
-      fontSize: scale(11),
-      fontWeight: "700",
-      color: "#94A3B8",
-      textAlign: "center",
-    },
-    errorText: {
-      fontSize: scale(13),
-      fontWeight: "900",
-      color: "#B91C1C",
-      textAlign: "center",
-    },
-    retryBtn: {
-      marginTop: vscale(6),
-      paddingVertical: vscale(10),
-      paddingHorizontal: scale(18),
-      backgroundColor: Colors.primary,
-      borderRadius: scale(999),
-    },
-    retryText: {
-      color: "#FFFFFF",
-      fontWeight: "900",
-      fontSize: scale(12),
-    },
-  });
+      dot: { width: scale(8), height: scale(8), borderRadius: scale(99) },
+
+      // ===== Chips =====
+      chipsWrap: {
+        paddingHorizontal: scale(16),
+        paddingBottom: vscale(8),
+      },
+      chipsContent: { gap: scale(10), paddingRight: scale(6) },
+      chip: {
+        height: vscale(36),
+        borderRadius: vscale(18),
+        borderWidth: 1,
+        paddingHorizontal: scale(14),
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      chipText: { fontSize: scale(12), fontWeight: "900" },
+
+      // ===== List =====
+      scrollContent: {
+        paddingHorizontal: scale(16),
+        paddingTop: vscale(6),
+      },
+      block: { marginBottom: vscale(12), gap: vscale(8) },
+
+      groupPill: {
+        alignSelf: "flex-start",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(6),
+        borderWidth: 1,
+        borderColor: BORDER,
+        backgroundColor: "#FFFFFF",
+        paddingHorizontal: scale(10),
+        paddingVertical: vscale(6),
+        borderRadius: vscale(999),
+      },
+
+      groupPillText: { fontSize: scale(11), fontWeight: "900", color: "#94A3B8" },
+
+      // ===== Ticket card =====
+      ticket: {
+        flexDirection: "row",
+        borderRadius: CARD_R,
+        borderWidth: 1,
+        borderColor: BORDER,
+        backgroundColor: "#FFFFFF",
+        overflow: "hidden",
+        // ✅ REMOVED SHADOWS
+        shadowColor: "transparent",
+        shadowOpacity: 0,
+        shadowRadius: 0,
+        shadowOffset: { width: 0, height: 0 },
+        elevation: 0,
+      },
+      ticketAccent: { width: scale(6) },
+      ticketBody: { flex: 1, paddingHorizontal: scale(12), paddingVertical: vscale(12) },
+
+      ticketTopRow: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: scale(10),
+      },
+      badge: {
+        width: vscale(40),
+        height: vscale(40),
+        borderRadius: vscale(14),
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      ticketTitleRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: scale(10),
+      },
+
+      ticketTitle: {
+        flex: 1,
+        fontSize: scale(16),
+        fontWeight: "900",
+      },
+      alertPill: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(6),
+        borderWidth: 1,
+        borderRadius: vscale(999),
+        paddingHorizontal: scale(8),
+        paddingVertical: vscale(4),
+      },
+
+      alertPillText: { fontSize: scale(10), fontWeight: "900" },
+
+      ticketDetail: {
+        marginTop: vscale(4),
+        fontSize: scale(12),
+        fontWeight: "400",
+        color: MUTED,
+        lineHeight: vscale(16),
+      },
+
+      ticketBottomRow: {
+        marginTop: vscale(10),
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: scale(10),
+        flexWrap: "wrap",
+      },
+
+      statusChip: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(6),
+        borderWidth: 1,
+        borderRadius: vscale(999),
+        paddingHorizontal: scale(10),
+        paddingVertical: vscale(6),
+      },
+
+      statusChipText: { fontSize: scale(11), fontWeight: "900" },
+
+      metaInline: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(6),
+      },
+
+      metaInlineText: { fontSize: scale(10), fontWeight: "400", color: "#94A3B8" },
+
+      // ===== Center states =====
+      centerBox: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: scale(20),
+        gap: vscale(10),
+      },
+
+      centerHint: {
+        fontSize: scale(13),
+        fontWeight: "400",
+        color: MUTED,
+        textAlign: "center",
+      },
+
+      errorText: {
+        fontSize: scale(13),
+        fontWeight: "400",
+        color: "#B91C1C",
+        textAlign: "center",
+      },
+
+      retryBtn: {
+        marginTop: vscale(6),
+        paddingVertical: vscale(10),
+        paddingHorizontal: scale(18),
+        backgroundColor: PRIMARY,
+        borderRadius: scale(999),
+      },
+
+      retryText: {
+        color: "#FFFFFF",
+        fontWeight: "900",
+        fontSize: scale(12),
+      },
+    }),
+    { _iconSize, _miniIcon, _emptyIcon }
+  ) as any;
 }

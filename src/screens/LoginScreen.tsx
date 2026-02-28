@@ -305,6 +305,14 @@ function bioOptInKeyForEmail(email: string) {
   return `tahanansafe_bio_optin_${safeKeyPart(email)}`;
 }
 
+/** ✅ NEW: per-email "snooze until" timestamp for biometrics prompt */
+function bioSnoozeUntilKeyForEmail(email: string) {
+  return `tahanansafe_bio_snooze_until_${safeKeyPart(email)}`;
+}
+
+/** ✅ NEW: snooze duration (3 days) */
+const BIO_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
+
 async function getBioOptInForEmail(email: string): Promise<boolean> {
   const key = bioOptInKeyForEmail(email);
   try {
@@ -322,6 +330,31 @@ async function setBioOptInForEmail(email: string, enabled: boolean) {
   } catch {
     // ignore
   }
+}
+
+async function getBioSnoozeUntilMs(email: string): Promise<number> {
+  const key = bioSnoozeUntilKeyForEmail(email);
+  try {
+    const v = await SecureStore.getItemAsync(key);
+    const n = v ? Number(v) : 0;
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function setBioSnoozeUntilMs(email: string, untilMs: number) {
+  const key = bioSnoozeUntilKeyForEmail(email);
+  try {
+    await SecureStore.setItemAsync(key, String(untilMs));
+  } catch {
+    // ignore
+  }
+}
+
+async function canShowBioPromptNow(email: string): Promise<boolean> {
+  const until = await getBioSnoozeUntilMs(email);
+  return !until || nowMs() >= until;
 }
 
 async function getRefreshTokenForEmail(email: string): Promise<string | null> {
@@ -418,7 +451,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const [verifyPassword, setVerifyPassword] = useState<string>(""); // for resend
   const [sendingOtp, setSendingOtp] = useState(false);
 
-  // ✅ Track if this login is "first time" (no refresh token existed before OTP)
+  // ✅ track if biometrics prompt should run after OTP success
   const [pendingFirstLoginBioPrompt, setPendingFirstLoginBioPrompt] =
     useState(false);
 
@@ -467,13 +500,15 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
 
   const maybeAskBiometricsOptIn = async (emailNorm: string) => {
     try {
-      // If user already decided before, don't ask again
-      const alreadyOpted = await SecureStore.getItemAsync(
+      // ✅ If user already enabled biometrics, never ask again
+      const currentOpt = await SecureStore.getItemAsync(
         bioOptInKeyForEmail(emailNorm)
       );
-      if (alreadyOpted === "1" || alreadyOpted === "0") {
-        return;
-      }
+      if (currentOpt === "1") return;
+
+      // ✅ If user tapped "Not now" recently, only ask again after 3 days
+      const allowedBySnooze = await canShowBioPromptNow(emailNorm);
+      if (!allowedBySnooze) return;
 
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const enrolled = await LocalAuthentication.isEnrolledAsync();
@@ -490,14 +525,19 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
           {
             text: "Not now",
             style: "cancel",
-            onPress: () => {
-              setBioOptInForEmail(emailNorm, false);
+            onPress: async () => {
+              // ✅ mark as "disabled" (so quick login won't trigger)
+              await setBioOptInForEmail(emailNorm, false);
+              // ✅ snooze next prompt for 3 days
+              await setBioSnoozeUntilMs(emailNorm, nowMs() + BIO_SNOOZE_MS);
             },
           },
           {
             text: "Enable",
-            onPress: () => {
-              setBioOptInForEmail(emailNorm, true);
+            onPress: async () => {
+              await setBioOptInForEmail(emailNorm, true);
+              // ✅ clear snooze so it doesn't block anything later
+              await setBioSnoozeUntilMs(emailNorm, 0);
             },
           },
         ]
@@ -560,7 +600,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
             onLoginSuccess();
             return;
           } catch (e: any) {
-            // ✅ IMPORTANT: Refresh errors are NOT invalid credentials
             const status = e?.status;
 
             console.log(`${TAG} refresh failed -> fallback to OTP`, {
@@ -569,7 +608,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
             });
 
             if (status === 401) {
-              // refresh token expired/invalid -> delete it so we don't loop forever
               await deleteRefreshTokenForEmail(emailNorm);
             }
 
@@ -582,14 +620,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
           console.log(
             `${TAG} biometrics not ok (${bio.reason}) -> send OTP fallback`
           );
-        }
-      } else {
-        if (storedRefresh && !bioOptedIn) {
-          console.log(
-            `${TAG} refresh exists but user did not opt-in to biometrics -> OTP`
-          );
-        } else {
-          console.log(`${TAG} no stored refresh token yet -> OTP required`);
         }
       }
 
@@ -609,7 +639,8 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         return;
       }
 
-      // ✅ Determine if this is the "first time" (no refresh token existed BEFORE OTP)
+      // ✅ "new user on this device" = no stored refresh token
+      // After OTP success, we attempt biometrics prompt (but snooze rules apply)
       setPendingFirstLoginBioPrompt(!storedRefresh);
 
       await loginSendOtpRequest(emailNorm, passwordNorm);
@@ -667,11 +698,12 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     }
   };
 
-  // ✅ Called after OTP verified
+  // ✅ Called after OTP verified (EnterVerificationModal already verifies on backend)
   const handleVerified = async (_code: string) => {
     setVerifyOpen(false);
 
-    // Only ask on first successful login for this account on this device
+    // ✅ If "new user on this device" => after OTP success, ask biometrics
+    // ✅ If they tapped "Not now" before, it will only show again after 3 days
     if (pendingFirstLoginBioPrompt && verifyEmail) {
       await maybeAskBiometricsOptIn(verifyEmail);
     }

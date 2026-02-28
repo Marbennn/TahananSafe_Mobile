@@ -1,5 +1,5 @@
 // src/screens/SettingsScreen.tsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,12 +10,29 @@ import {
   StatusBar,
   Platform,
   useWindowDimensions,
+  Alert,
+  Switch,
+  Modal,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { Colors } from "../theme/colors";
+
+// ✅ Auth context (for current account email)
+import { useAuth } from "../auth/AuthContext";
+
+// ✅ SecureStore for per-account flags/tokens
+import * as SecureStore from "expo-secure-store";
+
+// ✅ Needed to talk to backend and keep App.tsx routing correct
+import { getAccessToken, setHasPin, setPinSkippedForUser } from "../auth/session";
+import { setPinApi, getMeApi } from "../api/pin";
+
+// ✅ NEW: Verify Account card component
+import VerifyAccountCard from "../components/Settings/VerifyAccountCard";
 
 type Props = {
   onAccountPress?: () => void;
@@ -39,21 +56,109 @@ type Props = {
 type SettingItem = {
   key: string;
   label: string;
+  subtitle?: string;
+  icon: keyof typeof Ionicons.glyphMap;
   onPress?: () => void;
 };
 
 const BG = "#F5FAFE";
+
+/** SecureStore keys must only contain: A-Z a-z 0-9 . - _ */
+function safeKeyPart(input: string) {
+  return String(input || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, "_");
+}
+
+function bioOptInKeyForEmail(email: string) {
+  return `tahanansafe_bio_optin_${safeKeyPart(email)}`;
+}
+
+function pinEnabledKeyForEmail(email: string) {
+  return `tahanansafe_pin_enabled_${safeKeyPart(email)}`;
+}
+
+function pinValueKeyForEmail(email: string) {
+  return `tahanansafe_pin_value_${safeKeyPart(email)}`;
+}
+
+// ✅ Personalization (AsyncStorage) keys (per-account)
+function prefKey(email: string, suffix: string) {
+  const who = email ? safeKeyPart(email) : "guest";
+  return `tahanansafe_pref_${who}_${suffix}`;
+}
+
+async function getBioOptInForEmail(email: string): Promise<boolean> {
+  try {
+    const v = await SecureStore.getItemAsync(bioOptInKeyForEmail(email));
+    return v === "1";
+  } catch {
+    return false;
+  }
+}
+
+async function setBioOptInForEmail(email: string, enabled: boolean) {
+  try {
+    await SecureStore.setItemAsync(bioOptInKeyForEmail(email), enabled ? "1" : "0");
+  } catch {
+    // ignore
+  }
+}
+
+async function getPinEnabledForEmail(email: string): Promise<boolean> {
+  try {
+    const v = await SecureStore.getItemAsync(pinEnabledKeyForEmail(email));
+    return v === "1";
+  } catch {
+    return false;
+  }
+}
+
+async function setPinEnabledForEmail(email: string, enabled: boolean) {
+  try {
+    await SecureStore.setItemAsync(pinEnabledKeyForEmail(email), enabled ? "1" : "0");
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * NOTE:
+ * For security, it's better NOT to store the raw PIN on-device.
+ * But keeping your current behavior since your UI uses it as "exists" check.
+ */
+async function savePinForEmail(email: string, pin: string) {
+  try {
+    await SecureStore.setItemAsync(pinValueKeyForEmail(email), pin);
+  } catch {
+    // ignore
+  }
+}
+
+function maskEmail(email: string) {
+  const e = String(email || "").trim();
+  if (!e.includes("@")) return e;
+  const [name, domain] = e.split("@");
+  if (name.length <= 2) return `${name[0] ?? ""}*@${domain}`;
+  return `${name.slice(0, 2)}***@${domain}`;
+}
+
+function statusPillText(enabled?: boolean, loading?: boolean) {
+  if (loading) return "Loading";
+  return enabled ? "Enabled" : "Disabled";
+}
 
 export default function SettingsScreen({
   onAccountPress,
   onPrivacyPress,
   onHelpPress,
   onTermsPress,
-  onAboutPress,
-  onContactPress,
-  onFeedbackPress,
+  onAboutPress, // kept for compatibility (not used)
+  onContactPress, // kept for compatibility (not used)
+  onFeedbackPress, // kept for compatibility (not used)
   onLogout,
-  onQuickExit,
+  onQuickExit, // kept in props for compatibility; not shown in UI
   onTabChange,
   initialTab = "Settings",
   onFabPress,
@@ -69,14 +174,13 @@ export default function SettingsScreen({
   const vscale = (n: number) => Math.round(n * hScale);
 
   // icon sizes (numbers kept OUTSIDE styles)
-  const iconSize = scale(22);
+  const iconSize = scale(20);
+  const smallIcon = scale(16);
 
   const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
-
   const C = Colors as any;
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
-  const [query, setQuery] = useState("");
 
   // ✅ MATCH Hotlines/Reports sizing
   const NAV_BASE_HEIGHT = 78;
@@ -88,163 +192,875 @@ export default function SettingsScreen({
   const chevronBottom = navHeight + 90;
   const fabBottom = navHeight - FAB_SIZE / 2 - 10;
 
-  const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + 6;
-
-  const group1: SettingItem[] = useMemo(
-    () => [
-      { key: "account", label: "Account", onPress: onAccountPress },
-      { key: "privacy", label: "Privacy and Security", onPress: onPrivacyPress },
-      { key: "help", label: "Help and Support", onPress: onHelpPress },
-      { key: "terms", label: "Terms and Conditions", onPress: onTermsPress },
-    ],
-    [onAccountPress, onPrivacyPress, onHelpPress, onTermsPress]
-  );
-
-  const group2: SettingItem[] = useMemo(
-    () => [
-      { key: "about", label: "About", onPress: onAboutPress },
-      { key: "contact", label: "Contact", onPress: onContactPress },
-      { key: "feedback", label: "Feedback", onPress: onFeedbackPress },
-    ],
-    [onAboutPress, onContactPress, onFeedbackPress]
-  );
-
-  const q = query.trim().toLowerCase();
-  const filtered1 = useMemo(
-    () => (q ? group1.filter((i) => i.label.toLowerCase().includes(q)) : group1),
-    [group1, q]
-  );
-  const filtered2 = useMemo(
-    () => (q ? group2.filter((i) => i.label.toLowerCase().includes(q)) : group2),
-    [group2, q]
-  );
+  // ✅ More scrollable (extra breathing room at bottom)
+  const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + vscale(40);
 
   const screenBg = C.screenBg ?? C.background ?? BG;
   const surface = C.surface ?? C.card ?? "#FFFFFF";
-  const textDark = "#1F2A37";
-  const muted = C.mutedText ?? C.muted ?? "#9AA4B2";
+  const textDark = "#0F172A";
+  const muted = C.mutedText ?? C.muted ?? "#64748B";
   const primary = C.primary ?? Colors.primary ?? "#1E63D0";
   const divider = C.divider ?? "#E7EEF7";
+  const chipBg = "#EEF6FF";
 
   const handleTab = (tab: TabKey) => {
     setActiveTab(tab);
     onTabChange?.(tab);
   };
 
+  // ==========================
+  // ✅ Per-account security UI
+  // ==========================
+  const { user } = useAuth() as any;
+  const userEmail: string = (user?.email ? String(user.email) : "").trim().toLowerCase();
+
+  // ✅ Account modal
+  const [accountModalVisible, setAccountModalVisible] = useState(false);
+  const openAccountModal = () => setAccountModalVisible(true);
+  const closeAccountModal = () => setAccountModalVisible(false);
+
+  // ✅ Privacy & Security modal
+  const [psModalVisible, setPsModalVisible] = useState(false);
+  const openPrivacySecurity = () => setPsModalVisible(true);
+  const closePrivacySecurity = () => setPsModalVisible(false);
+
+  // ✅ Personalization modal (NEW)
+  const [persModalVisible, setPersModalVisible] = useState(false);
+  const openPersonalizationModal = () => setPersModalVisible(true);
+  const closePersonalizationModal = () => setPersModalVisible(false);
+
+  // Biometrics
+  const [bioEnabled, setBioEnabled] = useState(false);
+  const [bioLoading, setBioLoading] = useState(true);
+
+  const loadBioState = useCallback(async () => {
+    if (!userEmail) {
+      setBioEnabled(false);
+      setBioLoading(false);
+      return;
+    }
+    setBioLoading(true);
+    const enabled = await getBioOptInForEmail(userEmail);
+    setBioEnabled(enabled);
+    setBioLoading(false);
+  }, [userEmail]);
+
+  useEffect(() => {
+    loadBioState();
+  }, [loadBioState]);
+
+  const onToggleBiometrics = async (next: boolean) => {
+    if (!userEmail) return;
+
+    setBioEnabled(next);
+    await setBioOptInForEmail(userEmail, next);
+
+    if (!next) {
+      Alert.alert("Biometrics disabled", "Biometrics login is turned off for this account on this device.");
+    }
+  };
+
+  // PIN
+  const [pinEnabled, setPinEnabled] = useState(false);
+  const [pinLoading, setPinLoading] = useState(true);
+
+  const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [pinDraft, setPinDraft] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
+
+  const resetPinModal = () => {
+    setPinDraft("");
+    setPinConfirm("");
+  };
+
+  const loadPinState = useCallback(async () => {
+    if (!userEmail) {
+      setPinEnabled(false);
+      setPinLoading(false);
+      return;
+    }
+    setPinLoading(true);
+    const enabled = await getPinEnabledForEmail(userEmail);
+    setPinEnabled(enabled);
+    setPinLoading(false);
+  }, [userEmail]);
+
+  useEffect(() => {
+    loadPinState();
+  }, [loadPinState]);
+
+  const openPinSetup = () => {
+    resetPinModal();
+    setPinModalVisible(true);
+  };
+
+  const closePinSetup = () => {
+    setPinModalVisible(false);
+    resetPinModal();
+  };
+
+  // ✅ 4-digit PIN
+  const validatePin = (pin: string) => {
+    const trimmed = pin.trim();
+    if (!/^\d+$/.test(trimmed)) return { ok: false, msg: "PIN must be numbers only." as const };
+    if (trimmed.length !== 4) return { ok: false, msg: "PIN must be exactly 4 digits." as const };
+    return { ok: true, msg: "" as const };
+  };
+
+  /**
+   * ✅ IMPORTANT:
+   * - When enabling PIN, your App.tsx will ONLY show PinScreen if BACKEND hasPin === true.
+   * - So if server hasPin === false, we must force PIN setup (call setPinApi).
+   */
+  const onTogglePin = async (next: boolean) => {
+    if (!userEmail) return;
+
+    if (next) {
+      try {
+        const token = await getAccessToken();
+        if (token) {
+          const me = await getMeApi({ accessToken: token });
+          if (me?.user?.hasPin) {
+            await setPinEnabledForEmail(userEmail, true);
+            setPinEnabled(true);
+            await setHasPin(true);
+
+            try {
+              const userId = String(me.user._id);
+              await setPinSkippedForUser(userId, false);
+            } catch {
+              // ignore
+            }
+
+            Alert.alert("PIN enabled", "PIN login is now enabled for this account on this device.");
+            return;
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      openPinSetup();
+      return;
+    }
+
+    setPinEnabled(false);
+    await setPinEnabledForEmail(userEmail, false);
+    Alert.alert("PIN disabled", "PIN login is turned off for this account on this device.");
+  };
+
+  /**
+   * ✅ When saving a PIN from Settings, we MUST call setPinApi so backend sets hasPin=true.
+   */
+  const onSavePin = async () => {
+    if (!userEmail) return;
+
+    const a = validatePin(pinDraft);
+    if (!a.ok) {
+      Alert.alert("Invalid PIN", a.msg);
+      return;
+    }
+    const b = validatePin(pinConfirm);
+    if (!b.ok) {
+      Alert.alert("Invalid PIN", b.msg);
+      return;
+    }
+    if (pinDraft.trim() !== pinConfirm.trim()) {
+      Alert.alert("PIN mismatch", "PIN and confirmation do not match.");
+      return;
+    }
+
+    try {
+      setPinLoading(true);
+
+      const accessToken = await getAccessToken();
+      if (!accessToken) throw new Error("Session missing. Please login again.");
+
+      await setPinApi({ accessToken, pin: pinDraft.trim() });
+      await setHasPin(true);
+
+      try {
+        const me = await getMeApi({ accessToken });
+        const userId = String(me.user._id);
+        await setPinSkippedForUser(userId, false);
+      } catch {
+        // ignore
+      }
+
+      await setPinEnabledForEmail(userEmail, true);
+      setPinEnabled(true);
+
+      // keep existing behavior (not recommended, but consistent with your current code)
+      await savePinForEmail(userEmail, pinDraft.trim());
+
+      closePinSetup();
+      Alert.alert("PIN enabled", "PIN login is now enabled for this account on this device.");
+    } catch (e: any) {
+      Alert.alert("PIN Setup Failed", e?.message || "Something went wrong.");
+    } finally {
+      setPinLoading(false);
+    }
+  };
+
+  // ==========================
+  // ✅ Personalization settings (local-only)
+  // ==========================
+  const [prefCompact, setPrefCompact] = useState(false);
+  const [prefHaptics, setPrefHaptics] = useState(true);
+  const [prefSounds, setPrefSounds] = useState(true);
+
+  const loadPrefs = useCallback(async () => {
+    try {
+      const k1 = prefKey(userEmail, "compact");
+      const k2 = prefKey(userEmail, "haptics");
+      const k3 = prefKey(userEmail, "sounds");
+
+      const [a, b, c] = await Promise.all([
+        AsyncStorage.getItem(k1),
+        AsyncStorage.getItem(k2),
+        AsyncStorage.getItem(k3),
+      ]);
+
+      setPrefCompact(a === "1");
+      setPrefHaptics(b !== "0"); // default ON
+      setPrefSounds(c !== "0"); // default ON
+    } catch {
+      // ignore
+    }
+  }, [userEmail]);
+
+  useEffect(() => {
+    loadPrefs();
+  }, [loadPrefs]);
+
+  const savePref = useCallback(
+    async (suffix: string, val: boolean) => {
+      try {
+        await AsyncStorage.setItem(prefKey(userEmail, suffix), val ? "1" : "0");
+      } catch {
+        // ignore
+      }
+    },
+    [userEmail]
+  );
+
+  const onToggleCompact = async (next: boolean) => {
+    setPrefCompact(next);
+    await savePref("compact", next);
+  };
+
+  const onToggleHaptics = async (next: boolean) => {
+    setPrefHaptics(next);
+    await savePref("haptics", next);
+  };
+
+  const onToggleSounds = async (next: boolean) => {
+    setPrefSounds(next);
+    await savePref("sounds", next);
+  };
+
+  const onResetPersonalization = async () => {
+    try {
+      setPrefCompact(false);
+      setPrefHaptics(true);
+      setPrefSounds(true);
+      await Promise.all([
+        AsyncStorage.setItem(prefKey(userEmail, "compact"), "0"),
+        AsyncStorage.setItem(prefKey(userEmail, "haptics"), "1"),
+        AsyncStorage.setItem(prefKey(userEmail, "sounds"), "1"),
+      ]);
+      Alert.alert("Reset done", "Personalization settings were reset for this account on this device.");
+    } catch {
+      Alert.alert("Reset failed", "Could not reset settings. Please try again.");
+    }
+  };
+
+  // ==========================
+  // ✅ Main list rows (General)
+  // ==========================
+  const mainItems: SettingItem[] = useMemo(
+    () => [
+      {
+        key: "account",
+        label: "Account",
+        subtitle: "Profile, email, sessions",
+        icon: "person-circle-outline",
+        onPress: openAccountModal,
+      },
+      {
+        key: "privacy_security",
+        label: "Privacy and Security",
+        subtitle: "Permissions, biometrics, PIN",
+        icon: "lock-closed-outline",
+        onPress: openPrivacySecurity,
+      },
+      {
+        key: "help",
+        label: "Help and Support",
+        subtitle: "FAQs, contact support",
+        icon: "help-circle-outline",
+        onPress: onHelpPress,
+      },
+      {
+        key: "terms",
+        label: "Terms and Conditions",
+        subtitle: "Policies & agreements",
+        icon: "document-text-outline",
+        onPress: onTermsPress,
+      },
+      // ✅ Personalization now opens a modal (like Account)
+      {
+        key: "personalization",
+        label: "Personalization",
+        subtitle: "Layout, haptics, app sounds",
+        icon: "color-palette-outline",
+        onPress: openPersonalizationModal,
+      },
+    ],
+    [onHelpPress, onTermsPress]
+  );
+
+  const canManageSecurity = !!userEmail;
+  const currentStatusLabel = userEmail ? "Active" : "Guest";
+  const currentStatusIcon = userEmail ? "checkmark-circle-outline" : "alert-circle-outline";
+
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: screenBg }]}
-      edges={["top"]}
-    >
+    <SafeAreaView style={[styles.safe, { backgroundColor: screenBg }]} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
-      <View style={[styles.page, { backgroundColor: screenBg }]}>
-        {/* ✅ FIX GAP: remove extra paddingTop using insets.top */}
-        <View style={styles.topBar}>
-          <Text style={[styles.topTitle, { color: textDark }]}>Settings</Text>
-        </View>
+      {/* ✅ Account Modal */}
+      <Modal visible={accountModalVisible} transparent animationType="slide" onRequestClose={closeAccountModal}>
+        <View style={styles.accountModalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeAccountModal} />
+          <View style={[styles.accountModalSheet, { backgroundColor: surface, borderColor: divider }]}>
+            <View style={styles.accountModalHeader}>
+              <Text style={[styles.accountModalTitle, { color: textDark }]}>Account</Text>
 
-        {/* Search row */}
-        <View style={styles.searchRow}>
-          <View
-            style={[
-              styles.searchBox,
-              { borderColor: divider, backgroundColor: surface },
-            ]}
-          >
-            <Ionicons name="search-outline" size={iconSize} color={muted} />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search"
-              placeholderTextColor={muted}
-              style={styles.searchInput}
-              returnKeyType="search"
-            />
+              <Pressable onPress={closeAccountModal} hitSlop={10} style={styles.accountModalClose}>
+                <Ionicons name="close" size={iconSize} color={muted} />
+              </Pressable>
+            </View>
+
+            <View style={[styles.currentAccountRow, { borderColor: divider }]}>
+              <View style={[styles.currentAvatar, { backgroundColor: chipBg }]}>
+                <Ionicons name="person" size={scale(18)} color={primary} />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.currentTitle, { color: textDark }]}>Current Account</Text>
+                <Text style={[styles.currentSub, { color: muted }]}>
+                  {userEmail ? maskEmail(userEmail) : "Not signed in"}
+                </Text>
+              </View>
+
+              <View style={[styles.currentPill, { backgroundColor: chipBg }]}>
+                <Ionicons name={currentStatusIcon as any} size={smallIcon} color={primary} />
+                <Text style={[styles.currentPillText, { color: primary }]}>{currentStatusLabel}</Text>
+              </View>
+            </View>
+
+            <View style={[styles.line, { backgroundColor: divider }]} />
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountModalContent}>
+              <Pressable
+                onPress={() => {
+                  closeAccountModal();
+                  if (onAccountPress) onAccountPress();
+                  else Alert.alert("Profile", "Wire this to your Profile screen.");
+                }}
+                android_ripple={{ color: "rgba(0,0,0,0.06)" }}
+                style={styles.accountModalItem}
+              >
+                <View style={styles.settingLeft}>
+                  <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                    <Ionicons name="person-outline" size={iconSize} color={primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.settingTitle, { color: textDark }]}>Profile</Text>
+                    <Text style={[styles.settingSub, { color: muted }]}>Name, personal info</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={iconSize} color={primary} />
+              </Pressable>
+
+              <Pressable
+                onPress={() => Alert.alert("Email", "Wire this to your Email settings screen.")}
+                android_ripple={{ color: "rgba(0,0,0,0.06)" }}
+                style={styles.accountModalItem}
+              >
+                <View style={styles.settingLeft}>
+                  <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                    <Ionicons name="mail-outline" size={iconSize} color={primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.settingTitle, { color: textDark }]}>Email</Text>
+                    <Text style={[styles.settingSub, { color: muted }]}>Update email address</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={iconSize} color={primary} />
+              </Pressable>
+
+              <Pressable
+                onPress={() => Alert.alert("Sessions", "Wire this to your Sessions screen.")}
+                android_ripple={{ color: "rgba(0,0,0,0.06)" }}
+                style={styles.accountModalItem}
+              >
+                <View style={styles.settingLeft}>
+                  <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                    <Ionicons name="shield-checkmark-outline" size={iconSize} color={primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.settingTitle, { color: textDark }]}>Sessions</Text>
+                    <Text style={[styles.settingSub, { color: muted }]}>Logged-in devices</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={iconSize} color={primary} />
+              </Pressable>
+
+              <View style={{ height: vscale(12) }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ✅ Privacy & Security Modal */}
+      <Modal visible={psModalVisible} transparent animationType="slide" onRequestClose={closePrivacySecurity}>
+        <View style={styles.accountModalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closePrivacySecurity} />
+          <View style={[styles.psModalSheet, { backgroundColor: surface, borderColor: divider }]}>
+            <View style={styles.accountModalHeader}>
+              <Text style={[styles.accountModalTitle, { color: textDark }]}>Privacy and Security</Text>
+
+              <Pressable onPress={closePrivacySecurity} hitSlop={10} style={styles.accountModalClose}>
+                <Ionicons name="close" size={iconSize} color={muted} />
+              </Pressable>
+            </View>
+
+            <View style={[styles.currentAccountRow, { borderColor: divider }]}>
+              <View style={[styles.currentAvatar, { backgroundColor: chipBg }]}>
+                <Ionicons name="lock-closed" size={scale(18)} color={primary} />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.currentTitle, { color: textDark }]}>Current Account</Text>
+                <Text style={[styles.currentSub, { color: muted }]}>
+                  {userEmail ? maskEmail(userEmail) : "Not signed in"}
+                </Text>
+              </View>
+
+              <View style={[styles.currentPill, { backgroundColor: chipBg }]}>
+                <Ionicons name={currentStatusIcon as any} size={smallIcon} color={primary} />
+                <Text style={[styles.currentPillText, { color: primary }]}>{currentStatusLabel}</Text>
+              </View>
+            </View>
+
+            <View style={[styles.line, { backgroundColor: divider }]} />
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountModalContent}>
+              {/* Privacy */}
+              <Pressable
+                onPress={() => {
+                  closePrivacySecurity();
+                  onPrivacyPress?.();
+                }}
+                android_ripple={{ color: "rgba(0,0,0,0.06)" }}
+                style={styles.accountModalItem}
+              >
+                <View style={styles.settingLeft}>
+                  <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                    <Ionicons name="shield-checkmark-outline" size={iconSize} color={primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.settingTitle, { color: textDark }]}>Privacy</Text>
+                    <Text style={[styles.settingSub, { color: muted }]}>Permissions, data protection</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={iconSize} color={primary} />
+              </Pressable>
+
+              {/* Biometrics */}
+              <View style={[styles.accountModalItem, styles.psExpandedCard]}>
+                <View style={styles.psTopRow}>
+                  <View style={styles.settingLeft}>
+                    <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                      <Ionicons name="finger-print-outline" size={iconSize} color={primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.settingTitle, { color: textDark }]}>Biometrics</Text>
+                      <Text style={[styles.settingSub, { color: muted }]}>Face ID / fingerprint quick login</Text>
+                    </View>
+                  </View>
+
+                  <View style={[styles.statusChip, { backgroundColor: chipBg }]}>
+                    <Text style={[styles.statusChipText, { color: primary }]}>
+                      {statusPillText(bioEnabled, bioLoading)}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.line, { backgroundColor: divider }]} />
+
+                {!canManageSecurity ? (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="alert-circle-outline" size={scale(18)} color={muted} />
+                    <Text style={[styles.emptyText, { color: muted }]}>
+                      Log in first to manage biometrics and PIN per account.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.toggleWrap}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.toggleTitle, { color: textDark }]}>Use biometrics to login</Text>
+                      <Text style={[styles.toggleSub, { color: muted }]}>
+                        Enables biometric login for this account on this device.
+                      </Text>
+                    </View>
+
+                    <Switch
+                      value={bioEnabled}
+                      onValueChange={onToggleBiometrics}
+                      disabled={bioLoading}
+                      trackColor={{ false: "#D1D5DB", true: "#93C5FD" }}
+                      thumbColor={bioEnabled ? primary : "#F3F4F6"}
+                    />
+                  </View>
+                )}
+              </View>
+
+              {/* PIN */}
+              <View style={[styles.accountModalItem, styles.psExpandedCard]}>
+                <View style={styles.psTopRow}>
+                  <View style={styles.settingLeft}>
+                    <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                      <Ionicons name="keypad-outline" size={iconSize} color={primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.settingTitle, { color: textDark }]}>PIN</Text>
+                      <Text style={[styles.settingSub, { color: muted }]}>4-digit PIN as extra login option</Text>
+                    </View>
+                  </View>
+
+                  <View style={[styles.statusChip, { backgroundColor: chipBg }]}>
+                    <Text style={[styles.statusChipText, { color: primary }]}>
+                      {statusPillText(pinEnabled, pinLoading)}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.line, { backgroundColor: divider }]} />
+
+                {!canManageSecurity ? (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="alert-circle-outline" size={scale(18)} color={muted} />
+                    <Text style={[styles.emptyText, { color: muted }]}>Log in first to enable PIN for your account.</Text>
+                  </View>
+                ) : (
+                  <>
+                    <View style={styles.toggleWrap}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.toggleTitle, { color: textDark }]}>Enable PIN login</Text>
+                        <Text style={[styles.toggleSub, { color: muted }]}>
+                          Adds an extra security step for this account on this device.
+                        </Text>
+                      </View>
+
+                      <Switch
+                        value={pinEnabled}
+                        onValueChange={onTogglePin}
+                        disabled={pinLoading}
+                        trackColor={{ false: "#D1D5DB", true: "#93C5FD" }}
+                        thumbColor={pinEnabled ? primary : "#F3F4F6"}
+                      />
+                    </View>
+
+                    {!!userEmail && (
+                      <View style={styles.accountFoot}>
+                        <Ionicons name="mail-outline" size={smallIcon} color={muted} />
+                        <Text style={[styles.accountFootText, { color: muted }]}>Account: {userEmail}</Text>
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
+
+              <View style={{ height: vscale(12) }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ✅ Personalization Modal (NEW - behaves like Account modal) */}
+      <Modal visible={persModalVisible} transparent animationType="slide" onRequestClose={closePersonalizationModal}>
+        <View style={styles.accountModalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closePersonalizationModal} />
+          <View style={[styles.persModalSheet, { backgroundColor: surface, borderColor: divider }]}>
+            <View style={styles.accountModalHeader}>
+              <Text style={[styles.accountModalTitle, { color: textDark }]}>Personalization</Text>
+
+              <Pressable onPress={closePersonalizationModal} hitSlop={10} style={styles.accountModalClose}>
+                <Ionicons name="close" size={iconSize} color={muted} />
+              </Pressable>
+            </View>
+
+            <View style={[styles.currentAccountRow, { borderColor: divider }]}>
+              <View style={[styles.currentAvatar, { backgroundColor: chipBg }]}>
+                <Ionicons name="color-palette" size={scale(18)} color={primary} />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.currentTitle, { color: textDark }]}>Applies to</Text>
+                <Text style={[styles.currentSub, { color: muted }]}>
+                  {userEmail ? maskEmail(userEmail) : "Guest (this device)"}
+                </Text>
+              </View>
+
+              <View style={[styles.currentPill, { backgroundColor: chipBg }]}>
+                <Ionicons name={currentStatusIcon as any} size={smallIcon} color={primary} />
+                <Text style={[styles.currentPillText, { color: primary }]}>{currentStatusLabel}</Text>
+              </View>
+            </View>
+
+            <View style={[styles.line, { backgroundColor: divider }]} />
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountModalContent}>
+              {/* Compact layout */}
+              <View style={[styles.accountModalItem, styles.persExpandedCard]}>
+                <View style={styles.persTopRow}>
+                  <View style={styles.settingLeft}>
+                    <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                      <Ionicons name="contract-outline" size={iconSize} color={primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.settingTitle, { color: textDark }]}>Compact layout</Text>
+                      <Text style={[styles.settingSub, { color: muted }]}>Tighter spacing for lists and cards</Text>
+                    </View>
+                  </View>
+
+                  <Switch
+                    value={prefCompact}
+                    onValueChange={onToggleCompact}
+                    trackColor={{ false: "#D1D5DB", true: "#93C5FD" }}
+                    thumbColor={prefCompact ? primary : "#F3F4F6"}
+                  />
+                </View>
+
+                <View style={[styles.line, { backgroundColor: divider }]} />
+
+                {/* Haptics */}
+                <View style={styles.persTopRow}>
+                  <View style={styles.settingLeft}>
+                    <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                      <Ionicons name="phone-portrait-outline" size={iconSize} color={primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.settingTitle, { color: textDark }]}>Haptic feedback</Text>
+                      <Text style={[styles.settingSub, { color: muted }]}>Vibration feedback on key actions</Text>
+                    </View>
+                  </View>
+
+                  <Switch
+                    value={prefHaptics}
+                    onValueChange={onToggleHaptics}
+                    trackColor={{ false: "#D1D5DB", true: "#93C5FD" }}
+                    thumbColor={prefHaptics ? primary : "#F3F4F6"}
+                  />
+                </View>
+
+                <View style={[styles.line, { backgroundColor: divider }]} />
+
+                {/* Sounds */}
+                <View style={styles.persTopRow}>
+                  <View style={styles.settingLeft}>
+                    <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                      <Ionicons name="volume-high-outline" size={iconSize} color={primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.settingTitle, { color: textDark }]}>App sounds</Text>
+                      <Text style={[styles.settingSub, { color: muted }]}>Sound cues for notifications and actions</Text>
+                    </View>
+                  </View>
+
+                  <Switch
+                    value={prefSounds}
+                    onValueChange={onToggleSounds}
+                    trackColor={{ false: "#D1D5DB", true: "#93C5FD" }}
+                    thumbColor={prefSounds ? primary : "#F3F4F6"}
+                  />
+                </View>
+              </View>
+
+              {/* Reset */}
+              <Pressable
+                onPress={onResetPersonalization}
+                android_ripple={{ color: "rgba(0,0,0,0.06)" }}
+                style={styles.accountModalItem}
+              >
+                <View style={styles.settingLeft}>
+                  <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
+                    <Ionicons name="refresh-outline" size={iconSize} color={primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.settingTitle, { color: textDark }]}>Reset personalization</Text>
+                    <Text style={[styles.settingSub, { color: muted }]}>Restore default preferences for this account</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={iconSize} color={primary} />
+              </Pressable>
+
+              <View style={{ height: vscale(12) }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <View style={[styles.page, { backgroundColor: screenBg }]}>
+        {/* Header */}
+        <View style={styles.headerWrap}>
+          <View style={styles.headerTopRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.title, { color: textDark }]}>Settings</Text>
+              <Text style={[styles.subtitle, { color: muted }]}>Manage account, security, and app preferences</Text>
+            </View>
           </View>
         </View>
 
-        {/* Content */}
         <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: CONTENT_BOTTOM_PAD },
-          ]}
+          contentContainerStyle={[styles.content, { paddingBottom: CONTENT_BOTTOM_PAD }]}
           showsVerticalScrollIndicator={false}
+          bounces
+          alwaysBounceVertical
         >
-          {/* Group 1 */}
-          {filtered1.length > 0 && (
-            <View
-              style={[
-                styles.card,
-                { borderColor: divider, backgroundColor: surface },
-              ]}
-            >
-              {filtered1.map((item, idx) => (
-                <React.Fragment key={item.key}>
-                  <Pressable
-                    onPress={item.onPress}
-                    android_ripple={{ color: "rgba(0,0,0,0.06)" }}
-                    style={styles.row}
-                  >
-                    <Text style={[styles.rowText, { color: primary }]}>
-                      {item.label}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={iconSize} color={primary} />
-                  </Pressable>
+          {/* ✅ Verify Account Card */}
+          <VerifyAccountCard
+            primary={primary}
+            divider={divider}
+            surface={surface}
+            scale={scale}
+            vscale={vscale}
+            user={user}
+            userEmail={userEmail}
+            bioEnabled={bioEnabled}
+            pinEnabled={pinEnabled}
+            onOpenAccount={openAccountModal}
+            onOpenPrivacySecurity={openPrivacySecurity}
+            onOpenPinSetup={openPinSetup}
+          />
 
-                  {idx !== filtered1.length - 1 && (
-                    <View style={[styles.divider, { backgroundColor: divider }]} />
-                  )}
-                </React.Fragment>
-              ))}
-            </View>
-          )}
+          {/* ✅ ONE continuous card list */}
+          <View style={[styles.oneCard, { backgroundColor: surface, borderColor: divider }]}>
+            {mainItems.map((item, idx) => (
+              <React.Fragment key={item.key}>
+                <SettingRow
+                  label={item.label}
+                  subtitle={item.subtitle}
+                  icon={item.icon}
+                  onPress={item.onPress}
+                  primary={primary}
+                  muted={muted}
+                  textDark={textDark}
+                  divider={divider}
+                  iconSize={iconSize}
+                  styles={styles}
+                />
+                {idx !== mainItems.length - 1 && <View style={[styles.line, { backgroundColor: divider }]} />}
+              </React.Fragment>
+            ))}
+          </View>
 
-          {/* Group 2 */}
-          {filtered2.length > 0 && (
-            <View
-              style={[
-                styles.card,
-                { borderColor: divider, backgroundColor: surface },
-              ]}
-            >
-              {filtered2.map((item, idx) => (
-                <React.Fragment key={item.key}>
-                  <Pressable
-                    onPress={item.onPress}
-                    android_ripple={{ color: "rgba(0,0,0,0.06)" }}
-                    style={styles.row}
-                  >
-                    <Text style={[styles.rowText, { color: primary }]}>
-                      {item.label}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={iconSize} color={primary} />
-                  </Pressable>
-
-                  {idx !== filtered2.length - 1 && (
-                    <View style={[styles.divider, { backgroundColor: divider }]} />
-                  )}
-                </React.Fragment>
-              ))}
-            </View>
-          )}
-
-          {/* Logout */}
-          <View style={{ alignItems: "center", marginTop: vscale(16) }}>
-            <Pressable
-              onPress={onLogout}
-              style={[
-                styles.logoutBtn,
-                { borderColor: divider, backgroundColor: surface },
-              ]}
-              android_ripple={{ color: "rgba(0,0,0,0.06)" }}
-            >
-              <Ionicons name="log-out-outline" size={iconSize} color={primary} />
-              <Text style={[styles.logoutText, { color: primary }]}>Log out</Text>
+          {/* ✅ Logout card */}
+          <View style={[styles.logoutCard, { backgroundColor: surface, borderColor: divider }]}>
+            <Pressable onPress={onLogout} android_ripple={{ color: "rgba(0,0,0,0.06)" }} style={styles.settingRow}>
+              <View style={styles.settingLeft}>
+                <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
+                  <Ionicons name="log-out-outline" size={iconSize} color={primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.settingTitle, { color: textDark }]}>Log out</Text>
+                  <Text style={[styles.settingSub, { color: muted }]}>End your session on this device</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={iconSize} color={primary} />
             </Pressable>
           </View>
+
+          <View style={{ height: vscale(26) }} />
         </ScrollView>
+
+        {/* ✅ PIN setup modal (unchanged) */}
+        <Modal visible={pinModalVisible} transparent animationType="fade" onRequestClose={closePinSetup}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalCard, { backgroundColor: surface, borderColor: divider }]}>
+              <View style={styles.modalHeader}>
+                <View style={styles.modalHeaderLeft}>
+                  <View style={[styles.modalBadge, { backgroundColor: chipBg }]}>
+                    <Ionicons name="keypad-outline" size={iconSize} color={primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.modalTitle, { color: textDark }]}>Set your PIN</Text>
+                    <Text style={[styles.modalHint, { color: muted }]}>Create a 4-digit PIN (numbers only).</Text>
+                  </View>
+                </View>
+
+                <Pressable onPress={closePinSetup} hitSlop={10} style={styles.modalCloseBtn}>
+                  <Ionicons name="close" size={iconSize} color={muted} />
+                </Pressable>
+              </View>
+
+              <View style={styles.modalField}>
+                <Text style={[styles.modalLabel, { color: textDark }]}>PIN</Text>
+                <TextInput
+                  value={pinDraft}
+                  onChangeText={(t) => setPinDraft(t.replace(/[^\d]/g, ""))}
+                  keyboardType="number-pad"
+                  secureTextEntry
+                  maxLength={4}
+                  placeholder="Enter PIN"
+                  placeholderTextColor={muted}
+                  style={[styles.modalInput, { borderColor: divider, color: textDark }]}
+                />
+              </View>
+
+              <View style={styles.modalField}>
+                <Text style={[styles.modalLabel, { color: textDark }]}>Confirm PIN</Text>
+                <TextInput
+                  value={pinConfirm}
+                  onChangeText={(t) => setPinConfirm(t.replace(/[^\d]/g, ""))}
+                  keyboardType="number-pad"
+                  secureTextEntry
+                  maxLength={4}
+                  placeholder="Confirm PIN"
+                  placeholderTextColor={muted}
+                  style={[styles.modalInput, { borderColor: divider, color: textDark }]}
+                />
+              </View>
+
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={closePinSetup}
+                  style={[styles.modalBtn, styles.modalBtnGhost, { borderColor: divider }]}
+                  android_ripple={{ color: "rgba(0,0,0,0.06)" }}
+                >
+                  <Text style={[styles.modalBtnText, { color: textDark }]}>Cancel</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={onSavePin}
+                  style={[styles.modalBtn, { backgroundColor: primary, borderColor: primary }]}
+                  android_ripple={{ color: "rgba(255,255,255,0.18)" }}
+                >
+                  <Text style={[styles.modalBtnText, { color: "#fff" }]}>Save</Text>
+                </Pressable>
+              </View>
+
+              {!!userEmail && (
+                <View style={styles.modalFoot}>
+                  <Ionicons name="mail-outline" size={smallIcon} color={muted} />
+                  <Text style={[styles.modalFootText, { color: muted }]}>Account: {userEmail}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
 
         {/* Bottom nav */}
         <BottomNavBar
@@ -263,120 +1079,374 @@ export default function SettingsScreen({
   );
 }
 
+/** ---------- UI helpers ---------- */
+function SettingRow({
+  label,
+  subtitle,
+  icon,
+  onPress,
+  primary,
+  muted,
+  textDark,
+  divider,
+  iconSize,
+  styles,
+}: {
+  label: string;
+  subtitle?: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress?: () => void;
+  primary: string;
+  muted: string;
+  textDark: string;
+  divider: string;
+  iconSize: number;
+  styles: any;
+}) {
+  return (
+    <Pressable onPress={onPress} android_ripple={{ color: "rgba(0,0,0,0.06)" }} style={styles.settingRow}>
+      <View style={styles.settingLeft}>
+        <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+          <Ionicons name={icon} size={iconSize} color={primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.settingTitle, { color: textDark }]}>{label}</Text>
+          {!!subtitle && <Text style={[styles.settingSub, { color: muted }]}>{subtitle}</Text>}
+        </View>
+      </View>
+
+      <Ionicons name="chevron-forward" size={iconSize} color={primary} />
+    </Pressable>
+  );
+}
+
 function makeStyles(scale: (n: number) => number, vscale: (n: number) => number) {
-  const BORDER = "#E7EEF7";
-  const SEARCH_H = vscale(44);
-  const BTN_SIZE = vscale(44);
-  const ROW_H = vscale(54);
+  const CARD_R = scale(18);
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: BG },
     page: { flex: 1, backgroundColor: BG },
 
-    topBar: {
+    headerWrap: {
       paddingHorizontal: scale(16),
       paddingTop: vscale(6),
-      paddingBottom: vscale(10),
+      paddingBottom: vscale(8),
+    },
+    headerTopRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
+      gap: scale(12),
     },
-    topTitle: {
-      fontSize: scale(28),
-      fontWeight: "900",
-    },
+    title: { fontSize: scale(30), fontWeight: "900" },
 
-    quickExitBtn: {
-      width: BTN_SIZE,
-      height: BTN_SIZE,
-      borderRadius: Math.round(BTN_SIZE / 2),
-      borderWidth: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      ...Platform.select({
-        ios: {
-          shadowColor: "#000",
-          shadowOpacity: 0.06,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: 6 },
-        },
-        android: { elevation: 2 },
-      }),
-    },
-
-    searchRow: {
-      paddingHorizontal: scale(16),
-      paddingTop: vscale(6),
-      paddingBottom: vscale(10),
-    },
-    searchBox: {
-      height: SEARCH_H,
-      borderRadius: Math.round(SEARCH_H / 2),
-      borderWidth: 1,
-      paddingHorizontal: scale(14),
-      flexDirection: "row",
-      alignItems: "center",
-      gap: scale(10),
-    },
-    searchInput: {
-      flex: 1,
-      fontSize: scale(16),
-      color: "#111827",
-      paddingVertical: 0,
-      fontWeight: "600",
+    subtitle: {
+      marginTop: vscale(4),
+      fontSize: scale(12),
+      fontWeight: "500",
+      lineHeight: scale(16),
     },
 
     content: {
       paddingHorizontal: scale(16),
-      paddingTop: vscale(4),
+      paddingTop: vscale(6),
     },
 
-    card: {
-      borderRadius: scale(16),
+    oneCard: {
+      borderRadius: CARD_R,
       borderWidth: 1,
-      marginTop: vscale(12),
       overflow: "hidden",
-      ...Platform.select({
-        ios: {
-          shadowColor: "#000",
-          shadowOpacity: 0.06,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 8 },
-        },
-        android: { elevation: 2 },
-      }),
+      marginTop: vscale(12),
     },
-    row: {
-      height: ROW_H,
-      paddingHorizontal: scale(16),
+
+    logoutCard: {
+      borderRadius: CARD_R,
+      borderWidth: 1,
+      overflow: "hidden",
+      marginTop: vscale(12),
+    },
+
+    line: { height: StyleSheet.hairlineWidth, opacity: 1 },
+
+    settingRow: {
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(12),
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
+      gap: scale(12),
     },
-    rowText: { fontSize: scale(16), fontWeight: "800" },
-    divider: { height: StyleSheet.hairlineWidth, opacity: 1 },
 
-    logoutBtn: {
+    settingLeft: { flexDirection: "row", alignItems: "center", gap: scale(10), flex: 1 },
+    settingIconWrap: {
+      width: vscale(40),
+      height: vscale(40),
+      borderRadius: vscale(14),
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    settingTitle: { fontSize: scale(14), fontWeight: "900" },
+
+    settingSub: {
+      marginTop: vscale(2),
+      fontSize: scale(11),
+      fontWeight: "500",
+      lineHeight: scale(15),
+    },
+
+    // Status chip used in modal cards
+    statusChip: {
+      paddingHorizontal: scale(10),
+      paddingVertical: vscale(6),
+      borderRadius: vscale(14),
+      alignItems: "center",
+      justifyContent: "center",
+      minWidth: scale(82),
+    },
+    statusChipText: { fontSize: scale(12), fontWeight: "900" },
+
+    toggleWrap: {
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(12),
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: scale(12),
+    },
+    toggleTitle: { fontSize: scale(14), fontWeight: "900" },
+    toggleSub: {
+      marginTop: vscale(4),
+      fontSize: scale(11),
+      fontWeight: "500",
+      lineHeight: scale(15),
+    },
+
+    emptyState: {
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(12),
       flexDirection: "row",
       alignItems: "center",
       gap: scale(10),
-      paddingHorizontal: scale(18),
-      height: vscale(44),
-      borderRadius: vscale(22),
-      borderWidth: 1,
-      ...Platform.select({
-        ios: {
-          shadowColor: "#000",
-          shadowOpacity: 0.05,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: 6 },
-        },
-        android: { elevation: 1 },
-      }),
     },
-    logoutText: { fontSize: scale(16), fontWeight: "800" },
+    emptyText: { flex: 1, fontSize: scale(12), fontWeight: "500", lineHeight: scale(16) },
 
-    // keep for compatibility if you still use BORDER constant above
-    _border: { borderColor: BORDER },
+    accountFoot: {
+      paddingHorizontal: scale(14),
+      paddingBottom: vscale(12),
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(8),
+    },
+    accountFootText: { fontSize: scale(11), fontWeight: "500" },
+
+    // PIN Modal
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(15, 23, 42, 0.35)",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: scale(16),
+    },
+    modalCard: {
+      width: "100%",
+      maxWidth: 520,
+      borderRadius: CARD_R,
+      borderWidth: 1,
+      padding: scale(14),
+    },
+    modalHeader: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: scale(10),
+    },
+    modalHeaderLeft: { flexDirection: "row", alignItems: "center", gap: scale(10), flex: 1 },
+    modalBadge: {
+      width: vscale(40),
+      height: vscale(40),
+      borderRadius: vscale(14),
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modalTitle: { fontSize: scale(16), fontWeight: "900" },
+    modalHint: { marginTop: vscale(2), fontSize: scale(11), fontWeight: "500", lineHeight: scale(15) },
+    modalCloseBtn: {
+      width: vscale(36),
+      height: vscale(36),
+      borderRadius: vscale(18),
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modalField: { marginTop: vscale(12) },
+    modalLabel: { fontSize: scale(12), fontWeight: "900", marginBottom: vscale(6) },
+    modalInput: {
+      height: vscale(44),
+      borderWidth: 1,
+      borderRadius: vscale(12),
+      paddingHorizontal: scale(12),
+      fontSize: scale(16),
+      fontWeight: "600",
+    },
+    modalActions: {
+      marginTop: vscale(14),
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "flex-end",
+      gap: scale(10),
+    },
+    modalBtn: {
+      minWidth: scale(110),
+      height: vscale(42),
+      borderRadius: vscale(21),
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: scale(14),
+    },
+    modalBtnGhost: { backgroundColor: "transparent" },
+    modalBtnText: { fontSize: scale(14), fontWeight: "900" },
+    modalFoot: {
+      marginTop: vscale(10),
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(8),
+    },
+    modalFootText: { fontSize: scale(11), fontWeight: "500" },
+
+    // Account Modal Bottom Sheet
+    accountModalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(15, 23, 42, 0.35)",
+      justifyContent: "flex-end",
+    },
+    accountModalSheet: {
+      borderTopLeftRadius: CARD_R,
+      borderTopRightRadius: CARD_R,
+      borderWidth: 1,
+      overflow: "hidden",
+      paddingBottom: Platform.OS === "ios" ? vscale(12) : vscale(10),
+      maxHeight: "82%",
+    },
+    psModalSheet: {
+      borderTopLeftRadius: CARD_R,
+      borderTopRightRadius: CARD_R,
+      borderWidth: 1,
+      overflow: "hidden",
+      paddingBottom: Platform.OS === "ios" ? vscale(12) : vscale(10),
+      maxHeight: "86%",
+    },
+    // ✅ NEW: Personalization modal sizing
+    persModalSheet: {
+      borderTopLeftRadius: CARD_R,
+      borderTopRightRadius: CARD_R,
+      borderWidth: 1,
+      overflow: "hidden",
+      paddingBottom: Platform.OS === "ios" ? vscale(12) : vscale(10),
+      maxHeight: "86%",
+    },
+
+    accountModalHeader: {
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(12),
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: scale(10),
+    },
+    accountModalTitle: { fontSize: scale(16), fontWeight: "900" },
+    accountModalClose: {
+      width: vscale(36),
+      height: vscale(36),
+      borderRadius: vscale(18),
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    currentAccountRow: {
+      marginHorizontal: scale(14),
+      marginBottom: vscale(10),
+      borderRadius: CARD_R,
+      borderWidth: 1,
+      paddingHorizontal: scale(12),
+      paddingVertical: vscale(12),
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(10),
+    },
+    currentAvatar: {
+      width: vscale(40),
+      height: vscale(40),
+      borderRadius: vscale(20),
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    currentTitle: { fontSize: scale(12), fontWeight: "900" },
+    currentSub: { marginTop: vscale(2), fontSize: scale(12), fontWeight: "500" },
+
+    currentPill: {
+      paddingHorizontal: scale(10),
+      paddingVertical: vscale(6),
+      borderRadius: vscale(14),
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(6),
+    },
+    currentPillText: { fontSize: scale(12), fontWeight: "900" },
+
+    accountModalContent: {
+      paddingHorizontal: scale(14),
+      paddingBottom: vscale(16),
+      gap: vscale(10),
+    },
+    accountModalItem: {
+      borderRadius: CARD_R,
+      borderWidth: 1,
+      borderColor: "#E7EEF7",
+      backgroundColor: "#FFFFFF",
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(12),
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: scale(12),
+      overflow: "hidden",
+    },
+
+    // Expanded cards inside Privacy & Security modal
+    psExpandedCard: {
+      flexDirection: "column",
+      alignItems: "stretch",
+      justifyContent: "flex-start",
+      paddingHorizontal: 0,
+      paddingVertical: 0,
+      gap: 0,
+    },
+    psTopRow: {
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(12),
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: scale(12),
+    },
+
+    // ✅ Expanded card inside Personalization modal
+    persExpandedCard: {
+      flexDirection: "column",
+      alignItems: "stretch",
+      justifyContent: "flex-start",
+      paddingHorizontal: 0,
+      paddingVertical: 0,
+      gap: 0,
+    },
+    persTopRow: {
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(12),
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: scale(12),
+    },
   });
 }

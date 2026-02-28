@@ -12,6 +12,9 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 // ✅ Auth
 import { AuthProvider, useAuth } from "./src/auth/AuthContext";
 
+// ✅ SecureStore (for local PIN enable/disable toggle)
+import * as SecureStore from "expo-secure-store";
+
 // Screens
 import AppSplashScreen from "./src/screens/AppSplashScreen";
 import LoginScreen from "./src/screens/LoginScreen";
@@ -89,6 +92,33 @@ function formatDateLine(createdAt?: string) {
     return d.toLocaleString();
   } catch {
     return new Date().toLocaleString();
+  }
+}
+
+/* ===================== ✅ LOCAL PIN ENABLE FLAG (DEVICE-LEVEL) ===================== */
+/** SecureStore keys must only contain: A-Z a-z 0-9 . - _ */
+function safeKeyPart(input: string) {
+  return String(input || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, "_");
+}
+
+function pinEnabledKeyForEmail(email: string) {
+  return `tahanansafe_pin_enabled_${safeKeyPart(email)}`;
+}
+
+/**
+ * If key is missing, default to TRUE so existing users are not blocked.
+ * Settings toggle writes "1" (enabled) or "0" (disabled).
+ */
+async function isPinEnabledLocally(email: string): Promise<boolean> {
+  try {
+    const v = await SecureStore.getItemAsync(pinEnabledKeyForEmail(email));
+    if (v === null || v === undefined || String(v).trim() === "") return true; // default ON
+    return v === "1";
+  } catch {
+    return true; // safest UX: don't lock users out due to read error
   }
 }
 
@@ -257,12 +287,23 @@ async function bootstrapAfterLogin({
       const hasPin = !!me.user.hasPin;
       await setHasPin(hasPin);
 
-      if (hasPin) {
+      // ✅ NEW: device-level PIN enable/disable override
+      const email = String(me?.user?.email || "").trim().toLowerCase();
+      const pinLocalEnabled = email ? await isPinEnabledLocally(email) : true;
+
+      if (hasPin && pinLocalEnabled) {
         if (isPinUnlockedThisRun()) {
           navigation.reset({ index: 0, routes: [{ name: "Main" }] });
           return;
         }
         navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
+        return;
+      }
+
+      // ✅ If backend has PIN but user disabled it locally -> skip PIN screen
+      if (hasPin && !pinLocalEnabled) {
+        setPinUnlockedThisRun(true);
+        navigation.reset({ index: 0, routes: [{ name: "Main" }] });
         return;
       }
 
@@ -317,13 +358,12 @@ function MainScreenWrapper({ navigation, route }: { navigation: any; route: any 
   );
 }
 
-/* ===================== ✅ NEW: PIN SCREEN WRAPPER (SWITCH ACCOUNT FIX) ===================== */
+/* ===================== ✅ PIN SCREEN WRAPPER (WITH DISABLE-PIN BYPASS) ===================== */
 
 function PinScreenWrapper({ navigation }: { navigation: any }) {
   const auth = useAuth() as any;
 
   const handleBack = async () => {
-    // ✅ THIS is the fix:
     // Back from PIN means user wants to switch account -> full logout.
     resetPinUnlockedThisRun();
 
@@ -344,6 +384,11 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
       onBack={handleBack}
       onForgotPin={() => {
         Alert.alert("Forgot PIN", "Recovery coming soon.");
+      }}
+      // ✅ NEW: if user disabled PIN in Settings, PinScreen will call this and we skip to Main
+      onBypass={() => {
+        setPinUnlockedThisRun(true);
+        navigation.reset({ index: 0, routes: [{ name: "Main" }] });
       }}
       onVerified={async (pin) => {
         try {
@@ -462,9 +507,20 @@ function AppSplashScreenWrapper({
         await setHasPin(hasPin);
         if (!mounted) return;
 
-        if (hasPin) {
+        // ✅ NEW: device-level PIN enable/disable override (cold-start too)
+        const email = String(me?.user?.email || "").trim().toLowerCase();
+        const pinLocalEnabled = email ? await isPinEnabledLocally(email) : true;
+
+        if (hasPin && pinLocalEnabled) {
           if (isPinUnlockedThisRun()) onGoMain();
           else onGoPin();
+          return;
+        }
+
+        // ✅ If backend has PIN but user disabled it locally -> skip PIN
+        if (hasPin && !pinLocalEnabled) {
+          setPinUnlockedThisRun(true);
+          onGoMain();
           return;
         }
 
@@ -520,9 +576,7 @@ export default function App() {
                   <AppSplashScreenWrapper
                     onGoMain={() => navigation.reset({ index: 0, routes: [{ name: "Main" }] })}
                     onGoPin={() => navigation.reset({ index: 0, routes: [{ name: "Pin" }] })}
-                    onGoCreatePin={() =>
-                      navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] })
-                    }
+                    onGoCreatePin={() => navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] })}
                     onGoOnboarding={() => navigation.replace("OnboardingPager")}
                     onGoAuthFlow={() => navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })}
                   />
@@ -565,15 +619,11 @@ export default function App() {
               </Stack.Screen>
 
               <Stack.Screen name="Main">
-                {({ navigation, route }) => (
-                  <MainScreenWrapper navigation={navigation} route={route} />
-                )}
+                {({ navigation, route }) => <MainScreenWrapper navigation={navigation} route={route} />}
               </Stack.Screen>
 
               <Stack.Screen name="Notifications">
-                {({ navigation }) => (
-                  <NotificationsScreen onBack={() => navigation.goBack()} />
-                )}
+                {({ navigation }) => <NotificationsScreen onBack={() => navigation.goBack()} />}
               </Stack.Screen>
             </Stack.Navigator>
           </NavigationContainer>

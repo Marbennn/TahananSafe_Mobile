@@ -18,6 +18,7 @@ import {
   DeviceEventEmitter, // ✅ ADDED
   Linking, // ✅ ADDED
   Alert, // ✅ ADDED
+  Easing, // ✅ ADDED
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -612,6 +613,9 @@ export default function HomeScreen({
   const chevronOpen = useRef(new Animated.Value(0)).current;
   const chevronBounce = useRef(new Animated.Value(0)).current;
 
+  // ✅ NEW: Backdrop opacity animation (fixes "dim linger")
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+
   const startChevronBounce = useCallback(() => {
     chevronBounce.setValue(0);
     Animated.loop(
@@ -632,21 +636,78 @@ export default function HomeScreen({
   }, [sheetOpen, startChevronBounce, stopChevronBounce]);
 
   const openSheet = useCallback(() => {
+    // reset positions so open always feels instant
+    sheetY.stopAnimation();
+    chevronOpen.stopAnimation();
+    backdropOpacity.stopAnimation();
+
+    sheetY.setValue(SHEET_HEIGHT);
+    chevronOpen.setValue(0);
+    backdropOpacity.setValue(0);
+
     setSheetOpen(true);
+
+    // ✅ Make dim appear quickly & smoothly
     Animated.parallel([
-      Animated.timing(sheetY, { toValue: 0, duration: 240, useNativeDriver: true }),
-      Animated.timing(chevronOpen, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(backdropOpacity, {
+        toValue: 1,
+        duration: 140,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.spring(sheetY, {
+        toValue: 0,
+        useNativeDriver: true,
+        damping: 18,
+        stiffness: 220,
+        mass: 0.9,
+      }),
+      Animated.timing(chevronOpen, {
+        toValue: 1,
+        duration: 220,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
     ]).start();
-  }, [sheetY, chevronOpen]);
+  }, [sheetY, chevronOpen, backdropOpacity, SHEET_HEIGHT]);
 
   const closeSheet = useCallback(() => {
+    // ✅ Stop any running animations to avoid "lingering"
+    sheetY.stopAnimation();
+    chevronOpen.stopAnimation();
+    backdropOpacity.stopAnimation();
+
+    // ✅ Fade dim OUT fast, and close modal as soon as fade ends
     Animated.parallel([
-      Animated.timing(sheetY, { toValue: SHEET_HEIGHT, duration: 220, useNativeDriver: true }),
-      Animated.timing(chevronOpen, { toValue: 0, duration: 180, useNativeDriver: true }),
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 120, // 🔥 fast dim disappear
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+      // ✅ Use timing for snappy close (spring can feel slow on some devices)
+      Animated.timing(sheetY, {
+        toValue: SHEET_HEIGHT,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(chevronOpen, {
+        toValue: 0,
+        duration: 160,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      }),
     ]).start(({ finished }) => {
-      if (finished) setSheetOpen(false);
+      if (finished) {
+        // Ensure it's fully reset
+        sheetY.setValue(SHEET_HEIGHT);
+        chevronOpen.setValue(0);
+        backdropOpacity.setValue(0);
+        setSheetOpen(false);
+      }
     });
-  }, [sheetY, SHEET_HEIGHT, chevronOpen]);
+  }, [sheetY, SHEET_HEIGHT, chevronOpen, backdropOpacity]);
 
   const handlePan = useRef(
     PanResponder.create({
@@ -656,14 +717,34 @@ export default function HomeScreen({
         sheetY.setValue(next);
         const t = clamp(next / SHEET_HEIGHT, 0, 1);
         chevronOpen.setValue(1 - t);
+
+        // ✅ Backdrop follows drag (so when you drag down, dim reduces immediately)
+        backdropOpacity.setValue(1 - t);
       },
       onPanResponderRelease: (_, g) => {
         const shouldClose = g.dy > 60 || g.vy > 0.9;
         if (shouldClose) closeSheet();
         else {
           Animated.parallel([
-            Animated.timing(sheetY, { toValue: 0, duration: 190, useNativeDriver: true }),
-            Animated.timing(chevronOpen, { toValue: 1, duration: 190, useNativeDriver: true }),
+            Animated.timing(backdropOpacity, {
+              toValue: 1,
+              duration: 120,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: true,
+            }),
+            Animated.spring(sheetY, {
+              toValue: 0,
+              useNativeDriver: true,
+              damping: 18,
+              stiffness: 220,
+              mass: 0.9,
+            }),
+            Animated.timing(chevronOpen, {
+              toValue: 1,
+              duration: 190,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: true,
+            }),
           ]).start();
         }
       },
@@ -686,6 +767,30 @@ export default function HomeScreen({
   );
 
   const SHEET_TOTAL_HEIGHT = useMemo(() => SHEET_HEIGHT + bottomPad, [SHEET_HEIGHT, bottomPad]);
+
+  // ✅ NEW: Chevron should sit ABOVE the sheet when fully open
+  const CHEVRON_ABOVE_SHEET_GAP = useMemo(() => clamp(Math.round(10 * s), 8, 14), [s]);
+  const openBottom = useMemo(
+    () => SHEET_TOTAL_HEIGHT + CHEVRON_ABOVE_SHEET_GAP,
+    [SHEET_TOTAL_HEIGHT, CHEVRON_ABOVE_SHEET_GAP]
+  );
+
+  // distance we need to lift from the "closed position" to the "open-above-sheet position"
+  const deltaToOpen = useMemo(() => openBottom - chevronHandleBottom, [openBottom, chevronHandleBottom]);
+
+  // lift animation: 0 -> 1 moves chevron UP by deltaToOpen
+  const chevronLiftToOpen = useMemo(
+    () =>
+      chevronOpen.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, -deltaToOpen], // negative = move up
+        extrapolate: "clamp",
+      }),
+    [chevronOpen, deltaToOpen]
+  );
+
+  // ✅ Modal-layer chevron follows sheet drag (sheetY) AND transitions to the open-above-sheet position
+  const modalChevronTranslateY = useMemo(() => Animated.add(sheetY, chevronLiftToOpen), [sheetY, chevronLiftToOpen]);
 
   const chevronRotate = chevronOpen.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] });
   const bounceY = chevronBounce.interpolate({ inputRange: [-1, 0], outputRange: [-4, 0] });
@@ -831,6 +936,19 @@ export default function HomeScreen({
           justifyContent: "center",
           zIndex: 60,
         },
+
+        // ✅ NEW: chevron layer used inside the Modal (must be above the sheet)
+        chevronModalWrap: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: chevronHandleBottom, // base, then we transform translateY
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 999,
+          elevation: 999,
+        },
+
         chevronHandle: {
           width: clamp(Math.round(54 * s), 46, 64),
           height: clamp(Math.round(26 * s), 22, 30),
@@ -847,6 +965,7 @@ export default function HomeScreen({
           elevation: 6,
         },
 
+        // ✅ backdrop now controlled via Animated opacity (still same color)
         backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.18)" },
 
         sheetOuter: {
@@ -1061,21 +1180,23 @@ export default function HomeScreen({
           </View>
         </ScrollView>
 
-        {/* ✅ Chevron handle */}
-        <View style={styles.chevronHandleWrap} {...handleHandlePan.panHandlers}>
-          <Pressable
-            onPress={() => {
-              if (sheetOpen) closeSheet();
-              else openSheet();
-            }}
-            hitSlop={14}
-            style={({ pressed }) => [styles.chevronHandle, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
-          >
-            <Animated.View style={{ transform: [{ translateY: bounceY }, { rotate: chevronRotate }, { scale: chevronScale }] }}>
-              <Ionicons name="chevron-up" size={22} color={TEXT_DARK} />
-            </Animated.View>
-          </Pressable>
-        </View>
+        {/* ✅ Chevron handle (ONLY when sheet is CLOSED, because Modal sits on top when open) */}
+        {!sheetOpen ? (
+          <View style={styles.chevronHandleWrap} {...handleHandlePan.panHandlers}>
+            <Pressable
+              onPress={() => {
+                if (sheetOpen) closeSheet();
+                else openSheet();
+              }}
+              hitSlop={14}
+              style={({ pressed }) => [styles.chevronHandle, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
+            >
+              <Animated.View style={{ transform: [{ translateY: bounceY }, { rotate: chevronRotate }, { scale: chevronScale }] }}>
+                <Ionicons name="chevron-up" size={22} color={TEXT_DARK} />
+              </Animated.View>
+            </Pressable>
+          </View>
+        ) : null}
 
         {/* ✅ Bottom Nav */}
         <BottomNavBar
@@ -1108,18 +1229,46 @@ export default function HomeScreen({
         />
 
         {/* ✅ Swipe-up Sheet Modal */}
-        <Modal visible={sheetOpen} transparent animationType="none" onRequestClose={closeSheet}>
-          <Pressable style={styles.backdrop} onPress={closeSheet} />
+        <Modal
+          visible={sheetOpen}
+          transparent
+          animationType="none"
+          onRequestClose={closeSheet}
+          statusBarTranslucent // ✅ helps on Android (overlay)
+        >
+          {/* ✅ Animated backdrop (fixes dim lingering) */}
+          <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+            <Pressable style={{ flex: 1 }} onPress={closeSheet} />
+          </Animated.View>
+
+          {/* ✅ Chevron INSIDE modal so it can sit ABOVE the sheet and FOLLOW it */}
+          <Animated.View
+            style={[
+              styles.chevronModalWrap,
+              {
+                transform: [{ translateY: modalChevronTranslateY }],
+              },
+            ]}
+            {...handlePan.panHandlers} // ✅ allows drag from chevron too
+          >
+            <Pressable
+              onPress={() => closeSheet()}
+              hitSlop={14}
+              style={({ pressed }) => [styles.chevronHandle, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
+            >
+              <Animated.View style={{ transform: [{ rotate: chevronRotate }, { scale: chevronScale }] }}>
+                <Ionicons name="chevron-up" size={22} color={TEXT_DARK} />
+              </Animated.View>
+            </Pressable>
+          </Animated.View>
+
           <Animated.View style={[styles.sheetOuter, { transform: [{ translateY: sheetY }] }]}>
             <View style={styles.sheetCard} {...handlePan.panHandlers}>
               <View style={styles.sheetGrabber} />
 
               <Pressable
                 onPress={() => closeSheet()}
-                style={({ pressed }) => [
-                  styles.actionBtn,
-                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
-                ]}
+                style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
               >
                 <Ionicons name="warning-outline" size={20} color="#fff" style={styles.actionIcon} />
                 <Text style={styles.actionText} allowFontScaling={false}>
@@ -1132,10 +1281,7 @@ export default function HomeScreen({
                   closeSheet();
                   closeAndRemoveFromRecents();
                 }}
-                style={({ pressed }) => [
-                  styles.actionBtn,
-                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
-                ]}
+                style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
               >
                 <Ionicons name="eye-off-outline" size={20} color="#fff" style={styles.actionIcon} />
                 <Text style={styles.actionText} allowFontScaling={false}>
@@ -1144,26 +1290,26 @@ export default function HomeScreen({
               </Pressable>
 
               <Pressable
-              onPress={async () => {
-                closeSheet();
+                onPress={async () => {
+                  closeSheet();
 
-                try {
-                  // ✅ real logout: clears tokens + storage (session.ts)
-                  await logout();
+                  try {
+                    // ✅ real logout: clears tokens + storage (session.ts)
+                    await logout();
 
-                  // optional: parent can still react (navigate to login, etc.)
-                  onQuickExit?.();
-                } catch {
-                  // even if something fails, still call parent exit
-                  onQuickExit?.();
-                }
-              }}
-              style={({ pressed }) => [
-                styles.actionBtn,
-                styles.dangerBtn,
-                pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
-              ]}
-            >
+                    // optional: parent can still react (navigate to login, etc.)
+                    onQuickExit?.();
+                  } catch {
+                    // even if something fails, still call parent exit
+                    onQuickExit?.();
+                  }
+                }}
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  styles.dangerBtn,
+                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
+                ]}
+              >
                 <Ionicons name="log-out-outline" size={20} color="#fff" style={styles.actionIcon} />
                 <Text style={styles.actionText} allowFontScaling={false}>
                   Sign Out

@@ -1,5 +1,5 @@
 // src/screens/PinScreen.tsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -8,16 +8,30 @@ import {
   StatusBar,
   Platform,
   useWindowDimensions,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import NewLogo from "../../assets/NewLogo.svg";
 
+// ✅ Auth (to know which account is logged-in)
+import { useAuth } from "../auth/AuthContext";
+
+// ✅ SecureStore (to read the local PIN toggle)
+import * as SecureStore from "expo-secure-store";
+
 type Props = {
   onVerified: (pin: string) => void;
   onForgotPin: () => void;
   onBack?: () => void;
+
+  /**
+   * ✅ NEW:
+   * If PIN is disabled from Settings (device-level), we bypass this screen.
+   * In App.tsx PinScreenWrapper, pass: onBypass={() => navigation.reset({ index: 0, routes: [{ name: "Main" }] })}
+   */
+  onBypass?: () => void;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -27,7 +41,32 @@ function clamp(n: number, min: number, max: number) {
 const BLUE = "#1D4ED8";
 const BORDER = "#93C5FD";
 
-export default function PinScreen({ onVerified, onForgotPin, onBack }: Props) {
+/** SecureStore keys must only contain: A-Z a-z 0-9 . - _ */
+function safeKeyPart(input: string) {
+  return String(input || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, "_");
+}
+
+function pinEnabledKeyForEmail(email: string) {
+  return `tahanansafe_pin_enabled_${safeKeyPart(email)}`;
+}
+
+/**
+ * If key is missing -> default TRUE (so old users are not blocked)
+ */
+async function isPinEnabledLocally(email: string): Promise<boolean> {
+  try {
+    const v = await SecureStore.getItemAsync(pinEnabledKeyForEmail(email));
+    if (v === null || v === undefined || String(v).trim() === "") return true;
+    return v === "1";
+  } catch {
+    return true;
+  }
+}
+
+export default function PinScreen({ onVerified, onForgotPin, onBack, onBypass }: Props) {
   const { width, height } = useWindowDimensions();
 
   const s = clamp(width / 375, 0.95, 1.45);
@@ -39,6 +78,40 @@ export default function PinScreen({ onVerified, onForgotPin, onBack }: Props) {
 
   const [pin, setPin] = useState("");
   const PIN_LENGTH = 4;
+
+  // ✅ Check if PIN is disabled (device-level) then bypass this screen
+  const { user } = useAuth() as any;
+  const userEmail: string = (user?.email ? String(user.email) : "").trim().toLowerCase();
+  const [checkingLocal, setCheckingLocal] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        if (!userEmail) {
+          if (!mounted) return;
+          setCheckingLocal(false);
+          return;
+        }
+
+        const enabled = await isPinEnabledLocally(userEmail);
+        if (!mounted) return;
+
+        // If disabled locally, immediately bypass (go Main) if caller provided handler.
+        if (!enabled) {
+          onBypass?.();
+          return;
+        }
+      } finally {
+        if (mounted) setCheckingLocal(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [userEmail, onBypass]);
 
   const dots = useMemo(() => {
     return Array.from({ length: PIN_LENGTH }).map((_, i) => i < pin.length);
@@ -83,70 +156,82 @@ export default function PinScreen({ onVerified, onForgotPin, onBack }: Props) {
           <NewLogo width={scale(210)} height={scale(78)} />
         </View>
 
-        {/* Title + Dots */}
-        <View style={styles.pinHeader}>
-          <Text style={styles.title}>Enter Current PIN</Text>
-
-          <View style={styles.dotsRow}>
-            {dots.map((filled, idx) => (
-              <View
-                key={idx}
-                style={[
-                  styles.dot,
-                  filled ? styles.dotFilled : styles.dotEmpty,
-                ]}
-              />
-            ))}
+        {/* While checking local flag */}
+        {checkingLocal ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator />
+            <Text style={styles.loadingText}>Checking security settings...</Text>
           </View>
-        </View>
+        ) : (
+          <>
+            {/* Title + Dots */}
+            <View style={styles.pinHeader}>
+              <Text style={styles.title}>Enter Current PIN</Text>
 
-        {/* Keypad */}
-        <View style={styles.keypad}>
-          <View style={styles.keypadGrid}>
-            {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+              <View style={styles.dotsRow}>
+                {dots.map((filled, idx) => (
+                  <View
+                    key={idx}
+                    style={[styles.dot, filled ? styles.dotFilled : styles.dotEmpty]}
+                  />
+                ))}
+              </View>
+
+              {/* Optional help row */}
               <Pressable
-                key={d}
-                onPress={() => addDigit(d)}
+                onPress={onForgotPin}
                 hitSlop={10}
-                style={({ pressed }) => [
-                  styles.keyBtn,
-                  pressed && { transform: [{ scale: 0.98 }], opacity: 0.95 },
-                ]}
+                style={({ pressed }) => [styles.forgotBtn, pressed && { opacity: 0.7 }]}
               >
-                <Text style={styles.keyText}>{d}</Text>
+                <Text style={styles.forgotText}>Forgot PIN?</Text>
               </Pressable>
-            ))}
+            </View>
 
-            <View style={styles.keySpacer} />
+            {/* Keypad */}
+            <View style={styles.keypad}>
+              <View style={styles.keypadGrid}>
+                {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+                  <Pressable
+                    key={d}
+                    onPress={() => addDigit(d)}
+                    hitSlop={10}
+                    style={({ pressed }) => [
+                      styles.keyBtn,
+                      pressed && { transform: [{ scale: 0.98 }], opacity: 0.95 },
+                    ]}
+                  >
+                    <Text style={styles.keyText}>{d}</Text>
+                  </Pressable>
+                ))}
 
-            <Pressable
-              onPress={() => addDigit("0")}
-              hitSlop={10}
-              style={({ pressed }) => [
-                styles.keyBtn,
-                pressed && { transform: [{ scale: 0.98 }], opacity: 0.95 },
-              ]}
-            >
-              <Text style={styles.keyText}>0</Text>
-            </Pressable>
+                <View style={styles.keySpacer} />
 
-            {/* ✅ BIGGER backspace icon */}
-            <Pressable
-              onPress={backspace}
-              hitSlop={14}
-              style={({ pressed }) => [
-                styles.iconBtn,
-                pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 },
-              ]}
-            >
-              <Ionicons
-                name="backspace-outline"
-                size={scale(26)}
-                color={BLUE}
-              />
-            </Pressable>
-          </View>
-        </View>
+                <Pressable
+                  onPress={() => addDigit("0")}
+                  hitSlop={10}
+                  style={({ pressed }) => [
+                    styles.keyBtn,
+                    pressed && { transform: [{ scale: 0.98 }], opacity: 0.95 },
+                  ]}
+                >
+                  <Text style={styles.keyText}>0</Text>
+                </Pressable>
+
+                {/* ✅ BIGGER backspace icon */}
+                <Pressable
+                  onPress={backspace}
+                  hitSlop={14}
+                  style={({ pressed }) => [
+                    styles.iconBtn,
+                    pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 },
+                  ]}
+                >
+                  <Ionicons name="backspace-outline" size={scale(26)} color={BLUE} />
+                </Pressable>
+              </View>
+            </View>
+          </>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -159,7 +244,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
 
   const spaceLogoToTitle = clamp(vscale(22), 16, 30);
   const spaceTitleToDots = clamp(vscale(18), 14, 26);
-  const spaceDotsToKeypad = clamp(vscale(36), 26, 48);
+  const spaceDotsToKeypad = clamp(vscale(28), 22, 44);
   const keypadTop = clamp(vscale(10), 8, 18);
   const keypadRowGap = clamp(vscale(18), 14, 24);
 
@@ -194,6 +279,18 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       alignItems: "center",
     },
 
+    loadingWrap: {
+      marginTop: vscale(10),
+      alignItems: "center",
+      justifyContent: "center",
+      gap: vscale(10),
+    },
+    loadingText: {
+      fontSize: scale(12),
+      fontWeight: "800",
+      color: "#6B7280",
+    },
+
     pinHeader: {
       alignItems: "center",
     },
@@ -224,6 +321,18 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     dotFilled: {
       borderColor: BLUE,
       backgroundColor: BLUE,
+    },
+
+    forgotBtn: {
+      marginTop: vscale(2),
+      paddingVertical: vscale(6),
+      paddingHorizontal: scale(10),
+      borderRadius: scale(10),
+    },
+    forgotText: {
+      fontSize: scale(12),
+      fontWeight: "900",
+      color: BLUE,
     },
 
     keypad: {
