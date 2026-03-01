@@ -1138,7 +1138,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       justifyContent: "space-between",
       gap: scale(12),
     },
-    title: { fontSize: scale(30), fontWeight: "900" },
+
+    // ✅ CHANGED: from scale(30) -> scale(28) to match Hotlines + Reports
+    title: { fontSize: scale(28), fontWeight: "900" },
 
     subtitle: {
       marginTop: vscale(4),

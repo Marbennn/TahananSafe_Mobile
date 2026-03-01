@@ -16,155 +16,165 @@ export type LogItem = {
 
 type Props = {
   item: LogItem;
-  onPress: () => void;
+  onPress?: () => void;
 };
-
-const CARD_BORDER = "#E7EEF7";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function makeScale(width: number) {
+// simple scale (matches your “stable scale” approach)
+function makeScale(width: number, height: number) {
   const baseW = 375;
-  const s = clamp((width / baseW) * 1.03, 0.88, 1.18);
-  const fs = clamp(s * 1.06, 0.92, 1.28);
+  const baseH = 812;
+  const scaleW = width / baseW;
+  const scaleH = height / baseH;
+  const s = clamp(Math.min(scaleW, scaleH) * 1.04, 0.88, 1.28);
+  const fs = clamp(s * 1.06, 0.92, 1.32);
   return { s, fs };
 }
 
 export default function RecentLogCard({ item, onPress }: Props) {
-  const { width } = useWindowDimensions();
-  const { s, fs } = useMemo(() => makeScale(width), [width]);
+  const { width, height } = useWindowDimensions();
+  const { s, fs } = useMemo(() => makeScale(width, height), [width, height]);
 
-  const detailLines = width < 360 ? 3 : 2;
-
-  const S = useMemo(() => {
-    const padV = clamp(Math.round(16 * s), 12, 18);
-    const padH = clamp(Math.round(14 * s), 12, 18);
-
-    const barW = clamp(Math.round(4 * s), 3, 4);
-    const gap = clamp(Math.round(12 * s), 10, 14);
-
-    return StyleSheet.create({
-      card: {
-        flexDirection: "row",
-        backgroundColor: "#fff",
-        borderRadius: 16,
-        paddingVertical: padV,
-        paddingHorizontal: padH,
-        minHeight: clamp(Math.round(96 * s), 86, 112),
-        borderWidth: 1,
-        borderColor: CARD_BORDER,
-        shadowColor: "#000",
-        shadowOpacity: 0.04,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: 8 },
-        elevation: 2,
-      },
-
-      leftBar: {
-        width: barW,
-        borderRadius: 999,
-        backgroundColor: Colors.primary,
-        marginRight: gap,
-        alignSelf: "stretch",
-      },
-
-      body: {
-        flex: 1,
-        minWidth: 0, // ✅ important to prevent text causing horizontal overflow
-        paddingRight: clamp(Math.round(8 * s), 6, 10),
-      },
-
-      title: {
-        fontSize: clamp(Math.round(14 * fs), 12, 16),
-        fontWeight: "900",
-        color: Colors.primary,
-        marginBottom: clamp(Math.round(4 * s), 3, 6),
-      },
-
-      detail: {
-        fontSize: clamp(Math.round(12 * fs), 11, 14),
-        fontWeight: "600",
-        color: Colors.timestamp,
-        lineHeight: clamp(Math.round(17 * fs), 15, 19),
-        marginBottom: clamp(Math.round(10 * s), 8, 12),
-      },
-
-      metaRow: {
-        flexDirection: "row",
-        alignItems: "flex-end",
-        justifyContent: "space-between",
-      },
-
-      metaCol: {
-        flexShrink: 1,
-      },
-      metaColRight: {
-        alignItems: "flex-end",
-        flexShrink: 1,
-      },
-
-      metaDate: {
-        fontSize: clamp(Math.round(11 * fs), 10, 12),
-        fontWeight: "700",
-        color: Colors.timestamp,
-      },
-      metaTime: {
-        fontSize: clamp(Math.round(11 * fs), 10, 12),
-        fontWeight: "900",
-        color: Colors.heading,
-      },
-
-      chevWrap: {
-        width: clamp(Math.round(22 * s), 18, 26),
-        alignItems: "flex-end",
-        paddingTop: clamp(Math.round(6 * s), 4, 8),
-        justifyContent: "flex-start",
-      },
-    });
-  }, [s, fs]);
+  const styles = useMemo(() => makeStyles(s, fs), [s, fs]);
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [S.card, pressed && { opacity: 0.92, transform: [{ scale: 0.995 }] }]}
+      disabled={!onPress}
+      style={({ pressed }) => [styles.card, pressed && onPress ? { opacity: 0.92, transform: [{ scale: 0.995 }] } : null]}
+      hitSlop={8}
     >
-      <View style={S.leftBar} />
+      {/* left accent */}
+      <View style={styles.leftAccent} />
 
-      <View style={S.body}>
-        <Text style={S.title} numberOfLines={1} allowFontScaling={false}>
-          {item.title}
+      {/* content */}
+      <View style={styles.body}>
+        <View style={styles.topRow}>
+          <Text style={styles.title} numberOfLines={1} allowFontScaling={false}>
+            {item.title || "Other"}
+          </Text>
+
+          <Ionicons name="chevron-forward" size={clamp(Math.round(18 * fs), 16, 20)} color="#94A3B8" />
+        </View>
+
+        {/* ✅ Reserve 2 lines so every card has same height */}
+        <Text style={styles.detail} numberOfLines={2} ellipsizeMode="tail" allowFontScaling={false}>
+          {item.detail || "—"}
         </Text>
 
-        <Text style={S.detail} numberOfLines={detailLines} allowFontScaling={false}>
-          {item.detail}
-        </Text>
-
-        <View style={S.metaRow}>
-          <View style={S.metaCol}>
-            <Text style={S.metaDate} numberOfLines={1} allowFontScaling={false}>
-              {item.dateLeft}
+        <View style={styles.bottomRow}>
+          <View style={styles.col}>
+            <Text style={styles.metaLabel} numberOfLines={1} allowFontScaling={false}>
+              {item.dateLeft || "—"}
             </Text>
-            <Text style={S.metaTime} numberOfLines={1} allowFontScaling={false}>
-              {item.timeLeft}
+            <Text style={styles.metaValue} numberOfLines={1} allowFontScaling={false}>
+              {item.timeLeft || "—"}
             </Text>
           </View>
 
-          <View style={S.metaColRight}>
-            <Text style={S.metaDate} numberOfLines={1} allowFontScaling={false}>
-              {item.dateRight}
+          <View style={styles.colRight}>
+            <Text style={styles.metaLabel} numberOfLines={1} allowFontScaling={false}>
+              {item.dateRight || "—"}
             </Text>
-            <Text style={S.metaTime} numberOfLines={1} allowFontScaling={false}>
-              {item.timeRight}
+            <Text style={styles.metaValue} numberOfLines={1} allowFontScaling={false}>
+              {item.timeRight || "—"}
             </Text>
           </View>
         </View>
       </View>
-
-      <View style={S.chevWrap}>
-        <Ionicons name="chevron-forward" size={clamp(Math.round(18 * s), 16, 20)} color={Colors.heading} />
-      </View>
     </Pressable>
   );
+}
+
+function makeStyles(s: number, fs: number) {
+  const R = clamp(Math.round(16 * s), 14, 18);
+  const PAD_X = clamp(Math.round(14 * s), 12, 16);
+  const PAD_Y = clamp(Math.round(12 * s), 10, 14);
+
+  // ✅ Two-line reservation math
+  const detailFont = clamp(Math.round(12 * fs), 11, 13);
+  const detailLine = clamp(Math.round(16 * fs), 14, 18);
+  const detailMinH = detailLine * 2; // 2 lines always
+
+  return StyleSheet.create({
+    card: {
+      flexDirection: "row",
+      alignItems: "stretch",
+      borderRadius: R,
+      backgroundColor: "#FFFFFF",
+      borderWidth: 1,
+      borderColor: "#E7EEF7",
+
+      // ✅ Make overall height consistent even if other parts vary slightly
+      minHeight: clamp(Math.round(96 * s), 90, 112),
+
+      // remove heavy shadows (your style preference)
+      shadowColor: "#000",
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      elevation: 0,
+      overflow: "hidden",
+    },
+
+    leftAccent: {
+      width: clamp(Math.round(4 * s), 4, 6),
+      backgroundColor: Colors.primary,
+    },
+
+    body: {
+      flex: 1,
+      paddingHorizontal: PAD_X,
+      paddingVertical: PAD_Y,
+    },
+
+    topRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: clamp(Math.round(10 * s), 8, 12),
+    },
+
+    title: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: clamp(Math.round(14 * fs), 13, 16),
+      fontWeight: "900",
+      color: "#0B2B45",
+    },
+
+    detail: {
+      marginTop: clamp(Math.round(4 * s), 3, 6),
+      fontSize: detailFont,
+      lineHeight: detailLine,
+      fontWeight: "600",
+      color: "#64748B",
+      minHeight: detailMinH, // ✅ reserves space so cards match
+    },
+
+    bottomRow: {
+      marginTop: clamp(Math.round(8 * s), 6, 10),
+      flexDirection: "row",
+      alignItems: "flex-end",
+      justifyContent: "space-between",
+      gap: clamp(Math.round(10 * s), 8, 12),
+    },
+
+    col: { flex: 1, minWidth: 0 },
+    colRight: { flex: 1, minWidth: 0, alignItems: "flex-end" },
+
+    metaLabel: {
+      fontSize: clamp(Math.round(10 * fs), 10, 12),
+      fontWeight: "700",
+      color: "#94A3B8",
+    },
+    metaValue: {
+      marginTop: clamp(Math.round(2 * s), 1, 3),
+      fontSize: clamp(Math.round(12 * fs), 11, 14),
+      fontWeight: "900",
+      color: "#0B2B45",
+    },
+  });
 }

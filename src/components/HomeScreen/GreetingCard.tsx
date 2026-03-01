@@ -1,5 +1,5 @@
 // src/components/HomeScreen/GreetingCard.tsx
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -32,6 +32,9 @@ const HEIGHT_FACTOR = 0.9;
 
 const CARD_BG = "#0B3A5A";
 
+// ✅ Auto slide interval
+const AUTO_SLIDE_MS = 4500;
+
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
@@ -44,11 +47,7 @@ function makeScale(width: number) {
   return { s, fs };
 }
 
-export default function GreetingCard({
-  greeting,
-  dateLine,
-  userName = "User",
-}: Props) {
+export default function GreetingCard({ greeting, dateLine, userName = "User" }: Props) {
   const { width: screenW } = useWindowDimensions();
   const { s, fs } = useMemo(() => makeScale(screenW), [screenW]);
 
@@ -79,6 +78,51 @@ export default function GreetingCard({
   const baseXRef = useRef(0);
   const isDraggingRef = useRef(false);
 
+  // ✅ keep refs for auto-slide
+  const activeIndexRef = useRef(0);
+  useEffect(() => {
+    activeIndexRef.current = activeIndex;
+  }, [activeIndex]);
+
+  const goToIndex = useCallback(
+    (nextIndex: number) => {
+      const w = widthRef.current;
+      if (!w) return;
+
+      const idx = clamp(nextIndex, 0, SLIDE_COUNT - 1);
+      const toValue = -idx * w;
+
+      translateX.stopAnimation((v: number) => {
+        baseXRef.current = v;
+      });
+
+      Animated.spring(translateX, {
+        toValue: snapToPx(toValue),
+        useNativeDriver: true,
+        bounciness: 0,
+        speed: 18,
+      }).start(() => {
+        baseXRef.current = toValue;
+        setActiveIndex(idx);
+      });
+    },
+    [translateX, snapToPx]
+  );
+
+  // ✅ AUTO SLIDE (pauses while dragging; waits for layout)
+  useEffect(() => {
+    if (size.w <= 0 || size.h <= 0) return;
+
+    const id = setInterval(() => {
+      if (isDraggingRef.current) return;
+      const cur = activeIndexRef.current;
+      const next = (cur + 1) % SLIDE_COUNT;
+      goToIndex(next);
+    }, AUTO_SLIDE_MS);
+
+    return () => clearInterval(id);
+  }, [size.w, size.h, goToIndex]);
+
   const onLayout = useCallback(
     (e: LayoutChangeEvent) => {
       const { width: w0, height: h0 } = e.nativeEvent.layout;
@@ -91,13 +135,13 @@ export default function GreetingCard({
         widthRef.current = w;
 
         if (!isDraggingRef.current) {
-          const base = -activeIndex * w;
+          const base = -activeIndexRef.current * w;
           baseXRef.current = base;
           translateX.setValue(base);
         }
       }
     },
-    [activeIndex, translateX]
+    [translateX]
   );
 
   const panResponder = useMemo(() => {
@@ -168,7 +212,7 @@ export default function GreetingCard({
 
       onPanResponderTerminate: () => {
         const w = widthRef.current;
-        const toValue = w ? -activeIndex * w : 0;
+        const toValue = w ? -activeIndexRef.current * w : 0;
 
         Animated.spring(translateX, {
           toValue: snapToPx(toValue),
@@ -181,7 +225,7 @@ export default function GreetingCard({
         });
       },
     });
-  }, [activeIndex, s, translateX, snapToPx]);
+  }, [s, translateX, snapToPx]);
 
   const w = Math.max(size.w, 1);
 
@@ -196,8 +240,6 @@ export default function GreetingCard({
   );
 
   const rightCropPad = useMemo(() => {
-    // Instead of a fixed 110*s, crop based on actual card width
-    // Keeps text safe on small phones.
     const pct = 0.34; // ~34% reserved for right art area
     const px = Math.round(cardWApprox * pct);
     return clamp(px, Math.round(86 * s), Math.round(150 * s));
@@ -214,12 +256,12 @@ export default function GreetingCard({
 
           ...Platform.select({
             ios: {
-              shadowColor: "#000",
-              shadowOpacity: 0.06,
-              shadowRadius: 12,
-              shadowOffset: { width: 0, height: 8 },
+              shadowColor: "transparent",
+              shadowOpacity: 0,
+              shadowRadius: 0,
+              shadowOffset: { width: 0, height: 0 },
             },
-            android: { elevation: 2 },
+            android: { elevation: 0 },
           }),
         },
 
@@ -294,12 +336,7 @@ export default function GreetingCard({
 
   return (
     <View style={styles.cardOuter} {...panResponder.panHandlers}>
-      <View
-        style={styles.cardClip}
-        onLayout={onLayout}
-        renderToHardwareTextureAndroid
-        needsOffscreenAlphaCompositing
-      >
+      <View style={styles.cardClip} onLayout={onLayout} renderToHardwareTextureAndroid needsOffscreenAlphaCompositing>
         {size.w > 0 && size.h > 0 ? (
           <Animated.View
             style={[

@@ -5,7 +5,6 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  ScrollView,
   StatusBar,
   TextInput,
   useWindowDimensions,
@@ -13,6 +12,8 @@ import {
   RefreshControl,
   Platform,
   Alert,
+  SectionList,
+  Modal,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -24,6 +25,7 @@ import {
   markAllNotificationsReadCombined,
   toggleNotificationReadCombined,
   clearAllNotificationsCombined,
+  deleteNotificationCombined, // ✅ ADD THIS
   type NotificationItem,
   type NotifType,
 } from "../api/notifications";
@@ -38,6 +40,9 @@ type Props = {
 const BG = "#F5FAFE";
 const BORDER = "#E7EEF7";
 const TEXT_DARK = "#0B2B45";
+const SUBTLE = "#64748B";
+
+type FilterKey = "all" | "unread" | "alert" | "report" | "info";
 
 function iconForType(t: NotifType): keyof typeof Ionicons.glyphMap {
   if (t === "alert") return "warning-outline";
@@ -77,6 +82,43 @@ function formatTimeLabel(isoOrAny: string) {
 
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${months[d.getMonth()]} ${d.getDate()} • ${time}`;
+}
+
+function groupLabelFromDate(isoOrAny: string) {
+  const d = new Date(isoOrAny);
+  if (Number.isNaN(d.getTime())) return "Earlier";
+
+  const now = new Date();
+  const isSameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday =
+    d.getFullYear() === yesterday.getFullYear() &&
+    d.getMonth() === yesterday.getMonth() &&
+    d.getDate() === yesterday.getDate();
+
+  if (isSameDay) return "Today";
+  if (isYesterday) return "Yesterday";
+
+  const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+  return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
 // ✅ Use your Expo .env variable (ngrok or LAN IP)
@@ -181,6 +223,14 @@ async function fetchMyReportDetailAsReportItem(incidentId: string): Promise<Repo
   return mapped;
 }
 
+type NotifVM = NotificationItem & {
+  timeLabel: string;
+  groupLabel: string;
+  _ts: number; // for sorting
+};
+
+type SectionT = { title: string; data: NotifVM[]; sortKey: number };
+
 export default function NotificationsScreen({ onBack }: Props) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -195,26 +245,41 @@ export default function NotificationsScreen({ onBack }: Props) {
   const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
 
   const [query, setQuery] = useState("");
-  const [items, setItems] = useState<NotificationItem[]>([]);
+  const [items, setItems] = useState<NotifVM[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [openingId, setOpeningId] = useState<string | null>(null);
 
-  const unreadCount = useMemo(() => items.filter((i) => i.unread).length, [items]);
+  const [filter, setFilter] = useState<FilterKey>("all");
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((i) => `${i.title} ${i.message} ${i.time}`.toLowerCase().includes(q));
-  }, [items, query]);
+  // Top-right menu (quick actions for all)
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Long-press menu (per item)
+  const [itemMenuOpen, setItemMenuOpen] = useState(false);
+  const [itemMenu, setItemMenu] = useState<NotifVM | null>(null);
+
+  const unreadCount = useMemo(() => items.filter((i) => i.unread).length, [items]);
 
   const load = useCallback(async () => {
     try {
       setErrorMsg("");
       setLoading(true);
       const list = await fetchMyNotificationsCombined(80);
-      const mapped = list.map((n) => ({ ...n, time: formatTimeLabel(n.time) }));
+
+      const mapped: NotifVM[] = list.map((n) => {
+        const d = new Date(n.time);
+        const ts = Number.isNaN(d.getTime()) ? Date.now() : d.getTime();
+        return {
+          ...n,
+          timeLabel: formatTimeLabel(n.time),
+          groupLabel: groupLabelFromDate(n.time),
+          _ts: ts,
+        };
+      });
+
+      mapped.sort((a, b) => b._ts - a._ts);
       setItems(mapped);
     } catch (e: any) {
       setErrorMsg(e?.message ? String(e.message) : "Failed to load notifications.");
@@ -233,7 +298,20 @@ export default function NotificationsScreen({ onBack }: Props) {
       setRefreshing(true);
       setErrorMsg("");
       const list = await fetchMyNotificationsCombined(80);
-      setItems(list.map((n) => ({ ...n, time: formatTimeLabel(n.time) })));
+
+      const mapped: NotifVM[] = list.map((n) => {
+        const d = new Date(n.time);
+        const ts = Number.isNaN(d.getTime()) ? Date.now() : d.getTime();
+        return {
+          ...n,
+          timeLabel: formatTimeLabel(n.time),
+          groupLabel: groupLabelFromDate(n.time),
+          _ts: ts,
+        };
+      });
+
+      mapped.sort((a, b) => b._ts - a._ts);
+      setItems(mapped);
     } catch (e: any) {
       setErrorMsg(e?.message ? String(e.message) : "Failed to refresh notifications.");
     } finally {
@@ -241,7 +319,61 @@ export default function NotificationsScreen({ onBack }: Props) {
     }
   }, []);
 
+  const applyFilter = useCallback(
+    (list: NotifVM[]) => {
+      let out = list;
+
+      if (filter === "unread") out = out.filter((n) => n.unread);
+      if (filter === "alert") out = out.filter((n) => n.type === "alert");
+      if (filter === "report") out = out.filter((n) => n.type === "report");
+      if (filter === "info") out = out.filter((n) => n.type !== "alert" && n.type !== "report");
+
+      const q = query.trim().toLowerCase();
+      if (q) {
+        out = out.filter((n) => `${n.title} ${n.message} ${n.timeLabel}`.toLowerCase().includes(q));
+      }
+
+      return out;
+    },
+    [filter, query]
+  );
+
+  const filtered = useMemo(() => applyFilter(items), [applyFilter, items]);
+
+  const sections = useMemo(() => {
+    const map = new Map<string, NotifVM[]>();
+    for (const n of filtered) {
+      const k = n.groupLabel || "Earlier";
+      const arr = map.get(k) ?? [];
+      arr.push(n);
+      map.set(k, arr);
+    }
+
+    const toSortKey = (title: string) => {
+      if (title === "Today") return 3;
+      if (title === "Yesterday") return 2;
+      return 1;
+    };
+
+    const secs: SectionT[] = Array.from(map.entries()).map(([title, data]) => {
+      const sortKey = toSortKey(title);
+      data.sort((a, b) => b._ts - a._ts);
+      return { title, data, sortKey };
+    });
+
+    secs.sort((a, b) => {
+      if (a.sortKey !== b.sortKey) return b.sortKey - a.sortKey;
+      const aNewest = a.data[0]?._ts ?? 0;
+      const bNewest = b.data[0]?._ts ?? 0;
+      return bNewest - aNewest;
+    });
+
+    return secs;
+  }, [filtered]);
+
+  // -------- Global actions --------
   const markAllRead = useCallback(async () => {
+    setMenuOpen(false);
     try {
       setItems((prev) => prev.map((x) => ({ ...x, unread: false })));
       await markAllNotificationsReadCombined();
@@ -252,22 +384,96 @@ export default function NotificationsScreen({ onBack }: Props) {
   }, [load]);
 
   const clearAll = useCallback(async () => {
-    try {
-      setItems([]);
-      await clearAllNotificationsCombined();
-    } catch (e: any) {
-      await load();
-      setErrorMsg(e?.message ? String(e.message) : "Failed to clear notifications.");
-    }
+    setMenuOpen(false);
+    Alert.alert("Clear notifications", "This will remove all notifications from this device view.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Clear all",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setItems([]);
+            await clearAllNotificationsCombined();
+          } catch (e: any) {
+            await load();
+            setErrorMsg(e?.message ? String(e.message) : "Failed to clear notifications.");
+          }
+        },
+      },
+    ]);
   }, [load]);
 
+  // -------- Per-item actions (long press) --------
+  const openItemMenu = useCallback((n: NotifVM) => {
+    setItemMenu(n);
+    setItemMenuOpen(true);
+  }, []);
+
+  const closeItemMenu = useCallback(() => {
+    setItemMenuOpen(false);
+    setTimeout(() => setItemMenu(null), 150);
+  }, []);
+
+  const setUnreadLocal = useCallback((id: string, unread: boolean) => {
+    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, unread } : x)));
+  }, []);
+
+  const toggleReadFromMenu = useCallback(async () => {
+    const n = itemMenu;
+    if (!n) return;
+
+    closeItemMenu();
+    try {
+      const nextUnread = !n.unread;
+      setUnreadLocal(n.id, nextUnread);
+
+      await toggleNotificationReadCombined(n.id);
+    } catch (e: any) {
+      await load();
+      Alert.alert("Update failed", e?.message ? String(e.message) : "Failed to update notification.");
+    }
+  }, [closeItemMenu, itemMenu, load, setUnreadLocal]);
+
+  // ✅ FIXED: delete = remove locally + call deleteNotificationCombined (local/remote)
+  const deleteSingleFromMenu = useCallback(async () => {
+    const n = itemMenu;
+    if (!n) return;
+
+    closeItemMenu();
+
+    Alert.alert("Delete notification", "Remove this notification from the list?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          const snapshot = items; // for rollback
+          // optimistic remove
+          setItems((prev) => prev.filter((x) => x.id !== n.id));
+
+          try {
+            await deleteNotificationCombined(n.id);
+            // optional: re-sync quickly to reflect server truth
+            // await load();
+          } catch (e: any) {
+            // rollback if API failed (so it won't "ghost delete")
+            setItems(snapshot);
+            Alert.alert(
+              "Delete failed",
+              e?.message ? String(e.message) : "Failed to delete notification. Please try again."
+            );
+          }
+        },
+      },
+    ]);
+  }, [closeItemMenu, itemMenu, items]);
+
   const openNotification = useCallback(
-    async (n: NotificationItem) => {
+    async (n: NotifVM) => {
       try {
         if (openingId) return;
         setOpeningId(n.id);
 
-        // mark read only if unread
         if (n.unread) {
           setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, unread: false } : x)));
           try {
@@ -277,9 +483,7 @@ export default function NotificationsScreen({ onBack }: Props) {
           }
         }
 
-        if (!n.incidentId) {
-          return;
-        }
+        if (!n.incidentId) return;
 
         const report = await fetchMyReportDetailAsReportItem(n.incidentId);
         navigation.navigate("Main", { openReport: report });
@@ -294,13 +498,35 @@ export default function NotificationsScreen({ onBack }: Props) {
   );
 
   const bottomPad = Math.max(insets.bottom, vscale(10));
-  const CONTENT_BOTTOM_PAD = bottomPad + vscale(16);
+  const CONTENT_BOTTOM_PAD = bottomPad + vscale(18);
+
+  const filterPills = useMemo(
+    () =>
+      [
+        { key: "all" as const, label: "All" },
+        { key: "unread" as const, label: "Unread" },
+        { key: "alert" as const, label: "Alerts" },
+        { key: "report" as const, label: "Reports" },
+        { key: "info" as const, label: "Info" },
+      ].map((p) => ({
+        ...p,
+        active: p.key === filter,
+      })),
+    [filter]
+  );
+
+  const listEmpty = !loading && !errorMsg && sections.length === 0;
+
+  const selectedTitle = itemMenu?.title ?? "";
+  const selectedMsg = itemMenu?.message ?? "";
+  const selectedTime = itemMenu?.timeLabel ?? "";
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.page}>
+        {/* Top Bar */}
         <View style={styles.topBar}>
           <Pressable
             onPress={onBack}
@@ -311,45 +537,70 @@ export default function NotificationsScreen({ onBack }: Props) {
           </Pressable>
 
           <View style={{ flex: 1 }}>
-            <Text style={styles.topTitle}>Notifications</Text>
-            {unreadCount > 0 ? (
-              <Text style={styles.subTitle}>{unreadCount} unread</Text>
-            ) : (
-              <Text style={styles.subTitle}>All caught up</Text>
-            )}
+            <View style={styles.titleRowTop}>
+              <Text style={styles.topTitle}>Notifications</Text>
+              {unreadCount > 0 ? (
+                <View style={styles.unreadPill}>
+                  <Text style={styles.unreadPillText}>{unreadCount} new</Text>
+                </View>
+              ) : (
+                <View style={styles.caughtPill}>
+                  <Ionicons name="checkmark-circle-outline" size={scale(14)} color="#16A34A" />
+                  <Text style={styles.caughtPillText}>All caught up</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.subTitle}>Tap to open • Long press for actions</Text>
           </View>
 
           <Pressable
-            onPress={markAllRead}
+            onPress={() => setMenuOpen(true)}
             hitSlop={10}
-            style={({ pressed }) => [styles.markBtn, pressed && { opacity: 0.75 }]}
+            style={({ pressed }) => [styles.menuBtn, pressed && { opacity: 0.75 }]}
           >
-            <Text style={styles.markText}>Mark all</Text>
+            <Ionicons name="ellipsis-horizontal" size={scale(18)} color={SUBTLE} />
           </Pressable>
         </View>
 
+        {/* Search */}
         <View style={styles.searchRow}>
           <View style={styles.searchBox}>
             <Ionicons name="search-outline" size={scale(18)} color="#9AA4B2" />
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="Search"
+              placeholder="Search notifications"
               placeholderTextColor="#9AA4B2"
               style={styles.searchInput}
               returnKeyType="search"
+              autoCorrect={false}
             />
+            {query.trim().length > 0 ? (
+              <Pressable
+                onPress={() => setQuery("")}
+                hitSlop={10}
+                style={({ pressed }) => [styles.clearQueryBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Ionicons name="close-circle" size={scale(18)} color="#94A3B8" />
+              </Pressable>
+            ) : null}
           </View>
-
-          <Pressable
-            onPress={clearAll}
-            hitSlop={10}
-            style={({ pressed }) => [styles.clearBtn, pressed && { opacity: 0.75 }]}
-          >
-            <Ionicons name="trash-outline" size={scale(18)} color="#9AA4B2" />
-          </Pressable>
         </View>
 
+        {/* Filters */}
+        <View style={styles.filtersRow}>
+          {filterPills.map((p) => (
+            <Pressable
+              key={p.key}
+              onPress={() => setFilter(p.key)}
+              style={({ pressed }) => [styles.pill, p.active && styles.pillActive, pressed && { opacity: 0.9 }]}
+            >
+              <Text style={[styles.pillText, p.active && styles.pillTextActive]}>{p.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Body */}
         {loading ? (
           <View style={styles.centerBox}>
             <ActivityIndicator size="large" color={Colors.primary} />
@@ -366,66 +617,175 @@ export default function NotificationsScreen({ onBack }: Props) {
             </Pressable>
           </View>
         ) : (
-          <ScrollView
+          <SectionList
+            sections={sections}
+            keyExtractor={(item) => item.id}
+            stickySectionHeadersEnabled={false}
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             contentContainerStyle={[styles.content, { paddingBottom: CONTENT_BOTTOM_PAD }]}
-          >
-            {filtered.length === 0 ? (
-              <View style={styles.emptyCard}>
-                <Ionicons name="notifications-off-outline" size={scale(30)} color="#94A3B8" />
-                <Text style={styles.emptyTitle}>No notifications</Text>
-                <Text style={styles.emptyText}>You don’t have any notifications yet.</Text>
+            ListEmptyComponent={
+              listEmpty ? (
+                <View style={styles.emptyCard}>
+                  <Ionicons name="notifications-off-outline" size={scale(30)} color="#94A3B8" />
+                  <Text style={styles.emptyTitle}>No notifications</Text>
+                  <Text style={styles.emptyText}>You don’t have any notifications yet.</Text>
+                </View>
+              ) : null
+            }
+            renderSectionHeader={({ section }) => (
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{section.title}</Text>
+                <View style={styles.sectionLine} />
               </View>
-            ) : (
-              filtered.map((n) => (
+            )}
+            renderItem={({ item: n }) => {
+              const isBusy = openingId === n.id;
+              const isUnread = !!n.unread;
+
+              return (
                 <Pressable
-                  key={n.id}
                   onPress={() => openNotification(n)}
-                  disabled={openingId === n.id}
+                  onLongPress={() => openItemMenu(n)}
+                  delayLongPress={280}
+                  disabled={isBusy}
                   style={({ pressed }) => [
                     styles.card,
-                    pressed && { opacity: 0.96, transform: [{ scale: 0.995 }] },
-                    openingId === n.id && { opacity: 0.75 },
+                    isUnread && styles.cardUnread,
+                    pressed && { opacity: 0.96, transform: [{ scale: 0.996 }] },
+                    isBusy && { opacity: 0.75 },
                   ]}
                 >
-                  <View style={styles.iconWrap}>
-                    <Ionicons name={iconForType(n.type)} size={scale(20)} color={Colors.primary} />
-                  </View>
-
-                  <View style={{ flex: 1 }}>
-                    <View style={styles.titleRow}>
-                      <Text style={[styles.cardTitle, n.unread && styles.cardTitleUnread]} numberOfLines={1}>
-                        {n.title}
-                      </Text>
-                      {n.unread ? <View style={styles.dot} /> : null}
+                  <View style={[styles.leftRail, isUnread ? styles.leftRailUnread : styles.leftRailRead]} />
+                  <View style={styles.cardInner}>
+                    <View style={styles.iconWrap}>
+                      <Ionicons name={iconForType(n.type)} size={scale(20)} color={Colors.primary} />
                     </View>
 
-                    <Text style={styles.cardMsg} numberOfLines={2}>
-                      {n.message}
-                    </Text>
-                    <Text style={styles.cardTime}>{n.time}</Text>
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.titleRow}>
+                        <Text style={[styles.cardTitle, isUnread && styles.cardTitleUnread]} numberOfLines={1}>
+                          {n.title}
+                        </Text>
+                        {isUnread ? <View style={styles.dot} /> : null}
+                      </View>
+
+                      <Text style={styles.cardMsg} numberOfLines={2}>
+                        {n.message}
+                      </Text>
+
+                      <View style={styles.metaRow}>
+                        <Ionicons name="time-outline" size={scale(12)} color="#94A3B8" />
+                        <Text style={styles.cardTime}>{n.timeLabel}</Text>
+                      </View>
+                    </View>
+
+                    {isBusy ? (
+                      <ActivityIndicator size="small" color="#94A3B8" />
+                    ) : (
+                      <Ionicons name="chevron-forward" size={scale(18)} color="#94A3B8" />
+                    )}
                   </View>
-
-                  {openingId === n.id ? (
-                    <ActivityIndicator size="small" color="#94A3B8" />
-                  ) : (
-                    <Ionicons name="chevron-forward" size={scale(18)} color="#94A3B8" />
-                  )}
                 </Pressable>
-              ))
-            )}
-
-            {filtered.length > 0 ? <View style={{ height: vscale(6) }} /> : null}
-          </ScrollView>
+              );
+            }}
+          />
         )}
+
+        {/* Global Menu Modal */}
+        <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+          <Pressable style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
+            <Pressable style={styles.menuSheet} onPress={() => {}}>
+              <View style={styles.menuHandle} />
+              <Text style={styles.menuTitle}>Quick actions</Text>
+
+              <Pressable onPress={markAllRead} style={({ pressed }) => [styles.menuItem, pressed && { opacity: 0.8 }]}>
+                <Ionicons name="checkmark-done-outline" size={scale(18)} color={Colors.primary} />
+                <Text style={styles.menuItemText}>Mark all as read</Text>
+              </Pressable>
+
+              <Pressable onPress={clearAll} style={({ pressed }) => [styles.menuItem, pressed && { opacity: 0.8 }]}>
+                <Ionicons name="trash-outline" size={scale(18)} color="#DC2626" />
+                <Text style={[styles.menuItemText, { color: "#DC2626" }]}>Clear all</Text>
+              </Pressable>
+
+              <View style={{ height: vscale(8) }} />
+
+              <Pressable
+                onPress={() => setMenuOpen(false)}
+                style={({ pressed }) => [styles.menuCancel, pressed && { opacity: 0.85 }]}
+              >
+                <Text style={styles.menuCancelText}>Close</Text>
+              </Pressable>
+
+              <View style={{ height: Math.max(insets.bottom, vscale(10)) }} />
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        {/* Per-item Menu Modal (Long press) */}
+        <Modal visible={itemMenuOpen} transparent animationType="fade" onRequestClose={closeItemMenu}>
+          <Pressable style={styles.menuOverlay} onPress={closeItemMenu}>
+            <Pressable style={styles.menuSheet} onPress={() => {}}>
+              <View style={styles.menuHandle} />
+              <Text style={styles.menuTitle}>Notification actions</Text>
+
+              {/* Selected preview */}
+              <View style={styles.previewCard}>
+                <Text style={styles.previewTitle} numberOfLines={1}>
+                  {selectedTitle}
+                </Text>
+                <Text style={styles.previewMsg} numberOfLines={2}>
+                  {selectedMsg}
+                </Text>
+                <View style={styles.previewMeta}>
+                  <Ionicons name="time-outline" size={scale(12)} color="#94A3B8" />
+                  <Text style={styles.previewTime}>{selectedTime}</Text>
+                </View>
+              </View>
+
+              <Pressable
+                onPress={toggleReadFromMenu}
+                style={({ pressed }) => [styles.menuItem, pressed && { opacity: 0.8 }]}
+                disabled={!itemMenu}
+              >
+                <Ionicons
+                  name={itemMenu?.unread ? "mail-open-outline" : "mail-unread-outline"}
+                  size={scale(18)}
+                  color={Colors.primary}
+                />
+                <Text style={styles.menuItemText}>{itemMenu?.unread ? "Mark as read" : "Mark as unread"}</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={deleteSingleFromMenu}
+                style={({ pressed }) => [styles.menuItem, pressed && { opacity: 0.8 }]}
+                disabled={!itemMenu}
+              >
+                <Ionicons name="trash-outline" size={scale(18)} color="#DC2626" />
+                <Text style={[styles.menuItemText, { color: "#DC2626" }]}>Delete</Text>
+              </Pressable>
+
+              <View style={{ height: vscale(8) }} />
+
+              <Pressable
+                onPress={closeItemMenu}
+                style={({ pressed }) => [styles.menuCancel, pressed && { opacity: 0.85 }]}
+              >
+                <Text style={styles.menuCancelText}>Close</Text>
+              </Pressable>
+
+              <View style={{ height: Math.max(insets.bottom, vscale(10)) }} />
+            </Pressable>
+          </Pressable>
+        </Modal>
       </View>
     </SafeAreaView>
   );
 }
 
 function makeStyles(scale: (n: number) => number, vscale: (n: number) => number) {
-  const SEARCH_H = vscale(36);
+  const SEARCH_H = vscale(40);
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: BG },
@@ -446,20 +806,59 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       alignItems: "center",
       justifyContent: "center",
     },
+
+    titleRowTop: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(10),
+      flexWrap: "wrap",
+    },
     topTitle: {
       fontSize: scale(22),
       fontWeight: "900",
       color: TEXT_DARK,
     },
     subTitle: {
-      marginTop: vscale(1),
+      marginTop: vscale(2),
       fontSize: scale(11),
-      fontWeight: "800",
+      fontWeight: "700",
       color: "#94A3B8",
     },
-    markBtn: {
+
+    unreadPill: {
+      paddingHorizontal: scale(10),
+      paddingVertical: vscale(5),
+      borderRadius: scale(999),
+      backgroundColor: "#EEF6FF",
+      borderWidth: 1,
+      borderColor: "#D8E9FF",
+    },
+    unreadPillText: {
+      fontSize: scale(10),
+      fontWeight: "900",
+      color: Colors.primary,
+    },
+
+    caughtPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(6),
+      paddingHorizontal: scale(10),
+      paddingVertical: vscale(5),
+      borderRadius: scale(999),
+      backgroundColor: "#ECFDF5",
+      borderWidth: 1,
+      borderColor: "#BBF7D0",
+    },
+    caughtPillText: {
+      fontSize: scale(10),
+      fontWeight: "900",
+      color: "#166534",
+    },
+
+    menuBtn: {
+      width: scale(36),
       height: scale(36),
-      paddingHorizontal: scale(12),
       borderRadius: scale(12),
       alignItems: "center",
       justifyContent: "center",
@@ -467,22 +866,13 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       borderWidth: 1,
       borderColor: BORDER,
     },
-    markText: {
-      fontSize: scale(11),
-      fontWeight: "900",
-      color: Colors.primary,
-    },
 
     searchRow: {
       paddingHorizontal: scale(14),
-      paddingTop: vscale(6),
+      paddingTop: vscale(2),
       paddingBottom: vscale(8),
-      flexDirection: "row",
-      alignItems: "center",
-      gap: scale(10),
     },
     searchBox: {
-      flex: 1,
       height: SEARCH_H,
       backgroundColor: "#FFFFFF",
       borderRadius: Math.round(SEARCH_H / 2),
@@ -500,46 +890,105 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       paddingVertical: 0,
       fontWeight: "600",
     },
-    clearBtn: {
-      width: SEARCH_H,
-      height: SEARCH_H,
-      borderRadius: Math.round(SEARCH_H / 2),
+    clearQueryBtn: {
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    filtersRow: {
+      paddingHorizontal: scale(14),
+      paddingBottom: vscale(10),
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: scale(8),
+    },
+    pill: {
+      paddingHorizontal: scale(12),
+      paddingVertical: vscale(7),
+      borderRadius: scale(999),
       backgroundColor: "#FFFFFF",
       borderWidth: 1,
       borderColor: BORDER,
-      alignItems: "center",
-      justifyContent: "center",
+    },
+    pillActive: {
+      backgroundColor: "#EEF6FF",
+      borderColor: "#D8E9FF",
+    },
+    pillText: {
+      fontSize: scale(11),
+      fontWeight: "900",
+      color: "#475569",
+    },
+    pillTextActive: {
+      color: Colors.primary,
     },
 
     content: {
       paddingHorizontal: scale(14),
-      paddingTop: vscale(6),
+      paddingTop: vscale(2),
       gap: vscale(10),
     },
 
-    card: {
+    sectionHeader: {
+      paddingTop: vscale(6),
+      paddingBottom: vscale(6),
       flexDirection: "row",
       alignItems: "center",
       gap: scale(10),
+    },
+    sectionTitle: {
+      fontSize: scale(12),
+      fontWeight: "900",
+      color: "#334155",
+    },
+    sectionLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: "#E2E8F0",
+    },
+
+    card: {
       backgroundColor: "#FFFFFF",
       borderWidth: 1,
       borderColor: BORDER,
-      borderRadius: scale(14),
+      borderRadius: scale(16),
+      overflow: "hidden",
+    },
+    cardUnread: {
+      borderColor: "#D8E9FF",
+      backgroundColor: "#FBFDFF",
+    },
+    leftRail: {
+      position: "absolute",
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: scale(4),
+    },
+    leftRailUnread: {
+      backgroundColor: Colors.primary,
+    },
+    leftRailRead: {
+      backgroundColor: "#E5E7EB",
+    },
+    cardInner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(10),
       paddingVertical: vscale(12),
       paddingHorizontal: scale(12),
-      shadowColor: "#000",
-      shadowOpacity: 0.04,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 8 },
-      elevation: 2,
+      paddingLeft: scale(12) + scale(4),
     },
+
     iconWrap: {
-      width: scale(38),
-      height: scale(38),
-      borderRadius: scale(12),
+      width: scale(40),
+      height: scale(40),
+      borderRadius: scale(14),
       backgroundColor: "#F2F6FF",
       alignItems: "center",
       justifyContent: "center",
+      borderWidth: 1,
+      borderColor: "#E5EDFF",
     },
 
     titleRow: {
@@ -562,6 +1011,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       borderRadius: 999,
       backgroundColor: "#EF4444",
     },
+
     cardMsg: {
       marginTop: vscale(3),
       fontSize: scale(10),
@@ -569,8 +1019,14 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       color: "#6B7280",
       lineHeight: vscale(14),
     },
+
+    metaRow: {
+      marginTop: vscale(7),
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(6),
+    },
     cardTime: {
-      marginTop: vscale(6),
       fontSize: scale(9),
       fontWeight: "800",
       color: "#94A3B8",
@@ -580,8 +1036,8 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       backgroundColor: "#FFFFFF",
       borderWidth: 1,
       borderColor: BORDER,
-      borderRadius: scale(14),
-      paddingVertical: vscale(22),
+      borderRadius: scale(16),
+      paddingVertical: vscale(24),
       paddingHorizontal: scale(16),
       alignItems: "center",
       justifyContent: "center",
@@ -637,6 +1093,101 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       color: "#FFFFFF",
       fontWeight: "900",
       fontSize: scale(12),
+    },
+
+    // Menu modal shared
+    menuOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.25)",
+      justifyContent: "flex-end",
+    },
+    menuSheet: {
+      backgroundColor: "#FFFFFF",
+      borderTopLeftRadius: scale(18),
+      borderTopRightRadius: scale(18),
+      borderWidth: 1,
+      borderColor: BORDER,
+      paddingHorizontal: scale(14),
+      paddingTop: vscale(10),
+    },
+    menuHandle: {
+      alignSelf: "center",
+      width: scale(46),
+      height: vscale(5),
+      borderRadius: 999,
+      backgroundColor: "#E2E8F0",
+      marginBottom: vscale(10),
+    },
+    menuTitle: {
+      fontSize: scale(13),
+      fontWeight: "900",
+      color: "#0F172A",
+      marginBottom: vscale(10),
+    },
+    menuItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(10),
+      paddingVertical: vscale(12),
+      paddingHorizontal: scale(10),
+      borderRadius: scale(12),
+      borderWidth: 1,
+      borderColor: BORDER,
+      backgroundColor: "#FFFFFF",
+      marginBottom: vscale(10),
+    },
+    menuItemText: {
+      fontSize: scale(12),
+      fontWeight: "900",
+      color: "#0F172A",
+    },
+    menuCancel: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: vscale(12),
+      borderRadius: scale(12),
+      backgroundColor: "#F8FAFC",
+      borderWidth: 1,
+      borderColor: BORDER,
+    },
+    menuCancelText: {
+      fontSize: scale(12),
+      fontWeight: "900",
+      color: "#334155",
+    },
+
+    // Selected notification preview inside item menu
+    previewCard: {
+      borderWidth: 1,
+      borderColor: BORDER,
+      backgroundColor: "#F8FAFC",
+      borderRadius: scale(14),
+      paddingVertical: vscale(12),
+      paddingHorizontal: scale(12),
+      marginBottom: vscale(10),
+    },
+    previewTitle: {
+      fontSize: scale(12),
+      fontWeight: "900",
+      color: "#0F172A",
+    },
+    previewMsg: {
+      marginTop: vscale(4),
+      fontSize: scale(10),
+      fontWeight: "700",
+      color: "#475569",
+      lineHeight: vscale(14),
+    },
+    previewMeta: {
+      marginTop: vscale(8),
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(6),
+    },
+    previewTime: {
+      fontSize: scale(9),
+      fontWeight: "800",
+      color: "#94A3B8",
     },
   });
 }

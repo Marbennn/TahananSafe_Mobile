@@ -1,5 +1,5 @@
 // src/components/BottomNavBar.tsx
-import React, { useMemo } from "react";
+import React, { useMemo, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Platform,
   useWindowDimensions,
   Alert,
+  Animated,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -164,6 +165,54 @@ export default function BottomNavBar({
   const baseBottom =
     paddingBottom + (effectiveNavHeight - paddingBottom) - fabLift;
 
+  /* ===================== TAB CLICK ANIMATIONS ===================== */
+  // Per-tab Animated scale values so each button can "pop" when clicked
+  const tabScalesRef = useRef<Record<TabKey, Animated.Value>>({
+    Home: new Animated.Value(1),
+    Inbox: new Animated.Value(1),
+    Incident: new Animated.Value(1),
+    Reports: new Animated.Value(1),
+    Ledger: new Animated.Value(1),
+    Settings: new Animated.Value(1),
+  });
+
+  const pressInScale = useMemo(() => 0.92, []);
+  const popUpScale = useMemo(() => 1.08, []);
+  const settleScale = useMemo(() => 1.0, []);
+
+  const animateTabPress = useCallback((tab: TabKey) => {
+    const v = tabScalesRef.current[tab];
+    if (!v) return;
+
+    // stop any running animation so it feels snappy on rapid taps
+    v.stopAnimation();
+
+    Animated.sequence([
+      Animated.timing(v, {
+        toValue: popUpScale,
+        duration: 110,
+        useNativeDriver: true,
+      }),
+      Animated.spring(v, {
+        toValue: settleScale,
+        friction: 6,
+        tension: 180,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [popUpScale, settleScale]);
+
+  const handleTabPress = useCallback(
+    (tab: TabKey) => {
+      // bounce animation regardless if active/inactive
+      animateTabPress(tab);
+      // navigate after triggering the animation
+      onTabPress(tab);
+    },
+    [animateTabPress, onTabPress]
+  );
+  /* ============================================================ */
+
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -197,6 +246,12 @@ export default function BottomNavBar({
           justifyContent: "center",
           paddingBottom: itemPaddingBottom + EXTRA_BAR_HEIGHT * 0.35,
           minWidth: 0,
+        },
+
+        // wrapper inside item for Animated transform
+        itemInner: {
+          alignItems: "center",
+          justifyContent: "center",
         },
 
         label: {
@@ -370,22 +425,28 @@ export default function BottomNavBar({
           icon="home-outline"
           label="Home"
           active={activeTab === "Home"}
-          onPress={() => onTabPress("Home")}
+          onPress={() => handleTabPress("Home")}
           iconSize={iconSize}
           labelStyle={styles.label}
           labelActiveStyle={styles.labelActive}
           itemStyle={styles.item}
+          innerStyle={styles.itemInner}
+          scaleAnim={tabScalesRef.current.Home}
+          pressInScale={pressInScale}
         />
 
         <NavItem
           icon="call-outline"
           label="Hotlines"
           active={activeTab === "Inbox"}
-          onPress={() => onTabPress("Inbox")}
+          onPress={() => handleTabPress("Inbox")}
           iconSize={iconSize}
           labelStyle={styles.label}
           labelActiveStyle={styles.labelActive}
           itemStyle={styles.item}
+          innerStyle={styles.itemInner}
+          scaleAnim={tabScalesRef.current.Inbox}
+          pressInScale={pressInScale}
         />
 
         <View style={styles.centerSlot} pointerEvents="none">
@@ -405,22 +466,28 @@ export default function BottomNavBar({
           icon="stats-chart-outline"
           label="Reports"
           active={activeTab === "Reports"}
-          onPress={() => onTabPress("Reports")}
+          onPress={() => handleTabPress("Reports")}
           iconSize={iconSize}
           labelStyle={styles.label}
           labelActiveStyle={styles.labelActive}
           itemStyle={styles.item}
+          innerStyle={styles.itemInner}
+          scaleAnim={tabScalesRef.current.Reports}
+          pressInScale={pressInScale}
         />
 
         <NavItem
           icon="settings-outline"
           label="Settings"
           active={activeTab === "Settings"}
-          onPress={() => onTabPress("Settings")}
+          onPress={() => handleTabPress("Settings")}
           iconSize={iconSize}
           labelStyle={styles.label}
           labelActiveStyle={styles.labelActive}
           itemStyle={styles.item}
+          innerStyle={styles.itemInner}
+          scaleAnim={tabScalesRef.current.Settings}
+          pressInScale={pressInScale}
         />
       </View>
 
@@ -464,8 +531,11 @@ function NavItem({
   onPress,
   iconSize,
   itemStyle,
+  innerStyle,
   labelStyle,
   labelActiveStyle,
+  scaleAnim,
+  pressInScale,
 }: {
   icon: IoniconName;
   label: string;
@@ -473,23 +543,57 @@ function NavItem({
   onPress: () => void;
   iconSize: number;
   itemStyle: any;
+  innerStyle: any;
   labelStyle: any;
   labelActiveStyle: any;
+  scaleAnim: Animated.Value;
+  pressInScale: number;
 }) {
+  const handlePressIn = useCallback(() => {
+    scaleAnim.stopAnimation();
+    Animated.timing(scaleAnim, {
+      toValue: pressInScale,
+      duration: 90,
+      useNativeDriver: true,
+    }).start();
+  }, [pressInScale, scaleAnim]);
+
+  const handlePressOut = useCallback(() => {
+    // Let the parent do the "pop" sequence; here we just return to 1 quickly if needed.
+    Animated.timing(scaleAnim, {
+      toValue: 1,
+      duration: 90,
+      useNativeDriver: true,
+    }).start();
+  }, [scaleAnim]);
+
   return (
-    <Pressable onPress={onPress} style={itemStyle} hitSlop={10}>
-      <Ionicons
-        name={icon}
-        size={iconSize}
-        color={active ? Colors.primary : "#9AA4B2"}
-      />
-      <Text
-        style={[labelStyle, active && labelActiveStyle]}
-        numberOfLines={1}
-        allowFontScaling={false}
-      >
-        {label}
-      </Text>
+    <Pressable
+      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      style={itemStyle}
+      hitSlop={10}
+      android_ripple={
+        Platform.OS === "android"
+          ? { color: "rgba(0,0,0,0.08)", borderless: true }
+          : undefined
+      }
+    >
+      <Animated.View style={[innerStyle, { transform: [{ scale: scaleAnim }] }]}>
+        <Ionicons
+          name={icon}
+          size={iconSize}
+          color={active ? Colors.primary : "#9AA4B2"}
+        />
+        <Text
+          style={[labelStyle, active && labelActiveStyle]}
+          numberOfLines={1}
+          allowFontScaling={false}
+        >
+          {label}
+        </Text>
+      </Animated.View>
     </Pressable>
   );
 }

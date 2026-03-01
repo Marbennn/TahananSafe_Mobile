@@ -18,6 +18,10 @@ import {
   Easing,
   Keyboard,
   Modal,
+  AppState,
+  AppStateStatus,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -47,6 +51,9 @@ type ThreadMsg = {
   sender?: string;
   text: string;
   time: string;
+
+  // ✅ for stable ordering (optional)
+  createdAtMs?: number;
 };
 
 type Props = {
@@ -71,12 +78,15 @@ function formatStamp(d: Date) {
 
 function dtoToUi(dto: ThreadDto): ThreadMsg {
   const isResident = dto.senderRole === "resident";
+  const createdAtMs = dto.createdAt ? new Date(dto.createdAt).getTime() : undefined;
+
   return {
     id: dto._id,
     side: isResident ? "right" : "left",
     sender: isResident ? undefined : dto.senderName || "Staff",
     text: dto.text,
     time: dto.createdAt ? formatStamp(new Date(dto.createdAt)) : "",
+    createdAtMs,
   };
 }
 
@@ -172,7 +182,11 @@ export default function ReportDetailScreen({
   const CONTENT_MAX_W = isTablet ? Math.min(720, Math.round(width * 0.92)) : width;
   const CONTENT_SIDE_PAD = isTablet ? scale(18) : scale(14);
 
-  const thumbW = clamp(Math.round(width * (isTablet ? 0.22 : 0.34)), scale(110), scale(isTablet ? 190 : 140));
+  const thumbW = clamp(
+    Math.round(width * (isTablet ? 0.22 : 0.34)),
+    scale(110),
+    scale(isTablet ? 190 : 140)
+  );
   const thumbH = clamp(Math.round(thumbW * 0.7), vscale(74), vscale(110));
 
   const styles = useMemo(
@@ -271,7 +285,6 @@ export default function ReportDetailScreen({
   const threadsInFlightRef = useRef(false);
 
   const lastDetailLoadedIdRef = useRef<string>("");
-  const lastThreadsLoadedIdRef = useRef<string>("");
 
   const [tabW, setTabW] = useState(0);
   const tabAnim = useRef(new Animated.Value(view === "details" ? 0 : 1)).current;
@@ -331,14 +344,69 @@ export default function ReportDetailScreen({
     [reportId]
   );
 
-  const loadThreads = useCallback(
-    async (force = false) => {
-      if (!reportId) {
-        setThreadsError("Missing report id.");
-        return;
-      }
+  // =========================
+  // ✅ REALTIME-LIKE THREADS
+  // =========================
+  const POLL_MS = 2500;
 
-      if (!force && lastThreadsLoadedIdRef.current === reportId) return;
+  // track if user is at bottom; if not, don’t auto-scroll
+  const isAtBottomRef = useRef(true);
+  const [newMsgCount, setNewMsgCount] = useState(0);
+
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
+  // ✅ helper: scroll to bottom
+  const scrollToBottom = useCallback((animated = true) => {
+    requestAnimationFrame(() => {
+      threadScrollRef.current?.scrollToEnd({ animated });
+    });
+  }, []);
+
+  // ✅ merge helper (dedupe + stable order)
+  const mergeThreadDtos = useCallback(
+    (list: ThreadDto[]) => {
+      const incoming = (list || []).map(dtoToUi);
+
+      setMessages((prev) => {
+        const map = new Map<string, ThreadMsg>();
+
+        // keep previous
+        for (const m of prev) map.set(m.id, m);
+
+        // add/replace incoming (incoming should be source-of-truth for text/time)
+        for (const m of incoming) map.set(m.id, m);
+
+        const merged = Array.from(map.values());
+
+        // stable sort if createdAt is present
+        merged.sort((a, b) => {
+          const aa = a.createdAtMs ?? 0;
+          const bb = b.createdAtMs ?? 0;
+          if (aa !== bb) return aa - bb;
+          return a.id.localeCompare(b.id);
+        });
+
+        const added = merged.length - prev.length;
+        if (added > 0 && !isAtBottomRef.current) {
+          // show "new messages" badge if user is reading older messages
+          setNewMsgCount((c) => c + added);
+        }
+
+        // if user is at bottom, auto-scroll after render
+        if (added > 0 && isAtBottomRef.current) {
+          setTimeout(() => scrollToBottom(true), 60);
+        }
+
+        return merged;
+      });
+    },
+    [scrollToBottom]
+  );
+
+  const refreshThreads = useCallback(
+    async (opts?: { showLoader?: boolean }) => {
+      if (!reportId) return;
       if (threadsInFlightRef.current) return;
 
       try {
@@ -348,7 +416,7 @@ export default function ReportDetailScreen({
       threadsAbortRef.current = controller;
 
       threadsInFlightRef.current = true;
-      setLoadingThreads(true);
+      if (opts?.showLoader) setLoadingThreads(true);
       setThreadsError("");
 
       try {
@@ -357,13 +425,7 @@ export default function ReportDetailScreen({
         if (!mountedRef.current) return;
         if (controller.signal.aborted) return;
 
-        const ui = (list || []).map(dtoToUi);
-        lastThreadsLoadedIdRef.current = reportId;
-        setMessages(ui);
-
-        setTimeout(() => {
-          threadScrollRef.current?.scrollToEnd({ animated: true });
-        }, 80);
+        mergeThreadDtos(list || []);
       } catch (e: any) {
         if (!mountedRef.current) return;
         if (isAbortError(e)) return;
@@ -373,8 +435,64 @@ export default function ReportDetailScreen({
         threadsInFlightRef.current = false;
       }
     },
-    [reportId]
+    [reportId, mergeThreadDtos]
   );
+
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+
+  const startPolling = useCallback(() => {
+    stopPolling();
+
+    // only poll when:
+    // - Threads view
+    // - reportId exists
+    // - app is active
+    if (!reportId) return;
+    if (view !== "threads") return;
+    if (appStateRef.current !== "active") return;
+
+    // initial load (show loader only if we have nothing yet)
+    refreshThreads({ showLoader: messages.length === 0 });
+
+    pollTimerRef.current = setInterval(() => {
+      refreshThreads({ showLoader: false });
+    }, POLL_MS);
+  }, [stopPolling, reportId, view, refreshThreads, messages.length]);
+
+  // watch app state: pause/resume polling
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next) => {
+      appStateRef.current = next;
+      if (next === "active") {
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    });
+    return () => sub.remove();
+  }, [startPolling, stopPolling]);
+
+  // start/stop polling when switching tabs
+  useEffect(() => {
+    if (view === "threads") {
+      startPolling();
+    } else {
+      stopPolling();
+      try {
+        threadsAbortRef.current?.abort();
+      } catch {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, reportId]);
+
+  // =========================
+  // END REALTIME-LIKE THREADS
+  // =========================
 
   useEffect(() => {
     try {
@@ -386,7 +504,6 @@ export default function ReportDetailScreen({
     threadsInFlightRef.current = false;
 
     lastDetailLoadedIdRef.current = "";
-    lastThreadsLoadedIdRef.current = "";
 
     setDetail(null);
     setDetailError("");
@@ -395,20 +512,12 @@ export default function ReportDetailScreen({
     setMessages([]);
     setThreadsError("");
     setLoadingThreads(false);
+    setNewMsgCount(0);
+    isAtBottomRef.current = true;
 
     if (reportId) loadDetail(true);
     else setDetailError("Missing report id.");
   }, [reportId, loadDetail]);
-
-  useEffect(() => {
-    if (view === "threads") loadThreads(true);
-
-    if (view !== "threads") {
-      try {
-        threadsAbortRef.current?.abort();
-      } catch {}
-    }
-  }, [view, loadThreads]);
 
   const onSend = useCallback(async () => {
     const t = draft.trim();
@@ -427,13 +536,18 @@ export default function ReportDetailScreen({
       side: "right",
       text: t,
       time: formatStamp(new Date()),
+      createdAtMs: Date.now(),
     };
+
+    // if user sends, they probably want to be at bottom
+    isAtBottomRef.current = true;
+    setNewMsgCount(0);
 
     setMessages((prev) => [...prev, optimistic]);
     setDraft("");
 
     setTimeout(() => {
-      threadScrollRef.current?.scrollToEnd({ animated: true });
+      scrollToBottom(true);
     }, 60);
 
     const controller = new AbortController();
@@ -441,8 +555,8 @@ export default function ReportDetailScreen({
     try {
       await sendReportThreadMessage(reportId, t, controller.signal);
 
-      lastThreadsLoadedIdRef.current = "";
-      await loadThreads(true);
+      // ✅ don’t require manual reload; just refresh immediately (merge)
+      await refreshThreads({ showLoader: false });
     } catch (e: any) {
       if (!isAbortError(e)) {
         Alert.alert("Send failed", e?.message || "Could not send message.");
@@ -452,7 +566,7 @@ export default function ReportDetailScreen({
     } finally {
       setSending(false);
     }
-  }, [draft, reportId, sending, loadThreads]);
+  }, [draft, reportId, sending, scrollToBottom, refreshThreads]);
 
   // ✅ Cancel report (tries a dedicated cancel route first, then falls back to PATCH status)
   const cancelReport = useCallback(async () => {
@@ -531,14 +645,11 @@ export default function ReportDetailScreen({
     "Incident";
 
   const incidentNarrative =
-    detail?.details ||
-    (detail as any)?.narrative ||
-    (report as any)?.details ||
-    report.detail ||
-    "No details provided.";
+    detail?.details || (detail as any)?.narrative || (report as any)?.details || report.detail || "No details provided.";
 
   const witnessName = detail?.witnessName || (report as any)?.witnessName || "—";
-  const witnessRole = detail?.witnessType || (report as any)?.witnessRole || (report as any)?.witnessType || "—";
+  const witnessRole =
+    detail?.witnessType || (report as any)?.witnessRole || (report as any)?.witnessType || "—";
 
   const locationLabel = detail?.locationStr || (report as any)?.locationStr || (report as any)?.location || "—";
 
@@ -556,8 +667,6 @@ export default function ReportDetailScreen({
   }, [photosRaw, reportId]);
 
   const reportCode = String((report as any)?.alertNo ?? (reportId ? `#${reportId.slice(-4)}` : "#—"));
-
-  const threadsBottomGap = isKeyboardVisible ? vscale(10) : RESERVED_BOTTOM;
 
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
@@ -582,8 +691,37 @@ export default function ReportDetailScreen({
 
   const canCancel = !!reportId && statusUpper !== "CANCELLED" && statusUpper !== "RESOLVED";
 
+  // ✅ measure composer height so messages padding is always correct
+  const [composerH, setComposerH] = useState(vscale(64));
+
+  const threadsBottomSafe = Math.max(insets.bottom, vscale(10));
+  const threadsNavReserve = threadsBottomSafe;
+
+  useEffect(() => {
+    if (view !== "threads") return;
+    if (!isKeyboardVisible) return;
+    setTimeout(() => scrollToBottom(true), 60);
+  }, [isKeyboardVisible, view, scrollToBottom]);
+
+  const onChatScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+    const y = contentOffset.y;
+    const visibleH = layoutMeasurement.height;
+    const contentH = contentSize.height;
+
+    const distanceFromBottom = contentH - visibleH - y;
+
+    const atBottom = distanceFromBottom < 40; // threshold
+    isAtBottomRef.current = atBottom;
+
+    if (atBottom) {
+      // user returned to bottom: clear "new messages" badge
+      setNewMsgCount(0);
+    }
+  }, []);
+
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <StatusBar barStyle="dark-content" />
 
       {/* Image Viewer Modal */}
@@ -663,9 +801,13 @@ export default function ReportDetailScreen({
       <View style={styles.page}>
         <View style={[styles.heroWrap, { paddingTop: Math.max(insets.top, vscale(6)) }]}>
           <View style={styles.heroCard}>
-            {/* ✅ Row 1: Back + Title aligned (like your screenshot) */}
+            {/* Row 1: Back + Title aligned */}
             <View style={styles.heroHeaderRow}>
-              <Pressable onPress={onBack} hitSlop={12} style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.75 }]}>
+              <Pressable
+                onPress={onBack}
+                hitSlop={12}
+                style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.75 }]}
+              >
                 <Ionicons name="chevron-back" size={styles._backIcon} color={TEXT_DARK} />
               </Pressable>
 
@@ -673,11 +815,11 @@ export default function ReportDetailScreen({
                 {incidentTitle}
               </Text>
 
-              {/* right spacer to keep title visually centered between left/right */}
+              {/* right spacer to keep title visually centered */}
               <View style={{ width: styles._backBox, height: styles._backBox }} />
             </View>
 
-            {/* ✅ Row 2: Status centered */}
+            {/* Row 2: Status centered */}
             <View style={styles.heroStatusCenterRow}>
               <View style={[styles.statusPill, { borderColor: BORDER, backgroundColor: "#FFFFFF" }]}>
                 <View style={[styles.dot, { backgroundColor: accent }]} />
@@ -707,11 +849,17 @@ export default function ReportDetailScreen({
                 />
               </Animated.View>
 
-              <Pressable onPress={() => setView("details")} style={({ pressed }) => [styles.tabBtn, pressed && { opacity: 0.92 }]}>
+              <Pressable
+                onPress={() => setView("details")}
+                style={({ pressed }) => [styles.tabBtn, pressed && { opacity: 0.92 }]}
+              >
                 <Text style={[styles.tabText, view === "details" && styles.tabTextActive]}>Incident Details</Text>
               </Pressable>
 
-              <Pressable onPress={() => setView("threads")} style={({ pressed }) => [styles.tabBtn, pressed && { opacity: 0.92 }]}>
+              <Pressable
+                onPress={() => setView("threads")}
+                style={({ pressed }) => [styles.tabBtn, pressed && { opacity: 0.92 }]}
+              >
                 <Text style={[styles.tabText, view === "threads" && styles.tabTextActive]}>Threads</Text>
               </Pressable>
             </View>
@@ -815,7 +963,11 @@ export default function ReportDetailScreen({
               {photoUrls.length > 0 ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.galleryRow}>
                   {photoUrls.map((u, i) => (
-                    <Pressable key={i} onPress={() => openViewer(i)} style={({ pressed }) => [styles.photoCard, pressed && { opacity: 0.92 }]}>
+                    <Pressable
+                      key={i}
+                      onPress={() => openViewer(i)}
+                      style={({ pressed }) => [styles.photoCard, pressed && { opacity: 0.92 }]}
+                    >
                       <Image source={{ uri: u }} style={styles.photoImg} resizeMode="cover" />
                       <View style={styles.photoOverlay}>
                         <Ionicons name="expand-outline" size={styles._miniIcon} color="#FFFFFF" />
@@ -831,7 +983,6 @@ export default function ReportDetailScreen({
               )}
             </View>
 
-            {/* ✅ Cancel moved to bottom ABOVE Alert no */}
             {canCancel ? (
               <View style={styles.cancelBottomWrap}>
                 <Pressable
@@ -863,8 +1014,13 @@ export default function ReportDetailScreen({
           </ScrollView>
         ) : (
           <KeyboardAvoidingView
-            style={{ flex: 1, backgroundColor: BG }}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={[
+              styles.threadsKav,
+              {
+                paddingBottom: threadsNavReserve,
+              },
+            ]}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
             keyboardVerticalOffset={keyboardOffset}
           >
             <View style={styles.threadsWrap}>
@@ -883,10 +1039,7 @@ export default function ReportDetailScreen({
                   <Ionicons name="alert-circle-outline" size={styles._miniIcon} color="#B91C1C" />
                   <Text style={styles.bannerDangerText}>{threadsError}</Text>
                   <Pressable
-                    onPress={() => {
-                      lastThreadsLoadedIdRef.current = "";
-                      loadThreads(true);
-                    }}
+                    onPress={() => refreshThreads({ showLoader: true })}
                     style={({ pressed }) => [styles.bannerBtn, pressed && { opacity: 0.92 }]}
                   >
                     <Text style={styles.bannerBtnText}>Retry</Text>
@@ -894,16 +1047,24 @@ export default function ReportDetailScreen({
                 </View>
               ) : null}
 
-              <View style={[styles.chatSurface, { marginBottom: threadsBottomGap }]}>
+              <View style={styles.chatSurface}>
                 <ScrollView
                   ref={(r) => {
                     threadScrollRef.current = r;
                   }}
                   style={styles.chatScroll}
-                  contentContainerStyle={styles.chatContent}
+                  contentContainerStyle={[
+                    styles.chatContent,
+                    {
+                      paddingBottom: composerH + threadsNavReserve + vscale(14),
+                    },
+                  ]}
                   showsVerticalScrollIndicator
                   nestedScrollEnabled
                   keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+                  onScroll={onChatScroll}
+                  scrollEventThrottle={16}
                 >
                   {messages.length === 0 && !loadingThreads && !threadsError ? (
                     <View style={styles.emptyChat}>
@@ -945,7 +1106,30 @@ export default function ReportDetailScreen({
                   })}
                 </ScrollView>
 
-                <View style={styles.composerRow}>
+                {/* ✅ "New messages" floating pill */}
+                {newMsgCount > 0 ? (
+                  <View style={styles.newMsgPillWrap} pointerEvents="box-none">
+                    <Pressable
+                      onPress={() => {
+                        isAtBottomRef.current = true;
+                        setNewMsgCount(0);
+                        scrollToBottom(true);
+                      }}
+                      style={({ pressed }) => [styles.newMsgPill, pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] }]}
+                    >
+                      <Ionicons name="arrow-down" size={styles._miniIcon} color="#FFFFFF" />
+                      <Text style={styles.newMsgPillText}>{newMsgCount} new message(s)</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+
+                <View
+                  style={[styles.composerRow, { paddingBottom: vscale(10) + threadsNavReserve }]}
+                  onLayout={(e) => {
+                    const h = e.nativeEvent.layout.height;
+                    if (h && Math.abs(h - composerH) > 2) setComposerH(h);
+                  }}
+                >
                   <View style={styles.composerInputWrap}>
                     <Ionicons name="chatbox-ellipses-outline" size={styles._miniIcon} color="#94A3B8" />
                     <TextInput
@@ -960,6 +1144,9 @@ export default function ReportDetailScreen({
                       blurOnSubmit={false}
                       multiline={false}
                       textAlignVertical="center"
+                      onFocus={() => {
+                        setTimeout(() => scrollToBottom(true), 60);
+                      }}
                       {...(Platform.OS === "android" ? { includeFontPadding: false as any } : null)}
                     />
                   </View>
@@ -981,18 +1168,20 @@ export default function ReportDetailScreen({
           </KeyboardAvoidingView>
         )}
 
-        <BottomNavBar
-          activeTab={activeTab}
-          onTabPress={handleTab}
-          navHeight={navHeight}
-          paddingBottom={bottomPad}
-          chevronBottom={chevronBottom}
-          fabBottom={fabBottom}
-          fabSize={FAB_SIZE}
-          onFabPress={pressFab}
-          onFabLongPress={longPressFab}
-          centerLabel="Incident Log"
-        />
+        {view !== "threads" ? (
+          <BottomNavBar
+            activeTab={activeTab}
+            onTabPress={handleTab}
+            navHeight={navHeight}
+            paddingBottom={bottomPad}
+            chevronBottom={chevronBottom}
+            fabBottom={fabBottom}
+            fabSize={FAB_SIZE}
+            onFabPress={pressFab}
+            onFabLongPress={longPressFab}
+            centerLabel="Incident Log"
+          />
+        ) : null}
       </View>
     </SafeAreaView>
   );
@@ -1051,7 +1240,6 @@ function makeStyles(args: {
         paddingVertical: vscale(12),
       },
 
-      // ✅ header: align title with back arrow
       heroHeaderRow: {
         flexDirection: "row",
         alignItems: "center",
@@ -1076,10 +1264,9 @@ function makeStyles(args: {
         fontWeight: "900",
         color: TEXT_DARK,
         letterSpacing: 0.1,
-        textAlign: "left", // aligned to back arrow row
+        textAlign: "left",
       },
 
-      // ✅ status centered
       heroStatusCenterRow: {
         marginTop: vscale(8),
         flexDirection: "row",
@@ -1165,7 +1352,12 @@ function makeStyles(args: {
       metaLabel: { fontSize: scale(10), fontWeight: "900", color: "#94A3B8" },
       metaValue: { marginTop: vscale(6), fontSize: scale(isTablet ? 12.5 : 11.5), fontWeight: "400", color: TEXT_DARK },
 
-      locationText: { fontSize: scale(isTablet ? 12.5 : 11.5), fontWeight: "400", color: TEXT_MUTED, lineHeight: vscale(isTablet ? 18 : 16) },
+      locationText: {
+        fontSize: scale(isTablet ? 12.5 : 11.5),
+        fontWeight: "400",
+        color: TEXT_MUTED,
+        lineHeight: vscale(isTablet ? 18 : 16),
+      },
 
       witnessRow: { flexDirection: "row", alignItems: "center", gap: scale(10) },
       witnessBadge: {
@@ -1217,7 +1409,6 @@ function makeStyles(args: {
       },
       emptyEvidenceText: { fontSize: scale(11), fontWeight: "400", color: "#94A3B8" },
 
-      // ✅ cancel at bottom
       cancelBottomWrap: { ...CONTENT_ALIGN, marginTop: vscale(2) },
       cancelBottomBtn: {
         width: "100%",
@@ -1249,6 +1440,8 @@ function makeStyles(args: {
       },
       footerCode: { color: primary, fontWeight: "900" },
 
+      threadsKav: { flex: 1, backgroundColor: BG },
+
       threadsWrap: { flex: 1, paddingHorizontal: sidePad, paddingTop: vscale(2), gap: vscale(12), backgroundColor: BG },
 
       chatSurface: {
@@ -1262,7 +1455,7 @@ function makeStyles(args: {
       },
 
       chatScroll: { flex: 1, backgroundColor: "#FFFFFF" },
-      chatContent: { paddingHorizontal: scale(12), paddingVertical: vscale(12), paddingBottom: vscale(12) + vscale(64) },
+      chatContent: { paddingHorizontal: scale(12), paddingVertical: vscale(12) },
 
       emptyChat: { alignItems: "center", justifyContent: "center", paddingVertical: vscale(24), gap: vscale(6) },
       emptyChatTitle: { fontSize: scale(isTablet ? 13 : 12), fontWeight: "900", color: TEXT_DARK },
@@ -1276,7 +1469,13 @@ function makeStyles(args: {
       msgRowLeft: { justifyContent: "flex-start" },
       msgRowRight: { justifyContent: "flex-end" },
 
-      bubble: { maxWidth: isTablet ? "70%" : "82%", borderRadius: scale(16), paddingHorizontal: scale(12), paddingVertical: vscale(10), borderWidth: 1 },
+      bubble: {
+        maxWidth: isTablet ? "70%" : "82%",
+        borderRadius: scale(16),
+        paddingHorizontal: scale(12),
+        paddingVertical: vscale(10),
+        borderWidth: 1,
+      },
       bubbleLeft: { backgroundColor: "#EEF2F7", borderColor: "#E6ECF5" },
       bubbleRight: { backgroundColor: "#FFFFFF" },
 
@@ -1306,18 +1505,84 @@ function makeStyles(args: {
         alignItems: "center",
         gap: scale(8),
       },
-      composerInput: { flex: 1, height: vscale(42), paddingVertical: 0, fontSize: scale(isTablet ? 12 : 11), fontWeight: "400", color: "#111827" },
+      composerInput: {
+        flex: 1,
+        height: vscale(42),
+        paddingVertical: 0,
+        fontSize: scale(isTablet ? 12 : 11),
+        fontWeight: "400",
+        color: "#111827",
+      },
 
-      sendBtn: { width: scale(44), height: scale(44), borderRadius: scale(22), backgroundColor: primary, alignItems: "center", justifyContent: "center" },
+      sendBtn: {
+        width: scale(44),
+        height: scale(44),
+        borderRadius: scale(22),
+        backgroundColor: primary,
+        alignItems: "center",
+        justifyContent: "center",
+      },
 
-      bannerNeutral: { ...CONTENT_ALIGN, flexDirection: "row", alignItems: "center", gap: scale(10), borderRadius: scale(14), borderWidth: 1, borderColor: BORDER, backgroundColor: "#FFFFFF", paddingHorizontal: scale(12), paddingVertical: vscale(10) },
+      bannerNeutral: {
+        ...CONTENT_ALIGN,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(10),
+        borderRadius: scale(14),
+        borderWidth: 1,
+        borderColor: BORDER,
+        backgroundColor: "#FFFFFF",
+        paddingHorizontal: scale(12),
+        paddingVertical: vscale(10),
+      },
       bannerNeutralText: { fontSize: scale(10.5), fontWeight: "400", color: TEXT_MUTED },
 
-      bannerDanger: { ...CONTENT_ALIGN, flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: scale(10), borderRadius: scale(14), borderWidth: 1, borderColor: "#FECACA", backgroundColor: "#FEF2F2", paddingHorizontal: scale(12), paddingVertical: vscale(10) },
+      bannerDanger: {
+        ...CONTENT_ALIGN,
+        flexDirection: "row",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: scale(10),
+        borderRadius: scale(14),
+        borderWidth: 1,
+        borderColor: "#FECACA",
+        backgroundColor: "#FEF2F2",
+        paddingHorizontal: scale(12),
+        paddingVertical: vscale(10),
+      },
       bannerDangerText: { flex: 1, fontSize: scale(10.5), fontWeight: "400", color: "#B91C1C" },
 
-      bannerBtn: { paddingHorizontal: scale(12), paddingVertical: vscale(8), borderRadius: scale(12), borderWidth: 1, borderColor: BORDER, backgroundColor: "#FFFFFF" },
+      bannerBtn: {
+        paddingHorizontal: scale(12),
+        paddingVertical: vscale(8),
+        borderRadius: scale(12),
+        borderWidth: 1,
+        borderColor: BORDER,
+        backgroundColor: "#FFFFFF",
+      },
       bannerBtnText: { fontSize: scale(10.5), fontWeight: "900", color: primary },
+
+      // ✅ New messages pill
+      newMsgPillWrap: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: vscale(74),
+        alignItems: "center",
+        zIndex: 10,
+      },
+      newMsgPill: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(8),
+        paddingHorizontal: scale(12),
+        paddingVertical: vscale(8),
+        borderRadius: scale(999),
+        backgroundColor: primary,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.25)",
+      },
+      newMsgPillText: { fontSize: scale(10.5), fontWeight: "900", color: "#FFFFFF" },
 
       viewerBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", justifyContent: "center" },
       viewerTopBar: {
@@ -1333,17 +1598,43 @@ function makeStyles(args: {
         justifyContent: "space-between",
         zIndex: 5,
       },
-      viewerIconBtn: { width: _viewerPad, height: _viewerPad, borderRadius: _viewerPad / 2, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center" },
+      viewerIconBtn: {
+        width: _viewerPad,
+        height: _viewerPad,
+        borderRadius: _viewerPad / 2,
+        backgroundColor: "rgba(255,255,255,0.12)",
+        alignItems: "center",
+        justifyContent: "center",
+      },
       viewerCounter: { fontSize: scale(12), fontWeight: "900", color: "#FFFFFF", maxWidth: "65%", textAlign: "center" },
       viewerStage: { flex: 1, paddingTop: vscale(70), paddingBottom: vscale(36) },
       viewerStageInner: { flexGrow: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: sidePad },
       viewerImage: { width: "100%", height: "100%" },
 
-      viewerNavBtn: { position: "absolute", top: "50%", marginTop: -scale(22), width: scale(44), height: scale(44), borderRadius: scale(22), backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
+      viewerNavBtn: {
+        position: "absolute",
+        top: "50%",
+        marginTop: -scale(22),
+        width: scale(44),
+        height: scale(44),
+        borderRadius: scale(22),
+        backgroundColor: "rgba(255,255,255,0.14)",
+        alignItems: "center",
+        justifyContent: "center",
+      },
       viewerNavLeft: { left: sidePad },
       viewerNavRight: { right: sidePad },
 
-      viewerHint: { position: "absolute", bottom: vscale(10), left: 0, right: 0, textAlign: "center", fontSize: scale(10.5), fontWeight: "400", color: "rgba(255,255,255,0.72)" },
+      viewerHint: {
+        position: "absolute",
+        bottom: vscale(10),
+        left: 0,
+        right: 0,
+        textAlign: "center",
+        fontSize: scale(10.5),
+        fontWeight: "400",
+        color: "rgba(255,255,255,0.72)",
+      },
     }),
     {
       _iconSize,

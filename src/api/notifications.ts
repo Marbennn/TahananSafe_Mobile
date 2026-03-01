@@ -61,8 +61,7 @@ async function getUserScopeKeySuffix(): Promise<string> {
 
   const payload = decodeJwtPayload(token) || {};
   // support common backend fields
-  const uid =
-    String(payload?.userId ?? payload?.id ?? payload?._id ?? payload?.sub ?? "").trim();
+  const uid = String(payload?.userId ?? payload?.id ?? payload?._id ?? payload?.sub ?? "").trim();
 
   return uid || "anon";
 }
@@ -95,9 +94,7 @@ async function parseJsonSafe(res: Response) {
 
 export async function fetchMyNotifications(limit = 80): Promise<NotificationItem[]> {
   const headers = await authHeaders();
-  const url = `${API_BASE_URL}/api/mobile/v1/notifications/my?limit=${encodeURIComponent(
-    String(limit)
-  )}`;
+  const url = `${API_BASE_URL}/api/mobile/v1/notifications/my?limit=${encodeURIComponent(String(limit))}`;
 
   let res: Response;
   try {
@@ -142,6 +139,17 @@ export async function toggleNotificationRead(id: string): Promise<NotificationIt
 export async function clearAllNotifications(): Promise<void> {
   const headers = await authHeaders();
   const url = `${API_BASE_URL}/api/mobile/v1/notifications/clear`;
+
+  const res = await fetch(url, { method: "DELETE", headers });
+  const data = await parseJsonSafe(res);
+
+  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
+}
+
+// ✅ NEW: delete one REMOTE notification
+export async function deleteNotification(id: string): Promise<void> {
+  const headers = await authHeaders();
+  const url = `${API_BASE_URL}/api/mobile/v1/notifications/${encodeURIComponent(id)}`;
 
   const res = await fetch(url, { method: "DELETE", headers });
   const data = await parseJsonSafe(res);
@@ -350,6 +358,22 @@ export async function toggleNotificationReadCombined(id: string): Promise<Notifi
   }
 
   return await toggleNotificationRead(id);
+}
+
+// ✅ NEW: delete single notification (combined)
+export async function deleteNotificationCombined(id: string): Promise<void> {
+  const sid = String(id);
+
+  // local delete
+  if (sid.startsWith("local-")) {
+    const local = await getLocalNotifications();
+    const next = local.filter((n) => n.id !== sid);
+    await setLocalNotifications(next);
+    return;
+  }
+
+  // remote delete
+  await deleteNotification(sid);
 }
 
 export async function clearAllNotificationsCombined(): Promise<void> {

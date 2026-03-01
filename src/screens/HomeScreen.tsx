@@ -111,6 +111,7 @@ function makeDateLine(d: Date) {
   const time = d.toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
+    hour12: true,
   });
   return `${weekday} | ${monthDayYear} | ${time}`;
 }
@@ -378,12 +379,35 @@ export default function HomeScreen({
     }
   }, []);
 
+  // ✅ Emergency button animations (press bounce)
+  const em911Scale = useRef(new Animated.Value(1)).current;
+  const em117Scale = useRef(new Animated.Value(1)).current;
+
+  const pressInEmergency = useCallback((v: Animated.Value) => {
+    v.stopAnimation();
+    Animated.spring(v, {
+      toValue: 0.97,
+      useNativeDriver: true,
+      speed: 22,
+      bounciness: 0,
+    }).start();
+  }, []);
+
+  const pressOutEmergency = useCallback((v: Animated.Value) => {
+    v.stopAnimation();
+    Animated.spring(v, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 16,
+      bounciness: 8,
+    }).start();
+  }, []);
+
   // =========================
   // ✅ Notifications badge logic (UPDATED to auto-refresh)
   // =========================
   const [notifCount, setNotifCount] = useState<number>(0);
 
-  // kept (not removed) - may still be useful elsewhere
   const countUnreadFromList = useCallback((list: any[]) => {
     return list.reduce((acc, n) => {
       const isRead = n?.isRead === true || n?.read === true || n?.seen === true;
@@ -401,12 +425,10 @@ export default function HomeScreen({
     }
   }, []);
 
-  // ✅ Refresh notif count on mount
   useEffect(() => {
     fetchNotifCount();
   }, [fetchNotifCount]);
 
-  // ✅ Refresh when app becomes active again (foreground)
   useEffect(() => {
     let mounted = true;
     const onChange = (state: AppStateStatus) => {
@@ -420,7 +442,6 @@ export default function HomeScreen({
     };
   }, [fetchNotifCount]);
 
-  // ✅ Refresh when HomeScreen regains focus (after closing Notifications screen)
   useFocusEffect(
     useCallback(() => {
       fetchNotifCount();
@@ -428,7 +449,6 @@ export default function HomeScreen({
     }, [fetchNotifCount])
   );
 
-  // ✅ ADDED: Listen to notifications updates from NotificationsScreen
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(NOTIF_CHANGED_EVENT, () => {
       fetchNotifCount();
@@ -436,18 +456,16 @@ export default function HomeScreen({
     return () => sub.remove();
   }, [fetchNotifCount]);
 
-  // ✅ ADDED: Poll while Home is focused (catches status updates while staying on Home)
   useFocusEffect(
     useCallback(() => {
       let alive = true;
 
-      // refresh immediately on focus
       fetchNotifCount();
 
       const id = setInterval(() => {
         if (!alive) return;
         fetchNotifCount();
-      }, 15000); // 15 seconds
+      }, 15000);
 
       return () => {
         alive = false;
@@ -459,7 +477,6 @@ export default function HomeScreen({
   const handleOpenNotifications = useCallback(async () => {
     onOpenNotifications?.();
 
-    // keep marker (but don't clear badge)
     try {
       await AsyncStorage.setItem(NOTIF_LAST_SEEN_KEY, String(Date.now()));
     } catch {
@@ -613,7 +630,7 @@ export default function HomeScreen({
   const chevronOpen = useRef(new Animated.Value(0)).current;
   const chevronBounce = useRef(new Animated.Value(0)).current;
 
-  // ✅ NEW: Backdrop opacity animation (fixes "dim linger")
+  // ✅ Backdrop opacity animation
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
   const startChevronBounce = useCallback(() => {
@@ -636,7 +653,6 @@ export default function HomeScreen({
   }, [sheetOpen, startChevronBounce, stopChevronBounce]);
 
   const openSheet = useCallback(() => {
-    // reset positions so open always feels instant
     sheetY.stopAnimation();
     chevronOpen.stopAnimation();
     backdropOpacity.stopAnimation();
@@ -647,7 +663,6 @@ export default function HomeScreen({
 
     setSheetOpen(true);
 
-    // ✅ Make dim appear quickly & smoothly
     Animated.parallel([
       Animated.timing(backdropOpacity, {
         toValue: 1,
@@ -672,20 +687,17 @@ export default function HomeScreen({
   }, [sheetY, chevronOpen, backdropOpacity, SHEET_HEIGHT]);
 
   const closeSheet = useCallback(() => {
-    // ✅ Stop any running animations to avoid "lingering"
     sheetY.stopAnimation();
     chevronOpen.stopAnimation();
     backdropOpacity.stopAnimation();
 
-    // ✅ Fade dim OUT fast, and close modal as soon as fade ends
     Animated.parallel([
       Animated.timing(backdropOpacity, {
         toValue: 0,
-        duration: 120, // 🔥 fast dim disappear
+        duration: 120,
         easing: Easing.in(Easing.quad),
         useNativeDriver: true,
       }),
-      // ✅ Use timing for snappy close (spring can feel slow on some devices)
       Animated.timing(sheetY, {
         toValue: SHEET_HEIGHT,
         duration: 220,
@@ -700,7 +712,6 @@ export default function HomeScreen({
       }),
     ]).start(({ finished }) => {
       if (finished) {
-        // Ensure it's fully reset
         sheetY.setValue(SHEET_HEIGHT);
         chevronOpen.setValue(0);
         backdropOpacity.setValue(0);
@@ -717,8 +728,6 @@ export default function HomeScreen({
         sheetY.setValue(next);
         const t = clamp(next / SHEET_HEIGHT, 0, 1);
         chevronOpen.setValue(1 - t);
-
-        // ✅ Backdrop follows drag (so when you drag down, dim reduces immediately)
         backdropOpacity.setValue(1 - t);
       },
       onPanResponderRelease: (_, g) => {
@@ -768,28 +777,24 @@ export default function HomeScreen({
 
   const SHEET_TOTAL_HEIGHT = useMemo(() => SHEET_HEIGHT + bottomPad, [SHEET_HEIGHT, bottomPad]);
 
-  // ✅ NEW: Chevron should sit ABOVE the sheet when fully open
   const CHEVRON_ABOVE_SHEET_GAP = useMemo(() => clamp(Math.round(10 * s), 8, 14), [s]);
   const openBottom = useMemo(
     () => SHEET_TOTAL_HEIGHT + CHEVRON_ABOVE_SHEET_GAP,
     [SHEET_TOTAL_HEIGHT, CHEVRON_ABOVE_SHEET_GAP]
   );
 
-  // distance we need to lift from the "closed position" to the "open-above-sheet position"
   const deltaToOpen = useMemo(() => openBottom - chevronHandleBottom, [openBottom, chevronHandleBottom]);
 
-  // lift animation: 0 -> 1 moves chevron UP by deltaToOpen
   const chevronLiftToOpen = useMemo(
     () =>
       chevronOpen.interpolate({
         inputRange: [0, 1],
-        outputRange: [0, -deltaToOpen], // negative = move up
+        outputRange: [0, -deltaToOpen],
         extrapolate: "clamp",
       }),
     [chevronOpen, deltaToOpen]
   );
 
-  // ✅ Modal-layer chevron follows sheet drag (sheetY) AND transitions to the open-above-sheet position
   const modalChevronTranslateY = useMemo(() => Animated.add(sheetY, chevronLiftToOpen), [sheetY, chevronLiftToOpen]);
 
   const chevronRotate = chevronOpen.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] });
@@ -866,28 +871,32 @@ export default function HomeScreen({
         logsWrap: { paddingHorizontal: PAD, paddingTop: clamp(Math.round(10 * s), 8, 12) },
         logsGap: { height: GAP },
 
-        // ✅ NEW: Emergency buttons under Recent Logs
+        // ✅ Emergency buttons under Recent Logs
         emergencyWrap: {
           paddingHorizontal: PAD,
-          paddingTop: clamp(Math.round(12 * s), 10, 14),
+          paddingTop: clamp(Math.round(10 * s), 8, 12),
         },
         emergencyRow: {
           flexDirection: "row",
-          gap: clamp(Math.round(12 * s), 10, 14),
+          gap: clamp(Math.round(10 * s), 8, 12),
         },
-        emergencyBtn: {
+
+        // ✅ CHANGED: Shadow removed
+        emergencyBtnOuter: {
           flex: 1,
-          borderRadius: 20,
-          paddingVertical: clamp(Math.round(16 * s), 14, 18),
-          paddingHorizontal: clamp(Math.round(14 * s), 12, 16),
+        },
+
+        // ✅ CHANGED: actual “card” style, still rounded + padding, NO shadow
+        emergencyBtnCard: {
+          width: "100%",
+          borderRadius: 18,
+          paddingVertical: clamp(Math.round(12 * s), 10, 14),
+          paddingHorizontal: clamp(Math.round(12 * s), 10, 14),
           alignItems: "center",
           justifyContent: "center",
-          shadowColor: "#000",
-          shadowOpacity: 0.12,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 6 },
-          elevation: 7,
+          overflow: "hidden",
         },
+
         emergencyBtn911: {
           backgroundColor: "#8B0000",
         },
@@ -899,24 +908,25 @@ export default function HomeScreen({
           alignItems: "center",
           justifyContent: "center",
           gap: 8,
-          marginBottom: 6,
+          marginBottom: 5,
         },
         emergencyNum: {
-          fontSize: clamp(Math.round(26 * fs), 22, 30),
+          fontSize: clamp(Math.round(22 * fs), 19, 26),
           fontWeight: "900",
           color: "#FFFFFF",
-          letterSpacing: 0.6,
+          letterSpacing: 0.4,
         },
         emergencyLabel: {
-          fontSize: clamp(Math.round(12 * fs), 11, 14),
+          fontSize: clamp(Math.round(12 * fs), 11, 13),
           fontWeight: "900",
           color: "rgba(255,255,255,0.95)",
         },
         emergencySub: {
-          fontSize: clamp(Math.round(11 * fs), 10, 13),
-          fontWeight: "800",
+          fontSize: clamp(Math.round(10 * fs), 10, 12),
+          fontWeight: "700",
           color: "rgba(255,255,255,0.92)",
           textAlign: "center",
+          marginTop: 1,
         },
 
         miniCenter: { paddingHorizontal: PAD, paddingTop: 10, alignItems: "center", justifyContent: "center" },
@@ -937,12 +947,11 @@ export default function HomeScreen({
           zIndex: 60,
         },
 
-        // ✅ NEW: chevron layer used inside the Modal (must be above the sheet)
         chevronModalWrap: {
           position: "absolute",
           left: 0,
           right: 0,
-          bottom: chevronHandleBottom, // base, then we transform translateY
+          bottom: chevronHandleBottom,
           alignItems: "center",
           justifyContent: "center",
           zIndex: 999,
@@ -965,7 +974,6 @@ export default function HomeScreen({
           elevation: 6,
         },
 
-        // ✅ backdrop now controlled via Animated opacity (still same color)
         backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.18)" },
 
         sheetOuter: {
@@ -1053,7 +1061,6 @@ export default function HomeScreen({
             >
               <Ionicons name="notifications-outline" size={notifIconSize} color={TEXT_DARK} />
 
-              {/* ✅ Badge only shows when there are unread/new notifications */}
               {notifCount > 0 ? (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText} allowFontScaling={false}>
@@ -1128,59 +1135,63 @@ export default function HomeScreen({
             )}
           </View>
 
-          {/* ✅ NEW: Emergency call buttons (under Recent Logs) */}
+          {/* ✅ Emergency call buttons (NO SHADOW) */}
           <View style={styles.emergencyWrap}>
             <View style={styles.emergencyRow}>
               <Pressable
                 onPress={() => callEmergency("911")}
+                onPressIn={() => pressInEmergency(em911Scale)}
+                onPressOut={() => pressOutEmergency(em911Scale)}
                 hitSlop={8}
-                style={({ pressed }) => [
-                  styles.emergencyBtn,
-                  styles.emergencyBtn911,
-                  pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
-                ]}
+                style={styles.emergencyBtnOuter}
               >
-                <View style={styles.emergencyTop}>
-                  <Ionicons name="call" size={20} color="#fff" />
-                  <Text style={styles.emergencyNum} allowFontScaling={false}>
-                    911
-                  </Text>
-                </View>
-                <Text style={styles.emergencyLabel} allowFontScaling={false}>
-                  Emergency Hotline
-                </Text>
-                <Text style={styles.emergencySub} allowFontScaling={false}>
-                  Tap to call immediately
-                </Text>
+                <Animated.View style={{ transform: [{ scale: em911Scale }], width: "100%", alignItems: "center" }}>
+                  <View style={[styles.emergencyBtnCard, styles.emergencyBtn911]}>
+                    <View style={styles.emergencyTop}>
+                      <Ionicons name="call" size={18} color="#fff" />
+                      <Text style={styles.emergencyNum} allowFontScaling={false}>
+                        911
+                      </Text>
+                    </View>
+                    <Text style={styles.emergencyLabel} allowFontScaling={false}>
+                      Emergency Hotline
+                    </Text>
+                    <Text style={styles.emergencySub} allowFontScaling={false}>
+                      Tap to call immediately
+                    </Text>
+                  </View>
+                </Animated.View>
               </Pressable>
 
               <Pressable
                 onPress={() => callEmergency("117")}
+                onPressIn={() => pressInEmergency(em117Scale)}
+                onPressOut={() => pressOutEmergency(em117Scale)}
                 hitSlop={8}
-                style={({ pressed }) => [
-                  styles.emergencyBtn,
-                  styles.emergencyBtn117,
-                  pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
-                ]}
+                style={styles.emergencyBtnOuter}
               >
-                <View style={styles.emergencyTop}>
-                  <Ionicons name="call" size={20} color="#fff" />
-                  <Text style={styles.emergencyNum} allowFontScaling={false}>
-                    117
-                  </Text>
-                </View>
-                <Text style={styles.emergencyLabel} allowFontScaling={false}>
-                  Police Assistance
-                </Text>
-                <Text style={styles.emergencySub} allowFontScaling={false}>
-                  Tap to call immediately
-                </Text>
+                <Animated.View style={{ transform: [{ scale: em117Scale }], width: "100%", alignItems: "center" }}>
+                  <View style={[styles.emergencyBtnCard, styles.emergencyBtn117]}>
+                    <View style={styles.emergencyTop}>
+                      <Ionicons name="call" size={18} color="#fff" />
+                      <Text style={styles.emergencyNum} allowFontScaling={false}>
+                        117
+                      </Text>
+                    </View>
+                    <Text style={styles.emergencyLabel} allowFontScaling={false}>
+                      Police Assistance
+                    </Text>
+                    <Text style={styles.emergencySub} allowFontScaling={false}>
+                      Tap to call immediately
+                    </Text>
+                  </View>
+                </Animated.View>
               </Pressable>
             </View>
           </View>
         </ScrollView>
 
-        {/* ✅ Chevron handle (ONLY when sheet is CLOSED, because Modal sits on top when open) */}
+        {/* ✅ Chevron handle (ONLY when sheet is CLOSED) */}
         {!sheetOpen ? (
           <View style={styles.chevronHandleWrap} {...handleHandlePan.panHandlers}>
             <Pressable
@@ -1229,19 +1240,11 @@ export default function HomeScreen({
         />
 
         {/* ✅ Swipe-up Sheet Modal */}
-        <Modal
-          visible={sheetOpen}
-          transparent
-          animationType="none"
-          onRequestClose={closeSheet}
-          statusBarTranslucent // ✅ helps on Android (overlay)
-        >
-          {/* ✅ Animated backdrop (fixes dim lingering) */}
+        <Modal visible={sheetOpen} transparent animationType="none" onRequestClose={closeSheet} statusBarTranslucent>
           <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
             <Pressable style={{ flex: 1 }} onPress={closeSheet} />
           </Animated.View>
 
-          {/* ✅ Chevron INSIDE modal so it can sit ABOVE the sheet and FOLLOW it */}
           <Animated.View
             style={[
               styles.chevronModalWrap,
@@ -1249,7 +1252,7 @@ export default function HomeScreen({
                 transform: [{ translateY: modalChevronTranslateY }],
               },
             ]}
-            {...handlePan.panHandlers} // ✅ allows drag from chevron too
+            {...handlePan.panHandlers}
           >
             <Pressable
               onPress={() => closeSheet()}
@@ -1292,23 +1295,14 @@ export default function HomeScreen({
               <Pressable
                 onPress={async () => {
                   closeSheet();
-
                   try {
-                    // ✅ real logout: clears tokens + storage (session.ts)
                     await logout();
-
-                    // optional: parent can still react (navigate to login, etc.)
                     onQuickExit?.();
                   } catch {
-                    // even if something fails, still call parent exit
                     onQuickExit?.();
                   }
                 }}
-                style={({ pressed }) => [
-                  styles.actionBtn,
-                  styles.dangerBtn,
-                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
-                ]}
+                style={({ pressed }) => [styles.actionBtn, styles.dangerBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
               >
                 <Ionicons name="log-out-outline" size={20} color="#fff" style={styles.actionIcon} />
                 <Text style={styles.actionText} allowFontScaling={false}>
