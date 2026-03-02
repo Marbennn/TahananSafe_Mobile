@@ -52,8 +52,10 @@ type ThreadMsg = {
   text: string;
   time: string;
 
-  // ✅ for stable ordering (optional)
   createdAtMs?: number;
+
+  // ✅ optimistic state
+  pending?: boolean;
 };
 
 type Props = {
@@ -87,6 +89,7 @@ function dtoToUi(dto: ThreadDto): ThreadMsg {
     text: dto.text,
     time: dto.createdAt ? formatStamp(new Date(dto.createdAt)) : "",
     createdAtMs,
+    pending: false,
   };
 }
 
@@ -209,14 +212,21 @@ export default function ReportDetailScreen({
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [view, setView] = useState<ViewKey>("details");
 
-  const NAV_BASE_HEIGHT = vscale(78);
-  const FAB_SIZE = scale(62);
+  // =========================
+  // ✅ BottomNavBar sizing (prevent FAB from getting bigger here)
+  // =========================
+  const NAV_BASE_HEIGHT = vscale(74);
 
-  const bottomPad = Math.max(insets.bottom, vscale(10));
-  const navHeight = NAV_BASE_HEIGHT + bottomPad;
+  // ✅ IMPORTANT: do NOT allow FAB_SIZE to grow above 62
+  // (This fixes “FAB enlarged when entering ReportDetailScreen”)
+  const FAB_SIZE = clamp(scale(62), 56, 62);
 
+  const bottomInset = Math.max(0, insets.bottom);
+  const navHeight = NAV_BASE_HEIGHT + bottomInset;
+  const paddingBottom = bottomInset;
+
+  const fabBottom = bottomInset + (NAV_BASE_HEIGHT - FAB_SIZE / 2 - vscale(10));
   const chevronBottom = navHeight + vscale(90);
-  const fabBottom = navHeight - FAB_SIZE / 2 - vscale(10);
 
   const RESERVED_BOTTOM = navHeight + vscale(18);
   const DETAILS_EXTRA_BOTTOM = vscale(isTablet ? 130 : 110);
@@ -258,7 +268,6 @@ export default function ReportDetailScreen({
   const [detailError, setDetailError] = useState("");
   const [detail, setDetail] = useState<ReportDetailDto | null>(null);
 
-  // ✅ cancel state
   const [cancelling, setCancelling] = useState(false);
 
   const reportId = useMemo(() => {
@@ -345,41 +354,88 @@ export default function ReportDetailScreen({
   );
 
   // =========================
-  // ✅ REALTIME-LIKE THREADS
+  // ✅ REALTIME-LIKE THREADS (DEDUPED)
   // =========================
   const POLL_MS = 2500;
 
-  // track if user is at bottom; if not, don’t auto-scroll
   const isAtBottomRef = useRef(true);
   const [newMsgCount, setNewMsgCount] = useState(0);
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
-  // ✅ helper: scroll to bottom
+  // ✅ Track pending optimistic messages so we can remove them when server message arrives
+  const pendingOptimisticRef = useRef<
+    Map<string, { text: string; createdAtMs: number; side: "left" | "right" }>
+  >(new Map());
+
   const scrollToBottom = useCallback((animated = true) => {
     requestAnimationFrame(() => {
       threadScrollRef.current?.scrollToEnd({ animated });
     });
   }, []);
 
-  // ✅ merge helper (dedupe + stable order)
+  // ✅ Determine if a server msg “matches” an optimistic pending msg
+  function findMatchingServerMessage(
+    optimistic: { text: string; createdAtMs: number; side: "left" | "right" },
+    serverMsgs: ThreadMsg[]
+  ) {
+    const WINDOW_MS = 8000; // allow backend delay
+    const wantText = optimistic.text.trim();
+    if (!wantText) return null;
+
+    // Only match same side (resident messages are right)
+    const candidates = serverMsgs.filter((m) => m.side === optimistic.side && !m.pending);
+
+    let best: ThreadMsg | null = null;
+    let bestDelta = Number.POSITIVE_INFINITY;
+
+    for (const m of candidates) {
+      if (m.text.trim() !== wantText) continue;
+      const t = m.createdAtMs ?? 0;
+      if (!t) continue;
+      const delta = Math.abs(t - optimistic.createdAtMs);
+      if (delta <= WINDOW_MS && delta < bestDelta) {
+        best = m;
+        bestDelta = delta;
+      }
+    }
+    return best;
+  }
+
   const mergeThreadDtos = useCallback(
     (list: ThreadDto[]) => {
       const incoming = (list || []).map(dtoToUi);
 
       setMessages((prev) => {
+        // 1) Remove/replace optimistic messages that now exist on server
+        const incomingNonPending = incoming;
+
+        const pendingMap = pendingOptimisticRef.current;
+
+        const prevFiltered: ThreadMsg[] = [];
+        for (const m of prev) {
+          if (m.pending && pendingMap.has(m.id)) {
+            const meta = pendingMap.get(m.id)!;
+            const match = findMatchingServerMessage(meta, incomingNonPending);
+            if (match) {
+              // matched -> drop optimistic, server one will be shown
+              pendingMap.delete(m.id);
+              continue;
+            }
+          }
+          prevFiltered.push(m);
+        }
+
+        // 2) Dedup by id (server ids are stable; optimistic ids are tmp_*)
         const map = new Map<string, ThreadMsg>();
 
-        // keep previous
-        for (const m of prev) map.set(m.id, m);
-
-        // add/replace incoming (incoming should be source-of-truth for text/time)
-        for (const m of incoming) map.set(m.id, m);
+        for (const m of prevFiltered) map.set(m.id, m);
+        for (const m of incomingNonPending) map.set(m.id, m);
 
         const merged = Array.from(map.values());
 
-        // stable sort if createdAt is present
+        // 3) Stable sort
         merged.sort((a, b) => {
           const aa = a.createdAtMs ?? 0;
           const bb = b.createdAtMs ?? 0;
@@ -389,11 +445,8 @@ export default function ReportDetailScreen({
 
         const added = merged.length - prev.length;
         if (added > 0 && !isAtBottomRef.current) {
-          // show "new messages" badge if user is reading older messages
           setNewMsgCount((c) => c + added);
         }
-
-        // if user is at bottom, auto-scroll after render
         if (added > 0 && isAtBottomRef.current) {
           setTimeout(() => scrollToBottom(true), 60);
         }
@@ -448,15 +501,10 @@ export default function ReportDetailScreen({
   const startPolling = useCallback(() => {
     stopPolling();
 
-    // only poll when:
-    // - Threads view
-    // - reportId exists
-    // - app is active
     if (!reportId) return;
     if (view !== "threads") return;
     if (appStateRef.current !== "active") return;
 
-    // initial load (show loader only if we have nothing yet)
     refreshThreads({ showLoader: messages.length === 0 });
 
     pollTimerRef.current = setInterval(() => {
@@ -464,20 +512,15 @@ export default function ReportDetailScreen({
     }, POLL_MS);
   }, [stopPolling, reportId, view, refreshThreads, messages.length]);
 
-  // watch app state: pause/resume polling
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next) => {
       appStateRef.current = next;
-      if (next === "active") {
-        startPolling();
-      } else {
-        stopPolling();
-      }
+      if (next === "active") startPolling();
+      else stopPolling();
     });
     return () => sub.remove();
   }, [startPolling, stopPolling]);
 
-  // start/stop polling when switching tabs
   useEffect(() => {
     if (view === "threads") {
       startPolling();
@@ -491,7 +534,7 @@ export default function ReportDetailScreen({
   }, [view, reportId]);
 
   // =========================
-  // END REALTIME-LIKE THREADS
+  // END THREADS
   // =========================
 
   useEffect(() => {
@@ -515,6 +558,9 @@ export default function ReportDetailScreen({
     setNewMsgCount(0);
     isAtBottomRef.current = true;
 
+    // ✅ clear pending optimistic map when changing report
+    pendingOptimisticRef.current.clear();
+
     if (reportId) loadDetail(true);
     else setDetailError("Missing report id.");
   }, [reportId, loadDetail]);
@@ -531,44 +577,58 @@ export default function ReportDetailScreen({
 
     setSending(true);
 
+    const now = Date.now();
+    const tmpId = `tmp_${now}`;
+
     const optimistic: ThreadMsg = {
-      id: `tmp_${Date.now()}`,
+      id: tmpId,
       side: "right",
       text: t,
       time: formatStamp(new Date()),
-      createdAtMs: Date.now(),
+      createdAtMs: now,
+      pending: true,
     };
 
-    // if user sends, they probably want to be at bottom
+    // ✅ track for matching
+    pendingOptimisticRef.current.set(tmpId, { text: t, createdAtMs: now, side: "right" });
+
     isAtBottomRef.current = true;
     setNewMsgCount(0);
 
     setMessages((prev) => [...prev, optimistic]);
     setDraft("");
 
-    setTimeout(() => {
-      scrollToBottom(true);
-    }, 60);
+    setTimeout(() => scrollToBottom(true), 60);
 
     const controller = new AbortController();
 
     try {
       await sendReportThreadMessage(reportId, t, controller.signal);
 
-      // ✅ don’t require manual reload; just refresh immediately (merge)
+      // ✅ refresh immediately; merge will remove matching optimistic
       await refreshThreads({ showLoader: false });
+
+      // ✅ safety: if server didn’t return createdAt quickly, remove pending after a short delay
+      setTimeout(() => {
+        setMessages((prev) => {
+          if (!pendingOptimisticRef.current.has(tmpId)) return prev; // already matched/removed
+          // try one more refresh before removing
+          refreshThreads({ showLoader: false });
+          return prev;
+        });
+      }, 800);
     } catch (e: any) {
       if (!isAbortError(e)) {
         Alert.alert("Send failed", e?.message || "Could not send message.");
       }
-      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+      pendingOptimisticRef.current.delete(tmpId);
+      setMessages((prev) => prev.filter((m) => m.id !== tmpId));
       setDraft(t);
     } finally {
       setSending(false);
     }
   }, [draft, reportId, sending, scrollToBottom, refreshThreads]);
 
-  // ✅ Cancel report (tries a dedicated cancel route first, then falls back to PATCH status)
   const cancelReport = useCallback(async () => {
     if (!reportId) {
       Alert.alert("Missing report id", "Cannot cancel because reportId is empty.");
@@ -596,14 +656,12 @@ export default function ReportDetailScreen({
                 Authorization: `Bearer ${token}`,
               };
 
-              // 1) try: POST /reports/:id/cancel
               let res = await fetch(`${API_BASE_URL}/api/mobile/v1/reports/${reportId}/cancel`, {
                 method: "POST",
                 headers,
                 body: JSON.stringify({ reason: "User cancelled" }),
               });
 
-              // 2) fallback: PATCH /reports/:id with status
               if (!res.ok) {
                 res = await fetch(`${API_BASE_URL}/api/mobile/v1/reports/${reportId}`, {
                   method: "PATCH",
@@ -615,13 +673,11 @@ export default function ReportDetailScreen({
               const data: any = await readJsonSafe(res);
               if (!res.ok) throw new Error(data?.message || `Cancel failed (${res.status})`);
 
-              // update local UI immediately
               setDetail((prev) => {
                 const base: any = prev ?? {};
                 return { ...base, status: "CANCELLED", updatedAt: new Date().toISOString() } as any;
               });
 
-              // force reload detail so status/time are accurate
               lastDetailLoadedIdRef.current = "";
               await loadDetail(true);
 
@@ -645,11 +701,14 @@ export default function ReportDetailScreen({
     "Incident";
 
   const incidentNarrative =
-    detail?.details || (detail as any)?.narrative || (report as any)?.details || report.detail || "No details provided.";
+    detail?.details ||
+    (detail as any)?.narrative ||
+    (report as any)?.details ||
+    report.detail ||
+    "No details provided.";
 
   const witnessName = detail?.witnessName || (report as any)?.witnessName || "—";
-  const witnessRole =
-    detail?.witnessType || (report as any)?.witnessRole || (report as any)?.witnessType || "—";
+  const witnessRole = detail?.witnessType || (report as any)?.witnessRole || (report as any)?.witnessType || "—";
 
   const locationLabel = detail?.locationStr || (report as any)?.locationStr || (report as any)?.location || "—";
 
@@ -691,7 +750,6 @@ export default function ReportDetailScreen({
 
   const canCancel = !!reportId && statusUpper !== "CANCELLED" && statusUpper !== "RESOLVED";
 
-  // ✅ measure composer height so messages padding is always correct
   const [composerH, setComposerH] = useState(vscale(64));
 
   const threadsBottomSafe = Math.max(insets.bottom, vscale(10));
@@ -711,17 +769,14 @@ export default function ReportDetailScreen({
 
     const distanceFromBottom = contentH - visibleH - y;
 
-    const atBottom = distanceFromBottom < 40; // threshold
+    const atBottom = distanceFromBottom < 40;
     isAtBottomRef.current = atBottom;
 
-    if (atBottom) {
-      // user returned to bottom: clear "new messages" badge
-      setNewMsgCount(0);
-    }
+    if (atBottom) setNewMsgCount(0);
   }, []);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
       {/* Image Viewer Modal */}
@@ -801,7 +856,6 @@ export default function ReportDetailScreen({
       <View style={styles.page}>
         <View style={[styles.heroWrap, { paddingTop: Math.max(insets.top, vscale(6)) }]}>
           <View style={styles.heroCard}>
-            {/* Row 1: Back + Title aligned */}
             <View style={styles.heroHeaderRow}>
               <Pressable
                 onPress={onBack}
@@ -815,11 +869,9 @@ export default function ReportDetailScreen({
                 {incidentTitle}
               </Text>
 
-              {/* right spacer to keep title visually centered */}
               <View style={{ width: styles._backBox, height: styles._backBox }} />
             </View>
 
-            {/* Row 2: Status centered */}
             <View style={styles.heroStatusCenterRow}>
               <View style={[styles.statusPill, { borderColor: BORDER, backgroundColor: "#FFFFFF" }]}>
                 <View style={[styles.dot, { backgroundColor: accent }]} />
@@ -1090,6 +1142,7 @@ export default function ReportDetailScreen({
                               styles.bubble,
                               isLeft ? styles.bubbleLeft : styles.bubbleRight,
                               !isLeft && { borderColor: BORDER },
+                              m.pending && { opacity: 0.72 },
                             ]}
                           >
                             <Text style={[styles.bubbleText, isLeft ? styles.bubbleTextLeft : styles.bubbleTextRight]}>
@@ -1099,14 +1152,15 @@ export default function ReportDetailScreen({
                         </View>
 
                         {!isLeft ? (
-                          <Text style={[styles.msgTime, { textAlign: "right", marginTop: vscale(4) }]}>{m.time}</Text>
+                          <Text style={[styles.msgTime, { textAlign: "right", marginTop: vscale(4) }]}>
+                            {m.pending ? "Sending…" : m.time}
+                          </Text>
                         ) : null}
                       </View>
                     );
                   })}
                 </ScrollView>
 
-                {/* ✅ "New messages" floating pill */}
                 {newMsgCount > 0 ? (
                   <View style={styles.newMsgPillWrap} pointerEvents="box-none">
                     <Pressable
@@ -1115,7 +1169,10 @@ export default function ReportDetailScreen({
                         setNewMsgCount(0);
                         scrollToBottom(true);
                       }}
-                      style={({ pressed }) => [styles.newMsgPill, pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] }]}
+                      style={({ pressed }) => [
+                        styles.newMsgPill,
+                        pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
+                      ]}
                     >
                       <Ionicons name="arrow-down" size={styles._miniIcon} color="#FFFFFF" />
                       <Text style={styles.newMsgPillText}>{newMsgCount} new message(s)</Text>
@@ -1173,10 +1230,10 @@ export default function ReportDetailScreen({
             activeTab={activeTab}
             onTabPress={handleTab}
             navHeight={navHeight}
-            paddingBottom={bottomPad}
+            paddingBottom={paddingBottom}
             chevronBottom={chevronBottom}
             fabBottom={fabBottom}
-            fabSize={FAB_SIZE}
+            fabSize={FAB_SIZE} // ✅ capped here (prevents enlarge)
             onFabPress={pressFab}
             onFabLongPress={longPressFab}
             centerLabel="Incident Log"
@@ -1562,7 +1619,6 @@ function makeStyles(args: {
       },
       bannerBtnText: { fontSize: scale(10.5), fontWeight: "900", color: primary },
 
-      // ✅ New messages pill
       newMsgPillWrap: {
         position: "absolute",
         left: 0,

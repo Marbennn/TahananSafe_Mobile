@@ -158,7 +158,7 @@ export default function HotlinesScreen({
       <View style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>My Hotlines</Text>
+          <Text style={styles.title}>Hotlines</Text>
           <Text style={styles.subtitle}>Quick-dial emergency and local contacts</Text>
         </View>
 
