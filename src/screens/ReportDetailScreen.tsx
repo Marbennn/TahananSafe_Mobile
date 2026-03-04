@@ -218,7 +218,6 @@ export default function ReportDetailScreen({
   const NAV_BASE_HEIGHT = vscale(74);
 
   // ✅ IMPORTANT: do NOT allow FAB_SIZE to grow above 62
-  // (This fixes “FAB enlarged when entering ReportDetailScreen”)
   const FAB_SIZE = clamp(scale(62), 56, 62);
 
   const bottomInset = Math.max(0, insets.bottom);
@@ -364,7 +363,6 @@ export default function ReportDetailScreen({
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
-  // ✅ Track pending optimistic messages so we can remove them when server message arrives
   const pendingOptimisticRef = useRef<
     Map<string, { text: string; createdAtMs: number; side: "left" | "right" }>
   >(new Map());
@@ -375,16 +373,14 @@ export default function ReportDetailScreen({
     });
   }, []);
 
-  // ✅ Determine if a server msg “matches” an optimistic pending msg
   function findMatchingServerMessage(
     optimistic: { text: string; createdAtMs: number; side: "left" | "right" },
     serverMsgs: ThreadMsg[]
   ) {
-    const WINDOW_MS = 8000; // allow backend delay
+    const WINDOW_MS = 8000;
     const wantText = optimistic.text.trim();
     if (!wantText) return null;
 
-    // Only match same side (resident messages are right)
     const candidates = serverMsgs.filter((m) => m.side === optimistic.side && !m.pending);
 
     let best: ThreadMsg | null = null;
@@ -408,7 +404,6 @@ export default function ReportDetailScreen({
       const incoming = (list || []).map(dtoToUi);
 
       setMessages((prev) => {
-        // 1) Remove/replace optimistic messages that now exist on server
         const incomingNonPending = incoming;
 
         const pendingMap = pendingOptimisticRef.current;
@@ -419,7 +414,6 @@ export default function ReportDetailScreen({
             const meta = pendingMap.get(m.id)!;
             const match = findMatchingServerMessage(meta, incomingNonPending);
             if (match) {
-              // matched -> drop optimistic, server one will be shown
               pendingMap.delete(m.id);
               continue;
             }
@@ -427,7 +421,6 @@ export default function ReportDetailScreen({
           prevFiltered.push(m);
         }
 
-        // 2) Dedup by id (server ids are stable; optimistic ids are tmp_*)
         const map = new Map<string, ThreadMsg>();
 
         for (const m of prevFiltered) map.set(m.id, m);
@@ -435,7 +428,6 @@ export default function ReportDetailScreen({
 
         const merged = Array.from(map.values());
 
-        // 3) Stable sort
         merged.sort((a, b) => {
           const aa = a.createdAtMs ?? 0;
           const bb = b.createdAtMs ?? 0;
@@ -558,7 +550,6 @@ export default function ReportDetailScreen({
     setNewMsgCount(0);
     isAtBottomRef.current = true;
 
-    // ✅ clear pending optimistic map when changing report
     pendingOptimisticRef.current.clear();
 
     if (reportId) loadDetail(true);
@@ -589,7 +580,6 @@ export default function ReportDetailScreen({
       pending: true,
     };
 
-    // ✅ track for matching
     pendingOptimisticRef.current.set(tmpId, { text: t, createdAtMs: now, side: "right" });
 
     isAtBottomRef.current = true;
@@ -605,14 +595,11 @@ export default function ReportDetailScreen({
     try {
       await sendReportThreadMessage(reportId, t, controller.signal);
 
-      // ✅ refresh immediately; merge will remove matching optimistic
       await refreshThreads({ showLoader: false });
 
-      // ✅ safety: if server didn’t return createdAt quickly, remove pending after a short delay
       setTimeout(() => {
         setMessages((prev) => {
-          if (!pendingOptimisticRef.current.has(tmpId)) return prev; // already matched/removed
-          // try one more refresh before removing
+          if (!pendingOptimisticRef.current.has(tmpId)) return prev;
           refreshThreads({ showLoader: false });
           return prev;
         });
@@ -741,7 +728,6 @@ export default function ReportDetailScreen({
   );
 
   const closeViewer = useCallback(() => setViewerVisible(false), []);
-
   const goPrev = useCallback(() => setViewerIndex((i) => Math.max(0, i - 1)), []);
   const goNext = useCallback(() => setViewerIndex((i) => Math.min(photoUrls.length - 1, i + 1)), [photoUrls.length]);
 
@@ -752,8 +738,11 @@ export default function ReportDetailScreen({
 
   const [composerH, setComposerH] = useState(vscale(64));
 
-  const threadsBottomSafe = Math.max(insets.bottom, vscale(10));
-  const threadsNavReserve = threadsBottomSafe;
+  // ✅ FIX: only reserve the true safe-area inset (don’t inflate with extra vscale(10))
+  const threadsNavReserve = Math.max(0, insets.bottom);
+
+  // ✅ FIX: composer should have a SMALL minimum padding, but not double-count insets
+  const composerBottomPad = Math.max(insets.bottom, vscale(6));
 
   useEffect(() => {
     if (view !== "threads") return;
@@ -770,7 +759,7 @@ export default function ReportDetailScreen({
     const distanceFromBottom = contentH - visibleH - y;
 
     const atBottom = distanceFromBottom < 40;
-    isAtBottomRef.current = atBottom;
+    (isAtBottomRef as any).current = atBottom;
 
     if (atBottom) setNewMsgCount(0);
   }, []);
@@ -1066,12 +1055,7 @@ export default function ReportDetailScreen({
           </ScrollView>
         ) : (
           <KeyboardAvoidingView
-            style={[
-              styles.threadsKav,
-              {
-                paddingBottom: threadsNavReserve,
-              },
-            ]}
+            style={styles.threadsKav}
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             keyboardVerticalOffset={keyboardOffset}
           >
@@ -1108,7 +1092,8 @@ export default function ReportDetailScreen({
                   contentContainerStyle={[
                     styles.chatContent,
                     {
-                      paddingBottom: composerH + threadsNavReserve + vscale(14),
+                      // ✅ FIX: only account for composer + ONE bottom pad
+                      paddingBottom: composerH + composerBottomPad + vscale(12),
                     },
                   ]}
                   showsVerticalScrollIndicator
@@ -1165,7 +1150,7 @@ export default function ReportDetailScreen({
                   <View style={styles.newMsgPillWrap} pointerEvents="box-none">
                     <Pressable
                       onPress={() => {
-                        isAtBottomRef.current = true;
+                        (isAtBottomRef as any).current = true;
                         setNewMsgCount(0);
                         scrollToBottom(true);
                       }}
@@ -1181,7 +1166,8 @@ export default function ReportDetailScreen({
                 ) : null}
 
                 <View
-                  style={[styles.composerRow, { paddingBottom: vscale(10) + threadsNavReserve }]}
+                  // ✅ FIX: don’t add threadsNavReserve here; just one bottom inset (small)
+                  style={[styles.composerRow, { paddingBottom: composerBottomPad }]}
                   onLayout={(e) => {
                     const h = e.nativeEvent.layout.height;
                     if (h && Math.abs(h - composerH) > 2) setComposerH(h);
@@ -1217,7 +1203,11 @@ export default function ReportDetailScreen({
                       (sending || !reportId) && { opacity: 0.7 },
                     ]}
                   >
-                    {sending ? <ActivityIndicator color="#FFFFFF" /> : <Ionicons name="send" size={styles._sendIcon} color="#FFFFFF" />}
+                    {sending ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Ionicons name="send" size={styles._sendIcon} color="#FFFFFF" />
+                    )}
                   </Pressable>
                 </View>
               </View>
@@ -1233,7 +1223,7 @@ export default function ReportDetailScreen({
             paddingBottom={paddingBottom}
             chevronBottom={chevronBottom}
             fabBottom={fabBottom}
-            fabSize={FAB_SIZE} // ✅ capped here (prevents enlarge)
+            fabSize={FAB_SIZE}
             onFabPress={pressFab}
             onFabLongPress={longPressFab}
             centerLabel="Incident Log"

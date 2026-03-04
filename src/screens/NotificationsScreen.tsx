@@ -793,8 +793,12 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
 
     topBar: {
       paddingHorizontal: scale(14),
-      paddingTop: vscale(6),
-      paddingBottom: vscale(10),
+
+      // ✅ CHANGED: push the whole header down a bit
+      // was: paddingTop: vscale(6)
+      paddingTop: vscale(14),
+
+      paddingBottom: vscale(18),
       flexDirection: "row",
       alignItems: "center",
       gap: scale(10),

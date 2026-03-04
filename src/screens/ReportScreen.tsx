@@ -5,17 +5,20 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  ScrollView,
   StatusBar,
   useWindowDimensions,
   ActivityIndicator,
   RefreshControl,
   Platform,
   Animated,
+  TextInput,
+  SectionList,
+  SectionListData,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
 
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { Colors } from "../theme/colors";
@@ -51,6 +54,7 @@ export type ReportItem = {
   updatedAt?: string;
 };
 
+// --- Palette (kept close to your existing vibe)
 const BG = "#F5FAFE";
 const BORDER = "#E7EEF7";
 const TEXT_DARK = "#0B2B45";
@@ -191,99 +195,105 @@ function countByStatus(items: ReportItem[]) {
     else if (s === "RESOLVED") resolved++;
   }
 
-  return { pending, ongoing, cancelled, resolved, total: items.length };
+  return { pending, ongoing, cancelled, resolved };
 }
 
-function FilterChip({
-  label,
-  active,
-  onPress,
+function ReportStatusSegment({
+  value,
+  onChange,
   styles,
-  accent,
 }: {
-  label: FilterKey;
-  active: boolean;
-  onPress: () => void;
+  value: FilterKey;
+  onChange: (k: FilterKey) => void;
   styles: ReturnType<typeof makeStyles>;
-  accent: string;
 }) {
+  const options: FilterKey[] = ["Pending", "On going", "Cancelled", "Resolved"];
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.chip,
-        { borderColor: active ? "transparent" : BORDER, backgroundColor: active ? accent : "#FFFFFF" },
-        pressed && { opacity: 0.95, transform: [{ scale: 0.99 }] },
-      ]}
-    >
-      <Text style={[styles.chipText, { color: active ? "#FFFFFF" : "#64748B" }]} numberOfLines={1}>
-        {label}
-      </Text>
-    </Pressable>
+    <View style={styles.segmentWrap}>
+      {options.map((k) => {
+        const active = k === value;
+        const accent = statusAccent(filterToStatus(k), PRIMARY);
+        return (
+          <Pressable
+            key={k}
+            onPress={() => onChange(k)}
+            style={({ pressed }) => [
+              styles.segmentBtn,
+              active ? { backgroundColor: "#FFFFFF", borderColor: "transparent" } : { backgroundColor: "transparent" },
+              pressed && { opacity: 0.95 },
+            ]}
+          >
+            <View style={styles.segmentInner}>
+              <View style={[styles.segmentDot, { backgroundColor: active ? accent : "#CBD5E1" }]} />
+              <Text style={[styles.segmentText, { color: active ? TEXT_DARK : "#64748B" }]} numberOfLines={1}>
+                {k}
+              </Text>
+            </View>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
-function ReportTicketCard({
+function ReportCard({
   item,
   onPress,
   styles,
-  chevronSize,
   primary,
 }: {
   item: ReportItem;
   onPress?: () => void;
   styles: ReturnType<typeof makeStyles>;
-  chevronSize: number;
   primary: string;
 }) {
   const accent = statusAccent(item.status, primary);
   const icon = statusIcon(item.status);
-  const pillText = statusLabel(item.status);
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.ticket, pressed && { transform: [{ scale: 0.995 }] }]}>
-      <View style={[styles.ticketAccent, { backgroundColor: accent }]} />
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && { opacity: 0.98 }]}>
+      <View style={styles.cardInner}>
+        <View style={[styles.accentEdge, { backgroundColor: accent }]} />
 
-      <View style={styles.ticketBody}>
-        <View style={styles.ticketTopRow}>
-          <View style={[styles.badge, { backgroundColor: "#EEF6FF" }]}>
+        <View style={styles.cardTopRow}>
+          <View style={[styles.leadingIconWrap, { backgroundColor: "#EEF6FF", borderColor: BORDER }]}>
             <Ionicons name={icon} size={styles._iconSize} color={accent} />
           </View>
 
-          <View style={{ flex: 1 }}>
-            <View style={styles.ticketTitleRow}>
-              <Text style={[styles.ticketTitle, { color: TEXT_DARK }]} numberOfLines={1}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <View style={styles.titleRow}>
+              <Text style={styles.cardTitle} numberOfLines={1}>
                 {item.title}
               </Text>
 
               {!!item.alertNo && (
-                <View style={[styles.alertPill, { borderColor: BORDER, backgroundColor: "#FFFFFF" }]}>
-                  <Ionicons name="alert-circle-outline" size={styles._miniIcon} color={MUTED} />
-                  <Text style={[styles.alertPillText, { color: MUTED }]} numberOfLines={1}>
+                <View style={styles.alertTag}>
+                  <Ionicons name="alert-circle-outline" size={styles._miniIcon} color="#64748B" />
+                  <Text style={styles.alertTagText} numberOfLines={1}>
                     {item.alertNo}
                   </Text>
                 </View>
               )}
             </View>
 
-            <Text style={styles.ticketDetail} numberOfLines={2}>
+            <Text style={styles.cardDetail} numberOfLines={2}>
               {item.detail}
             </Text>
           </View>
 
-          <Ionicons name="chevron-forward" size={chevronSize} color="#94A3B8" />
+          <Ionicons name="chevron-forward" size={styles._chevron} color="#94A3B8" />
         </View>
 
-        <View style={styles.ticketBottomRow}>
-          <View style={[styles.statusChip, { backgroundColor: "#EEF6FF", borderColor: BORDER }]}>
-            <View style={[styles.dot, { backgroundColor: accent }]} />
-            <Text style={[styles.statusChipText, { color: accent }]}>{pillText}</Text>
+        <View style={styles.cardBottomRow}>
+          <View style={[styles.statusPill, { borderColor: "#EAF2FF", backgroundColor: "#F3F8FF" }]}>
+            <View style={[styles.statusDot, { backgroundColor: accent }]} />
+            <Text style={[styles.statusPillText, { color: accent }]}>{statusLabel(item.status)}</Text>
           </View>
 
-          <View style={styles.metaInline}>
-            <Ionicons name="time-outline" size={styles._miniIcon} color={MUTED} />
-            <Text style={styles.metaInlineText} numberOfLines={1}>
-              Updated: {item.timeRight}
+          <View style={styles.metaRow}>
+            <Ionicons name="time-outline" size={styles._miniIcon} color="#94A3B8" />
+            <Text style={styles.metaText} numberOfLines={1}>
+              Updated {item.timeRight}
             </Text>
           </View>
         </View>
@@ -291,6 +301,11 @@ function ReportTicketCard({
     </Pressable>
   );
 }
+
+type ReportSection = {
+  title: string;
+  data: ReportItem[];
+};
 
 export default function ReportScreen({
   onQuickExit,
@@ -320,11 +335,11 @@ export default function ReportScreen({
   const scale = (n: number) => Math.round(n * wScale);
   const vscale = (n: number) => Math.round(n * hScale);
 
-  const chevronSize = scale(20);
   const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab ?? "Reports");
   const [filter, setFilter] = useState<FilterKey>("Pending");
+  const [query, setQuery] = useState<string>("");
 
   const [items, setItems] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -561,10 +576,36 @@ export default function ReportScreen({
 
   const filtered = useMemo(() => {
     const want = filterToStatus(filter);
-    return items.filter((x) => (x.status ?? "PENDING") === want);
-  }, [items, filter]);
+    const base = items.filter((x) => (x.status ?? "PENDING") === want);
 
-  // ✅ Simple tab-change animation (fade + slight slide up)
+    const q = query.trim().toLowerCase();
+    if (!q) return base;
+
+    return base.filter((x) => {
+      const hay = `${x.title} ${x.detail} ${x.alertNo ?? ""} ${x.location ?? ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [items, filter, query]);
+
+  const sections = useMemo<ReportSection[]>(() => {
+    const map = new Map<string, ReportItem[]>();
+    for (const it of filtered) {
+      const key = String(it.groupLabel ?? "").trim() || "—";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(it);
+    }
+
+    const keys = Array.from(map.keys());
+    keys.sort((a, b) => {
+      if (a === "Today" && b !== "Today") return -1;
+      if (b === "Today" && a !== "Today") return 1;
+      return 0;
+    });
+
+    return keys.map((k) => ({ title: k, data: map.get(k)! }));
+  }, [filtered]);
+
+  // ✅ Simple list fade/slide when filter changes
   const tabAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     tabAnim.setValue(0);
@@ -577,14 +618,13 @@ export default function ReportScreen({
 
   const listAnimStyle = useMemo(() => {
     const opacity = tabAnim;
-    const translateY = tabAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] });
+    const translateY = tabAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] });
     return { opacity, transform: [{ translateY }] };
   }, [tabAnim]);
 
   const setFilterAnimated = useCallback(
     (k: FilterKey) => {
       if (k === filter) return;
-      // kick a tiny "out" feel before switching
       Animated.timing(tabAnim, { toValue: 0, duration: 90, useNativeDriver: true }).start(() => {
         setFilter(k);
       });
@@ -592,57 +632,81 @@ export default function ReportScreen({
     [filter, tabAnim]
   );
 
+  const headerAccent = statusAccent(filterToStatus(filter), PRIMARY);
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.page}>
-        {/* Header card */}
-        <View style={styles.heroWrap}>
-          <View style={styles.heroCard}>
-            <View style={styles.heroTopRow}>
+        {/* ===== Gradient header backdrop ===== */}
+        <LinearGradient
+          colors={["#EAF3FF", "#F5FAFE"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.headerBg}
+        />
+
+        {/* ===== Top header card ===== */}
+        <View style={styles.headerWrap}>
+          <View style={styles.headerCard}>
+            <View style={styles.headerTopRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.heroTitle}>Reports</Text>
-                <Text style={styles.heroSub}>Track your incident progress by status</Text>
+                <Text style={styles.headerTitle}>Reports</Text>
+                <Text style={styles.headerSub}>Track your incident progress by status</Text>
               </View>
+
+             
             </View>
 
+            {/* stats row */}
             <View style={styles.statsRow}>
-              <StatPill label="All" value={counts.total} color={TEXT_DARK} styles={styles} />
-              <StatPill label="Pending" value={counts.pending} color={statusAccent("PENDING", PRIMARY)} styles={styles} />
-              <StatPill
+              <MiniStat label="Pending" value={counts.pending} color={statusAccent("PENDING", PRIMARY)} styles={styles} />
+              <View style={styles.statDivider} />
+              <MiniStat
                 label="On going"
                 value={counts.ongoing}
                 color={statusAccent("ONGOING", PRIMARY)}
                 styles={styles}
               />
-              <StatPill
+              <View style={styles.statDivider} />
+              <MiniStat
                 label="Resolved"
                 value={counts.resolved}
                 color={statusAccent("RESOLVED", PRIMARY)}
                 styles={styles}
               />
             </View>
+
+            {/* search */}
+            <View style={styles.searchWrap}>
+              <Ionicons name="search-outline" size={styles._iconSize} color="#94A3B8" />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search reports…"
+                placeholderTextColor="#94A3B8"
+                style={styles.searchInput}
+                autoCorrect={false}
+                autoCapitalize="none"
+                returnKeyType="search"
+              />
+              {!!query && (
+                <Pressable
+                  onPress={() => setQuery("")}
+                  style={({ pressed }) => [styles.clearBtn, pressed && { opacity: 0.85 }]}
+                >
+                  <Ionicons name="close" size={styles._iconSize} color="#94A3B8" />
+                </Pressable>
+              )}
+            </View>
+
+            {/* segmented control */}
+            <ReportStatusSegment value={filter} onChange={setFilterAnimated} styles={styles} />
           </View>
         </View>
 
-        {/* Filter chips */}
-        <View style={styles.chipsWrap}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsContent}>
-            {(["Pending", "On going", "Cancelled", "Resolved"] as FilterKey[]).map((k) => (
-              <FilterChip
-                key={k}
-                label={k}
-                active={k === filter}
-                onPress={() => setFilterAnimated(k)}
-                styles={styles}
-                accent={statusAccent(filterToStatus(k), PRIMARY)}
-              />
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Body */}
+        {/* ===== Body ===== */}
         {loading ? (
           <View style={styles.centerBox}>
             <ActivityIndicator size="large" color={PRIMARY} />
@@ -650,8 +714,9 @@ export default function ReportScreen({
           </View>
         ) : errorMsg ? (
           <View style={styles.centerBox}>
+            <Ionicons name="warning-outline" size={styles._emptyIcon} color="#F59E0B" />
             <Text style={styles.errorText}>{errorMsg}</Text>
-            <Pressable onPress={load} style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.9 }]}>
+            <Pressable onPress={load} style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.92 }]}>
               <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           </View>
@@ -659,41 +724,30 @@ export default function ReportScreen({
           <Animated.View style={[styles.centerBox, listAnimStyle]}>
             <Ionicons name="document-text-outline" size={styles._emptyIcon} color="#94A3B8" />
             <Text style={styles.centerHint}>No reports found for {filter}.</Text>
+            {!!query && <Text style={styles.centerSubHint}>Try a different keyword.</Text>}
           </Animated.View>
         ) : (
           <Animated.View style={[{ flex: 1 }, listAnimStyle]}>
-            <ScrollView
+            <SectionList
+              sections={sections as SectionListData<ReportItem, ReportSection>[]}
+              keyExtractor={(it) => it.id}
               showsVerticalScrollIndicator={false}
+              stickySectionHeadersEnabled={false}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-              contentContainerStyle={[styles.scrollContent, { paddingBottom: CONTENT_BOTTOM_PAD }]}
-            >
-              {(() => {
-                let lastGroup = "";
-                return filtered.map((item) => {
-                  const showGroup = item.groupLabel && item.groupLabel !== lastGroup;
-                  if (item.groupLabel) lastGroup = item.groupLabel;
-
-                  return (
-                    <View key={item.id} style={styles.block}>
-                      {showGroup ? (
-                        <View style={styles.groupPill}>
-                          <Ionicons name="calendar-outline" size={styles._miniIcon} color={MUTED} />
-                          <Text style={styles.groupPillText}>{item.groupLabel}</Text>
-                        </View>
-                      ) : null}
-
-                      <ReportTicketCard
-                        item={item}
-                        onPress={() => onOpenReport?.(item)}
-                        styles={styles}
-                        chevronSize={chevronSize}
-                        primary={PRIMARY}
-                      />
-                    </View>
-                  );
-                });
-              })()}
-            </ScrollView>
+              contentContainerStyle={[styles.listContent, { paddingBottom: CONTENT_BOTTOM_PAD }]}
+              renderSectionHeader={({ section }) => (
+                <View style={styles.sectionHeaderWrap}>
+                  <View style={styles.sectionPill}>
+                    <Ionicons name="calendar-outline" size={styles._miniIcon} color="#94A3B8" />
+                    <Text style={styles.sectionPillText}>{section.title}</Text>
+                  </View>
+                </View>
+              )}
+              renderItem={({ item }) => (
+                <ReportCard item={item} onPress={() => onOpenReport?.(item)} styles={styles} primary={PRIMARY} />
+              )}
+              ItemSeparatorComponent={() => <View style={{ height: vscale(10) }} />}
+            />
           </Animated.View>
         )}
 
@@ -714,7 +768,7 @@ export default function ReportScreen({
   );
 }
 
-function StatPill({
+function MiniStat({
   label,
   value,
   color,
@@ -726,9 +780,9 @@ function StatPill({
   styles: ReturnType<typeof makeStyles>;
 }) {
   return (
-    <View style={[styles.statPill, { borderColor: BORDER, backgroundColor: "#FFFFFF" }]}>
-      <Text style={[styles.statValue, { color }]}>{value}</Text>
-      <Text style={[styles.statLabel, { color: MUTED }]} numberOfLines={1}>
+    <View style={styles.miniStat}>
+      <Text style={[styles.miniStatValue, { color }]}>{value}</Text>
+      <Text style={styles.miniStatLabel} numberOfLines={1}>
         {label}
       </Text>
     </View>
@@ -736,51 +790,63 @@ function StatPill({
 }
 
 function makeStyles(scale: (n: number) => number, vscale: (n: number) => number) {
-  const CARD_R = scale(18);
+  const CARD_R = scale(20);
 
-  const _iconSize = scale(20);
+  const _iconSize = scale(18);
   const _miniIcon = scale(14);
-  const _emptyIcon = scale(40);
+  const _emptyIcon = scale(44);
+  const _chevron = scale(20);
 
   return Object.assign(
     StyleSheet.create({
       safe: { flex: 1, backgroundColor: BG },
       page: { flex: 1, backgroundColor: BG },
 
-      // ===== Hero =====
-      heroWrap: {
+      headerBg: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        height: vscale(220),
+      },
+
+      headerWrap: {
         paddingHorizontal: scale(16),
-        paddingTop: vscale(6),
+        paddingTop: vscale(8),
         paddingBottom: vscale(10),
       },
-      heroCard: {
+
+      // ✅ NO SHADOWS AT ALL (super-flat iOS feel)
+      headerCard: {
         borderRadius: CARD_R,
         borderWidth: 1,
-        borderColor: BORDER,
-        backgroundColor: CARD,
+        borderColor: "#E6F0FF",
+        backgroundColor: "#FFFFFF",
         paddingHorizontal: scale(14),
-        paddingVertical: vscale(12),
-        // ✅ REMOVED SHADOWS
+        paddingVertical: vscale(14),
+
         shadowColor: "transparent",
         shadowOpacity: 0,
         shadowRadius: 0,
         shadowOffset: { width: 0, height: 0 },
         elevation: 0,
       },
-      heroTopRow: {
+
+      headerTopRow: {
         flexDirection: "row",
         alignItems: "flex-start",
         justifyContent: "space-between",
         gap: scale(10),
       },
 
-      heroTitle: {
+      headerTitle: {
         fontSize: scale(28),
         fontWeight: "900",
         color: TEXT_DARK,
+        letterSpacing: -0.2,
       },
 
-      heroSub: {
+      headerSub: {
         marginTop: vscale(4),
         fontSize: scale(12),
         fontWeight: "400",
@@ -788,119 +854,207 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
         lineHeight: scale(16),
       },
 
+      headerBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(6),
+        borderWidth: 1,
+        borderRadius: scale(999),
+        paddingHorizontal: scale(10),
+        paddingVertical: vscale(6),
+        backgroundColor: "#F3F8FF",
+      },
+
+      headerBadgeText: {
+        fontSize: scale(11),
+        fontWeight: "900",
+      },
+
       statsRow: {
         marginTop: vscale(12),
         flexDirection: "row",
-        gap: scale(10),
-      },
-      statPill: {
-        flex: 1,
+        alignItems: "center",
         borderWidth: 1,
-        borderRadius: scale(14),
-        paddingVertical: vscale(8),
+        borderColor: "#EEF4FF",
+        backgroundColor: "#F7FAFF",
+        borderRadius: scale(16),
+        paddingVertical: vscale(10),
         paddingHorizontal: scale(10),
+      },
+
+      statDivider: {
+        width: 1,
+        alignSelf: "stretch",
+        backgroundColor: "#E6EEFF",
+        marginHorizontal: scale(10),
+      },
+
+      miniStat: { flex: 1, alignItems: "center", justifyContent: "center" },
+      miniStatValue: { fontSize: scale(16), fontWeight: "900" },
+      miniStatLabel: { marginTop: vscale(2), fontSize: scale(10), fontWeight: "700", color: "#64748B" },
+
+      searchWrap: {
+        marginTop: vscale(12),
+        flexDirection: "row",
         alignItems: "center",
-        justifyContent: "center",
-      },
-
-      statValue: { fontSize: scale(16), fontWeight: "900" },
-      statLabel: { marginTop: vscale(2), fontSize: scale(10), fontWeight: "900" },
-
-      dot: { width: scale(8), height: scale(8), borderRadius: scale(99) },
-
-      // ===== Chips =====
-      chipsWrap: {
-        paddingHorizontal: scale(16),
-        paddingBottom: vscale(8),
-      },
-      chipsContent: { gap: scale(10), paddingRight: scale(6) },
-      chip: {
-        height: vscale(36),
-        borderRadius: vscale(18),
+        gap: scale(10),
         borderWidth: 1,
-        paddingHorizontal: scale(14),
+        borderColor: "#EEF4FF",
+        backgroundColor: "#F8FBFF",
+        borderRadius: scale(16),
+        paddingHorizontal: scale(12),
+        height: vscale(44),
+      },
+
+      searchInput: {
+        flex: 1,
+        fontSize: scale(12),
+        color: TEXT_DARK,
+        fontWeight: "400",
+      },
+
+      clearBtn: {
+        width: vscale(30),
+        height: vscale(30),
+        borderRadius: vscale(999),
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#FFFFFF",
+        borderWidth: 1,
+        borderColor: "#EEF4FF",
+      },
+
+      // Segmented control
+      segmentWrap: {
+        marginTop: vscale(12),
+        flexDirection: "row",
+        borderWidth: 1,
+        borderColor: "#EAF2FF",
+        backgroundColor: "#F3F8FF",
+        borderRadius: scale(16),
+        padding: scale(4),
+        gap: scale(6),
+      },
+
+      segmentBtn: {
+        flex: 1,
+        height: vscale(38),
+        borderRadius: scale(12),
+        borderWidth: 1,
+        borderColor: "transparent",
         alignItems: "center",
         justifyContent: "center",
       },
-      chipText: { fontSize: scale(12), fontWeight: "900" },
 
-      // ===== List =====
-      scrollContent: {
+      segmentInner: { flexDirection: "row", alignItems: "center", gap: scale(6) },
+      segmentDot: { width: scale(8), height: scale(8), borderRadius: scale(99) },
+
+      segmentText: {
+        fontSize: scale(11),
+        fontWeight: "900",
+      },
+
+      // List
+      listContent: {
         paddingHorizontal: scale(16),
         paddingTop: vscale(6),
       },
-      block: { marginBottom: vscale(12), gap: vscale(8) },
 
-      groupPill: {
+      sectionHeaderWrap: {
+        paddingTop: vscale(10),
+        paddingBottom: vscale(8),
+      },
+
+      sectionPill: {
         alignSelf: "flex-start",
         flexDirection: "row",
         alignItems: "center",
         gap: scale(6),
         borderWidth: 1,
-        borderColor: BORDER,
+        borderColor: "#EEF4FF",
         backgroundColor: "#FFFFFF",
         paddingHorizontal: scale(10),
         paddingVertical: vscale(6),
         borderRadius: vscale(999),
       },
 
-      groupPillText: { fontSize: scale(11), fontWeight: "900", color: "#94A3B8" },
+      sectionPillText: { fontSize: scale(11), fontWeight: "900", color: "#94A3B8" },
 
-      // ===== Ticket card =====
-      ticket: {
-        flexDirection: "row",
+      // ✅ NO SHADOWS AT ALL
+      card: {
         borderRadius: CARD_R,
         borderWidth: 1,
-        borderColor: BORDER,
+        borderColor: "#EAF2FF",
         backgroundColor: "#FFFFFF",
-        overflow: "hidden",
-        // ✅ REMOVED SHADOWS
+
         shadowColor: "transparent",
         shadowOpacity: 0,
         shadowRadius: 0,
         shadowOffset: { width: 0, height: 0 },
         elevation: 0,
       },
-      ticketAccent: { width: scale(6) },
-      ticketBody: { flex: 1, paddingHorizontal: scale(12), paddingVertical: vscale(12) },
 
-      ticketTopRow: {
+      cardInner: {
+        borderRadius: CARD_R,
+        overflow: "hidden",
+        paddingHorizontal: scale(12),
+        paddingVertical: vscale(12),
+      },
+
+      accentEdge: {
+        position: "absolute",
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: scale(5),
+        opacity: 0.9,
+      },
+
+      cardTopRow: {
         flexDirection: "row",
         alignItems: "flex-start",
         gap: scale(10),
       },
-      badge: {
-        width: vscale(40),
-        height: vscale(40),
+
+      leadingIconWrap: {
+        width: vscale(42),
+        height: vscale(42),
         borderRadius: vscale(14),
         alignItems: "center",
         justifyContent: "center",
+        borderWidth: 1,
       },
-      ticketTitleRow: {
+
+      titleRow: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
         gap: scale(10),
       },
 
-      ticketTitle: {
+      cardTitle: {
         flex: 1,
         fontSize: scale(16),
         fontWeight: "900",
+        color: TEXT_DARK,
+        letterSpacing: -0.1,
       },
-      alertPill: {
+
+      alertTag: {
         flexDirection: "row",
         alignItems: "center",
         gap: scale(6),
         borderWidth: 1,
+        borderColor: "#EEF4FF",
+        backgroundColor: "#FFFFFF",
         borderRadius: vscale(999),
         paddingHorizontal: scale(8),
         paddingVertical: vscale(4),
       },
 
-      alertPillText: { fontSize: scale(10), fontWeight: "900" },
+      alertTagText: { fontSize: scale(10), fontWeight: "900", color: "#64748B" },
 
-      ticketDetail: {
+      cardDetail: {
         marginTop: vscale(4),
         fontSize: scale(12),
         fontWeight: "400",
@@ -908,7 +1062,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
         lineHeight: vscale(16),
       },
 
-      ticketBottomRow: {
+      cardBottomRow: {
         marginTop: vscale(10),
         flexDirection: "row",
         alignItems: "center",
@@ -917,7 +1071,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
         flexWrap: "wrap",
       },
 
-      statusChip: {
+      statusPill: {
         flexDirection: "row",
         alignItems: "center",
         gap: scale(6),
@@ -927,17 +1081,14 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
         paddingVertical: vscale(6),
       },
 
-      statusChipText: { fontSize: scale(11), fontWeight: "900" },
+      statusDot: { width: scale(8), height: scale(8), borderRadius: scale(99) },
 
-      metaInline: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: scale(6),
-      },
+      statusPillText: { fontSize: scale(11), fontWeight: "900" },
 
-      metaInlineText: { fontSize: scale(10), fontWeight: "400", color: "#94A3B8" },
+      metaRow: { flexDirection: "row", alignItems: "center", gap: scale(6) },
+      metaText: { fontSize: scale(10), fontWeight: "400", color: "#94A3B8" },
 
-      // ===== Center states =====
+      // Center states
       centerBox: {
         flex: 1,
         alignItems: "center",
@@ -951,6 +1102,14 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
         fontWeight: "400",
         color: MUTED,
         textAlign: "center",
+      },
+
+      centerSubHint: {
+        fontSize: scale(12),
+        fontWeight: "400",
+        color: "#94A3B8",
+        textAlign: "center",
+        marginTop: vscale(-4),
       },
 
       errorText: {
@@ -974,6 +1133,6 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
         fontSize: scale(12),
       },
     }),
-    { _iconSize, _miniIcon, _emptyIcon }
+    { _iconSize, _miniIcon, _emptyIcon, _chevron }
   ) as any;
 }
