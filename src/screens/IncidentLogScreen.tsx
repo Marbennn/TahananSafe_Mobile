@@ -32,6 +32,9 @@ import {
 // ✅ API
 import { submitIncident } from "../api/incidents";
 
+// ✅ AI API
+import { analyzeIncident, type AiAnalyzeResponse } from "../api/ai";
+
 // ✅ preview screen
 import IncidentLogConfirmScreen from "./IncidentLogConfirmationScreen";
 // ✅ TYPE
@@ -163,18 +166,10 @@ function joinWithSpace(a: string, b: string) {
   return `${aa} ${bb}`;
 }
 
-/**
- * ✅ Fix: expo-speech-recognition usually returns:
- *   event.results[0]?.transcript
- * But some implementations may return nested arrays (web-ish):
- *   event.results[0][0]?.transcript
- * We support both.
- */
 function extractTranscriptFromEvent(event: any): string {
   try {
     const results = event?.results;
 
-    // ✅ common shape: [{ transcript: "..." }, ...]
     if (Array.isArray(results) && results.length > 0) {
       const r0 = results[0];
 
@@ -182,7 +177,6 @@ function extractTranscriptFromEvent(event: any): string {
         return r0.transcript;
       }
 
-      // ✅ fallback: [[{ transcript: "..." }]]
       if (Array.isArray(r0) && r0.length > 0) {
         const alt0 = r0[0];
         if (alt0 && typeof alt0 === "object" && typeof alt0.transcript === "string") {
@@ -191,12 +185,33 @@ function extractTranscriptFromEvent(event: any): string {
       }
     }
 
-    // ✅ last fallback
     if (typeof event?.transcript === "string") return event.transcript;
   } catch {
     // ignore
   }
   return "";
+}
+
+function formatBool(v: any) {
+  if (v === true) return "Yes";
+  if (v === false) return "No";
+  return "—";
+}
+
+function formatPct(v: any) {
+  if (typeof v === "number") return `${v}%`;
+  return "—";
+}
+
+function formatConfidence(v: any) {
+  if (typeof v === "number") return `${v}`;
+  return "—";
+}
+
+/** ✅ Prefer AI incident type for display + saving */
+function normalizeAiIncidentType(v: any) {
+  const s = safeTrim(String(v ?? ""));
+  return s || "";
 }
 
 export default function IncidentLogScreen({
@@ -208,7 +223,6 @@ export default function IncidentLogScreen({
   const { width: screenWidth } = useWindowDimensions();
   const s = useMemo(() => clamp(screenWidth / 375, 0.9, 1.2), [screenWidth]);
 
-  // ✅ Mode still exists internally, but UI button is removed.
   const [mode, setMode] = useState<Mode>("complain");
   const [incidentType, setIncidentType] = useState<IncidentTypeValue>("Other");
 
@@ -219,26 +233,121 @@ export default function IncidentLogScreen({
 
   const detailsInputRef = React.useRef<TextInput>(null);
 
-  // ✅ REAL current date/time (LIVE update every 2 seconds)
   const [dateStr, setDateStr] = useState(() => formatDateMMDDYYYY(new Date()));
   const [timeStr, setTimeStr] = useState(() => formatTime12h(new Date()));
 
-  // ✅ location string sent to backend (still used, but not shown in a box)
   const [locationStr, setLocationStr] = useState("Brgy. 12");
 
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationGranted, setLocationGranted] = useState<boolean | null>(null);
 
-  // ✅ Speech-to-text state
   const [recognizing, setRecognizing] = useState(false);
   const [speechPreview, setSpeechPreview] = useState("");
   const [speechError, setSpeechError] = useState<string | null>(null);
 
-  // Base text before we started speaking (so interim results append correctly)
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState<AiAnalyzeResponse | null>(null);
+  const lastAnalyzedTextRef = React.useRef<string>("");
+
+  const [photos, setPhotos] = useState<string[]>([]);
+  const MAX_PHOTOS = 3;
+
+  const [showPreview, setShowPreview] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  /** ✅ AI staleness */
+  const aiIsStale = useMemo(() => {
+    const cur = safeTrim(details);
+    const last = safeTrim(lastAnalyzedTextRef.current);
+    if (!aiResult) return false;
+    if (!last) return true;
+    return cur !== last;
+  }, [details, aiResult]);
+
+  /** ✅ NEW: incident type to use (AI first, fallback to internal) */
+  const getDisplayIncidentType = React.useCallback(() => {
+    if (mode === "emergency") return "Emergency";
+
+    const aiType = normalizeAiIncidentType((aiResult as any)?.incident_type);
+    if (aiType) return aiType;
+
+    return incidentType || "Other";
+  }, [aiResult, incidentType, mode]);
+
+  /** ✅ Manual analyze button handler (kept) */
+  const runAiAnalyze = async () => {
+    if (submitting) return;
+    if (recognizing) {
+      Alert.alert("Voice input active", "Please stop voice input before running AI analysis.");
+      return;
+    }
+
+    const text = safeTrim(details);
+    if (!text) {
+      Alert.alert("No incident detail", "Please enter incident details first.");
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError(null);
+
+    try {
+      const res = await analyzeIncident(text);
+      setAiResult(res);
+      lastAnalyzedTextRef.current = text;
+    } catch (e: any) {
+      setAiResult(null);
+      setAiError(e?.message || "AI analyze failed.");
+      Alert.alert("AI Analyze Failed", e?.message || "Please try again.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  /**
+   * ✅ NEW: Auto-analyze when user clicks "Secure Complaint"
+   * - Only runs for complain mode
+   * - Only runs if no aiResult OR stale
+   * - If AI fails, we STOP (so user can retry)
+   */
+  const autoAnalyzeIfNeeded = React.useCallback(async (): Promise<boolean> => {
+    if (mode !== "complain") return true;
+    if (submitting) return false;
+
+    if (recognizing) {
+      Alert.alert("Voice input active", "Please stop voice input before securing the complaint.");
+      return false;
+    }
+
+    const text = safeTrim(details);
+    if (!text) return true; // validation handled elsewhere
+
+    // if we already have AI and it's not stale -> ok
+    if (aiResult && !aiIsStale) return true;
+
+    setAiLoading(true);
+    setAiError(null);
+
+    try {
+      const res = await analyzeIncident(text);
+      setAiResult(res);
+      lastAnalyzedTextRef.current = text;
+      return true;
+    } catch (e: any) {
+      setAiResult(null);
+      const msg = e?.message || "AI analyze failed.";
+      setAiError(msg);
+      Alert.alert("AI Analyze Failed", msg);
+      return false;
+    } finally {
+      setAiLoading(false);
+    }
+  }, [mode, submitting, recognizing, details, aiResult, aiIsStale]);
+
   const speechBaseRef = React.useRef("");
   const lastFinalRef = React.useRef("");
 
-  // ✅ rate limit cache (avoid reading AsyncStorage too often)
   const lastSubmitAtRef = React.useRef<number>(0);
 
   React.useEffect(() => {
@@ -255,11 +364,8 @@ export default function IncidentLogScreen({
 
   const getRemainingCooldownMs = React.useCallback(async () => {
     const now = Date.now();
-
-    // Use ref first
     let last = lastSubmitAtRef.current || 0;
 
-    // If ref empty, try storage once
     if (!last) {
       try {
         const raw = await AsyncStorage.getItem(INCIDENT_LAST_SUBMIT_KEY);
@@ -287,7 +393,7 @@ export default function IncidentLogScreen({
           "Please wait",
           `You can ${actionLabel} again in ${secs} second${secs === 1 ? "" : "s"}.`
         );
-        return true; // blocked
+        return true;
       }
       return false;
     },
@@ -304,7 +410,6 @@ export default function IncidentLogScreen({
     }
   }, []);
 
-  // ✅ If you ever setMode("emergency") somewhere else, this keeps incidentType aligned.
   React.useEffect(() => {
     if (mode === "emergency") setIncidentType("Emergency");
     else setIncidentType("Other");
@@ -329,7 +434,6 @@ export default function IncidentLogScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Stop recognition on unmount
   React.useEffect(() => {
     return () => {
       try {
@@ -340,7 +444,6 @@ export default function IncidentLogScreen({
     };
   }, []);
 
-  // Speech recognition events
   useSpeechRecognitionEvent("start", () => {
     setRecognizing(true);
     setSpeechError(null);
@@ -359,7 +462,6 @@ export default function IncidentLogScreen({
     const isFinal = event?.isFinal === true;
 
     if (isFinal) {
-      // ✅ Commit final into base, so next speech continues from here
       const newBase = joinWithSpace(speechBaseRef.current, t);
 
       speechBaseRef.current = newBase;
@@ -370,7 +472,6 @@ export default function IncidentLogScreen({
       return;
     }
 
-    // interim
     setSpeechPreview(t);
     setDetails(joinWithSpace(speechBaseRef.current, t));
   });
@@ -406,7 +507,6 @@ export default function IncidentLogScreen({
         return;
       }
 
-      // ✅ Focus the Incident Detail box so user sees text being inserted
       detailsInputRef.current?.focus?.();
 
       speechBaseRef.current = safeTrim(details);
@@ -434,7 +534,7 @@ export default function IncidentLogScreen({
   };
 
   const toggleVoiceInput = async () => {
-    if (submitting) return;
+    if (submitting || aiLoading) return;
     if (recognizing) await stopVoiceInput();
     else await startVoiceInput();
   };
@@ -442,14 +542,8 @@ export default function IncidentLogScreen({
   const FOOTER_H = 72 * s;
   const CONTENT_BOTTOM_PAD = Math.max(insets.bottom, 10) + FOOTER_H + 16;
 
-  const [photos, setPhotos] = useState<string[]>([]);
-  const MAX_PHOTOS = 3;
-
-  const [showPreview, setShowPreview] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
   const requestAndSetCurrentLocation = async (opts?: { silent?: boolean }) => {
-    if (submitting) return;
+    if (submitting || aiLoading) return;
     if (locationLoading) return;
 
     setLocationLoading(true);
@@ -506,7 +600,6 @@ export default function IncidentLogScreen({
     }
   };
 
-  // ===================== PHOTO HELPERS (UPDATED) =====================
   const canAddMorePhotos = () => photos.length < MAX_PHOTOS;
 
   const mergeAndLimitPhotos = (newUris: string[]) => {
@@ -521,7 +614,7 @@ export default function IncidentLogScreen({
   };
 
   const pickFromGallery = async () => {
-    if (submitting) return;
+    if (submitting || aiLoading) return;
 
     if (!canAddMorePhotos()) {
       Alert.alert("Max reached", `You can only add up to ${MAX_PHOTOS} photos.`);
@@ -556,7 +649,7 @@ export default function IncidentLogScreen({
   };
 
   const takePhoto = async () => {
-    if (submitting) return;
+    if (submitting || aiLoading) return;
 
     if (!canAddMorePhotos()) {
       Alert.alert("Max reached", `You can only add up to ${MAX_PHOTOS} photos.`);
@@ -586,10 +679,9 @@ export default function IncidentLogScreen({
     mergeAndLimitPhotos([uri]);
   };
 
-  // ✅ Now Add Photo shows option picker
   const onAddPhoto = async () => {
     try {
-      if (submitting) return;
+      if (submitting || aiLoading) return;
 
       if (!canAddMorePhotos()) {
         Alert.alert("Max reached", `You can only add up to ${MAX_PHOTOS} photos.`);
@@ -606,16 +698,16 @@ export default function IncidentLogScreen({
       Alert.alert("Error", "Could not open photo options. Please try again.");
     }
   };
-  // ================================================================
 
   const removePhotoAt = (index: number) => {
-    if (submitting) return;
+    if (submitting || aiLoading) return;
     setPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
+  /** ✅ UPDATED: preview uses AI incident type */
   const buildPreviewData = (): IncidentPreviewData =>
     ({
-      incidentType,
+      incidentType: getDisplayIncidentType(),
       details,
       offenderName,
       witnessName,
@@ -626,6 +718,7 @@ export default function IncidentLogScreen({
       photoCount: photos.length,
       photos,
       mode,
+      aiResult,
     } as any);
 
   const resetForm = () => {
@@ -640,12 +733,19 @@ export default function IncidentLogScreen({
     setSpeechError(null);
     speechBaseRef.current = "";
     lastFinalRef.current = "";
+
+    setAiLoading(false);
+    setAiError(null);
+    setAiResult(null);
+    lastAnalyzedTextRef.current = "";
   };
 
   const submitToBackend = async (): Promise<SubmitIncidentResponse> => {
-    const payload = {
+    const incidentTypeToSend = getDisplayIncidentType();
+
+    const payload: any = {
       mode,
-      incidentType,
+      incidentType: incidentTypeToSend,
       details,
       offenderName,
       witnessName,
@@ -656,11 +756,28 @@ export default function IncidentLogScreen({
       photos,
     };
 
+    if (aiResult) {
+      payload.ai_incident_type = aiResult.incident_type ?? "";
+      payload.ai_language = aiResult.language ?? "";
+      payload.ai_risk_level = aiResult.risk_level ?? "";
+      payload.ai_risk_percentage =
+        typeof aiResult.risk_percentage === "number" ? aiResult.risk_percentage : undefined;
+      payload.ai_priority_level = aiResult.priority_level ?? "";
+      payload.ai_children_involved = aiResult.children_involved ?? undefined;
+      payload.ai_weapon_mentioned = aiResult.weapon_mentioned ?? undefined;
+      payload.ai_confidence_score =
+        typeof aiResult.confidence_score === "number" ? aiResult.confidence_score : undefined;
+
+      payload.ai_processing_time_ms =
+        typeof (aiResult as any).processing_time_ms === "number"
+          ? (aiResult as any).processing_time_ms
+          : undefined;
+    }
+
     setSubmitting(true);
     try {
-      const res = (await submitIncident(payload as any)) as SubmitIncidentResponse;
+      const res = (await submitIncident(payload)) as SubmitIncidentResponse;
 
-      // ✅ mark cooldown only AFTER successful submit
       await markSubmittedNow();
 
       Alert.alert(
@@ -678,8 +795,9 @@ export default function IncidentLogScreen({
     }
   };
 
+  /** ✅ UPDATED: Secure Complaint now auto-analyzes first */
   const onSubmit = async () => {
-    if (submitting) return;
+    if (submitting || aiLoading) return;
 
     if (recognizing) {
       Alert.alert("Voice input active", "Please stop voice input before submitting.");
@@ -691,7 +809,6 @@ export default function IncidentLogScreen({
       return;
     }
 
-    // ✅ rate limit before allowing submit/preview flow
     const blocked = await blockIfCoolingDown("submit a report");
     if (blocked) return;
 
@@ -700,7 +817,10 @@ export default function IncidentLogScreen({
       return;
     }
 
-    // complain -> preview/confirm flow
+    // ✅ AUTO AI ANALYZE here (only for complain)
+    const ok = await autoAnalyzeIfNeeded();
+    if (!ok) return;
+
     if (onProceedConfirm) {
       onProceedConfirm(buildPreviewData());
       return;
@@ -710,9 +830,8 @@ export default function IncidentLogScreen({
   };
 
   const onConfirmComplaint = async () => {
-    if (submitting) return;
+    if (submitting || aiLoading) return;
 
-    // ✅ rate limit again here (covers cases where user stayed in preview, etc.)
     const blocked = await blockIfCoolingDown("submit a report");
     if (blocked) return null as any;
 
@@ -727,7 +846,12 @@ export default function IncidentLogScreen({
     return { incidentId, createdAt };
   };
 
-  const actionText = mode === "emergency" ? "Send Emergency" : "Secure Complaint";
+  const actionText =
+    mode === "emergency"
+      ? "Send Emergency"
+      : aiLoading
+      ? "Analyzing..."
+      : "Secure Complaint";
   const detailsLabel = mode === "emergency" ? "Emergency Detail" : "Incident Detail";
 
   if (showPreview) {
@@ -754,12 +878,12 @@ export default function IncidentLogScreen({
         {/* Top bar */}
         <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 8) }]}>
           <Pressable
-            disabled={submitting}
+            disabled={submitting || aiLoading}
             onPress={onBack ?? (() => Alert.alert("Back", "Wire onBack() to navigation"))}
             hitSlop={12}
             style={({ pressed }) => [
               styles.backBtn,
-              (pressed || submitting) && { opacity: 0.7 },
+              (pressed || submitting || aiLoading) && { opacity: 0.7 },
             ]}
           >
             <Ionicons name="chevron-back" size={24} color={Colors.primary} />
@@ -784,13 +908,13 @@ export default function IncidentLogScreen({
               </Text>
 
               <Pressable
-                disabled={submitting}
+                disabled={submitting || aiLoading}
                 onPress={toggleVoiceInput}
                 hitSlop={10}
                 style={({ pressed }) => [
                   styles.micBtn,
                   recognizing && styles.micBtnActive,
-                  (pressed || submitting) && { opacity: 0.9 },
+                  (pressed || submitting || aiLoading) && { opacity: 0.9 },
                 ]}
               >
                 <Ionicons
@@ -804,15 +928,12 @@ export default function IncidentLogScreen({
               </Pressable>
             </View>
 
-            {!!speechError && (
-              <Text style={styles.speechErrorText}>{speechError}</Text>
-            )}
+            {!!speechError && <Text style={styles.speechErrorText}>{speechError}</Text>}
 
-            {/* Details */}
             <View style={[styles.input, styles.textArea]}>
               <TextInput
                 ref={detailsInputRef}
-                editable={!submitting}
+                editable={!submitting && !aiLoading}
                 value={details}
                 onChangeText={(t) => {
                   setDetails(t);
@@ -820,6 +941,7 @@ export default function IncidentLogScreen({
                     speechBaseRef.current = safeTrim(t);
                     lastFinalRef.current = "";
                   }
+                  setAiError(null);
                 }}
                 placeholder="A detailed explanation of what happened, including actions, sequence of events, and any relevant details observed during the incident."
                 placeholderTextColor="#9AA7B5"
@@ -830,19 +952,97 @@ export default function IncidentLogScreen({
             </View>
 
             {recognizing && (
-              <Text style={styles.speechHint}>
-                Speak now. Tap “Listening...” to stop.
-              </Text>
+              <Text style={styles.speechHint}>Speak now. Tap “Listening...” to stop.</Text>
             )}
+
+            {/* ✅ AI Assessment */}
+            <View style={styles.aiWrap}>
+              <View style={styles.aiHeaderRow}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Ionicons name="sparkles-outline" size={16} color={Colors.primary} />
+                  <Text style={styles.aiTitle}>AI Assessment</Text>
+
+                  {aiResult && aiIsStale && (
+                    <View style={styles.aiStalePill}>
+                      <Text style={styles.aiStaleText}>Needs update</Text>
+                    </View>
+                  )}
+                </View>
+
+                <Pressable
+                  disabled={submitting || aiLoading}
+                  onPress={runAiAnalyze}
+                  hitSlop={10}
+                  style={({ pressed }) => [
+                    styles.aiBtn,
+                    (pressed || submitting || aiLoading) && { opacity: 0.92 },
+                  ]}
+                >
+                  {aiLoading ? (
+                    <ActivityIndicator />
+                  ) : (
+                    <Ionicons name="flash-outline" size={16} color={Colors.primary} />
+                  )}
+                  <Text style={styles.aiBtnText}>
+                    {aiLoading ? "Analyzing..." : "Analyze"}
+                  </Text>
+                </Pressable>
+              </View>
+
+              {!!aiError && <Text style={styles.aiErrorText}>{aiError}</Text>}
+
+              {aiResult ? (
+                <View style={styles.aiCard}>
+                  <View style={styles.aiRow}>
+                    <Text style={styles.aiKey}>Incident Type</Text>
+                    <Text style={styles.aiVal}>{aiResult.incident_type ?? "—"}</Text>
+                  </View>
+                  <View style={styles.aiRow}>
+                    <Text style={styles.aiKey}>Language</Text>
+                    <Text style={styles.aiVal}>{aiResult.language ?? "—"}</Text>
+                  </View>
+
+                  <View style={styles.aiRow}>
+                    <Text style={styles.aiKey}>Risk Level</Text>
+                    <Text style={styles.aiVal}>{aiResult.risk_level ?? "—"}</Text>
+                  </View>
+                  <View style={styles.aiRow}>
+                    <Text style={styles.aiKey}>Risk %</Text>
+                    <Text style={styles.aiVal}>{formatPct(aiResult.risk_percentage)}</Text>
+                  </View>
+                  <View style={styles.aiRow}>
+                    <Text style={styles.aiKey}>Priority</Text>
+                    <Text style={styles.aiVal}>{aiResult.priority_level ?? "—"}</Text>
+                  </View>
+
+                  <View style={styles.aiRow}>
+                    <Text style={styles.aiKey}>Children Involved</Text>
+                    <Text style={styles.aiVal}>{formatBool(aiResult.children_involved)}</Text>
+                  </View>
+                  <View style={styles.aiRow}>
+                    <Text style={styles.aiKey}>Weapon Mentioned</Text>
+                    <Text style={styles.aiVal}>{formatBool(aiResult.weapon_mentioned)}</Text>
+                  </View>
+                  <View style={styles.aiRow}>
+                    <Text style={styles.aiKey}>Confidence</Text>
+                    <Text style={styles.aiVal}>{formatConfidence(aiResult.confidence_score)}</Text>
+                  </View>
+                </View>
+              ) : (
+                <Text style={styles.aiHint}>
+                  Tap Analyze to auto-detect risk and priority from the incident details.
+                </Text>
+              )}
+            </View>
 
             {/* Add Photo */}
             <View style={styles.photoRow}>
               <Pressable
-                disabled={submitting}
+                disabled={submitting || aiLoading}
                 onPress={onAddPhoto}
                 style={({ pressed }) => [
                   styles.photoBtn,
-                  (pressed || submitting) && { opacity: 0.9 },
+                  (pressed || submitting || aiLoading) && { opacity: 0.9 },
                 ]}
               >
                 <Ionicons name="cloud-upload-outline" size={18} color={Colors.primary} />
@@ -857,7 +1057,7 @@ export default function IncidentLogScreen({
                 {photos.map((uri, idx) => (
                   <Pressable
                     key={`${uri}-${idx}`}
-                    disabled={submitting}
+                    disabled={submitting || aiLoading}
                     onPress={() => {
                       Alert.alert("Remove photo?", "Do you want to remove this photo?", [
                         { text: "Cancel", style: "cancel" },
@@ -870,7 +1070,7 @@ export default function IncidentLogScreen({
                     }}
                     style={({ pressed }) => [
                       styles.thumbBox,
-                      (pressed || submitting) && { opacity: 0.92 },
+                      (pressed || submitting || aiLoading) && { opacity: 0.92 },
                     ]}
                   >
                     <Image source={{ uri }} style={styles.thumbImg} />
@@ -882,14 +1082,13 @@ export default function IncidentLogScreen({
               </View>
             )}
 
-            {/* Offender */}
             <Text style={[styles.sectionTitle, { marginTop: 14 }]}>
               Offender (Optional)
             </Text>
 
             <View style={styles.input}>
               <TextInput
-                editable={!submitting}
+                editable={!submitting && !aiLoading}
                 value={offenderName}
                 onChangeText={setOffenderName}
                 placeholder="Name of Offender"
@@ -898,12 +1097,11 @@ export default function IncidentLogScreen({
               />
             </View>
 
-            {/* Witness */}
             <Text style={[styles.sectionTitle, { marginTop: 14 }]}>Witness</Text>
 
             <View style={styles.input}>
               <TextInput
-                editable={!submitting}
+                editable={!submitting && !aiLoading}
                 value={witnessName}
                 onChangeText={setWitnessName}
                 placeholder="Name (Optional)"
@@ -914,7 +1112,7 @@ export default function IncidentLogScreen({
 
             <View style={styles.input}>
               <TextInput
-                editable={!submitting}
+                editable={!submitting && !aiLoading}
                 value={witnessType}
                 onChangeText={setWitnessType}
                 placeholder="Type (Neighbor, Family, etc.)."
@@ -923,16 +1121,15 @@ export default function IncidentLogScreen({
               />
             </View>
 
-            {/* ✅ Location label + button ONLY (box removed) */}
             <View style={{ marginTop: 6, marginBottom: 6 }}>
               <Text style={styles.sectionTitle}>Location</Text>
 
               <Pressable
-                disabled={submitting || locationLoading}
+                disabled={submitting || aiLoading || locationLoading}
                 onPress={() => requestAndSetCurrentLocation({ silent: false })}
                 style={({ pressed }) => [
                   styles.locationBtnSolo,
-                  (pressed || locationLoading || submitting) && { opacity: 0.9 },
+                  (pressed || locationLoading || submitting || aiLoading) && { opacity: 0.9 },
                 ]}
               >
                 {locationLoading ? (
@@ -952,7 +1149,6 @@ export default function IncidentLogScreen({
               )}
             </View>
 
-            {/* meta */}
             <View style={styles.metaRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.metaText}>
@@ -972,14 +1168,13 @@ export default function IncidentLogScreen({
           </View>
         </ScrollView>
 
-        {/* bottom button */}
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           <Pressable
-            disabled={submitting}
+            disabled={submitting || aiLoading}
             onPress={onSubmit}
             style={({ pressed }) => [
               styles.submitShadow,
-              (pressed || submitting) && { opacity: 0.95 },
+              (pressed || submitting || aiLoading) && { opacity: 0.95 },
             ]}
           >
             <LinearGradient
@@ -992,6 +1187,11 @@ export default function IncidentLogScreen({
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                   <ActivityIndicator color="#FFFFFF" />
                   <Text style={styles.submitText}>Submitting...</Text>
+                </View>
+              ) : aiLoading ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <ActivityIndicator color="#FFFFFF" />
+                  <Text style={styles.submitText}>Analyzing...</Text>
                 </View>
               ) : (
                 <Text style={styles.submitText}>{actionText}</Text>
@@ -1139,6 +1339,95 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
+  aiWrap: {
+    marginTop: 6,
+    marginBottom: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 14,
+    padding: 12,
+  },
+  aiHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  aiTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: TEXT_DARK,
+  },
+  aiBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 12,
+    height: 34,
+    borderRadius: 12,
+  },
+  aiBtnText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: Colors.primary,
+  },
+  aiHint: {
+    marginTop: 10,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#52677A",
+  },
+  aiErrorText: {
+    marginTop: 8,
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#E11D48",
+  },
+  aiCard: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 12,
+    backgroundColor: "#F8FBFF",
+    padding: 12,
+    gap: 8,
+  },
+  aiRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  aiKey: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#52677A",
+  },
+  aiVal: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: TEXT_DARK,
+  },
+  aiStalePill: {
+    paddingHorizontal: 10,
+    height: 22,
+    borderRadius: 999,
+    backgroundColor: "#FEF3C7",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  aiStaleText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#92400E",
+  },
+
   photoRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1202,7 +1491,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  // ✅ location button only
   locationBtnSolo: {
     flexDirection: "row",
     alignItems: "center",

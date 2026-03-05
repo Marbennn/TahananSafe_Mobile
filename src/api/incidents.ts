@@ -8,9 +8,7 @@ export type CreateIncidentPayload = {
   incidentType?: string;
   details: string;
 
-  // ✅ NEW
   offenderName?: string;
-
   witnessName?: string;
   witnessType?: string;
 
@@ -20,6 +18,16 @@ export type CreateIncidentPayload = {
 
   // URIs from Expo ImagePicker (result.assets[].uri)
   photos?: string[];
+
+  // ✅ NEW: AI fields (match your AI API / README keys)
+  ai_incident_type?: string;
+  ai_language?: string;
+  ai_risk_level?: string;
+  ai_risk_percentage?: number;
+  ai_priority_level?: string;
+  ai_children_involved?: boolean;
+  ai_weapon_mentioned?: boolean;
+  ai_confidence_score?: number;
 };
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
@@ -41,6 +49,11 @@ function fileNameFromUri(uri: string, index: number) {
   return last;
 }
 
+function appendIfDefined(form: FormData, key: string, value: any) {
+  if (value === undefined || value === null) return;
+  form.append(key, typeof value === "string" ? value : String(value));
+}
+
 export async function submitIncident(payload: CreateIncidentPayload) {
   const token = await getAccessToken();
 
@@ -53,7 +66,6 @@ export async function submitIncident(payload: CreateIncidentPayload) {
     form.append("incidentType", payload.incidentType || "");
   }
 
-  // ✅ NEW
   if (payload.offenderName) form.append("offenderName", payload.offenderName);
 
   if (payload.witnessName) form.append("witnessName", payload.witnessName);
@@ -61,6 +73,16 @@ export async function submitIncident(payload: CreateIncidentPayload) {
   if (payload.dateStr) form.append("dateStr", payload.dateStr);
   if (payload.timeStr) form.append("timeStr", payload.timeStr);
   if (payload.locationStr) form.append("locationStr", payload.locationStr);
+
+  // ✅ AI fields -> backend
+  appendIfDefined(form, "ai_incident_type", payload.ai_incident_type);
+  appendIfDefined(form, "ai_language", payload.ai_language);
+  appendIfDefined(form, "ai_risk_level", payload.ai_risk_level);
+  appendIfDefined(form, "ai_risk_percentage", payload.ai_risk_percentage);
+  appendIfDefined(form, "ai_priority_level", payload.ai_priority_level);
+  appendIfDefined(form, "ai_children_involved", payload.ai_children_involved);
+  appendIfDefined(form, "ai_weapon_mentioned", payload.ai_weapon_mentioned);
+  appendIfDefined(form, "ai_confidence_score", payload.ai_confidence_score);
 
   const uris = (payload.photos || []).slice(0, 3);
 
