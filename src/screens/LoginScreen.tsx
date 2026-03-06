@@ -58,8 +58,18 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
 const LOGIN_PATH = "/api/mobile/v1/login";
 const REFRESH_PATH = "/api/mobile/v1/refresh-token";
 
-// Backend response shapes (loose)
-type LoginCheckResponse = { message?: string };
+// ✅ Updated backend response shape
+type LoginCheckResponse = {
+  message?: string;
+  purpose?: string;
+  user?: {
+    id?: string;
+    email?: string;
+    profileImage?: string;
+    role?: string;
+  };
+};
+
 type LoginSendOtpResponse = { message?: string };
 
 const INVALID_CREDENTIALS_TITLE = "Invalid Credentials";
@@ -71,6 +81,14 @@ function showInvalidCredentials() {
 
 function showServerUnavailable() {
   Alert.alert("Server unavailable", "Please try again. (Tunnel/Server issue)");
+}
+
+function normalizeRole(role?: string) {
+  return String(role || "").trim().toLowerCase();
+}
+
+function isBarangayOfficial(role?: string) {
+  return normalizeRole(role) === "barangay official";
 }
 
 /**
@@ -451,6 +469,9 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const [verifyPassword, setVerifyPassword] = useState<string>(""); // for resend
   const [sendingOtp, setSendingOtp] = useState(false);
 
+  // ✅ NEW: store pending role before OTP verify
+  const [pendingLoginRole, setPendingLoginRole] = useState<string>("user");
+
   // ✅ track if biometrics prompt should run after OTP success
   const [pendingFirstLoginBioPrompt, setPendingFirstLoginBioPrompt] =
     useState(false);
@@ -463,6 +484,18 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   // ✅ Legal modal
   const [legalOpen, setLegalOpen] = useState(false);
   const [legalMode, setLegalMode] = useState<LegalMode>("terms");
+
+  const goAfterLoginByRole = (role?: string) => {
+    if (isBarangayOfficial(role)) {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "AdminHomeScreen" }],
+      });
+      return;
+    }
+
+    onLoginSuccess();
+  };
 
   const closeForgotFlow = () => {
     setForgotStep("none");
@@ -526,9 +559,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
             text: "Not now",
             style: "cancel",
             onPress: async () => {
-              // ✅ mark as "disabled" (so quick login won't trigger)
               await setBioOptInForEmail(emailNorm, false);
-              // ✅ snooze next prompt for 3 days
               await setBioSnoozeUntilMs(emailNorm, nowMs() + BIO_SNOOZE_MS);
             },
           },
@@ -536,7 +567,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
             text: "Enable",
             onPress: async () => {
               await setBioOptInForEmail(emailNorm, true);
-              // ✅ clear snooze so it doesn't block anything later
               await setBioSnoozeUntilMs(emailNorm, 0);
             },
           },
@@ -578,7 +608,10 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       console.log(`${TAG} handleLoginPressed START`, { email: emailNorm });
 
       // ✅ STEP 1: validate credentials FIRST
-      await loginCheckRequest(emailNorm, passwordNorm);
+      const checkData = await loginCheckRequest(emailNorm, passwordNorm);
+      const roleFromBackend = checkData?.user?.role || "user";
+
+      setPendingLoginRole(roleFromBackend);
 
       // ✅ STEP 2: If refresh exists AND user opted in -> biometrics quick login
       const storedRefresh = await getRefreshTokenForEmail(emailNorm);
@@ -596,8 +629,8 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
             await saveTokens({ accessToken: newAccess });
             await setLoggedIn(true);
 
-            console.log(`${TAG} refreshed access token saved -> go Home`);
-            onLoginSuccess();
+            console.log(`${TAG} refreshed access token saved -> route by role`);
+            goAfterLoginByRole(roleFromBackend);
             return;
           } catch (e: any) {
             const status = e?.status;
@@ -640,7 +673,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       }
 
       // ✅ "new user on this device" = no stored refresh token
-      // After OTP success, we attempt biometrics prompt (but snooze rules apply)
       setPendingFirstLoginBioPrompt(!storedRefresh);
 
       await loginSendOtpRequest(emailNorm, passwordNorm);
@@ -698,18 +730,18 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     }
   };
 
-  // ✅ Called after OTP verified (EnterVerificationModal already verifies on backend)
+  // ✅ Called after OTP verified
   const handleVerified = async (_code: string) => {
     setVerifyOpen(false);
 
-    // ✅ If "new user on this device" => after OTP success, ask biometrics
-    // ✅ If they tapped "Not now" before, it will only show again after 3 days
     if (pendingFirstLoginBioPrompt && verifyEmail) {
       await maybeAskBiometricsOptIn(verifyEmail);
     }
 
     setPendingFirstLoginBioPrompt(false);
-    onLoginSuccess();
+
+    // ✅ route depending on role captured from login check
+    goAfterLoginByRole(pendingLoginRole);
   };
 
   const handleForgotPassword = () => {
@@ -722,6 +754,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     setLegalMode("terms");
     setLegalOpen(true);
   };
+
   const handlePrivacy = () => {
     setLegalMode("privacy");
     setLegalOpen(true);

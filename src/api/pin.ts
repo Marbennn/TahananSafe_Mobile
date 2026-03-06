@@ -16,6 +16,7 @@ type GetMeResponse = {
     dateOfBirth?: string;
     age?: number;
     hasPin: boolean;
+    role?: string;
   };
 };
 

@@ -192,22 +192,6 @@ function extractTranscriptFromEvent(event: any): string {
   return "";
 }
 
-function formatBool(v: any) {
-  if (v === true) return "Yes";
-  if (v === false) return "No";
-  return "—";
-}
-
-function formatPct(v: any) {
-  if (typeof v === "number") return `${v}%`;
-  return "—";
-}
-
-function formatConfidence(v: any) {
-  if (typeof v === "number") return `${v}`;
-  return "—";
-}
-
 /** ✅ Prefer AI incident type for display + saving */
 function normalizeAiIncidentType(v: any) {
   const s = safeTrim(String(v ?? ""));
@@ -275,38 +259,8 @@ export default function IncidentLogScreen({
     return incidentType || "Other";
   }, [aiResult, incidentType, mode]);
 
-  /** ✅ Manual analyze button handler (kept) */
-  const runAiAnalyze = async () => {
-    if (submitting) return;
-    if (recognizing) {
-      Alert.alert("Voice input active", "Please stop voice input before running AI analysis.");
-      return;
-    }
-
-    const text = safeTrim(details);
-    if (!text) {
-      Alert.alert("No incident detail", "Please enter incident details first.");
-      return;
-    }
-
-    setAiLoading(true);
-    setAiError(null);
-
-    try {
-      const res = await analyzeIncident(text);
-      setAiResult(res);
-      lastAnalyzedTextRef.current = text;
-    } catch (e: any) {
-      setAiResult(null);
-      setAiError(e?.message || "AI analyze failed.");
-      Alert.alert("AI Analyze Failed", e?.message || "Please try again.");
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
   /**
-   * ✅ NEW: Auto-analyze when user clicks "Secure Complaint"
+   * ✅ Auto-analyze when user clicks "Secure Complaint"
    * - Only runs for complain mode
    * - Only runs if no aiResult OR stale
    * - If AI fails, we STOP (so user can retry)
@@ -852,6 +806,7 @@ export default function IncidentLogScreen({
       : aiLoading
       ? "Analyzing..."
       : "Secure Complaint";
+
   const detailsLabel = mode === "emergency" ? "Emergency Detail" : "Incident Detail";
 
   if (showPreview) {
@@ -929,6 +884,7 @@ export default function IncidentLogScreen({
             </View>
 
             {!!speechError && <Text style={styles.speechErrorText}>{speechError}</Text>}
+            {!!aiError && <Text style={styles.aiErrorText}>{aiError}</Text>}
 
             <View style={[styles.input, styles.textArea]}>
               <TextInput
@@ -954,86 +910,6 @@ export default function IncidentLogScreen({
             {recognizing && (
               <Text style={styles.speechHint}>Speak now. Tap “Listening...” to stop.</Text>
             )}
-
-            {/* ✅ AI Assessment */}
-            <View style={styles.aiWrap}>
-              <View style={styles.aiHeaderRow}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <Ionicons name="sparkles-outline" size={16} color={Colors.primary} />
-                  <Text style={styles.aiTitle}>AI Assessment</Text>
-
-                  {aiResult && aiIsStale && (
-                    <View style={styles.aiStalePill}>
-                      <Text style={styles.aiStaleText}>Needs update</Text>
-                    </View>
-                  )}
-                </View>
-
-                <Pressable
-                  disabled={submitting || aiLoading}
-                  onPress={runAiAnalyze}
-                  hitSlop={10}
-                  style={({ pressed }) => [
-                    styles.aiBtn,
-                    (pressed || submitting || aiLoading) && { opacity: 0.92 },
-                  ]}
-                >
-                  {aiLoading ? (
-                    <ActivityIndicator />
-                  ) : (
-                    <Ionicons name="flash-outline" size={16} color={Colors.primary} />
-                  )}
-                  <Text style={styles.aiBtnText}>
-                    {aiLoading ? "Analyzing..." : "Analyze"}
-                  </Text>
-                </Pressable>
-              </View>
-
-              {!!aiError && <Text style={styles.aiErrorText}>{aiError}</Text>}
-
-              {aiResult ? (
-                <View style={styles.aiCard}>
-                  <View style={styles.aiRow}>
-                    <Text style={styles.aiKey}>Incident Type</Text>
-                    <Text style={styles.aiVal}>{aiResult.incident_type ?? "—"}</Text>
-                  </View>
-                  <View style={styles.aiRow}>
-                    <Text style={styles.aiKey}>Language</Text>
-                    <Text style={styles.aiVal}>{aiResult.language ?? "—"}</Text>
-                  </View>
-
-                  <View style={styles.aiRow}>
-                    <Text style={styles.aiKey}>Risk Level</Text>
-                    <Text style={styles.aiVal}>{aiResult.risk_level ?? "—"}</Text>
-                  </View>
-                  <View style={styles.aiRow}>
-                    <Text style={styles.aiKey}>Risk %</Text>
-                    <Text style={styles.aiVal}>{formatPct(aiResult.risk_percentage)}</Text>
-                  </View>
-                  <View style={styles.aiRow}>
-                    <Text style={styles.aiKey}>Priority</Text>
-                    <Text style={styles.aiVal}>{aiResult.priority_level ?? "—"}</Text>
-                  </View>
-
-                  <View style={styles.aiRow}>
-                    <Text style={styles.aiKey}>Children Involved</Text>
-                    <Text style={styles.aiVal}>{formatBool(aiResult.children_involved)}</Text>
-                  </View>
-                  <View style={styles.aiRow}>
-                    <Text style={styles.aiKey}>Weapon Mentioned</Text>
-                    <Text style={styles.aiVal}>{formatBool(aiResult.weapon_mentioned)}</Text>
-                  </View>
-                  <View style={styles.aiRow}>
-                    <Text style={styles.aiKey}>Confidence</Text>
-                    <Text style={styles.aiVal}>{formatConfidence(aiResult.confidence_score)}</Text>
-                  </View>
-                </View>
-              ) : (
-                <Text style={styles.aiHint}>
-                  Tap Analyze to auto-detect risk and priority from the incident details.
-                </Text>
-              )}
-            </View>
 
             {/* Add Photo */}
             <View style={styles.photoRow}>
@@ -1339,93 +1215,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  aiWrap: {
-    marginTop: 6,
-    marginBottom: 10,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 14,
-    padding: 12,
-  },
-  aiHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  aiTitle: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: TEXT_DARK,
-  },
-  aiBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: BORDER,
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 12,
-    height: 34,
-    borderRadius: 12,
-  },
-  aiBtnText: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: Colors.primary,
-  },
-  aiHint: {
-    marginTop: 10,
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#52677A",
-  },
   aiErrorText: {
-    marginTop: 8,
+    marginTop: -4,
+    marginBottom: 10,
     fontSize: 11,
     fontWeight: "900",
     color: "#E11D48",
-  },
-  aiCard: {
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 12,
-    backgroundColor: "#F8FBFF",
-    padding: 12,
-    gap: 8,
-  },
-  aiRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  aiKey: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: "#52677A",
-  },
-  aiVal: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: TEXT_DARK,
-  },
-  aiStalePill: {
-    paddingHorizontal: 10,
-    height: 22,
-    borderRadius: 999,
-    backgroundColor: "#FEF3C7",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#FDE68A",
-  },
-  aiStaleText: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: "#92400E",
   },
 
   photoRow: {

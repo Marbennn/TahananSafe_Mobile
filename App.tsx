@@ -33,6 +33,9 @@ import NotificationsScreen from "./src/screens/NotificationsScreen";
 import IncidentLogScreen from "./src/screens/IncidentLogScreen";
 import IncidentLogConfirmedScreen from "./src/screens/IncidentLogConfirmedScreen";
 
+// ✅ Admin
+import AdminHomeScreen from "./src/screens/admin_mobile/AdminHomeScreen";
+
 // Session helpers
 import {
   isLoggedIn,
@@ -63,8 +66,8 @@ type RootStackParamList = {
   CreatePin: undefined;
   Pin: undefined;
 
-  // ✅ UPDATED: Main can receive openReport
   Main: { openReport?: ReportItem } | undefined;
+  AdminHomeScreen: undefined;
 
   Notifications: undefined;
 };
@@ -95,6 +98,22 @@ function formatDateLine(createdAt?: string) {
   }
 }
 
+/* ===================== ROLE HELPERS ===================== */
+
+function normalizeRole(role?: string) {
+  return String(role || "").trim().toLowerCase();
+}
+
+function isBarangayOfficial(role?: string) {
+  return normalizeRole(role) === "barangay official";
+}
+
+function getHomeRouteNameByRole(
+  role?: string
+): "Main" | "AdminHomeScreen" {
+  return isBarangayOfficial(role) ? "AdminHomeScreen" : "Main";
+}
+
 /* ===================== ✅ LOCAL PIN ENABLE FLAG (DEVICE-LEVEL) ===================== */
 /** SecureStore keys must only contain: A-Z a-z 0-9 . - _ */
 function safeKeyPart(input: string) {
@@ -115,10 +134,10 @@ function pinEnabledKeyForEmail(email: string) {
 async function isPinEnabledLocally(email: string): Promise<boolean> {
   try {
     const v = await SecureStore.getItemAsync(pinEnabledKeyForEmail(email));
-    if (v === null || v === undefined || String(v).trim() === "") return true; // default ON
+    if (v === null || v === undefined || String(v).trim() === "") return true;
     return v === "1";
   } catch {
-    return true; // safest UX: don't lock users out due to read error
+    return true;
   }
 }
 
@@ -127,14 +146,11 @@ async function isPinEnabledLocally(email: string): Promise<boolean> {
 function MainShell({
   onLogout,
   onOpenNotifications,
-
-  // ✅ NEW: report passed from NotificationsScreen via navigation.navigate("Main", { openReport })
   incomingReport,
   clearIncomingReport,
 }: {
   onLogout: () => void;
   onOpenNotifications: () => void;
-
   incomingReport?: ReportItem | null;
   clearIncomingReport: () => void;
 }) {
@@ -162,7 +178,6 @@ function MainShell({
     setActiveTab("Reports");
   };
 
-  // ✅ IMPORTANT: Auto-open report detail when coming from Notifications tap
   useEffect(() => {
     if (!incomingReport) return;
 
@@ -171,7 +186,6 @@ function MainShell({
       setActiveTab("Reports");
       setReportStep("detail");
     } finally {
-      // prevent reopening on future renders
       clearIncomingReport();
     }
   }, [incomingReport, clearIncomingReport]);
@@ -277,7 +291,6 @@ async function bootstrapAfterLogin({
     if (token) {
       const me = await getMeApi({ accessToken: token });
 
-      // ✅ IMPORTANT: update AuthContext user so GreetingCard updates
       try {
         auth?.setUser?.(me.user);
       } catch {
@@ -285,32 +298,33 @@ async function bootstrapAfterLogin({
       }
 
       const hasPin = !!me.user.hasPin;
+      const role = me?.user?.role;
+      const targetHome = getHomeRouteNameByRole(role);
+
       await setHasPin(hasPin);
 
-      // ✅ NEW: device-level PIN enable/disable override
       const email = String(me?.user?.email || "").trim().toLowerCase();
       const pinLocalEnabled = email ? await isPinEnabledLocally(email) : true;
 
       if (hasPin && pinLocalEnabled) {
         if (isPinUnlockedThisRun()) {
-          navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+          navigation.reset({ index: 0, routes: [{ name: targetHome }] });
           return;
         }
         navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
         return;
       }
 
-      // ✅ If backend has PIN but user disabled it locally -> skip PIN screen
       if (hasPin && !pinLocalEnabled) {
         setPinUnlockedThisRun(true);
-        navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+        navigation.reset({ index: 0, routes: [{ name: targetHome }] });
         return;
       }
 
       const userId = String(me.user._id);
       const skipped = await isPinSkippedForUser(userId);
       if (skipped) {
-        navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+        navigation.reset({ index: 0, routes: [{ name: targetHome }] });
         return;
       }
 
@@ -322,7 +336,7 @@ async function bootstrapAfterLogin({
   navigation.reset({ index: 0, routes: [{ name: "Main" }] });
 }
 
-/* ===================== MAIN SCREEN WRAPPER (FIX) ===================== */
+/* ===================== MAIN SCREEN WRAPPER ===================== */
 
 function MainScreenWrapper({ navigation, route }: { navigation: any; route: any }) {
   const { logout: authLogout } = useAuth() as any;
@@ -358,13 +372,52 @@ function MainScreenWrapper({ navigation, route }: { navigation: any; route: any 
   );
 }
 
-/* ===================== ✅ PIN SCREEN WRAPPER (WITH DISABLE-PIN BYPASS) ===================== */
+/* ===================== ADMIN HOME WRAPPER ===================== */
+
+function AdminHomeWrapper({ navigation }: { navigation: any }) {
+  const { logout: authLogout } = useAuth() as any;
+
+  return (
+    <AdminHomeScreen
+      onOpenNotifications={() => navigation.navigate("Notifications")}
+      onOpenHelp={() => {
+        Alert.alert("Help", "Admin help screen coming soon.");
+      }}
+      onOpenReports={() => {
+        Alert.alert("Reports", "Admin reports screen coming soon.");
+      }}
+      onOpenUsers={() => {
+        Alert.alert("Users", "Admin users screen coming soon.");
+      }}
+      onOpenHotlines={() => {
+        Alert.alert("Hotlines", "Admin hotlines screen coming soon.");
+      }}
+      onOpenAnalytics={() => {
+        Alert.alert("Analytics", "Admin analytics screen coming soon.");
+      }}
+      onOpenPendingReports={() => {
+        Alert.alert("Pending Reports", "Pending reports screen coming soon.");
+      }}
+      onOpenVerifiedUsers={() => {
+        Alert.alert("Verified Users", "Verified users screen coming soon.");
+      }}
+      onOpenEscalatedCases={() => {
+        Alert.alert("Escalated Cases", "Escalated cases screen coming soon.");
+      }}
+      onOpenReportDetail={(reportId) => {
+        Alert.alert("Report Detail", `Open admin report ${reportId} next.`);
+      }}
+    />
+  );
+}
+
+/* ===================== ✅ PIN SCREEN WRAPPER ===================== */
 
 function PinScreenWrapper({ navigation }: { navigation: any }) {
   const auth = useAuth() as any;
+  const targetHome = getHomeRouteNameByRole(auth?.user?.role);
 
   const handleBack = async () => {
-    // Back from PIN means user wants to switch account -> full logout.
     resetPinUnlockedThisRun();
 
     try {
@@ -385,10 +438,9 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
       onForgotPin={() => {
         Alert.alert("Forgot PIN", "Recovery coming soon.");
       }}
-      // ✅ NEW: if user disabled PIN in Settings, PinScreen will call this and we skip to Main
       onBypass={() => {
         setPinUnlockedThisRun(true);
-        navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+        navigation.reset({ index: 0, routes: [{ name: targetHome }] });
       }}
       onVerified={async (pin) => {
         try {
@@ -406,7 +458,7 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
           await verifyPinApi({ accessToken: token, pin });
 
           setPinUnlockedThisRun(true);
-          navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+          navigation.reset({ index: 0, routes: [{ name: targetHome }] });
         } catch (e: any) {
           Alert.alert("Invalid PIN", e?.message || "Try again.");
         }
@@ -415,7 +467,27 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
   );
 }
 
-/* ===================== AUTH FLOW WRAPPER (HOOK-SAFE) ===================== */
+/* ===================== CREATE PIN WRAPPER ===================== */
+
+function CreatePinWrapper({ navigation }: { navigation: any }) {
+  const auth = useAuth() as any;
+  const targetHome = getHomeRouteNameByRole(auth?.user?.role);
+
+  return (
+    <CreatePinScreen
+      onContinue={() => {
+        setPinUnlockedThisRun(true);
+        navigation.reset({ index: 0, routes: [{ name: targetHome }] });
+      }}
+      onSkip={() => {
+        setPinUnlockedThisRun(true);
+        navigation.reset({ index: 0, routes: [{ name: targetHome }] });
+      }}
+    />
+  );
+}
+
+/* ===================== AUTH FLOW WRAPPER ===================== */
 
 function AuthFlowWrapper({ navigation }: { navigation: any }) {
   const auth = useAuth() as any;
@@ -431,7 +503,7 @@ function AuthFlowWrapper({ navigation }: { navigation: any }) {
   );
 }
 
-/* ===================== LOGIN WRAPPER (HOOK-SAFE) ===================== */
+/* ===================== LOGIN WRAPPER ===================== */
 
 function LoginWrapper({ navigation }: { navigation: any }) {
   const auth = useAuth() as any;
@@ -450,12 +522,14 @@ function LoginWrapper({ navigation }: { navigation: any }) {
 
 function AppSplashScreenWrapper({
   onGoMain,
+  onGoAdminHome,
   onGoPin,
   onGoCreatePin,
   onGoOnboarding,
   onGoAuthFlow,
 }: {
   onGoMain: () => void;
+  onGoAdminHome: () => void;
   onGoPin: () => void;
   onGoCreatePin: () => void;
   onGoOnboarding: () => void;
@@ -475,7 +549,6 @@ function AppSplashScreenWrapper({
         if (!mounted) return;
 
         if (!logged) {
-          // ✅ ensure context user cleared if not logged
           try {
             auth?.setUser?.(null);
           } catch {}
@@ -498,36 +571,42 @@ function AppSplashScreenWrapper({
 
         const me = await getMeApi({ accessToken: token });
 
-        // ✅ keep GreetingCard correct on cold-start
         try {
           auth?.setUser?.(me.user);
         } catch {}
 
         const hasPin = !!me.user.hasPin;
+        const role = me?.user?.role;
+        const isAdmin = isBarangayOfficial(role);
+
         await setHasPin(hasPin);
         if (!mounted) return;
 
-        // ✅ NEW: device-level PIN enable/disable override (cold-start too)
         const email = String(me?.user?.email || "").trim().toLowerCase();
         const pinLocalEnabled = email ? await isPinEnabledLocally(email) : true;
 
         if (hasPin && pinLocalEnabled) {
-          if (isPinUnlockedThisRun()) onGoMain();
-          else onGoPin();
+          if (isPinUnlockedThisRun()) {
+            if (isAdmin) onGoAdminHome();
+            else onGoMain();
+          } else {
+            onGoPin();
+          }
           return;
         }
 
-        // ✅ If backend has PIN but user disabled it locally -> skip PIN
         if (hasPin && !pinLocalEnabled) {
           setPinUnlockedThisRun(true);
-          onGoMain();
+          if (isAdmin) onGoAdminHome();
+          else onGoMain();
           return;
         }
 
         const userId = String(me.user._id);
         const skipped = await isPinSkippedForUser(userId);
         if (skipped) {
-          onGoMain();
+          if (isAdmin) onGoAdminHome();
+          else onGoMain();
           return;
         }
 
@@ -553,7 +632,7 @@ function AppSplashScreenWrapper({
       mounted = false;
       clearTimeout(t);
     };
-  }, [onGoMain, onGoPin, onGoCreatePin, onGoOnboarding, onGoAuthFlow]);
+  }, [onGoMain, onGoAdminHome, onGoPin, onGoCreatePin, onGoOnboarding, onGoAuthFlow]);
 
   return <AppSplashScreen />;
 }
@@ -575,10 +654,17 @@ export default function App() {
                 {({ navigation }) => (
                   <AppSplashScreenWrapper
                     onGoMain={() => navigation.reset({ index: 0, routes: [{ name: "Main" }] })}
+                    onGoAdminHome={() =>
+                      navigation.reset({ index: 0, routes: [{ name: "AdminHomeScreen" }] })
+                    }
                     onGoPin={() => navigation.reset({ index: 0, routes: [{ name: "Pin" }] })}
-                    onGoCreatePin={() => navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] })}
+                    onGoCreatePin={() =>
+                      navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] })
+                    }
                     onGoOnboarding={() => navigation.replace("OnboardingPager")}
-                    onGoAuthFlow={() => navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })}
+                    onGoAuthFlow={() =>
+                      navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })
+                    }
                   />
                 )}
               </Stack.Screen>
@@ -600,18 +686,7 @@ export default function App() {
               </Stack.Screen>
 
               <Stack.Screen name="CreatePin">
-                {({ navigation }) => (
-                  <CreatePinScreen
-                    onContinue={() => {
-                      setPinUnlockedThisRun(true);
-                      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
-                    }}
-                    onSkip={() => {
-                      setPinUnlockedThisRun(true);
-                      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
-                    }}
-                  />
-                )}
+                {({ navigation }) => <CreatePinWrapper navigation={navigation} />}
               </Stack.Screen>
 
               <Stack.Screen name="Pin">
@@ -620,6 +695,10 @@ export default function App() {
 
               <Stack.Screen name="Main">
                 {({ navigation, route }) => <MainScreenWrapper navigation={navigation} route={route} />}
+              </Stack.Screen>
+
+              <Stack.Screen name="AdminHomeScreen">
+                {({ navigation }) => <AdminHomeWrapper navigation={navigation} />}
               </Stack.Screen>
 
               <Stack.Screen name="Notifications">
