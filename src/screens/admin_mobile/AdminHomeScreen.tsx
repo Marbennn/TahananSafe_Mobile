@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useCallback, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -7,11 +7,17 @@ import {
   ScrollView,
   StatusBar,
   useWindowDimensions,
+  Modal,
+  Animated,
+  PanResponder,
+  Easing,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../../theme/colors";
+import { useAuth } from "../../auth/AuthContext";
+import BottomNavBar, { TabKey } from "../../components/BottomNavBar";
 
 type QuickAction = {
   id: string;
@@ -47,7 +53,12 @@ type Props = {
   onOpenVerifiedUsers?: () => void;
   onOpenEscalatedCases?: () => void;
   onOpenReportDetail?: (reportId: string) => void;
+  onLogout?: () => void;
 };
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
 
 const AdminHomeScreen: React.FC<Props> = ({
   onOpenNotifications,
@@ -60,11 +71,24 @@ const AdminHomeScreen: React.FC<Props> = ({
   onOpenVerifiedUsers,
   onOpenEscalatedCases,
   onOpenReportDetail,
+  onLogout,
 }) => {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-
+  const { width, height } = useWindowDimensions();
   const isSmallDevice = width < 380;
+
+  const { logout } = useAuth() as any;
+
+  const [activeTab, setActiveTab] = useState<TabKey>("Home");
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await logout();
+    } finally {
+      onLogout?.();
+    }
+  }, [logout, onLogout]);
 
   const statCardWidth = useMemo(() => {
     const horizontalPadding = 20 * 2;
@@ -159,6 +183,163 @@ const AdminHomeScreen: React.FC<Props> = ({
     return "#35B56A";
   };
 
+  // =========================
+  // Bottom nav sizing
+  // =========================
+  const NAV_BASE_HEIGHT = 78;
+  const FAB_SIZE = 62;
+
+  const bottomPad = Math.max(insets.bottom, 10);
+  const navHeight = NAV_BASE_HEIGHT + bottomPad;
+  const chevronBottom = navHeight + 90;
+  const fabBottom = navHeight - FAB_SIZE / 2 - 10;
+
+  const contentBottomPad = useMemo(() => {
+    const fabOverlapPad = Math.round(FAB_SIZE * 0.55);
+    return navHeight + fabOverlapPad + 18;
+  }, [navHeight]);
+
+  // =========================
+  // Swipe-up Sheet
+  // =========================
+  const s = clamp(Math.min(width / 375, height / 812) * 1.04, 0.88, 1.28);
+
+  const SHEET_HEIGHT = useMemo(() => clamp(Math.round(height * 0.31), 240, 320), [height]);
+  const SHEET_TOTAL_HEIGHT = useMemo(() => SHEET_HEIGHT + bottomPad, [SHEET_HEIGHT, bottomPad]);
+
+  const sheetY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+
+  const openSheet = useCallback(() => {
+    sheetY.stopAnimation();
+    backdropOpacity.stopAnimation();
+
+    sheetY.setValue(SHEET_HEIGHT);
+    backdropOpacity.setValue(0);
+    setSheetOpen(true);
+
+    Animated.parallel([
+      Animated.timing(backdropOpacity, {
+        toValue: 1,
+        duration: 140,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.spring(sheetY, {
+        toValue: 0,
+        useNativeDriver: true,
+        damping: 18,
+        stiffness: 220,
+        mass: 0.9,
+      }),
+    ]).start();
+  }, [sheetY, backdropOpacity, SHEET_HEIGHT]);
+
+  const closeSheet = useCallback(() => {
+    sheetY.stopAnimation();
+    backdropOpacity.stopAnimation();
+
+    Animated.parallel([
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 120,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(sheetY, {
+        toValue: SHEET_HEIGHT,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) {
+        sheetY.setValue(SHEET_HEIGHT);
+        backdropOpacity.setValue(0);
+        setSheetOpen(false);
+
+        if (activeTab === "Incident" || activeTab === "Settings") {
+          setActiveTab("Home");
+        }
+      }
+    });
+  }, [sheetY, backdropOpacity, SHEET_HEIGHT, activeTab]);
+
+  const handlePan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6 && Math.abs(g.dx) < 20,
+      onPanResponderMove: (_, g) => {
+        const next = clamp(g.dy, 0, SHEET_HEIGHT);
+        sheetY.setValue(next);
+        const t = clamp(next / SHEET_HEIGHT, 0, 1);
+        backdropOpacity.setValue(1 - t);
+      },
+      onPanResponderRelease: (_, g) => {
+        const shouldClose = g.dy > 60 || g.vy > 0.9;
+        if (shouldClose) {
+          closeSheet();
+        } else {
+          Animated.parallel([
+            Animated.timing(backdropOpacity, {
+              toValue: 1,
+              duration: 120,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: true,
+            }),
+            Animated.spring(sheetY, {
+              toValue: 0,
+              useNativeDriver: true,
+              damping: 18,
+              stiffness: 220,
+              mass: 0.9,
+            }),
+          ]).start();
+        }
+      },
+    })
+  ).current;
+
+  // =========================
+  // Bottom nav handlers
+  // =========================
+  const handleAdminTabPress = useCallback(
+    (tab: TabKey) => {
+      if (tab === "Home") {
+        setActiveTab("Home");
+        return;
+      }
+
+      if (tab === "Inbox") {
+        setActiveTab("Inbox");
+        onOpenHotlines?.();
+        return;
+      }
+
+      if (tab === "Reports") {
+        setActiveTab("Reports");
+        onOpenReports?.();
+        return;
+      }
+
+      if (tab === "Settings") {
+        setActiveTab("Settings");
+        openSheet();
+        return;
+      }
+
+      if (tab === "Incident") {
+        setActiveTab("Incident");
+        openSheet();
+      }
+    },
+    [onOpenHotlines, onOpenReports, openSheet]
+  );
+
+  const handleFabPress = useCallback(() => {
+    setActiveTab("Incident");
+    openSheet();
+  }, [openSheet]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#EEF3F8" />
@@ -188,7 +369,7 @@ const AdminHomeScreen: React.FC<Props> = ({
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            paddingBottom: 32 + insets.bottom,
+            paddingBottom: contentBottomPad,
           }}
         >
           <LinearGradient
@@ -342,6 +523,102 @@ const AdminHomeScreen: React.FC<Props> = ({
             ))}
           </View>
         </ScrollView>
+
+        <BottomNavBar
+          activeTab={activeTab}
+          onTabPress={handleAdminTabPress}
+          navHeight={navHeight}
+          paddingBottom={bottomPad}
+          chevronBottom={chevronBottom}
+          fabBottom={fabBottom}
+          fabSize={FAB_SIZE}
+          onFabPress={handleFabPress}
+          centerLabel="Admin Menu"
+        />
+
+        <Modal
+          visible={sheetOpen}
+          transparent
+          animationType="none"
+          onRequestClose={closeSheet}
+          statusBarTranslucent
+        >
+          <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+            <Pressable style={{ flex: 1 }} onPress={closeSheet} />
+          </Animated.View>
+
+          <Animated.View
+            style={[
+              styles.sheetOuter,
+              {
+                height: SHEET_TOTAL_HEIGHT,
+                transform: [{ translateY: sheetY }],
+              },
+            ]}
+          >
+            <View style={[styles.sheetCard, { height: SHEET_TOTAL_HEIGHT }]} {...handlePan.panHandlers}>
+              <View style={styles.sheetGrabber} />
+
+              <Pressable
+                onPress={() => {
+                  closeSheet();
+                  setActiveTab("Reports");
+                  onOpenReports?.();
+                }}
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
+                ]}
+              >
+                <Ionicons name="document-text-outline" size={20} color="#fff" style={styles.actionIcon} />
+                <Text style={styles.actionText}>View Reports</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  closeSheet();
+                  onOpenUsers?.();
+                }}
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
+                ]}
+              >
+                <Ionicons name="people-outline" size={20} color="#fff" style={styles.actionIcon} />
+                <Text style={styles.actionText}>Manage Users</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  closeSheet();
+                  onOpenAnalytics?.();
+                }}
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
+                ]}
+              >
+                <Ionicons name="bar-chart-outline" size={20} color="#fff" style={styles.actionIcon} />
+                <Text style={styles.actionText}>View Analytics</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={async () => {
+                  closeSheet();
+                  await handleLogout();
+                }}
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  styles.dangerBtn,
+                  pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] },
+                ]}
+              >
+                <Ionicons name="log-out-outline" size={20} color="#fff" style={styles.actionIcon} />
+                <Text style={styles.actionText}>Sign Out</Text>
+              </Pressable>
+            </View>
+          </Animated.View>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -358,6 +635,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#EEF3F8",
     paddingHorizontal: 20,
+    position: "relative",
   },
 
   headerRow: {
@@ -638,5 +916,63 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#34495E",
     textAlign: "center",
+  },
+
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+
+  sheetOuter: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "flex-end",
+  },
+  sheetCard: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    backgroundColor: "#FFFFFF",
+    paddingTop: 12,
+    paddingBottom: 24,
+    paddingHorizontal: 18,
+    shadowColor: "#000",
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: -6 },
+    elevation: 12,
+  },
+  sheetGrabber: {
+    alignSelf: "center",
+    width: 64,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: "#D7E3F2",
+    marginBottom: 14,
+  },
+
+  actionBtn: {
+    width: "100%",
+    borderRadius: 18,
+    backgroundColor: "#083B67",
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  dangerBtn: {
+    backgroundColor: "#0B2B45",
+  },
+  actionText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
+  actionIcon: {
+    marginTop: 1,
+    marginRight: 10,
   },
 });

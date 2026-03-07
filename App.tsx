@@ -407,6 +407,20 @@ function AdminHomeWrapper({ navigation }: { navigation: any }) {
       onOpenReportDetail={(reportId) => {
         Alert.alert("Report Detail", `Open admin report ${reportId} next.`);
       }}
+      onLogout={async () => {
+        resetPinUnlockedThisRun();
+
+        try {
+          await authLogout();
+        } catch {
+          // ignore
+        }
+
+        await setLoggedIn(false);
+        await setHasPin(false);
+
+        navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
+      }}
     />
   );
 }
@@ -694,7 +708,9 @@ export default function App() {
               </Stack.Screen>
 
               <Stack.Screen name="Main">
-                {({ navigation, route }) => <MainScreenWrapper navigation={navigation} route={route} />}
+                {({ navigation, route }) => (
+                  <MainScreenWrapper navigation={navigation} route={route} />
+                )}
               </Stack.Screen>
 
               <Stack.Screen name="AdminHomeScreen">

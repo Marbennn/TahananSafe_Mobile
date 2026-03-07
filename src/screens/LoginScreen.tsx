@@ -38,6 +38,9 @@ import ForgotPasswordSuccessModal from "../components/LoginScreen/ForgotPassword
 // ✅ Legal modal
 import LegalModal, { type LegalMode } from "../components/LoginScreen/LegalModal";
 
+// ✅ custom biometrics modal
+import BiometricsOptInModal from "../components/LoginScreen/BiometricsOptInModal";
+
 // ✅ Session storage
 import { saveTokens, setLoggedIn } from "../auth/session";
 
@@ -57,6 +60,9 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
 
 const LOGIN_PATH = "/api/mobile/v1/login";
 const REFRESH_PATH = "/api/mobile/v1/refresh-token";
+
+// ✅ TEMP DEBUG FLAG
+const BIO_DEBUG = true;
 
 // ✅ Updated backend response shape
 type LoginCheckResponse = {
@@ -81,6 +87,13 @@ function showInvalidCredentials() {
 
 function showServerUnavailable() {
   Alert.alert("Server unavailable", "Please try again. (Tunnel/Server issue)");
+}
+
+function showBioDebug(message: string) {
+  console.log(`${TAG} [BIO_DEBUG] ${message}`);
+  if (BIO_DEBUG) {
+    Alert.alert("Biometrics Debug", message);
+  }
 }
 
 function normalizeRole(role?: string) {
@@ -323,12 +336,17 @@ function bioOptInKeyForEmail(email: string) {
   return `tahanansafe_bio_optin_${safeKeyPart(email)}`;
 }
 
-/** ✅ NEW: per-email "snooze until" timestamp for biometrics prompt */
+/** ✅ per-email biometrics prompt snooze key */
 function bioSnoozeUntilKeyForEmail(email: string) {
   return `tahanansafe_bio_snooze_until_${safeKeyPart(email)}`;
 }
 
-/** ✅ NEW: snooze duration (3 days) */
+/** ✅ NEW: per-email prompt-shown key */
+function bioPromptShownKeyForEmail(email: string) {
+  return `tahanansafe_bio_prompt_shown_${safeKeyPart(email)}`;
+}
+
+/** ✅ snooze duration (3 days) */
 const BIO_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
 
 async function getBioOptInForEmail(email: string): Promise<boolean> {
@@ -373,6 +391,25 @@ async function setBioSnoozeUntilMs(email: string, untilMs: number) {
 async function canShowBioPromptNow(email: string): Promise<boolean> {
   const until = await getBioSnoozeUntilMs(email);
   return !until || nowMs() >= until;
+}
+
+async function hasBioPromptBeenShown(email: string): Promise<boolean> {
+  const key = bioPromptShownKeyForEmail(email);
+  try {
+    const v = await SecureStore.getItemAsync(key);
+    return v === "1";
+  } catch {
+    return false;
+  }
+}
+
+async function setBioPromptShown(email: string, shown: boolean) {
+  const key = bioPromptShownKeyForEmail(email);
+  try {
+    await SecureStore.setItemAsync(key, shown ? "1" : "0");
+  } catch {
+    // ignore
+  }
 }
 
 async function getRefreshTokenForEmail(email: string): Promise<string | null> {
@@ -466,15 +503,21 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   // ✅ OTP modal state
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState<string>("");
-  const [verifyPassword, setVerifyPassword] = useState<string>(""); // for resend
+  const [verifyPassword, setVerifyPassword] = useState<string>("");
   const [sendingOtp, setSendingOtp] = useState(false);
 
-  // ✅ NEW: store pending role before OTP verify
+  // ✅ store pending role before OTP verify
   const [pendingLoginRole, setPendingLoginRole] = useState<string>("user");
 
-  // ✅ track if biometrics prompt should run after OTP success
+  // ✅ based on whether the user has already made a choice, not refresh token
   const [pendingFirstLoginBioPrompt, setPendingFirstLoginBioPrompt] =
     useState(false);
+
+  // ✅ biometrics modal state
+  const [bioModalVisible, setBioModalVisible] = useState(false);
+  const [bioPromptEmail, setBioPromptEmail] = useState("");
+  const [pendingRoleAfterBioModal, setPendingRoleAfterBioModal] =
+    useState<string>("user");
 
   // ✅ Forgot password flow
   const [forgotStep, setForgotStep] = useState<ForgotStep>("none");
@@ -504,14 +547,21 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   };
 
   const handleBack = () => {
+    if (bioModalVisible) {
+      handleBiometricsNotNow();
+      return;
+    }
+
     if (legalOpen) {
       setLegalOpen(false);
       return;
     }
+
     if (verifyOpen) {
       setVerifyOpen(false);
       return;
     }
+
     if (forgotStep !== "none") {
       closeForgotFlow();
       return;
@@ -521,6 +571,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       navigation.goBack();
       return;
     }
+
     onGoSignup();
   };
 
@@ -531,49 +582,138 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     console.log(`${TAG} OTP modal opened`);
   };
 
-  const maybeAskBiometricsOptIn = async (emailNorm: string) => {
+  /**
+   * ✅ returns true if popup was opened
+   */
+  const maybeAskBiometricsOptIn = async (
+    emailNorm: string
+  ): Promise<boolean> => {
     try {
-      // ✅ If user already enabled biometrics, never ask again
-      const currentOpt = await SecureStore.getItemAsync(
-        bioOptInKeyForEmail(emailNorm)
-      );
-      if (currentOpt === "1") return;
+      const promptShown = await hasBioPromptBeenShown(emailNorm);
+      if (promptShown) {
+        showBioDebug(
+          "Popup blocked: this account has already made a biometrics choice on this device."
+        );
+        return false;
+      }
 
-      // ✅ If user tapped "Not now" recently, only ask again after 3 days
+      const alreadyEnabled = await getBioOptInForEmail(emailNorm);
+      if (alreadyEnabled) {
+        showBioDebug(
+          "Popup blocked: biometrics already enabled for this account on this device."
+        );
+        return false;
+      }
+
       const allowedBySnooze = await canShowBioPromptNow(emailNorm);
-      if (!allowedBySnooze) return;
+      if (!allowedBySnooze) {
+        const untilMs = await getBioSnoozeUntilMs(emailNorm);
+        const untilText = untilMs
+          ? new Date(untilMs).toLocaleString()
+          : "unknown time";
+        showBioDebug(`Popup blocked: snoozed until ${untilText}.`);
+        return false;
+      }
 
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!hasHardware) {
+        showBioDebug(
+          "Popup blocked: no biometrics hardware found on this device."
+        );
+        return false;
+      }
 
-      // If device can't do biometrics, just silently skip asking
-      if (!hasHardware || !enrolled) return;
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!enrolled) {
+        showBioDebug(
+          Platform.OS === "ios"
+            ? "Popup blocked: Face ID / Touch ID is not enrolled in device settings."
+            : "Popup blocked: fingerprint / biometrics is not enrolled in device settings."
+        );
+        return false;
+      }
+
+      console.log(`${TAG} maybeAskBiometricsOptIn allowed`, {
+        email: emailNorm,
+        promptShown,
+        alreadyEnabled,
+        allowedBySnooze,
+        hasHardware,
+        enrolled,
+      });
+
+      if (BIO_DEBUG) {
+        console.log(`${TAG} [BIO_DEBUG] Popup allowed for: ${emailNorm}`);
+      }
+
+      setBioPromptEmail(emailNorm);
+      setBioModalVisible(true);
+      return true;
+    } catch (e: any) {
+      showBioDebug(`Popup blocked by error: ${e?.message || "unknown error"}`);
+      return false;
+    }
+  };
+
+  const handleEnableBiometrics = async () => {
+    const emailNorm = String(bioPromptEmail || "").trim().toLowerCase();
+    const roleToGo = pendingRoleAfterBioModal;
+
+    try {
+      if (emailNorm) {
+        await setBioOptInForEmail(emailNorm, true);
+        await setBioSnoozeUntilMs(emailNorm, 0);
+        await setBioPromptShown(emailNorm, true);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setBioModalVisible(false);
+      setBioPromptEmail("");
+      setPendingRoleAfterBioModal("user");
 
       Alert.alert(
-        "Enable Biometrics?",
+        "Biometrics Enabled",
         Platform.OS === "ios"
-          ? "Do you want to use Face ID for faster login next time?"
-          : "Do you want to use fingerprint for faster login next time?",
+          ? "Face ID will be available on your next login."
+          : "Fingerprint login will be available on your next login.",
         [
           {
-            text: "Not now",
-            style: "cancel",
-            onPress: async () => {
-              await setBioOptInForEmail(emailNorm, false);
-              await setBioSnoozeUntilMs(emailNorm, nowMs() + BIO_SNOOZE_MS);
-            },
-          },
-          {
-            text: "Enable",
-            onPress: async () => {
-              await setBioOptInForEmail(emailNorm, true);
-              await setBioSnoozeUntilMs(emailNorm, 0);
-            },
+            text: "OK",
+            onPress: () => goAfterLoginByRole(roleToGo),
           },
         ]
       );
+    }
+  };
+
+  const handleBiometricsNotNow = async () => {
+    const emailNorm = String(bioPromptEmail || "").trim().toLowerCase();
+    const roleToGo = pendingRoleAfterBioModal;
+
+    try {
+      if (emailNorm) {
+        const untilMs = nowMs() + BIO_SNOOZE_MS;
+
+        await setBioOptInForEmail(emailNorm, false);
+        await setBioSnoozeUntilMs(emailNorm, untilMs);
+        await setBioPromptShown(emailNorm, true);
+
+        if (BIO_DEBUG) {
+          console.log(
+            `${TAG} [BIO_DEBUG] Snoozed biometrics prompt until ${new Date(
+              untilMs
+            ).toLocaleString()}`
+          );
+        }
+      }
     } catch {
       // ignore
+    } finally {
+      setBioModalVisible(false);
+      setBioPromptEmail("");
+      setPendingRoleAfterBioModal("user");
+      goAfterLoginByRole(roleToGo);
     }
   };
 
@@ -613,9 +753,19 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
 
       setPendingLoginRole(roleFromBackend);
 
-      // ✅ STEP 2: If refresh exists AND user opted in -> biometrics quick login
+      // ✅ STEP 2: quick login only if refresh exists AND biometrics enabled
       const storedRefresh = await getRefreshTokenForEmail(emailNorm);
       const bioOptedIn = await getBioOptInForEmail(emailNorm);
+
+      if (BIO_DEBUG) {
+        const promptShown = await hasBioPromptBeenShown(emailNorm);
+        console.log(`${TAG} [BIO_DEBUG] login state`, {
+          email: emailNorm,
+          hasStoredRefresh: !!storedRefresh,
+          bioOptedIn,
+          promptShown,
+        });
+      }
 
       if (storedRefresh && bioOptedIn) {
         const bio = await runBiometricsGate();
@@ -647,7 +797,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
             if (status === 503) {
               showServerUnavailable();
             }
-            // continue to OTP fallback below
           }
         } else {
           console.log(
@@ -672,8 +821,19 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         return;
       }
 
-      // ✅ "new user on this device" = no stored refresh token
-      setPendingFirstLoginBioPrompt(!storedRefresh);
+      /**
+       * ✅ Decide prompt based on whether the account already made a choice
+       * NOT based on stored refresh token
+       */
+      const promptShown = await hasBioPromptBeenShown(emailNorm);
+      setPendingFirstLoginBioPrompt(!promptShown);
+
+      if (BIO_DEBUG) {
+        console.log(
+          `${TAG} [BIO_DEBUG] pendingFirstLoginBioPrompt (from promptShown) =`,
+          !promptShown
+        );
+      }
 
       await loginSendOtpRequest(emailNorm, passwordNorm);
       openOtpModal(emailNorm, passwordNorm);
@@ -734,13 +894,29 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const handleVerified = async (_code: string) => {
     setVerifyOpen(false);
 
+    if (BIO_DEBUG) {
+      console.log(`${TAG} [BIO_DEBUG] handleVerified`, {
+        pendingFirstLoginBioPrompt,
+        verifyEmail,
+        pendingLoginRole,
+      });
+    }
+
     if (pendingFirstLoginBioPrompt && verifyEmail) {
-      await maybeAskBiometricsOptIn(verifyEmail);
+      const opened = await maybeAskBiometricsOptIn(verifyEmail);
+
+      if (opened) {
+        setPendingRoleAfterBioModal(pendingLoginRole);
+        setPendingFirstLoginBioPrompt(false);
+        return;
+      }
+    } else if (BIO_DEBUG) {
+      showBioDebug(
+        "Popup skipped: this account has already made a biometrics choice on this device."
+      );
     }
 
     setPendingFirstLoginBioPrompt(false);
-
-    // ✅ route depending on role captured from login check
     goAfterLoginByRole(pendingLoginRole);
   };
 
@@ -861,6 +1037,15 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       <ForgotPasswordSuccessModal
         visible={forgotStep === "success"}
         onClose={closeForgotFlow}
+        scale={scale}
+        vscale={vscale}
+      />
+
+      <BiometricsOptInModal
+        visible={bioModalVisible}
+        onClose={handleBiometricsNotNow}
+        onEnable={handleEnableBiometrics}
+        onNotNow={handleBiometricsNotNow}
         scale={scale}
         vscale={vscale}
       />
