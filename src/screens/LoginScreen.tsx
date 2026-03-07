@@ -61,9 +61,6 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
 const LOGIN_PATH = "/api/mobile/v1/login";
 const REFRESH_PATH = "/api/mobile/v1/refresh-token";
 
-// ✅ TEMP DEBUG FLAG
-const BIO_DEBUG = true;
-
 // ✅ Updated backend response shape
 type LoginCheckResponse = {
   message?: string;
@@ -87,13 +84,6 @@ function showInvalidCredentials() {
 
 function showServerUnavailable() {
   Alert.alert("Server unavailable", "Please try again. (Tunnel/Server issue)");
-}
-
-function showBioDebug(message: string) {
-  console.log(`${TAG} [BIO_DEBUG] ${message}`);
-  if (BIO_DEBUG) {
-    Alert.alert("Biometrics Debug", message);
-  }
 }
 
 function normalizeRole(role?: string) {
@@ -341,7 +331,7 @@ function bioSnoozeUntilKeyForEmail(email: string) {
   return `tahanansafe_bio_snooze_until_${safeKeyPart(email)}`;
 }
 
-/** ✅ NEW: per-email prompt-shown key */
+/** ✅ per-email prompt-shown key */
 function bioPromptShownKeyForEmail(email: string) {
   return `tahanansafe_bio_prompt_shown_${safeKeyPart(email)}`;
 }
@@ -582,75 +572,29 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     console.log(`${TAG} OTP modal opened`);
   };
 
-  /**
-   * ✅ returns true if popup was opened
-   */
   const maybeAskBiometricsOptIn = async (
     emailNorm: string
   ): Promise<boolean> => {
     try {
       const promptShown = await hasBioPromptBeenShown(emailNorm);
-      if (promptShown) {
-        showBioDebug(
-          "Popup blocked: this account has already made a biometrics choice on this device."
-        );
-        return false;
-      }
+      if (promptShown) return false;
 
       const alreadyEnabled = await getBioOptInForEmail(emailNorm);
-      if (alreadyEnabled) {
-        showBioDebug(
-          "Popup blocked: biometrics already enabled for this account on this device."
-        );
-        return false;
-      }
+      if (alreadyEnabled) return false;
 
       const allowedBySnooze = await canShowBioPromptNow(emailNorm);
-      if (!allowedBySnooze) {
-        const untilMs = await getBioSnoozeUntilMs(emailNorm);
-        const untilText = untilMs
-          ? new Date(untilMs).toLocaleString()
-          : "unknown time";
-        showBioDebug(`Popup blocked: snoozed until ${untilText}.`);
-        return false;
-      }
+      if (!allowedBySnooze) return false;
 
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      if (!hasHardware) {
-        showBioDebug(
-          "Popup blocked: no biometrics hardware found on this device."
-        );
-        return false;
-      }
+      if (!hasHardware) return false;
 
       const enrolled = await LocalAuthentication.isEnrolledAsync();
-      if (!enrolled) {
-        showBioDebug(
-          Platform.OS === "ios"
-            ? "Popup blocked: Face ID / Touch ID is not enrolled in device settings."
-            : "Popup blocked: fingerprint / biometrics is not enrolled in device settings."
-        );
-        return false;
-      }
-
-      console.log(`${TAG} maybeAskBiometricsOptIn allowed`, {
-        email: emailNorm,
-        promptShown,
-        alreadyEnabled,
-        allowedBySnooze,
-        hasHardware,
-        enrolled,
-      });
-
-      if (BIO_DEBUG) {
-        console.log(`${TAG} [BIO_DEBUG] Popup allowed for: ${emailNorm}`);
-      }
+      if (!enrolled) return false;
 
       setBioPromptEmail(emailNorm);
       setBioModalVisible(true);
       return true;
-    } catch (e: any) {
-      showBioDebug(`Popup blocked by error: ${e?.message || "unknown error"}`);
+    } catch {
       return false;
     }
   };
@@ -698,14 +642,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         await setBioOptInForEmail(emailNorm, false);
         await setBioSnoozeUntilMs(emailNorm, untilMs);
         await setBioPromptShown(emailNorm, true);
-
-        if (BIO_DEBUG) {
-          console.log(
-            `${TAG} [BIO_DEBUG] Snoozed biometrics prompt until ${new Date(
-              untilMs
-            ).toLocaleString()}`
-          );
-        }
       }
     } catch {
       // ignore
@@ -756,16 +692,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       // ✅ STEP 2: quick login only if refresh exists AND biometrics enabled
       const storedRefresh = await getRefreshTokenForEmail(emailNorm);
       const bioOptedIn = await getBioOptInForEmail(emailNorm);
-
-      if (BIO_DEBUG) {
-        const promptShown = await hasBioPromptBeenShown(emailNorm);
-        console.log(`${TAG} [BIO_DEBUG] login state`, {
-          email: emailNorm,
-          hasStoredRefresh: !!storedRefresh,
-          bioOptedIn,
-          promptShown,
-        });
-      }
 
       if (storedRefresh && bioOptedIn) {
         const bio = await runBiometricsGate();
@@ -828,13 +754,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       const promptShown = await hasBioPromptBeenShown(emailNorm);
       setPendingFirstLoginBioPrompt(!promptShown);
 
-      if (BIO_DEBUG) {
-        console.log(
-          `${TAG} [BIO_DEBUG] pendingFirstLoginBioPrompt (from promptShown) =`,
-          !promptShown
-        );
-      }
-
       await loginSendOtpRequest(emailNorm, passwordNorm);
       openOtpModal(emailNorm, passwordNorm);
     } catch (err: any) {
@@ -894,14 +813,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const handleVerified = async (_code: string) => {
     setVerifyOpen(false);
 
-    if (BIO_DEBUG) {
-      console.log(`${TAG} [BIO_DEBUG] handleVerified`, {
-        pendingFirstLoginBioPrompt,
-        verifyEmail,
-        pendingLoginRole,
-      });
-    }
-
     if (pendingFirstLoginBioPrompt && verifyEmail) {
       const opened = await maybeAskBiometricsOptIn(verifyEmail);
 
@@ -910,10 +821,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         setPendingFirstLoginBioPrompt(false);
         return;
       }
-    } else if (BIO_DEBUG) {
-      showBioDebug(
-        "Popup skipped: this account has already made a biometrics choice on this device."
-      );
     }
 
     setPendingFirstLoginBioPrompt(false);
