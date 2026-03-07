@@ -34,7 +34,7 @@ import IncidentLogScreen from "./src/screens/IncidentLogScreen";
 import IncidentLogConfirmedScreen from "./src/screens/IncidentLogConfirmedScreen";
 
 // ✅ Admin
-import AdminHomeScreen from "./src/screens/admin_mobile/AdminHomeScreen";
+import AdminShell from "./src/screens/admin_mobile/AdminShell";
 
 // Session helpers
 import {
@@ -378,35 +378,8 @@ function AdminHomeWrapper({ navigation }: { navigation: any }) {
   const { logout: authLogout } = useAuth() as any;
 
   return (
-    <AdminHomeScreen
+    <AdminShell
       onOpenNotifications={() => navigation.navigate("Notifications")}
-      onOpenHelp={() => {
-        Alert.alert("Help", "Admin help screen coming soon.");
-      }}
-      onOpenReports={() => {
-        Alert.alert("Reports", "Admin reports screen coming soon.");
-      }}
-      onOpenUsers={() => {
-        Alert.alert("Users", "Admin users screen coming soon.");
-      }}
-      onOpenHotlines={() => {
-        Alert.alert("Hotlines", "Admin hotlines screen coming soon.");
-      }}
-      onOpenAnalytics={() => {
-        Alert.alert("Analytics", "Admin analytics screen coming soon.");
-      }}
-      onOpenPendingReports={() => {
-        Alert.alert("Pending Reports", "Pending reports screen coming soon.");
-      }}
-      onOpenVerifiedUsers={() => {
-        Alert.alert("Verified Users", "Verified users screen coming soon.");
-      }}
-      onOpenEscalatedCases={() => {
-        Alert.alert("Escalated Cases", "Escalated cases screen coming soon.");
-      }}
-      onOpenReportDetail={(reportId) => {
-        Alert.alert("Report Detail", `Open admin report ${reportId} next.`);
-      }}
       onLogout={async () => {
         resetPinUnlockedThisRun();
 
