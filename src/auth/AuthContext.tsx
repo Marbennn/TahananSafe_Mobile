@@ -1,10 +1,17 @@
 // src/auth/AuthContext.tsx
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { AppState, AppStateStatus } from "react-native";
 
-// ✅ use your existing /me api
 import { getMeApi } from "../api/pin";
+import { refreshAccessTokenApi } from "../api/auth";
 
-// ✅ SINGLE source of truth for tokens/session (used by notifications.ts too)
 import {
   getAccessToken,
   getRefreshToken,
@@ -27,6 +34,7 @@ export type StoredUser = {
   dateOfBirth?: string;
   gender?: string;
   age?: number;
+  role?: string;
   [key: string]: any;
 };
 
@@ -39,10 +47,15 @@ type AuthState = {
 };
 
 type AuthContextType = AuthState & {
-  login: (payload: { accessToken: string; refreshToken?: string; user?: StoredUser }) => Promise<void>;
+  login: (payload: {
+    accessToken: string;
+    refreshToken?: string;
+    user?: StoredUser;
+  }) => Promise<void>;
   logout: () => Promise<void>;
   setUser: (u: StoredUser | null) => void;
   refreshMe: () => Promise<void>;
+  ensureValidAccessToken: () => Promise<string | null>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -50,18 +63,20 @@ const AuthContext = createContext<AuthContextType | null>(null);
 function normalizeUser(input: any): StoredUser | null {
   if (!input) return null;
 
-  const u = input?.user ?? input; // supports {user:{...}} or {...}
+  const u = input?.user ?? input;
 
   const firstName =
     (typeof u?.firstName === "string" && u.firstName.trim()) ||
     (typeof u?.profile?.firstName === "string" && u.profile.firstName.trim()) ||
-    (typeof u?.personalInfo?.firstName === "string" && u.personalInfo.firstName.trim()) ||
+    (typeof u?.personalInfo?.firstName === "string" &&
+      u.personalInfo.firstName.trim()) ||
     "";
 
   const lastName =
     (typeof u?.lastName === "string" && u.lastName.trim()) ||
     (typeof u?.profile?.lastName === "string" && u.profile.lastName.trim()) ||
-    (typeof u?.personalInfo?.lastName === "string" && u.personalInfo.lastName.trim()) ||
+    (typeof u?.personalInfo?.lastName === "string" &&
+      u.personalInfo.lastName.trim()) ||
     "";
 
   return {
@@ -77,16 +92,53 @@ function normalizeUser(input: any): StoredUser | null {
     dateOfBirth: u?.dateOfBirth,
     gender: u?.gender,
     age: u?.age,
+    role: typeof u?.role === "string" ? u.role : undefined,
     ...u,
   };
 }
 
+function decodeJwtPayload(token: string): any | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+
+    if (typeof globalThis.atob === "function") {
+      return JSON.parse(globalThis.atob(padded));
+    }
+
+    return JSON.parse(Buffer.from(padded, "base64").toString("utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+function getTokenExpiryMs(token: string | null): number | null {
+  if (!token) return null;
+  const payload = decodeJwtPayload(token);
+  const exp = Number(payload?.exp);
+
+  if (!Number.isFinite(exp) || exp <= 0) return null;
+  return exp * 1000;
+}
+
+function isTokenExpiringSoon(token: string | null, bufferMs = 2 * 60 * 1000): boolean {
+  const expiryMs = getTokenExpiryMs(token);
+  if (!expiryMs) return true;
+
+  const now = Date.now();
+  return expiryMs - now <= bufferMs;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isBooting, setIsBooting] = useState(true);
-
   const [accessToken, setAccessTokenState] = useState<string | null>(null);
   const [refreshToken, setRefreshTokenState] = useState<string | null>(null);
   const [user, setUser] = useState<StoredUser | null>(null);
+
+  const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
 
   const refreshMe = async () => {
     const token = accessToken || (await getAccessToken());
@@ -95,13 +147,88 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const me = await getMeApi({ accessToken: token });
       const normalized = normalizeUser(me);
-      if (normalized) setUser(normalized);
+      if (normalized) {
+        setUser(normalized);
+      }
     } catch {
       // ignore
     }
   };
 
-  // ✅ Restore session on app start (from session.ts only)
+  const logout = async () => {
+    setAccessTokenState(null);
+    setRefreshTokenState(null);
+    setUser(null);
+
+    await clearSession().catch(() => {});
+    await setLoggedIn(false).catch(() => {});
+  };
+
+  const performRefresh = async (): Promise<string | null> => {
+    const currentRefreshToken = refreshToken || (await getRefreshToken());
+
+    if (!currentRefreshToken) {
+      await logout();
+      return null;
+    }
+
+    try {
+      const data = await refreshAccessTokenApi(currentRefreshToken);
+
+      const nextAccessToken = data.accessToken;
+      const nextRefreshToken = data.refreshToken || currentRefreshToken;
+
+      await saveTokens({
+        accessToken: nextAccessToken,
+        refreshToken: nextRefreshToken,
+      });
+      await setLoggedIn(true);
+
+      setAccessTokenState(nextAccessToken);
+      setRefreshTokenState(nextRefreshToken);
+
+      if (data.user) {
+        const normalized = normalizeUser(data.user);
+        if (normalized) {
+          setUser(normalized);
+        }
+      } else {
+        try {
+          const me = await getMeApi({ accessToken: nextAccessToken });
+          const normalized = normalizeUser(me);
+          if (normalized) setUser(normalized);
+        } catch {
+          // ignore
+        }
+      }
+
+      return nextAccessToken;
+    } catch {
+      await logout();
+      return null;
+    }
+  };
+
+  const ensureValidAccessToken = async (): Promise<string | null> => {
+    const token = accessToken || (await getAccessToken());
+
+    if (token && !isTokenExpiringSoon(token)) {
+      return token;
+    }
+
+    if (refreshInFlightRef.current) {
+      return refreshInFlightRef.current;
+    }
+
+    refreshInFlightRef.current = performRefresh();
+
+    try {
+      return await refreshInFlightRef.current;
+    } finally {
+      refreshInFlightRef.current = null;
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
 
@@ -116,10 +243,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (logged && token) {
           setAccessTokenState(token);
           setRefreshTokenState(rToken);
-          await setLoggedIn(true); // keep flag consistent
-          await refreshMe();
+          await setLoggedIn(true);
+
+          const validToken = await ensureValidAccessToken();
+          if (validToken) {
+            try {
+              const me = await getMeApi({ accessToken: validToken });
+              const normalized = normalizeUser(me);
+              if (normalized && mounted) setUser(normalized);
+            } catch {
+              // ignore
+            }
+          }
         } else {
-          // ensure clean state
           setAccessTokenState(null);
           setRefreshTokenState(null);
           setUser(null);
@@ -132,14 +268,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       mounted = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = async (payload: { accessToken: string; refreshToken?: string; user?: StoredUser }) => {
-    // ✅ wipe any previous account session first
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", async (nextState: AppStateStatus) => {
+      if (nextState === "active") {
+        await ensureValidAccessToken();
+      }
+    });
+
+    return () => {
+      sub.remove();
+    };
+  }, [accessToken, refreshToken]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      ensureValidAccessToken().catch(() => {});
+    }, 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [accessToken, refreshToken]);
+
+  const login = async (payload: {
+    accessToken: string;
+    refreshToken?: string;
+    user?: StoredUser;
+  }) => {
     await clearSession().catch(() => {});
 
-    // ✅ store tokens where notifications.ts reads them
     await saveTokens({
       accessToken: payload.accessToken,
       refreshToken: payload.refreshToken,
@@ -150,17 +307,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRefreshTokenState(payload.refreshToken ?? null);
 
     const normalized = normalizeUser(payload.user);
-    if (normalized) setUser(normalized);
-    else await refreshMe(); // if no user payload, fetch /me
-  };
-
-  const logout = async () => {
-    setAccessTokenState(null);
-    setRefreshTokenState(null);
-    setUser(null);
-
-    await clearSession().catch(() => {});
-    await setLoggedIn(false).catch(() => {});
+    if (normalized) {
+      setUser(normalized);
+    } else {
+      try {
+        const me = await getMeApi({ accessToken: payload.accessToken });
+        const normalizedMe = normalizeUser(me);
+        if (normalizedMe) setUser(normalizedMe);
+      } catch {
+        // ignore
+      }
+    }
   };
 
   const value = useMemo<AuthContextType>(
@@ -174,6 +331,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout,
       setUser,
       refreshMe,
+      ensureValidAccessToken,
     }),
     [isBooting, accessToken, refreshToken, user]
   );
@@ -183,6 +341,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
+  if (!ctx) {
+    throw new Error("useAuth must be used inside AuthProvider");
+  }
   return ctx;
 }

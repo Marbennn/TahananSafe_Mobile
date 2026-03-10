@@ -6,14 +6,8 @@ const KEYS = {
   accessToken: "@tahanansafe_access_token",
   refreshToken: "@tahanansafe_refresh_token",
   hasPin: "@tahanansafe_has_pin",
-
-  // ✅ IMPORTANT: clear stored user on logout too
   user: "@tahanansafe_user",
-
-  // ✅ onboarding shown flag
   onboardingSeen: "@tahanansafe_onboarding_seen",
-
-  // ✅ legacy: global skip pin (keep for backward compatibility)
   pinSkipped: "@tahanansafe_pin_skipped",
 } as const;
 
@@ -81,9 +75,6 @@ export async function setLoggedIn(value: boolean) {
   if (value) {
     await AsyncStorage.setItem(KEYS.loggedIn, "1");
   } else {
-    // ✅ logging out clears session tokens + login flags
-    // ✅ plus stored user (fix stale "last account" name)
-    // ✅ but it should NOT delete per-user pinSkipped_*
     pinUnlockedThisRun = false;
 
     await AsyncStorage.multiRemove([
@@ -91,11 +82,8 @@ export async function setLoggedIn(value: boolean) {
       KEYS.accessToken,
       KEYS.refreshToken,
       KEYS.hasPin,
-      KEYS.user, // ✅ FIX: remove stored user
-      // ✅ don't remove KEYS.pinSkipped (legacy) OR per-user keys
+      KEYS.user,
     ]);
-
-    // ✅ NOTE: we do NOT remove onboardingSeen (so onboarding stays one-time)
   }
 }
 
@@ -109,9 +97,18 @@ export async function saveTokens(params: {
   refreshToken?: string;
 }) {
   await AsyncStorage.setItem(KEYS.accessToken, params.accessToken);
+
   if (params.refreshToken) {
     await AsyncStorage.setItem(KEYS.refreshToken, params.refreshToken);
   }
+}
+
+export async function setAccessToken(accessToken: string) {
+  await AsyncStorage.setItem(KEYS.accessToken, accessToken);
+}
+
+export async function setRefreshToken(refreshToken: string) {
+  await AsyncStorage.setItem(KEYS.refreshToken, refreshToken);
 }
 
 export async function getAccessToken(): Promise<string | null> {
@@ -132,7 +129,6 @@ export async function getHasPin(): Promise<boolean> {
 }
 
 export async function clearSession() {
-  // ✅ clearing session resets in-memory unlock too
   pinUnlockedThisRun = false;
 
   await AsyncStorage.multiRemove([
@@ -140,9 +136,6 @@ export async function clearSession() {
     KEYS.accessToken,
     KEYS.refreshToken,
     KEYS.hasPin,
-    KEYS.user, // ✅ FIX: remove stored user
-    // ✅ do NOT remove per-user pinSkipped_*
+    KEYS.user,
   ]);
-
-  // ✅ NOTE: do NOT remove onboardingSeen
 }

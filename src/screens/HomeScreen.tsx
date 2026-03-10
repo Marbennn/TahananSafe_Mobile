@@ -15,13 +15,14 @@ import {
   Modal,
   AppState,
   AppStateStatus,
-  DeviceEventEmitter, // ✅ ADDED
-  Linking, // ✅ ADDED
-  Alert, // ✅ ADDED
-  Easing, // ✅ ADDED
+  DeviceEventEmitter,
+  Linking,
+  Alert,
+  Easing,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // ✅ NEW: refresh when Home regains focus
@@ -56,6 +57,9 @@ import { closeAndRemoveFromRecents } from "../utils/hideApp";
 // ✅ NEW: Use same API as NotificationsScreen (source of truth)
 import { fetchMyNotificationsCombined } from "../api/notifications";
 
+// ✅ FIX: Use requestJson with auth for auto token refresh
+import { requestJson } from "../api/http";
+
 type Props = {
   onQuickExit?: () => void;
   onTabChange?: (tab: TabKey) => void;
@@ -72,7 +76,7 @@ const TEXT_DARK = "#0B2B45";
 // ✅ once-only tutorial key
 const FAB_TUTORIAL_SEEN_KEY = "tahanansafe_fab_tutorial_seen_v1";
 
-// ✅ local “seen notifications” marker (kept, not removed)
+// ✅ local "seen notifications" marker (kept, not removed)
 const NOTIF_LAST_SEEN_KEY = "tahanansafe_notif_last_seen_v1";
 
 // ✅ ADDED: must match NotificationsScreen.tsx emit name
@@ -115,20 +119,6 @@ function makeDateLine(d: Date) {
   });
   return `${weekday} | ${monthDayYear} | ${time}`;
 }
-
-// ✅ API base
-function getApiBaseUrl() {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL;
-
-  if (envUrl && typeof envUrl === "string" && envUrl.trim().length > 0) {
-    return envUrl.replace(/\/+$/, "");
-  }
-
-  if (Platform.OS === "android") return "http://10.0.2.2:8000";
-  return "http://localhost:8000";
-}
-
-const API_BASE_URL = getApiBaseUrl();
 
 // ---------------------------
 // Small helpers for mapping
@@ -488,29 +478,17 @@ export default function HomeScreen({
   const [recentReports, setRecentReports] = useState<ReportItem[]>([]);
   const [loadingReports, setLoadingReports] = useState(false);
 
+  // ✅ FIX: Use requestJson with auth:true for auto token refresh
   const fetchRecentReports = useCallback(async () => {
     try {
       setLoadingReports(true);
 
-      const headers: Record<string, string> = {
-        Accept: "application/json",
-      };
-
-      const access = accessToken || (await getAccessToken());
-      if (access) headers.Authorization = `Bearer ${access}`;
-
-      const url = `${API_BASE_URL}/api/mobile/v1/reports/my`;
-
-      const res = await fetch(url, { method: "GET", headers });
-      const txt = await res.text().catch(() => "");
-      if (!res.ok) return;
-
-      let json: any = {};
-      try {
-        json = txt ? JSON.parse(txt) : {};
-      } catch {
-        json = {};
-      }
+      // ✅ FIX: This auto-attaches the access token AND auto-refreshes on 401
+      const json: any = await requestJson({
+        method: "GET",
+        path: "/api/mobile/v1/reports/my",
+        auth: true,
+      });
 
       const rawList = Array.isArray(json) ? json : json?.incidents ?? [];
       const mapped: ReportItem[] = rawList.map((doc: any) => {
@@ -585,14 +563,25 @@ export default function HomeScreen({
       });
 
       setRecentReports(mapped.slice(0, 2));
+    } catch {
+      // ✅ On error (including session expired), just clear reports silently
+      setRecentReports([]);
     } finally {
       setLoadingReports(false);
     }
-  }, [accessToken]);
+  }, []); // ✅ FIX: No more [accessToken] dependency — requestJson handles token internally
 
   useEffect(() => {
     fetchRecentReports();
   }, [fetchRecentReports]);
+
+  // ✅ Also refresh reports when Home screen regains focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchRecentReports();
+      return () => {};
+    }, [fetchRecentReports])
+  );
 
   const logs: LogItem[] = useMemo(() => {
     return recentReports.map((r) => ({
@@ -871,62 +860,159 @@ export default function HomeScreen({
         logsWrap: { paddingHorizontal: PAD, paddingTop: clamp(Math.round(10 * s), 8, 12) },
         logsGap: { height: GAP },
 
-        // ✅ Emergency buttons under Recent Logs
+        // Emergency buttons
         emergencyWrap: {
           paddingHorizontal: PAD,
-          paddingTop: clamp(Math.round(10 * s), 8, 12),
+          paddingTop: clamp(Math.round(6 * s), 4, 8),
         },
         emergencyRow: {
           flexDirection: "row",
           gap: clamp(Math.round(10 * s), 8, 12),
         },
-
-        // ✅ CHANGED: Shadow removed
         emergencyBtnOuter: {
           flex: 1,
         },
-
-        // ✅ CHANGED: actual “card” style, still rounded + padding, NO shadow
         emergencyBtnCard: {
           width: "100%",
-          borderRadius: 18,
-          paddingVertical: clamp(Math.round(12 * s), 10, 14),
-          paddingHorizontal: clamp(Math.round(12 * s), 10, 14),
-          alignItems: "center",
-          justifyContent: "center",
+          borderRadius: 20,
+          paddingVertical: clamp(Math.round(14 * s), 12, 17),
+          paddingHorizontal: clamp(Math.round(14 * s), 12, 16),
           overflow: "hidden",
         },
-
-        emergencyBtn911: {
-          backgroundColor: "#8B0000",
-        },
-        emergencyBtn117: {
-          backgroundColor: "#daa520",
-        },
-        emergencyTop: {
+        emergencyIconRow: {
           flexDirection: "row",
           alignItems: "center",
+          gap: clamp(Math.round(10 * s), 8, 12),
+          marginBottom: clamp(Math.round(6 * s), 4, 8),
+        },
+        emergencyCircle: {
+          width: clamp(Math.round(34 * s), 30, 40),
+          height: clamp(Math.round(34 * s), 30, 40),
+          borderRadius: 999,
+          backgroundColor: "rgba(255,255,255,0.2)",
+          alignItems: "center",
           justifyContent: "center",
-          gap: 8,
-          marginBottom: 5,
+        },
+        emergencyTextGroup: {
+          flex: 1,
         },
         emergencyNum: {
-          fontSize: clamp(Math.round(22 * fs), 19, 26),
+          fontSize: clamp(Math.round(26 * fs), 22, 30),
           fontWeight: "900",
           color: "#FFFFFF",
-          letterSpacing: 0.4,
+          letterSpacing: 0.5,
+          lineHeight: clamp(Math.round(28 * fs), 24, 32),
         },
         emergencyLabel: {
-          fontSize: clamp(Math.round(12 * fs), 11, 13),
-          fontWeight: "900",
-          color: "rgba(255,255,255,0.95)",
+          fontSize: clamp(Math.round(11 * fs), 10, 12),
+          fontWeight: "800",
+          color: "rgba(255,255,255,0.85)",
         },
         emergencySub: {
-          fontSize: clamp(Math.round(10 * fs), 10, 12),
+          fontSize: clamp(Math.round(10 * fs), 9, 11),
+          fontWeight: "600",
+          color: "rgba(255,255,255,0.65)",
+        },
+
+        // Safety status chips
+        safetyScroll: {
+          flexGrow: 0,
+          paddingTop: clamp(Math.round(10 * s), 8, 12),
+        },
+        safetyRow: {
+          paddingHorizontal: PAD,
+          flexDirection: "row",
+          gap: clamp(Math.round(8 * s), 6, 10),
+        },
+        safetyChip: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: clamp(Math.round(5 * s), 4, 7),
+          backgroundColor: "#FFFFFF",
+          borderRadius: 999,
+          borderWidth: 1,
+          borderColor: "#E7EEF7",
+          paddingHorizontal: clamp(Math.round(12 * s), 10, 14),
+          paddingVertical: clamp(Math.round(6 * s), 5, 8),
+        },
+        safetyChipGreen: {
+          backgroundColor: "#F0FDF4",
+          borderColor: "#BBF7D0",
+        },
+        safetyChipAmber: {
+          backgroundColor: "#FFFBEB",
+          borderColor: "#FDE68A",
+        },
+        safetyChipDot: {
+          width: 7,
+          height: 7,
+          borderRadius: 4,
+        },
+        safetyChipText: {
+          fontSize: clamp(Math.round(12 * fs), 11, 13),
           fontWeight: "700",
-          color: "rgba(255,255,255,0.92)",
+          color: "#334155",
+        },
+
+        // Section icon + row wrapper
+        sectionTitleRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: clamp(Math.round(8 * s), 6, 10),
+        },
+        sectionIcon: {
+          width: clamp(Math.round(26 * s), 22, 30),
+          height: clamp(Math.round(26 * s), 22, 30),
+          borderRadius: 8,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+
+        // Improved empty state
+        emptyLogsCard: {
+          backgroundColor: "#FFFFFF",
+          borderRadius: clamp(Math.round(16 * s), 14, 18),
+          borderWidth: 1,
+          borderColor: "#E7EEF7",
+          alignItems: "center",
+          paddingVertical: clamp(Math.round(24 * s), 20, 28),
+          paddingHorizontal: PAD,
+          gap: clamp(Math.round(6 * s), 4, 8),
+        },
+        emptyLogsIconWrap: {
+          width: clamp(Math.round(52 * s), 44, 60),
+          height: clamp(Math.round(52 * s), 44, 60),
+          borderRadius: clamp(Math.round(16 * s), 12, 18),
+          backgroundColor: "#EAF3FF",
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: clamp(Math.round(2 * s), 1, 4),
+        },
+        emptyLogsTitle: {
+          fontSize: clamp(Math.round(15 * fs), 13, 17),
+          fontWeight: "900",
+          color: TEXT_DARK,
+        },
+        emptyLogsText: {
+          fontSize: clamp(Math.round(12 * fs), 11, 13),
+          fontWeight: "600",
+          color: "#94A3B8",
           textAlign: "center",
-          marginTop: 1,
+        },
+        emptyLogsBtn: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 5,
+          marginTop: clamp(Math.round(6 * s), 4, 8),
+          backgroundColor: Colors.primary,
+          paddingHorizontal: clamp(Math.round(16 * s), 12, 20),
+          paddingVertical: clamp(Math.round(8 * s), 6, 10),
+          borderRadius: 999,
+        },
+        emptyLogsBtnText: {
+          fontSize: clamp(Math.round(12 * fs), 11, 13),
+          fontWeight: "800",
+          color: "#FFFFFF",
         },
 
         miniCenter: { paddingHorizontal: PAD, paddingTop: 10, alignItems: "center", justifyContent: "center" },
@@ -1093,10 +1179,16 @@ export default function HomeScreen({
         >
           <GreetingCard greeting={greeting} dateLine={dateLine} userName={userName} />
 
+
           <View style={styles.sectionRow}>
-            <Text style={styles.sectionTitle} allowFontScaling={false}>
-              Recent Logs
-            </Text>
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.sectionIcon, { backgroundColor: "#EAF3FF" }]}>
+                <Ionicons name="document-text-outline" size={14} color={Colors.primary} />
+              </View>
+              <Text style={styles.sectionTitle} allowFontScaling={false}>
+                Recent Logs
+              </Text>
+            </View>
 
             <Pressable onPress={() => onTabChange?.("Reports")} hitSlop={10}>
               <Text style={styles.seeMore} allowFontScaling={false}>
@@ -1111,10 +1203,15 @@ export default function HomeScreen({
                 <ActivityIndicator size="small" color={Colors.primary} />
               </View>
             ) : logs.length === 0 ? (
-              <View style={styles.miniCenter}>
-                <Text style={styles.emptyHint} allowFontScaling={false}>
-                  No recent reports.
+              <View style={styles.emptyLogsCard}>
+                <View style={styles.emptyLogsIconWrap}>
+                  <Ionicons name="document-text-outline" size={26} color={Colors.primary} />
+                </View>
+                <Text style={styles.emptyLogsTitle} allowFontScaling={false}>No reports yet</Text>
+                <Text style={styles.emptyLogsText} allowFontScaling={false}>
+                  Your incident logs will appear here once you submit a report.
                 </Text>
+               
               </View>
             ) : (
               logs.map((item, idx) => {
@@ -1135,7 +1232,18 @@ export default function HomeScreen({
             )}
           </View>
 
-          {/* ✅ Emergency call buttons (NO SHADOW) */}
+          {/* Emergency Contacts */}
+          <View style={styles.sectionRow}>
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.sectionIcon, { backgroundColor: "#FFEDE9" }]}>
+                <Ionicons name="call-outline" size={14} color="#DC2626" />
+              </View>
+              <Text style={styles.sectionTitle} allowFontScaling={false}>
+                Emergency Contacts
+              </Text>
+            </View>
+          </View>
+
           <View style={styles.emergencyWrap}>
             <View style={styles.emergencyRow}>
               <Pressable
@@ -1145,21 +1253,22 @@ export default function HomeScreen({
                 hitSlop={8}
                 style={styles.emergencyBtnOuter}
               >
-                <Animated.View style={{ transform: [{ scale: em911Scale }], width: "100%", alignItems: "center" }}>
-                  <View style={[styles.emergencyBtnCard, styles.emergencyBtn911]}>
-                    <View style={styles.emergencyTop}>
-                      <Ionicons name="call" size={18} color="#fff" />
-                      <Text style={styles.emergencyNum} allowFontScaling={false}>
-                        911
-                      </Text>
+                <Animated.View style={{ transform: [{ scale: em911Scale }], width: "100%" }}>
+                  <LinearGradient
+                    colors={["#DC2626", "#991B1B"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.emergencyBtnCard}
+                  >
+                    <View style={styles.emergencyIconRow}>
+                      <View style={styles.emergencyCircle}>
+                        <Ionicons name="call" size={16} color="#fff" />
+                      </View>
+                      <Text style={styles.emergencyNum} allowFontScaling={false}>911</Text>
                     </View>
-                    <Text style={styles.emergencyLabel} allowFontScaling={false}>
-                      Emergency Hotline
-                    </Text>
-                    <Text style={styles.emergencySub} allowFontScaling={false}>
-                      Tap to call immediately
-                    </Text>
-                  </View>
+                    <Text style={styles.emergencyLabel} allowFontScaling={false}>Emergency Hotline</Text>
+                    <Text style={styles.emergencySub} allowFontScaling={false}>Tap to call immediately</Text>
+                  </LinearGradient>
                 </Animated.View>
               </Pressable>
 
@@ -1170,21 +1279,22 @@ export default function HomeScreen({
                 hitSlop={8}
                 style={styles.emergencyBtnOuter}
               >
-                <Animated.View style={{ transform: [{ scale: em117Scale }], width: "100%", alignItems: "center" }}>
-                  <View style={[styles.emergencyBtnCard, styles.emergencyBtn117]}>
-                    <View style={styles.emergencyTop}>
-                      <Ionicons name="call" size={18} color="#fff" />
-                      <Text style={styles.emergencyNum} allowFontScaling={false}>
-                        117
-                      </Text>
+                <Animated.View style={{ transform: [{ scale: em117Scale }], width: "100%" }}>
+                  <LinearGradient
+                    colors={["#D97706", "#92400E"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.emergencyBtnCard}
+                  >
+                    <View style={styles.emergencyIconRow}>
+                      <View style={styles.emergencyCircle}>
+                        <Ionicons name="call" size={16} color="#fff" />
+                      </View>
+                      <Text style={styles.emergencyNum} allowFontScaling={false}>117</Text>
                     </View>
-                    <Text style={styles.emergencyLabel} allowFontScaling={false}>
-                      Police Assistance
-                    </Text>
-                    <Text style={styles.emergencySub} allowFontScaling={false}>
-                      Tap to call immediately
-                    </Text>
-                  </View>
+                    <Text style={styles.emergencyLabel} allowFontScaling={false}>Police Assistance</Text>
+                    <Text style={styles.emergencySub} allowFontScaling={false}>Tap to call immediately</Text>
+                  </LinearGradient>
                 </Animated.View>
               </Pressable>
             </View>

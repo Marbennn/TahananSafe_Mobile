@@ -1,5 +1,7 @@
 // src/api/pin.ts
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+// ✅ FIXED: Uses requestJson with auth:true for automatic token refresh on 401
+// Keeps the same types and function signatures so nothing else breaks.
+import { requestJson } from "./http";
 
 type SetPinResponse = { message: string };
 type VerifyPinResponse = { message: string };
@@ -20,54 +22,53 @@ type GetMeResponse = {
   };
 };
 
-export async function setPinApi(params: { accessToken: string; pin: string }) {
-  const res = await fetch(`${API_URL}/api/mobile/v1/set-pin`, {
+/**
+ * ✅ PUT /set-pin
+ * Same signature as before: { accessToken, pin }
+ * Now auto-refreshes token on 401.
+ * If an explicit accessToken is passed (e.g. right after login), it's used directly.
+ * Otherwise requestJson reads from AsyncStorage automatically.
+ */
+export async function setPinApi(params: { accessToken: string; pin: string }): Promise<SetPinResponse> {
+  return requestJson<SetPinResponse>({
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${params.accessToken}`,
-    },
-    body: JSON.stringify({ pin: params.pin }),
+    path: "/api/mobile/v1/set-pin",
+    body: { pin: params.pin },
+    auth: true,
+    // Use the explicit token if provided (keeps backward compatibility)
+    headers: params.accessToken
+      ? { Authorization: `Bearer ${params.accessToken}` }
+      : undefined,
   });
-
-  const data = (await res.json().catch(() => ({}))) as Partial<SetPinResponse> & {
-    message?: string;
-  };
-
-  if (!res.ok) throw new Error(data.message || "Failed to set PIN");
-  return data as SetPinResponse;
 }
 
-export async function verifyPinApi(params: { accessToken: string; pin: string }) {
-  const res = await fetch(`${API_URL}/api/mobile/v1/verify-pin`, {
+/**
+ * ✅ POST /verify-pin
+ * Same signature as before: { accessToken, pin }
+ */
+export async function verifyPinApi(params: { accessToken: string; pin: string }): Promise<VerifyPinResponse> {
+  return requestJson<VerifyPinResponse>({
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${params.accessToken}`,
-    },
-    body: JSON.stringify({ pin: params.pin }),
+    path: "/api/mobile/v1/verify-pin",
+    body: { pin: params.pin },
+    auth: true,
+    headers: params.accessToken
+      ? { Authorization: `Bearer ${params.accessToken}` }
+      : undefined,
   });
-
-  const data = (await res.json().catch(() => ({}))) as Partial<VerifyPinResponse> & {
-    message?: string;
-  };
-
-  if (!res.ok) throw new Error(data.message || "Invalid PIN");
-  return data as VerifyPinResponse;
 }
 
-export async function getMeApi(params: { accessToken: string }) {
-  const res = await fetch(`${API_URL}/api/mobile/v1/me`, {
+/**
+ * ✅ GET /me
+ * Same signature as before: { accessToken }
+ */
+export async function getMeApi(params: { accessToken: string }): Promise<GetMeResponse> {
+  return requestJson<GetMeResponse>({
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${params.accessToken}`,
-    },
+    path: "/api/mobile/v1/me",
+    auth: true,
+    headers: params.accessToken
+      ? { Authorization: `Bearer ${params.accessToken}` }
+      : undefined,
   });
-
-  const data = (await res.json().catch(() => ({}))) as Partial<GetMeResponse> & {
-    message?: string;
-  };
-
-  if (!res.ok) throw new Error(data.message || "Failed to load profile");
-  return data as GetMeResponse;
 }

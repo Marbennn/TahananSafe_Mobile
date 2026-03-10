@@ -23,7 +23,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { Colors } from "../theme/colors";
 import { useAuth } from "../auth/AuthContext";
-import { getAccessToken } from "../auth/session";
+
+// ✅ FIX: Use requestJson with auth for auto token refresh (replaces raw fetch + getAccessToken)
+import { requestJson } from "../api/http";
 
 // ✅ NEW: local status-change notifications
 import { syncLocalReportStatusNotifications } from "../api/notifications";
@@ -63,19 +65,6 @@ const CARD = "#FFFFFF";
 
 // ✅ IMPORTANT: force this to be a normal string (fixes TS literal type error)
 const PRIMARY: string = String((Colors as any).primary ?? "#1E63D0");
-
-function getApiBaseUrl() {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL;
-
-  if (envUrl && typeof envUrl === "string" && envUrl.trim().length > 0) {
-    return envUrl.replace(/\/+$/, "");
-  }
-
-  if (Platform.OS === "android") return "http://10.0.2.2:8000";
-  return "http://localhost:8000";
-}
-
-const API_BASE_URL = getApiBaseUrl();
 
 // ---------------------------
 // Helpers
@@ -366,42 +355,19 @@ export default function ReportScreen({
 
   const abortRef = useRef<AbortController | null>(null);
 
+  // ✅ FIX: Use requestJson with auth:true for auto token refresh
   const fetchMyReports = useCallback(async (signal?: AbortSignal): Promise<ReportItem[]> => {
-    const token = await getAccessToken();
-
-    if (!token) {
-      throw new Error("Please login again. (Missing access token)");
-    }
-
-    const headers: Record<string, string> = {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    };
-
-    const url = `${API_BASE_URL}/api/mobile/v1/reports/my`;
-
-    let res: Response;
+    // ✅ FIX: requestJson auto-attaches token AND auto-refreshes on 401
+    let data: any;
     try {
-      res = await fetch(url, { method: "GET", headers, signal });
+      data = await requestJson({
+        method: "GET",
+        path: "/api/mobile/v1/reports/my",
+        auth: true,
+      });
     } catch (e: any) {
       if (isAbortError(e)) throw e;
-      throw new Error(
-        `Network request failed.\n\nCheck EXPO_PUBLIC_API_URL:\n${API_BASE_URL}\n\nBackend port must match (8000).`
-      );
-    }
-
-    const text = await res.text().catch(() => "");
-
-    let data: any = {};
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      data = { message: text };
-    }
-
-    if (!res.ok) {
-      throw new Error(data?.message || `Request failed (${res.status})`);
+      throw e;
     }
 
     const rawList = Array.isArray(data) ? data : data?.incidents ?? [];
@@ -473,7 +439,7 @@ export default function ReportScreen({
     });
 
     return mapped;
-  }, []);
+  }, []); // ✅ FIX: No dependencies needed — requestJson handles token internally
 
   const load = useCallback(async () => {
     if (!userId) {
@@ -654,30 +620,8 @@ export default function ReportScreen({
               <View style={{ flex: 1 }}>
                 <Text style={styles.headerTitle}>Reports</Text>
                 <Text style={styles.headerSub}>Track your incident progress by status</Text>
-              </View>
-
-             
+              </View>       
             </View>
-
-            {/* stats row */}
-            <View style={styles.statsRow}>
-              <MiniStat label="Pending" value={counts.pending} color={statusAccent("PENDING", PRIMARY)} styles={styles} />
-              <View style={styles.statDivider} />
-              <MiniStat
-                label="On going"
-                value={counts.ongoing}
-                color={statusAccent("ONGOING", PRIMARY)}
-                styles={styles}
-              />
-              <View style={styles.statDivider} />
-              <MiniStat
-                label="Resolved"
-                value={counts.resolved}
-                color={statusAccent("RESOLVED", PRIMARY)}
-                styles={styles}
-              />
-            </View>
-
             {/* search */}
             <View style={styles.searchWrap}>
               <Ionicons name="search-outline" size={styles._iconSize} color="#94A3B8" />
