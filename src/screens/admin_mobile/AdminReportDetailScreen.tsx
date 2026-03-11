@@ -2,7 +2,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Pressable,
   RefreshControl,
@@ -18,7 +17,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../../theme/colors";
 import {
   fetchAdminIncidentById,
-  updateIncidentStatus,
   AdminIncident,
 } from "../../api/admin";
 import { apiUrl } from "../../config/api";
@@ -143,8 +141,6 @@ export default function AdminReportDetailScreen({ reportId, onBack }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [updating, setUpdating] = useState(false);
-
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(
@@ -175,40 +171,6 @@ export default function AdminReportDetailScreen({ reportId, onBack }: Props) {
     load();
     return () => { abortRef.current?.abort(); };
   }, [load]);
-
-  const handleStatusChange = useCallback(
-    async (newStatus: StatusKey) => {
-      if (!incident) return;
-
-      const label = getStatusLabel(newStatus);
-      Alert.alert(
-        "Update Status",
-        `Mark this report as "${label}"?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Confirm",
-            style: "default",
-            onPress: async () => {
-              setUpdating(true);
-              try {
-                await updateIncidentStatus(incident._id, newStatus);
-                setIncident((prev) =>
-                  prev ? { ...prev, status: newStatus } : prev
-                );
-                Alert.alert("Updated", `Status changed to ${label}.`);
-              } catch (e: any) {
-                Alert.alert("Error", e?.message || "Failed to update status.");
-              } finally {
-                setUpdating(false);
-              }
-            },
-          },
-        ]
-      );
-    },
-    [incident]
-  );
 
   const shortId = reportId.slice(-6).toUpperCase();
   const riskLabel = incident ? getRiskLabel(incident) : null;
@@ -311,40 +273,6 @@ export default function AdminReportDetailScreen({ reportId, onBack }: Props) {
               })}
             </View>
           </View>
-
-          {/* Status update actions */}
-          {incident.status !== "resolved" && incident.status !== "cancelled" && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Update Status</Text>
-              <View style={styles.actionRow}>
-                {incident.status !== "reviewing" && (
-                  <Pressable
-                    style={[styles.actionBtn, { backgroundColor: "#F5B30120" }]}
-                    onPress={() => handleStatusChange("reviewing")}
-                    disabled={updating}
-                  >
-                    <Ionicons name="sync-outline" size={18} color="#F5B301" />
-                    <Text style={[styles.actionBtnText, { color: "#F5B301" }]}>
-                      Mark On Going
-                    </Text>
-                  </Pressable>
-                )}
-                <Pressable
-                  style={[styles.actionBtn, { backgroundColor: "#35B56A20" }]}
-                  onPress={() => handleStatusChange("resolved")}
-                  disabled={updating}
-                >
-                  <Ionicons name="checkmark-circle-outline" size={18} color="#35B56A" />
-                  <Text style={[styles.actionBtnText, { color: "#35B56A" }]}>
-                    Mark Resolved
-                  </Text>
-                </Pressable>
-              </View>
-              {updating && (
-                <ActivityIndicator size="small" color={Colors.primary} style={{ marginTop: 8 }} />
-              )}
-            </View>
-          )}
 
           {/* Incident details */}
           <View style={styles.section}>
@@ -706,25 +634,6 @@ const styles = StyleSheet.create({
     height: 2,
     marginBottom: 20,
     maxWidth: 40,
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    paddingVertical: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  actionBtnText: {
-    fontSize: 13,
-    fontWeight: "700",
   },
   aiCard: {
     borderRadius: 18,
