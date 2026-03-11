@@ -8,6 +8,8 @@ import AdminReportDetailScreen from "./AdminReportDetailScreen";
 import AdminUsersScreen from "./AdminUsersScreen";
 import AdminHotlinesScreen from "./AdminHotlinesScreen";
 import AdminAnalyticsScreen from "./AdminAnalyticsScreen";
+import AdminAlertsScreen from "./AdminAlertsScreen";
+import AdminSettingsScreen from "./AdminSettingsScreen";
 
 type AdminView =
   | { type: "home" }
@@ -15,7 +17,9 @@ type AdminView =
   | { type: "reportDetail"; reportId: string }
   | { type: "users" }
   | { type: "hotlines" }
-  | { type: "analytics" };
+  | { type: "alerts" }
+  | { type: "analytics" }
+  | { type: "settings" };
 
 type Props = {
   onOpenNotifications: () => void;
@@ -36,6 +40,8 @@ export default function AdminShell({ onOpenNotifications, onLogout }: Props) {
   const openUsers = useCallback(() => setView({ type: "users" }), []);
 
   const openHotlines = useCallback(() => setView({ type: "hotlines" }), []);
+  const openAlerts = useCallback(() => setView({ type: "alerts" }), []);
+  const openSettings = useCallback(() => setView({ type: "settings" }), []);
 
   const openAnalytics = useCallback(() => setView({ type: "analytics" }), []);
 
@@ -50,6 +56,8 @@ export default function AdminShell({ onOpenNotifications, onLogout }: Props) {
         onOpenReports={openReports}
         onOpenUsers={openUsers}
         onOpenHotlines={openHotlines}
+        onOpenAlerts={openAlerts}
+        onOpenSettings={openSettings}
         onOpenAnalytics={openAnalytics}
         onOpenPendingReports={openReports}
         onOpenVerifiedUsers={openUsers}
@@ -90,9 +98,39 @@ export default function AdminShell({ onOpenNotifications, onLogout }: Props) {
     return <AdminHotlinesScreen onBack={goHome} />;
   }
 
+  // ── Alerts ──
+  if (view.type === "alerts") {
+    return (
+      <AdminAlertsScreen
+        onTabChange={(tab) => {
+          if (tab === "Home") goHome();
+          else if (tab === "Reports") setView({ type: "reports" });
+        }}
+        initialTab="Inbox"
+        onFabPress={() => {}}
+      />
+    );
+  }
+
   // ── Analytics ──
   if (view.type === "analytics") {
     return <AdminAnalyticsScreen onBack={goHome} />;
+  }
+
+  // ── Settings ──
+  if (view.type === "settings") {
+    return (
+      <AdminSettingsScreen
+        onTabChange={(tab) => {
+          if (tab === "Home") goHome();
+          else if (tab === "Reports") setView({ type: "reports" });
+          else if (tab === "Inbox") setView({ type: "alerts" });
+        }}
+        initialTab="Settings"
+        onFabPress={() => {}}
+        onLogout={onLogout}
+      />
+    );
   }
 
   return null;

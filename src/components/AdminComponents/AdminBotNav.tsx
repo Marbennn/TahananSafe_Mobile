@@ -1,4 +1,4 @@
-// src/components/BottomNavBar.tsx
+// src/components/AdminComponents/AdminBotNav.tsx
 import React, { useMemo, useRef, useCallback } from "react";
 import {
   View,
@@ -7,13 +7,11 @@ import {
   Pressable,
   Platform,
   useWindowDimensions,
-  Alert,
   Animated,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../../theme/colors";
+import AdminElepsis from "../../../assets/Admin/BottomNavBar/AdminElepsis.svg";
 
 export type TabKey =
   | "Home"
@@ -49,16 +47,6 @@ type Props = {
 const NAV_BG = "#FFFFFF";
 const INACTIVE = "#9AA4B2";
 
-/* ===================== RATE LIMIT (10 seconds) ===================== */
-const INCIDENT_SUBMIT_COOLDOWN_MS = 10_000;
-const INCIDENT_LAST_SUBMIT_KEY = "tahanansafe_last_incident_submit_at_v1";
-
-function formatSecondsCeil(ms: number) {
-  const s = Math.ceil(ms / 1000);
-  return s <= 0 ? 0 : s;
-}
-/* ============================================================ */
-
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
@@ -69,7 +57,7 @@ function makeScale(width: number) {
   return { s };
 }
 
-export default function BottomNavBar({
+export default function AdminBotNav({
   activeTab,
   onTabPress,
   navHeight,
@@ -78,7 +66,7 @@ export default function BottomNavBar({
   fabSize: fabSizeProp = 62,
   onFabPress,
   onFabLongPress,
-  centerLabel = "Incident Log",
+  centerLabel = "Admin Menu",
   Chevron,
 }: Props) {
   const { width } = useWindowDimensions();
@@ -103,7 +91,7 @@ export default function BottomNavBar({
     [s]
   );
 
-  // FAB sizing
+  // base size reference
   const fabSize = useMemo(() => {
     const raw = fabSizeProp * s;
     if (width < 360) return clamp(Math.round(raw), 52, 62);
@@ -111,19 +99,14 @@ export default function BottomNavBar({
     return clamp(Math.round(raw), 60, 76);
   }, [fabSizeProp, s, width]);
 
-  const fabIconSize = useMemo(() => {
-    const raw = 30 * s;
-    if (width < 360) return clamp(Math.round(raw), 24, 28);
-    if (width < 400) return clamp(Math.round(raw), 26, 30);
-    return clamp(Math.round(raw), 28, 34);
-  }, [s, width]);
+  const fabSvgWidth = fabSize;
+  const fabSvgHeight = fabSize;
 
   const cutoutSize = useMemo(
     () => clamp(Math.round(fabSize * 1.42), fabSize + 22, fabSize + 40),
     [fabSize]
   );
 
-  // ✅ button position (ONLY button uses this)
   const fabLift = useMemo(() => {
     const base = clamp(Math.round(fabSize * 0.86), 30, 54);
     if (width < 360) return clamp(Math.round(base * 0.93), 28, 50);
@@ -142,15 +125,14 @@ export default function BottomNavBar({
   );
 
   const cutoutVisibleHeight = useMemo(() => {
-    const h = cutoutSize * 0.55;
+    const h = cutoutSize * 0.52;
     return clamp(
       Math.round(h),
-      Math.round(cutoutSize * 0.5),
-      Math.round(cutoutSize * 0.65)
+      Math.round(cutoutSize * 0.48),
+      Math.round(cutoutSize * 0.62)
     );
   }, [cutoutSize]);
 
-  // ✅ halo internal upward shift (within the clip)
   const haloUp = useMemo(() => {
     const base = clamp(Math.round(fabSize * 0.18), 10, 20);
     if (width < 360) return clamp(Math.round(base * 0.9), 9, 18);
@@ -158,15 +140,13 @@ export default function BottomNavBar({
   }, [fabSize, width]);
 
   const haloLiftExtra = useMemo(() => {
-    return clamp(Math.round(60 * s), 8, 80);
+    return clamp(Math.round(58 * s), 8, 80);
   }, [s]);
 
-  // Base bottom anchor shared logic
   const baseBottom =
     paddingBottom + (effectiveNavHeight - paddingBottom) - fabLift;
 
-  /* ===================== TAB CLICK ANIMATIONS ===================== */
-  // Per-tab Animated scale values so each button can "pop" when clicked
+  /* ── Tab click animations ── */
   const tabScalesRef = useRef<Record<TabKey, Animated.Value>>({
     Home: new Animated.Value(1),
     Inbox: new Animated.Value(1),
@@ -180,38 +160,35 @@ export default function BottomNavBar({
   const popUpScale = useMemo(() => 1.08, []);
   const settleScale = useMemo(() => 1.0, []);
 
-  const animateTabPress = useCallback((tab: TabKey) => {
-    const v = tabScalesRef.current[tab];
-    if (!v) return;
-
-    // stop any running animation so it feels snappy on rapid taps
-    v.stopAnimation();
-
-    Animated.sequence([
-      Animated.timing(v, {
-        toValue: popUpScale,
-        duration: 110,
-        useNativeDriver: true,
-      }),
-      Animated.spring(v, {
-        toValue: settleScale,
-        friction: 6,
-        tension: 180,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [popUpScale, settleScale]);
+  const animateTabPress = useCallback(
+    (tab: TabKey) => {
+      const v = tabScalesRef.current[tab];
+      if (!v) return;
+      v.stopAnimation();
+      Animated.sequence([
+        Animated.timing(v, {
+          toValue: popUpScale,
+          duration: 110,
+          useNativeDriver: true,
+        }),
+        Animated.spring(v, {
+          toValue: settleScale,
+          friction: 6,
+          tension: 180,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    },
+    [popUpScale, settleScale]
+  );
 
   const handleTabPress = useCallback(
     (tab: TabKey) => {
-      // bounce animation regardless if active/inactive
       animateTabPress(tab);
-      // navigate after triggering the animation
       onTabPress(tab);
     },
     [animateTabPress, onTabPress]
   );
-  /* ============================================================ */
 
   const styles = useMemo(
     () =>
@@ -248,7 +225,6 @@ export default function BottomNavBar({
           minWidth: 0,
         },
 
-        // wrapper inside item for Animated transform
         itemInner: {
           alignItems: "center",
           justifyContent: "center",
@@ -305,12 +281,6 @@ export default function BottomNavBar({
           justifyContent: "flex-start",
         },
 
-        /**
-         * ✅ HALO (white half circle) WITHOUT edge color:
-         * - NO shadow
-         * - NO elevation
-         * - NO border
-         */
         cutout: {
           width: cutoutSize,
           height: cutoutSize,
@@ -338,9 +308,11 @@ export default function BottomNavBar({
         },
 
         fabPressable: {
-          width: fabSize,
-          height: fabSize,
-          borderRadius: fabSize / 2,
+          width: fabSvgWidth,
+          height: fabSvgHeight,
+          borderRadius: fabSvgWidth / 2,
+          alignItems: "center",
+          justifyContent: "center",
           overflow: "hidden",
           ...Platform.select({
             ios: {
@@ -353,11 +325,11 @@ export default function BottomNavBar({
           }),
         },
 
-        fabInner: {
-          flex: 1,
+        fabSvgWrap: {
+          width: fabSvgWidth,
+          height: fabSvgHeight,
           alignItems: "center",
           justifyContent: "center",
-          overflow: "hidden",
         },
       }),
     [
@@ -368,8 +340,8 @@ export default function BottomNavBar({
       itemPaddingBottom,
       labelMarginTop,
       labelFont,
-      fabSize,
-      fabLift,
+      fabSvgWidth,
+      fabSvgHeight,
       cutoutSize,
       EXTRA_BAR_HEIGHT,
       centerLabelBottom,
@@ -379,32 +351,6 @@ export default function BottomNavBar({
       baseBottom,
     ]
   );
-
-  // ✅ FAB press handler with cooldown popup
-  const handleFabPress = async () => {
-    try {
-      const now = Date.now();
-      const raw = await AsyncStorage.getItem(INCIDENT_LAST_SUBMIT_KEY);
-      const last = raw ? Number(raw) : 0;
-
-      const elapsed = now - (Number.isFinite(last) ? last : 0);
-      const remaining = INCIDENT_SUBMIT_COOLDOWN_MS - elapsed;
-
-      if (remaining > 0) {
-        const secs = formatSecondsCeil(remaining);
-        Alert.alert(
-          "Please wait",
-          `You can report again in ${secs} second${secs === 1 ? "" : "s"}.`
-        );
-        return;
-      }
-
-      onFabPress();
-    } catch {
-      // If storage fails, don't block user
-      onFabPress();
-    }
-  };
 
   return (
     <>
@@ -436,8 +382,8 @@ export default function BottomNavBar({
         />
 
         <NavItem
-          icon="call-outline"
-          label="Hotlines"
+          icon="notifications-outline"
+          label="Alerts"
           active={activeTab === "Inbox"}
           onPress={() => handleTabPress("Inbox")}
           iconSize={iconSize}
@@ -491,32 +437,27 @@ export default function BottomNavBar({
         />
       </View>
 
-      {/* ✅ HALO only */}
+      {/* Halo / cutout */}
       <View style={styles.haloLayer}>
         <View style={styles.cutoutClip}>
           <View style={styles.cutout} />
         </View>
       </View>
 
-      {/* ✅ FAB only */}
+      {/* AdminElepsis.svg fully replaces FAB */}
       <View style={styles.fabLayer} pointerEvents="box-none">
         <Pressable
-          onPress={handleFabPress}
+          onPress={onFabPress}
           onLongPress={onFabLongPress}
           delayLongPress={350}
           style={({ pressed }) => [
             styles.fabPressable,
-            pressed && { transform: [{ scale: 0.98 }] },
+            pressed && { transform: [{ scale: 0.96 }] },
           ]}
+          hitSlop={10}
         >
-          <View style={styles.fabInner}>
-            <LinearGradient
-              colors={Colors.gradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFillObject}
-            />
-            <Ionicons name="add" size={fabIconSize} color="#FFFFFF" />
+          <View style={styles.fabSvgWrap}>
+            <AdminElepsis width={fabSvgWidth} height={fabSvgHeight} />
           </View>
         </Pressable>
       </View>
@@ -559,7 +500,6 @@ function NavItem({
   }, [pressInScale, scaleAnim]);
 
   const handlePressOut = useCallback(() => {
-    // Let the parent do the "pop" sequence; here we just return to 1 quickly if needed.
     Animated.timing(scaleAnim, {
       toValue: 1,
       duration: 90,
