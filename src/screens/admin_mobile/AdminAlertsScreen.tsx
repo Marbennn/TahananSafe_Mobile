@@ -1,5 +1,5 @@
 // src/screens/admin_mobile/AdminAlertsScreen.tsx
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -8,12 +8,18 @@ import {
   ScrollView,
   StatusBar,
   useWindowDimensions,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import AdminBotNav, { TabKey } from "../../components/AdminComponents/AdminBotNav";
-import AdminElepsis from "../../../assets/Admin/BottomNavBar/AdminElepsis.svg";
 import { Colors } from "../../theme/colors";
+import {
+  fetchMyNotificationsCombined,
+  toggleNotificationReadCombined,
+  type NotificationItem,
+} from "../../api/notifications";
 
 const BG = "#F5FAFE";
 const SURFACE = "#FFFFFF";
@@ -33,6 +39,7 @@ type AlertItem = {
   date: string;
   read: boolean;
   source: string;
+  ts: number;
 };
 
 type FilterKey = "All" | "Unread" | "Critical";
@@ -43,108 +50,102 @@ type Props = {
   onFabPress?: () => void;
 };
 
+const FILTERS: FilterKey[] = ["All", "Unread", "Critical"];
+
 function getSeverityColor(severity: AlertSeverity) {
   switch (severity) {
-    case "Critical": return "#F04452";
-    case "High":     return "#F5B301";
-    case "Moderate": return "#FB923C";
-    case "Low":      return "#35B56A";
-    case "Info":     return "#3B82F6";
+    case "Critical":
+      return "#F04452";
+    case "High":
+      return "#F5B301";
+    case "Moderate":
+      return "#FB923C";
+    case "Low":
+      return "#35B56A";
+    case "Info":
+      return "#3B82F6";
   }
 }
 
 function getSeverityBg(severity: AlertSeverity) {
   switch (severity) {
-    case "Critical": return "#FFF0F1";
-    case "High":     return "#FFFBEB";
-    case "Moderate": return "#FFF7ED";
-    case "Low":      return "#F0FDF4";
-    case "Info":     return "#EFF6FF";
+    case "Critical":
+      return "#FFF0F1";
+    case "High":
+      return "#FFFBEB";
+    case "Moderate":
+      return "#FFF7ED";
+    case "Low":
+      return "#F0FDF4";
+    case "Info":
+      return "#EFF6FF";
   }
 }
 
 function getSeverityIcon(severity: AlertSeverity): keyof typeof Ionicons.glyphMap {
   switch (severity) {
-    case "Critical": return "alert-circle";
-    case "High":     return "warning";
-    case "Moderate": return "alert";
-    case "Low":      return "information-circle-outline";
-    case "Info":     return "information-circle-outline";
+    case "Critical":
+      return "alert-circle";
+    case "High":
+      return "warning";
+    case "Moderate":
+      return "alert";
+    case "Low":
+      return "information-circle-outline";
+    case "Info":
+      return "information-circle-outline";
   }
 }
 
-const MOCK_ALERTS: AlertItem[] = [
-  {
-    id: "a1",
-    title: "Critical: Domestic violence escalation",
-    description: "Report #8934 has been escalated. Immediate response required.",
-    severity: "Critical",
-    time: "10:05 PM",
-    date: "January 12, 2026",
-    read: false,
-    source: "Barangay Zone 2",
-  },
-  {
-    id: "a2",
-    title: "New unverified user account",
-    description: "A new user registered and is pending identity verification.",
-    severity: "High",
-    time: "9:48 PM",
-    date: "January 12, 2026",
-    read: false,
-    source: "User Management",
-  },
-  {
-    id: "a3",
-    title: "Hotline reported unreachable",
-    description: "Hotline #3 (Barangay Poblacion) did not respond for 2 hours.",
-    severity: "Moderate",
-    time: "9:12 PM",
-    date: "January 12, 2026",
-    read: false,
-    source: "Hotlines Monitor",
-  },
-  {
-    id: "a4",
-    title: "Follow-up reminder: Case #8014",
-    description: "No update has been filed for Case #8014 in the last 24 hours.",
-    severity: "Low",
-    time: "8:50 PM",
-    date: "January 12, 2026",
-    read: true,
-    source: "Barangay San Vicente",
-  },
-  {
-    id: "a5",
-    title: "Weekly report summary available",
-    description: "The weekly admin summary for Jan 6–12 is ready to review.",
-    severity: "Info",
-    time: "8:00 AM",
-    date: "January 12, 2026",
-    read: true,
-    source: "System",
-  },
-  {
-    id: "a6",
-    title: "Resident requested callback",
-    description: "Resident from Barangay Poblacion is waiting for a callback from admin.",
-    severity: "Moderate",
-    time: "7:30 PM",
-    date: "January 11, 2026",
-    read: true,
-    source: "Barangay Poblacion",
-  },
-  {
-    id: "a7",
-    title: "New incident report submitted",
-    description: "Report #8912 filed with attachments pending review.",
-    severity: "Low",
-    time: "3:15 PM",
-    date: "January 11, 2026",
-    read: true,
-    source: "Barangay San Jose",
-  },
-];
+function getSeverityFromNotification(n: NotificationItem): AlertSeverity {
+  const hay = `${n.title} ${n.message}`.toLowerCase();
+  if (hay.includes("critical") || hay.includes("sos") || hay.includes("immediate")) return "Critical";
+  if (hay.includes("high") || hay.includes("urgent") || hay.includes("escalat")) return "High";
+  if (hay.includes("moderate") || hay.includes("medium")) return "Moderate";
+  if (hay.includes("low")) return "Low";
+  return "High";
+}
+
+function formatDate(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-PH", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatTime(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("en-PH", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function inferSource(n: NotificationItem) {
+  if (n.incidentId) return `Incident #${n.incidentId.slice(-5)}`;
+  return "Alert System";
+}
+
+function toAlertItem(n: NotificationItem): AlertItem {
+  const d = new Date(n.time);
+  const ts = Number.isNaN(d.getTime()) ? 0 : d.getTime();
+  return {
+    id: n.id,
+    title: n.title || "Alert",
+    description: n.message || "",
+    severity: getSeverityFromNotification(n),
+    time: formatTime(n.time),
+    date: formatDate(n.time),
+    read: !n.unread,
+    source: inferSource(n),
+    ts,
+  };
+}
 
 export default function AdminAlertsScreen({
   onTabChange,
@@ -161,7 +162,10 @@ export default function AdminAlertsScreen({
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [filter, setFilter] = useState<FilterKey>("All");
-  const [alerts, setAlerts] = useState<AlertItem[]>(MOCK_ALERTS);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   const NAV_BASE_HEIGHT = 78;
   const FAB_SIZE = 62;
@@ -175,13 +179,66 @@ export default function AdminAlertsScreen({
 
   const filtered = useMemo(() => {
     if (filter === "Unread") return alerts.filter((a) => !a.read);
-    if (filter === "Critical") return alerts.filter((a) => a.severity === "Critical" || a.severity === "High");
+    if (filter === "Critical") {
+      return alerts.filter((a) => a.severity === "Critical" || a.severity === "High");
+    }
     return alerts;
   }, [filter, alerts]);
 
-  const markAllRead = () => {
+  const loadAlerts = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true);
+    setErrorMsg("");
+    try {
+      const list = await fetchMyNotificationsCombined(200);
+      const mapped = list
+        .filter((n) => n.type === "alert")
+        .map(toAlertItem)
+        .sort((a, b) => b.ts - a.ts);
+      setAlerts(mapped);
+    } catch (e: any) {
+      setErrorMsg(e?.message || "Failed to load alerts.");
+      setAlerts([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAlerts();
+  }, [loadAlerts]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadAlerts(true);
+  }, [loadAlerts]);
+
+  const markAllRead = useCallback(async () => {
+    const unreadIds = alerts.filter((a) => !a.read).map((a) => a.id);
+    if (unreadIds.length === 0) return;
+
     setAlerts((prev) => prev.map((a) => ({ ...a, read: true })));
-  };
+    try {
+      await Promise.all(unreadIds.map((id) => toggleNotificationReadCombined(id)));
+    } catch (e: any) {
+      await loadAlerts(true);
+      setErrorMsg(e?.message || "Failed to mark alerts as read.");
+    }
+  }, [alerts, loadAlerts]);
+
+  const openAlert = useCallback(
+    async (alertId: string, alreadyRead: boolean) => {
+      if (alreadyRead) return;
+      setAlerts((prev) => prev.map((a) => (a.id === alertId ? { ...a, read: true } : a)));
+      try {
+        await toggleNotificationReadCombined(alertId);
+      } catch (e: any) {
+        await loadAlerts(true);
+        setErrorMsg(e?.message || "Failed to update alert.");
+      }
+    },
+    [loadAlerts]
+  );
 
   const handleTab = (key: TabKey) => {
     setActiveTab(key);
@@ -190,23 +247,20 @@ export default function AdminAlertsScreen({
 
   const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
 
-  const FILTERS: FilterKey[] = ["All", "Unread", "Critical"];
-
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.page}>
-        {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <View>
               <Text style={styles.title}>Alerts</Text>
-              <Text style={styles.subtitle}>System and barangay notifications</Text>
+              <Text style={styles.subtitle}>All alert notifications</Text>
             </View>
             {unreadCount > 0 && (
               <Pressable
-                onPress={markAllRead}
+                onPress={() => void markAllRead()}
                 style={({ pressed }) => [styles.markAllBtn, pressed && { opacity: 0.7 }]}
                 hitSlop={10}
               >
@@ -216,7 +270,6 @@ export default function AdminAlertsScreen({
           </View>
         </View>
 
-        {/* Filter tabs */}
         <View style={styles.filterRow}>
           {FILTERS.map((f) => {
             const active = filter === f;
@@ -231,9 +284,7 @@ export default function AdminAlertsScreen({
                   pressed && { opacity: 0.8 },
                 ]}
               >
-                <Text style={[styles.filterLabel, active && styles.filterLabelActive]}>
-                  {f}
-                </Text>
+                <Text style={[styles.filterLabel, active && styles.filterLabelActive]}>{f}</Text>
                 {badge != null && badge > 0 && (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>{badge}</Text>
@@ -244,16 +295,40 @@ export default function AdminAlertsScreen({
           })}
         </View>
 
-        {/* Alert list */}
+        {!loading && !!errorMsg && (
+          <View style={styles.errorWrap}>
+            <Text style={styles.errorText} numberOfLines={2}>
+              {errorMsg}
+            </Text>
+            <Pressable onPress={() => void loadAlerts()} hitSlop={8}>
+              <Text style={styles.errorRetry}>Retry</Text>
+            </Pressable>
+          </View>
+        )}
+
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: CONTENT_BOTTOM_PAD }]}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={Colors.primary}
+              colors={[Colors.primary]}
+            />
+          }
         >
-          {filtered.length === 0 ? (
+          {loading ? (
+            <View style={styles.emptyWrap}>
+              <ActivityIndicator size="small" color={Colors.primary} />
+              <Text style={styles.emptyTitle}>Loading alerts</Text>
+              <Text style={styles.emptyText}>Please wait while alerts are fetched.</Text>
+            </View>
+          ) : filtered.length === 0 ? (
             <View style={styles.emptyWrap}>
               <Ionicons name="notifications-off-outline" size={scale(36)} color={SUBTLE} />
               <Text style={styles.emptyTitle}>No alerts</Text>
-              <Text style={styles.emptyText}>You're all caught up.</Text>
+              <Text style={styles.emptyText}>You are all caught up.</Text>
             </View>
           ) : (
             filtered.map((alert) => (
@@ -264,16 +339,10 @@ export default function AdminAlertsScreen({
                   !alert.read && styles.cardUnread,
                   pressed && { opacity: 0.88 },
                 ]}
-                onPress={() =>
-                  setAlerts((prev) =>
-                    prev.map((a) => (a.id === alert.id ? { ...a, read: true } : a))
-                  )
-                }
+                onPress={() => void openAlert(alert.id, alert.read)}
               >
-                {/* Unread dot */}
                 {!alert.read && <View style={styles.unreadDot} />}
 
-                {/* Left severity icon */}
                 <View
                   style={[
                     styles.severityIcon,
@@ -287,7 +356,6 @@ export default function AdminAlertsScreen({
                   />
                 </View>
 
-                {/* Body */}
                 <View style={styles.cardBody}>
                   <View style={styles.cardTop}>
                     <Text
@@ -320,9 +388,9 @@ export default function AdminAlertsScreen({
                   <View style={styles.cardMeta}>
                     <Ionicons name="location-outline" size={scale(11)} color={SUBTLE} />
                     <Text style={styles.metaText}>{alert.source}</Text>
-                    <Text style={styles.metaDot}>·</Text>
-                    <Text style={styles.metaText}>{alert.time}</Text>
-                    <Text style={styles.metaDot}>·</Text>
+                    <Text style={styles.metaDot}>|</Text>
+                    <Text style={styles.metaText}>{alert.time || "-"}</Text>
+                    <Text style={styles.metaDot}>|</Text>
                     <Text style={styles.metaText}>{alert.date}</Text>
                   </View>
                 </View>
@@ -331,7 +399,6 @@ export default function AdminAlertsScreen({
           )}
         </ScrollView>
 
-        {/* Bottom nav */}
         <AdminBotNav
           activeTab={activeTab}
           onTabPress={handleTab}
@@ -432,6 +499,33 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       fontSize: scale(10),
       fontWeight: "800",
       color: "#FFFFFF",
+    },
+
+    errorWrap: {
+      marginHorizontal: scale(16),
+      marginTop: vscale(4),
+      marginBottom: vscale(4),
+      paddingHorizontal: scale(12),
+      paddingVertical: vscale(10),
+      borderRadius: scale(12),
+      borderWidth: 1,
+      borderColor: "#FECACA",
+      backgroundColor: "#FFF1F2",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: scale(10),
+    },
+    errorText: {
+      flex: 1,
+      fontSize: scale(11),
+      fontWeight: "700",
+      color: "#B91C1C",
+    },
+    errorRetry: {
+      fontSize: scale(12),
+      fontWeight: "800",
+      color: "#B91C1C",
     },
 
     content: {
