@@ -615,13 +615,14 @@ export default function ReportScreen({
 
         {/* ===== Top header card ===== */}
         <View style={styles.headerWrap}>
-          <View style={styles.headerCard}>
-            <View style={styles.headerTopRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.headerTitle}>Reports</Text>
-                <Text style={styles.headerSub}>Track your incident progress by status</Text>
-              </View>       
+          <View style={styles.headerTopRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.headerTitle}>Reports</Text>
+              <Text style={styles.headerSub}>Track your incident progress by status</Text>
             </View>
+          </View>
+
+          <View style={styles.headerCard}>
             {/* search */}
             <View style={styles.searchWrap}>
               <Ionicons name="search-outline" size={styles._iconSize} color="#94A3B8" />
@@ -781,6 +782,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
         alignItems: "flex-start",
         justifyContent: "space-between",
         gap: scale(10),
+        marginBottom: vscale(10),
       },
 
       headerTitle: {

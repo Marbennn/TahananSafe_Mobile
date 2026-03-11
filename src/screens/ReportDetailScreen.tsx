@@ -735,6 +735,7 @@ export default function ReportDetailScreen({
   const canNext = viewerIndex < photoUrls.length - 1;
 
   const canCancel = !!reportId && statusUpper !== "CANCELLED" && statusUpper !== "RESOLVED";
+  const canChat = !!reportId && statusUpper !== "CANCELLED" && statusUpper !== "RESOLVED";
 
   const [composerH, setComposerH] = useState(vscale(64));
 
@@ -1165,6 +1166,13 @@ export default function ReportDetailScreen({
                   </View>
                 ) : null}
 
+                {!canChat && (
+                  <View style={{ paddingHorizontal: 16, paddingBottom: 6 }}>
+                    <Text style={{ textAlign: "center", fontSize: 12, color: "#94A3B8", fontStyle: "italic" }}>
+                      This report is {statusUpper.toLowerCase()} — messaging is disabled
+                    </Text>
+                  </View>
+                )}
                 <View
                   // ✅ FIX: don’t add threadsNavReserve here; just one bottom inset (small)
                   style={[styles.composerRow, { paddingBottom: composerBottomPad }]}
@@ -1183,7 +1191,7 @@ export default function ReportDetailScreen({
                       style={styles.composerInput}
                       returnKeyType="send"
                       onSubmitEditing={onSend}
-                      editable={!sending && !!reportId}
+                      editable={!sending && canChat}
                       blurOnSubmit={false}
                       multiline={false}
                       textAlignVertical="center"
@@ -1196,11 +1204,11 @@ export default function ReportDetailScreen({
 
                   <Pressable
                     onPress={onSend}
-                    disabled={sending || !reportId}
+                    disabled={sending || !canChat}
                     style={({ pressed }) => [
                       styles.sendBtn,
                       pressed && { transform: [{ scale: 0.98 }], opacity: 0.95 },
-                      (sending || !reportId) && { opacity: 0.7 },
+                      (sending || !canChat) && { opacity: 0.7 },
                     ]}
                   >
                     {sending ? (
