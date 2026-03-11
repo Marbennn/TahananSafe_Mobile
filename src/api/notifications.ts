@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAccessToken } from "../auth/session";
 
-export type NotifType = "alert" | "report" | "system";
+export type NotifType = "alert" | "report" | "system" | "thread";
 
 export type NotificationItem = {
   id: string;

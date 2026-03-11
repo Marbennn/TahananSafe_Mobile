@@ -42,11 +42,12 @@ const BORDER = "#E7EEF7";
 const TEXT_DARK = "#0B2B45";
 const SUBTLE = "#64748B";
 
-type FilterKey = "all" | "unread" | "alert" | "report" | "info";
+type FilterKey = "all" | "unread" | "alert" | "report" | "thread" | "info";
 
 function iconForType(t: NotifType): keyof typeof Ionicons.glyphMap {
   if (t === "alert") return "warning-outline";
   if (t === "report") return "document-text-outline";
+  if (t === "thread") return "chatbubble-ellipses-outline";
   return "information-circle-outline";
 }
 
@@ -326,7 +327,8 @@ export default function NotificationsScreen({ onBack }: Props) {
       if (filter === "unread") out = out.filter((n) => n.unread);
       if (filter === "alert") out = out.filter((n) => n.type === "alert");
       if (filter === "report") out = out.filter((n) => n.type === "report");
-      if (filter === "info") out = out.filter((n) => n.type !== "alert" && n.type !== "report");
+      if (filter === "thread") out = out.filter((n) => n.type === "thread");
+      if (filter === "info") out = out.filter((n) => n.type !== "alert" && n.type !== "report" && n.type !== "thread");
 
       const q = query.trim().toLowerCase();
       if (q) {
@@ -507,6 +509,7 @@ export default function NotificationsScreen({ onBack }: Props) {
         { key: "unread" as const, label: "Unread" },
         { key: "alert" as const, label: "Alerts" },
         { key: "report" as const, label: "Reports" },
+        { key: "thread" as const, label: "Replies" },
         { key: "info" as const, label: "Info" },
       ].map((p) => ({
         ...p,
