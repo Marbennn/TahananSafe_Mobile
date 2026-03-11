@@ -72,7 +72,7 @@ export async function fetchAdminIncidents(
   signal?: AbortSignal
 ): Promise<AdminIncident[]> {
   const headers = await authHeaders();
-  const res = await fetch(apiUrl("/api/admin/incidents"), { headers, signal });
+  const res = await fetch(apiUrl("/api/web/v1/incidents"), { headers, signal });
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data?.message || `Failed (${res.status})`);
   return Array.isArray(data?.incidents)
@@ -88,7 +88,7 @@ export async function fetchAdminIncidentById(
 ): Promise<AdminIncident> {
   const headers = await authHeaders();
   const res = await fetch(
-    apiUrl(`/api/admin/incidents/${encodeURIComponent(id)}`),
+    apiUrl(`/api/web/v1/incidents/${encodeURIComponent(id)}`),
     { headers, signal }
   );
   const data = await parseJson(res);
@@ -106,11 +106,9 @@ export async function updateIncidentStatus(
     "Content-Type": "application/json",
   };
   const res = await fetch(
-    apiUrl(
-      `/api/admin/incidents/${encodeURIComponent(incidentId)}/status`
-    ),
+    apiUrl(`/api/web/v1/incidents/${encodeURIComponent(incidentId)}/status`),
     {
-      method: "PATCH",
+      method: "PUT",
       headers,
       body: JSON.stringify({ status }),
       signal,
@@ -124,7 +122,7 @@ export async function fetchAdminUsers(
   signal?: AbortSignal
 ): Promise<AdminUser[]> {
   const headers = await authHeaders();
-  const res = await fetch(apiUrl("/api/admin/users"), { headers, signal });
+  const res = await fetch(apiUrl("/api/web/v1/users"), { headers, signal });
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data?.message || `Failed (${res.status})`);
   return Array.isArray(data?.users)
@@ -138,8 +136,18 @@ export async function fetchAdminStats(
   signal?: AbortSignal
 ): Promise<AdminStats> {
   const headers = await authHeaders();
-  const res = await fetch(apiUrl("/api/admin/stats"), { headers, signal });
+  const res = await fetch(apiUrl("/api/web/v1/statistics"), { headers, signal });
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data?.message || `Failed (${res.status})`);
-  return data as AdminStats;
+  // Map backend statistics shape to AdminStats
+  return {
+    totalIncidents: data?.totalCases ?? 0,
+    pending: data?.pending ?? 0,
+    reviewing: data?.ongoing ?? 0,
+    resolved: data?.resolved ?? 0,
+    cancelled: data?.cancelled ?? 0,
+    highRisk: data?.riskHigh ?? 0,
+    totalUsers: data?.totalUsers ?? 0,
+    verifiedUsers: data?.verifiedUsers ?? 0,
+  } as AdminStats;
 }

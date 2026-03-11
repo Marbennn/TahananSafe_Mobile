@@ -146,7 +146,24 @@ export async function clearAllNotifications(): Promise<void> {
   if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
 }
 
-// ✅ NEW: delete one REMOTE notification
+// POST /api/mobile/v1/notifications/send-sos
+export async function sendSosAlert(address?: string): Promise<{ sent: number; message: string }> {
+  const headers = await authHeaders();
+  const url = `${API_BASE_URL}/api/mobile/v1/notifications/send-sos`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ address: address ?? null }),
+  });
+  const data = await parseJsonSafe(res);
+
+  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
+
+  return { sent: data?.sent ?? 0, message: data?.message ?? "Alert sent." };
+}
+
+// delete one REMOTE notification
 export async function deleteNotification(id: string): Promise<void> {
   const headers = await authHeaders();
   const url = `${API_BASE_URL}/api/mobile/v1/notifications/${encodeURIComponent(id)}`;

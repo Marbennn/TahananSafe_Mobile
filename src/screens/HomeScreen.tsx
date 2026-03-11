@@ -55,10 +55,13 @@ import type { ReportItem } from "./ReportScreen";
 import { closeAndRemoveFromRecents } from "../utils/hideApp";
 
 // ✅ NEW: Use same API as NotificationsScreen (source of truth)
-import { fetchMyNotificationsCombined } from "../api/notifications";
+import { fetchMyNotificationsCombined, sendSosAlert } from "../api/notifications";
 
 // ✅ FIX: Use requestJson with auth for auto token refresh
 import { requestJson } from "../api/http";
+
+// ✅ Location for SOS
+import * as Location from "expo-location";
 
 type Props = {
   onQuickExit?: () => void;
@@ -1380,7 +1383,45 @@ export default function HomeScreen({
               <View style={styles.sheetGrabber} />
 
               <Pressable
-                onPress={() => closeSheet()}
+                onPress={() => {
+                  Alert.alert(
+                    "Send SOS Alert",
+                    "This will notify all Barangay Officials with your current location. Are you sure?",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Send Alert",
+                        style: "destructive",
+                        onPress: async () => {
+                          closeSheet();
+                          let address: string | undefined;
+                          try {
+                            const { status } = await Location.requestForegroundPermissionsAsync();
+                            if (status === "granted") {
+                              const coords = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                              const [place] = await Location.reverseGeocodeAsync({
+                                latitude: coords.coords.latitude,
+                                longitude: coords.coords.longitude,
+                              });
+                              if (place) {
+                                const parts = [place.street, place.district, place.city, place.region].filter(Boolean);
+                                address = parts.join(", ") || undefined;
+                              }
+                            }
+                          } catch {
+                            // location failed — send without address
+                          }
+                          try {
+                            const result = await sendSosAlert(address);
+                            Alert.alert("Alert Sent", result.message);
+                          } catch (e: any) {
+                            Alert.alert("Failed", e?.message ?? "Could not send alert. Please try again.");
+                          }
+                        },
+                      },
+                    ]
+                  );
+                }}
                 style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
               >
                 <Ionicons name="warning-outline" size={20} color="#fff" style={styles.actionIcon} />

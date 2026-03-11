@@ -12,6 +12,7 @@ import {
   PanResponder,
   Modal,
   Easing,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -24,6 +25,7 @@ import GreetingCard from "../../components/HomeScreen/GreetingCard";
 import HomeScreenLogo from "../../../assets/HomeScreen/NewLogo.svg";
 import FabTutorialOverlay from "../../components/Tutorial/FabTutorialOverlay";
 import { useAuth } from "../../auth/AuthContext";
+import { fetchMyNotifications } from "../../api/notifications";
 
 const BG = "#F5FAFE";
 const TEXT_DARK = "#0B2B45";
@@ -99,7 +101,6 @@ const AdminHomeScreen: React.FC<Props> = ({
   onOpenReports,
   onOpenAlerts,
   onOpenPendingReports,
-  onOpenReportDetail,
   onOpenSettings,
   onLogout,
 }) => {
@@ -356,38 +357,56 @@ const AdminHomeScreen: React.FC<Props> = ({
     return (width - PAD * 2 - gap) / 2;
   }, [width, PAD]);
 
-  // ── Static admin data ─────────────────────────────────────────────
-  const stats: StatCard[] = [
-    { id: "1", label: "Pending Reports", value: "18", icon: "document-text-outline" },
-    { id: "3", label: "Active Alerts", value: "07", icon: "notifications-outline" },
-  ];
+  // ── Notification badge count ──────────────────────────────────────
+  const [notifCount, setNotifCount] = useState(0);
+  const [activeAlertCount, setActiveAlertCount] = useState(0);
 
-  const recentReports: ReportItem[] = [
-    {
-      id: "8934",
-      title: "Emergency domestic violence report",
-      subtitle: "Barangay Zone 2 • Immediate review needed",
-      date: "January 12, 2026",
-      time: "10:00 PM",
-      level: "High",
-    },
-    {
-      id: "8034",
-      title: "Resident requested hotline assistance",
-      subtitle: "Barangay Poblacion • Waiting for callback",
-      date: "January 12, 2026",
-      time: "9:30 PM",
-      level: "Moderate",
-    },
-    {
-      id: "8014",
-      title: "Incident follow-up submitted",
-      subtitle: "Barangay San Vicente • Review attachments",
-      date: "January 12, 2026",
-      time: "8:45 PM",
-      level: "Low",
-    },
-  ];
+  // ── Static admin data ─────────────────────────────────────────────
+  const stats: StatCard[] = useMemo(() => [
+    { id: "1", label: "Pending Reports", value: "18", icon: "document-text-outline" },
+    { id: "3", label: "Active Alerts", value: String(activeAlertCount), icon: "notifications-outline" },
+  ], [activeAlertCount]);
+
+  // ── Recent Alerts (live from backend) ────────────────────────────
+  const [recentAlerts, setRecentAlerts] = useState<ReportItem[]>([]);
+  const [loadingAlerts, setLoadingAlerts] = useState(false);
+
+  const fetchRecentAlerts = useCallback(async () => {
+    try {
+      setLoadingAlerts(true);
+      const notifs = await fetchMyNotifications(80);
+      // Badge: count all unread
+      const unread = notifs.filter((n) => n.unread).length;
+      setNotifCount(unread);
+      // Active Alerts card: count of alert-type notifications (unread)
+      const alertUnread = notifs.filter((n) => n.type === "alert" && n.unread).length;
+      setActiveAlertCount(alertUnread);
+      // Cards: only alert-type, latest 3
+      const alerts = notifs
+        .filter((n) => n.type === "alert")
+        .slice(0, 3)
+        .map((n) => {
+          const d = new Date(n.time);
+          const date = isNaN(d.getTime())
+            ? "—"
+            : d.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+          const time = isNaN(d.getTime())
+            ? "—"
+            : d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
+          return { id: n.id, title: n.title, subtitle: n.message, date, time, level: "High" as const };
+        });
+      setRecentAlerts(alerts);
+    } catch {
+      setRecentAlerts([]);
+    } finally {
+      setLoadingAlerts(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchRecentAlerts(); }, [fetchRecentAlerts]);
+
+  // ── Alert detail modal ────────────────────────────────────────────
+  const [selectedAlert, setSelectedAlert] = useState<ReportItem | null>(null);
 
   const getRiskColor = (level: ReportItem["level"]) => {
     if (level === "High") return "#F04452";
@@ -689,6 +708,21 @@ const AdminHomeScreen: React.FC<Props> = ({
         actionText: { fontSize: clamp(Math.round(16 * fs), 14, 18), fontWeight: "900", color: "#FFFFFF" },
         actionIcon: { marginTop: 1, marginRight: 10 },
         dangerBtn: { backgroundColor: "#0B2B45" },
+
+        emptyAlertsCard: {
+          backgroundColor: "#FFFFFF",
+          borderRadius: clamp(Math.round(16 * s), 14, 18),
+          borderWidth: 1,
+          borderColor: "#E7EEF7",
+          alignItems: "center" as const,
+          paddingVertical: clamp(Math.round(20 * s), 16, 24),
+          gap: 8,
+        },
+        emptyAlertsText: {
+          fontSize: clamp(Math.round(13 * fs), 12, 14),
+          fontWeight: "600" as const,
+          color: "#94A3B8",
+        },
       }),
     [
       PAD,
@@ -725,6 +759,13 @@ const AdminHomeScreen: React.FC<Props> = ({
               style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
             >
               <Ionicons name="notifications-outline" size={notifIconSize} color={TEXT_DARK} />
+              {notifCount > 0 ? (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText} allowFontScaling={false}>
+                    {notifCount > 99 ? "99+" : String(notifCount)}
+                  </Text>
+                </View>
+              ) : null}
             </Pressable>
 
             <View style={styles.rightActionSpacer} />
@@ -796,39 +837,48 @@ const AdminHomeScreen: React.FC<Props> = ({
           </View>
 
           <View style={styles.logsWrap}>
-            {recentReports.map((item) => (
-              <Pressable
-                key={item.id}
-                style={styles.reportCard}
-                onPress={() => onOpenReportDetail?.(item.id)}
-              >
-                <View style={[styles.riskIndicator, { backgroundColor: getRiskColor(item.level) }]} />
+            {loadingAlerts ? (
+              <ActivityIndicator size="small" color={Colors.primary} style={{ marginTop: 12 }} />
+            ) : recentAlerts.length === 0 ? (
+              <View style={styles.emptyAlertsCard}>
+                <Ionicons name="notifications-off-outline" size={26} color="#94A3B8" />
+                <Text style={styles.emptyAlertsText} allowFontScaling={false}>No recent alerts</Text>
+              </View>
+            ) : (
+              recentAlerts.map((item) => (
+                <Pressable
+                  key={item.id}
+                  style={styles.reportCard}
+                  onPress={() => setSelectedAlert(item)}
+                >
+                  <View style={[styles.riskIndicator, { backgroundColor: getRiskColor(item.level) }]} />
 
-                <View style={styles.reportMainContent}>
-                  <View style={styles.reportTopRow}>
-                    <Text style={styles.reportTitle} numberOfLines={1} allowFontScaling={false}>
-                      {item.title}
-                    </Text>
-                    <View style={[styles.riskPill, { backgroundColor: `${getRiskColor(item.level)}18` }]}>
-                      <Text style={[styles.riskPillText, { color: getRiskColor(item.level) }]} allowFontScaling={false}>
-                        {item.level}
+                  <View style={styles.reportMainContent}>
+                    <View style={styles.reportTopRow}>
+                      <Text style={styles.reportTitle} numberOfLines={1} allowFontScaling={false}>
+                        {item.title}
                       </Text>
+                      <View style={[styles.riskPill, { backgroundColor: `${getRiskColor(item.level)}18` }]}>
+                        <Text style={[styles.riskPillText, { color: getRiskColor(item.level) }]} allowFontScaling={false}>
+                          SOS
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.reportSubtitle} numberOfLines={2} allowFontScaling={false}>
+                      {item.subtitle}
+                    </Text>
+
+                    <View style={styles.reportBottomRow}>
+                      <Text style={styles.reportDate} allowFontScaling={false}>{item.date}</Text>
+                      <Text style={styles.reportTime} allowFontScaling={false}>{item.time}</Text>
                     </View>
                   </View>
 
-                  <Text style={styles.reportSubtitle} numberOfLines={2} allowFontScaling={false}>
-                    {item.subtitle}
-                  </Text>
-
-                  <View style={styles.reportBottomRow}>
-                    <Text style={styles.reportDate} allowFontScaling={false}>{item.date}</Text>
-                    <Text style={styles.reportTime} allowFontScaling={false}>{item.time}</Text>
-                  </View>
-                </View>
-
-                <Ionicons name="chevron-forward" size={20} color={Colors.primary} />
-              </Pressable>
-            ))}
+                  <Ionicons name="chevron-forward" size={20} color={Colors.primary} />
+                </Pressable>
+              ))
+            )}
           </View>
 
           {/* Quick Actions */}
@@ -912,6 +962,84 @@ const AdminHomeScreen: React.FC<Props> = ({
           title="Admin Menu"
           message="Tap the center button to access admin actions."
         />
+
+        {/* ── Alert Detail Modal ── */}
+        <Modal
+          visible={!!selectedAlert}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setSelectedAlert(null)}
+          statusBarTranslucent
+        >
+          <Pressable
+            style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", paddingHorizontal: PAD + 8 }}
+            onPress={() => setSelectedAlert(null)}
+          >
+            <Pressable onPress={() => {}} style={{
+              backgroundColor: "#FFFFFF",
+              borderRadius: 20,
+              padding: clamp(Math.round(20 * s), 16, 24),
+              shadowColor: "#000",
+              shadowOpacity: 0.18,
+              shadowRadius: 20,
+              shadowOffset: { width: 0, height: 6 },
+              elevation: 14,
+            }}>
+              {/* Header row */}
+              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 10 }}>
+                <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: "#FEE2E2", alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name="warning" size={20} color="#DC2626" />
+                </View>
+                <Text style={{ flex: 1, fontSize: clamp(Math.round(15 * fs), 14, 17), fontWeight: "900", color: TEXT_DARK }} allowFontScaling={false} numberOfLines={2}>
+                  {selectedAlert?.title ?? ""}
+                </Text>
+                <Pressable onPress={() => setSelectedAlert(null)} hitSlop={10}>
+                  <Ionicons name="close-circle" size={24} color="#94A3B8" />
+                </Pressable>
+              </View>
+
+              {/* Divider */}
+              <View style={{ height: 1, backgroundColor: "#F1F5F9", marginBottom: 12 }} />
+
+              {/* Message */}
+              <Text style={{ fontSize: clamp(Math.round(13 * fs), 12, 15), color: "#334155", lineHeight: 20, fontWeight: "500", marginBottom: 16 }} allowFontScaling={false}>
+                {selectedAlert?.subtitle ?? ""}
+              </Text>
+
+              {/* Date + Time */}
+              <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 16 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                  <Ionicons name="calendar-outline" size={14} color="#64748B" />
+                  <Text style={{ fontSize: clamp(Math.round(12 * fs), 11, 13), color: "#64748B", fontWeight: "600" }} allowFontScaling={false}>
+                    {selectedAlert?.date ?? ""}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                  <Ionicons name="time-outline" size={14} color="#64748B" />
+                  <Text style={{ fontSize: clamp(Math.round(12 * fs), 11, 13), color: "#64748B", fontWeight: "600" }} allowFontScaling={false}>
+                    {selectedAlert?.time ?? ""}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Dismiss button */}
+              <Pressable
+                onPress={() => setSelectedAlert(null)}
+                style={({ pressed }) => [{
+                  backgroundColor: Colors.primary,
+                  borderRadius: 14,
+                  paddingVertical: 12,
+                  alignItems: "center" as const,
+                  opacity: pressed ? 0.85 : 1,
+                }]}
+              >
+                <Text style={{ fontSize: clamp(Math.round(14 * fs), 13, 15), fontWeight: "800", color: "#FFFFFF" }} allowFontScaling={false}>
+                  Dismiss
+                </Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         {/* ── Sheet Modal ── */}
         <Modal
