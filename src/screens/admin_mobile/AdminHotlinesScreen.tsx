@@ -32,6 +32,7 @@ type Props = {
   onTabChange?: (tab: TabKey) => void;
   initialTab?: TabKey;
   onQuickExit?: () => void;
+  onBack?: () => void;
 };
 
 function cleanTel(num: string) {

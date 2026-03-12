@@ -29,6 +29,7 @@ import ReportScreen from "./src/screens/ReportScreen";
 import ReportDetailScreen from "./src/screens/ReportDetailScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
+import AdminNotificationsScreen from "./src/screens/admin_mobile/AdminNotificationsScreen";
 
 import IncidentLogScreen from "./src/screens/IncidentLogScreen";
 import IncidentLogConfirmedScreen from "./src/screens/IncidentLogConfirmedScreen";
@@ -398,6 +399,16 @@ function AdminHomeWrapper({ navigation }: { navigation: any }) {
   );
 }
 
+function NotificationsWrapper({ navigation }: { navigation: any }) {
+  const auth = useAuth() as any;
+
+  if (isBarangayOfficial(auth?.user?.role)) {
+    return <AdminNotificationsScreen onBack={() => navigation.goBack()} />;
+  }
+
+  return <NotificationsScreen onBack={() => navigation.goBack()} />;
+}
+
 /* ===================== ✅ PIN SCREEN WRAPPER ===================== */
 
 function PinScreenWrapper({ navigation }: { navigation: any }) {
@@ -691,7 +702,7 @@ export default function App() {
               </Stack.Screen>
 
               <Stack.Screen name="Notifications">
-                {({ navigation }) => <NotificationsScreen onBack={() => navigation.goBack()} />}
+                {({ navigation }) => <NotificationsWrapper navigation={navigation} />}
               </Stack.Screen>
             </Stack.Navigator>
           </NavigationContainer>

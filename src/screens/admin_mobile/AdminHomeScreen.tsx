@@ -13,6 +13,7 @@ import {
   Modal,
   Easing,
   ActivityIndicator,
+  AppState,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -26,11 +27,13 @@ import HomeScreenLogo from "../../../assets/HomeScreen/NewLogo.svg";
 import FabTutorialOverlay from "../../components/Tutorial/FabTutorialOverlay";
 import { useAuth } from "../../auth/AuthContext";
 import { fetchMyNotifications } from "../../api/notifications";
+import { ensureAdminAlarmNotificationPermissions, showAdminAlarmNotification } from "../../utils/adminAlarmNotifications";
 
 const BG = "#F5FAFE";
 const TEXT_DARK = "#0B2B45";
 
 const ADMIN_TUTORIAL_KEY = "tahanansafe_admin_fab_tutorial_seen_v1";
+const NOTIFICATION_POLL_MS = 10000;
 
 type ReportItem = {
   id: string;
@@ -53,6 +56,7 @@ type Props = {
   onOpenHelp?: () => void;
   onOpenReports?: () => void;
   onOpenUsers?: () => void;
+  onOpenHotlines?: () => void;
   onOpenAlerts?: () => void;
   onOpenAnalytics?: () => void;
   onOpenPendingReports?: () => void;
@@ -360,6 +364,9 @@ const AdminHomeScreen: React.FC<Props> = ({
   // ── Notification badge count ──────────────────────────────────────
   const [notifCount, setNotifCount] = useState(0);
   const [activeAlertCount, setActiveAlertCount] = useState(0);
+  const seenAlertIdsRef = useRef<Set<string>>(new Set());
+  const alertsPrimedRef = useRef(false);
+  const alertsFetchInFlightRef = useRef(false);
 
   // ── Static admin data ─────────────────────────────────────────────
   const stats: StatCard[] = useMemo(() => [
@@ -372,8 +379,14 @@ const AdminHomeScreen: React.FC<Props> = ({
   const [loadingAlerts, setLoadingAlerts] = useState(false);
 
   const fetchRecentAlerts = useCallback(async () => {
+    if (alertsFetchInFlightRef.current) return;
+    alertsFetchInFlightRef.current = true;
+
     try {
-      setLoadingAlerts(true);
+      if (!alertsPrimedRef.current) {
+        setLoadingAlerts(true);
+      }
+
       const notifs = await fetchMyNotifications(80);
       // Badge: count all unread
       const unread = notifs.filter((n) => n.unread).length;
@@ -381,6 +394,23 @@ const AdminHomeScreen: React.FC<Props> = ({
       // Active Alerts card: count of alert-type notifications (unread)
       const alertUnread = notifs.filter((n) => n.type === "alert" && n.unread).length;
       setActiveAlertCount(alertUnread);
+      const unreadAlerts = notifs.filter((n) => n.type === "alert" && n.unread);
+
+      if (!alertsPrimedRef.current) {
+        seenAlertIdsRef.current = new Set(unreadAlerts.map((n) => n.id));
+        alertsPrimedRef.current = true;
+      } else {
+        const nextSeen = new Set(seenAlertIdsRef.current);
+        const newUnreadAlerts = unreadAlerts.filter((n) => !nextSeen.has(n.id));
+
+        for (const alert of newUnreadAlerts) {
+          nextSeen.add(alert.id);
+          await showAdminAlarmNotification(alert).catch(() => {});
+        }
+
+        seenAlertIdsRef.current = nextSeen;
+      }
+
       // Cards: only alert-type, latest 3
       const alerts = notifs
         .filter((n) => n.type === "alert")
@@ -397,13 +427,34 @@ const AdminHomeScreen: React.FC<Props> = ({
         });
       setRecentAlerts(alerts);
     } catch {
-      setRecentAlerts([]);
+      if (!alertsPrimedRef.current) {
+        setRecentAlerts([]);
+      }
     } finally {
+      alertsFetchInFlightRef.current = false;
       setLoadingAlerts(false);
     }
   }, []);
 
-  useEffect(() => { fetchRecentAlerts(); }, [fetchRecentAlerts]);
+  useEffect(() => {
+    ensureAdminAlarmNotificationPermissions().catch(() => {});
+    fetchRecentAlerts();
+
+    const intervalId = setInterval(() => {
+      fetchRecentAlerts();
+    }, NOTIFICATION_POLL_MS);
+
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        fetchRecentAlerts();
+      }
+    });
+
+    return () => {
+      clearInterval(intervalId);
+      appStateSub.remove();
+    };
+  }, [fetchRecentAlerts]);
 
   // ── Alert detail modal ────────────────────────────────────────────
   const [selectedAlert, setSelectedAlert] = useState<ReportItem | null>(null);

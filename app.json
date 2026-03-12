@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "FirstProject",
-    "slug": "firstproject",
+    "name": "TahananSafe",
+    "slug": "tahanansafe",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash1.png",
       "resizeMode": "cover",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": true,
@@ -23,7 +23,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#FFFFFF"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.angelgeloo0918.firstproject"
@@ -37,8 +37,8 @@
       [
         "expo-speech-recognition",
         {
-          "microphonePermission": "Allow FirstProject to use the microphone.",
-          "speechRecognitionPermission": "Allow FirstProject to use speech recognition."
+          "microphonePermission": "Allow TahananSafe to use the microphone.",
+          "speechRecognitionPermission": "Allow TahananSafe to use speech recognition."
         }
       ]
     ],
