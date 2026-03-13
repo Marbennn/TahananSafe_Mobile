@@ -43,3 +43,27 @@ yarn-error.*
 # generated native folders
 #/ios
 #/android
+
+# Gradle caches
+.gradle/
+.gradle-user-home/
+**/.gradle/
+
+# Android build outputs
+android/.gradle/
+android/build/
+android/app/build/
+
+# Node
+node_modules/
+
+# Expo
+.expo/
+dist/
+
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db
