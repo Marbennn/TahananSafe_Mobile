@@ -19,6 +19,7 @@ import {
   Linking,
   Alert,
   Easing,
+  InteractionManager,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -214,6 +215,7 @@ export default function HomeScreen({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isFocused = useIsFocused();
+  const isFocusedRef = useRef(isFocused);
 
   const { s, fs } = useMemo(() => makeScale(width, height), [width, height]);
 
@@ -477,14 +479,18 @@ export default function HomeScreen({
 
   useFocusEffect(
     useCallback(() => {
-      fetchNotifCount({ force: true, withStatusSync: true });
-      return () => {};
+      const task = InteractionManager.runAfterInteractions(() => {
+        fetchNotifCount({ force: true, withStatusSync: false });
+      });
+      return () => task.cancel();
     }, [fetchNotifCount])
   );
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(NOTIF_CHANGED_EVENT, () => {
-      fetchNotifCount({ force: true, withStatusSync: false });
+      InteractionManager.runAfterInteractions(() => {
+        fetchNotifCount({ force: true, withStatusSync: false });
+      });
     });
     return () => sub.remove();
   }, [fetchNotifCount]);
@@ -492,8 +498,6 @@ export default function HomeScreen({
   useFocusEffect(
     useCallback(() => {
       let alive = true;
-
-      fetchNotifCount({ force: true, withStatusSync: false });
 
       const id = setInterval(() => {
         if (!alive) return;
@@ -520,9 +524,18 @@ export default function HomeScreen({
   // ✅ Recent reports
   const [recentReports, setRecentReports] = useState<ReportItem[]>([]);
   const [loadingReports, setLoadingReports] = useState(false);
+  const reportsFetchInFlightRef = useRef(false);
+  const lastReportsFetchAtRef = useRef(0);
 
   // ✅ FIX: Use requestJson with auth:true for auto token refresh
-  const fetchRecentReports = useCallback(async () => {
+  const fetchRecentReports = useCallback(async (opts?: { force?: boolean }) => {
+    const force = !!opts?.force;
+    const now = Date.now();
+
+    if (!force && now - lastReportsFetchAtRef.current < 90000) return;
+    if (reportsFetchInFlightRef.current) return;
+
+    reportsFetchInFlightRef.current = true;
     try {
       setLoadingReports(true);
 
@@ -608,23 +621,27 @@ export default function HomeScreen({
       });
 
       setRecentReports(mapped);
+      lastReportsFetchAtRef.current = Date.now();
     } catch {
       // ✅ On error (including session expired), just clear reports silently
       setRecentReports([]);
     } finally {
       setLoadingReports(false);
+      reportsFetchInFlightRef.current = false;
     }
   }, []); // ✅ FIX: No more [accessToken] dependency — requestJson handles token internally
 
   useEffect(() => {
-    fetchRecentReports();
+    fetchRecentReports({ force: true });
   }, [fetchRecentReports]);
 
   // ✅ Also refresh reports when Home screen regains focus
   useFocusEffect(
     useCallback(() => {
-      fetchRecentReports();
-      return () => {};
+      const task = InteractionManager.runAfterInteractions(() => {
+        fetchRecentReports({ force: false });
+      });
+      return () => task.cancel();
     }, [fetchRecentReports])
   );
 
@@ -657,44 +674,29 @@ export default function HomeScreen({
   // ✅ Swipe-up Quick Actions Sheet
   // =========================
   const [sheetOpen, setSheetOpen] = useState(false);
+  const sheetOpenRef = useRef(false);
 
   const SHEET_HEIGHT = useMemo(() => clamp(Math.round(height * 0.34), 250, 340), [height]);
   const sheetY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
   const sheetAnimatingRef = useRef(false);
 
   const chevronOpen = useRef(new Animated.Value(0)).current;
-  const chevronBounce = useRef(new Animated.Value(0)).current;
-  const chevronBounceLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   // ✅ Backdrop opacity animation
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
-  const startChevronBounce = useCallback(() => {
-    if (chevronBounceLoopRef.current) return;
+  useEffect(() => {
+    isFocusedRef.current = isFocused;
+  }, [isFocused]);
 
-    chevronBounce.setValue(0);
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(chevronBounce, { toValue: -1, duration: 650, useNativeDriver: true }),
-        Animated.timing(chevronBounce, { toValue: 0, duration: 650, useNativeDriver: true }),
-      ])
-    );
-    chevronBounceLoopRef.current = loop;
-    loop.start();
-  }, [chevronBounce]);
-
-  const stopChevronBounce = useCallback(() => {
-    if (chevronBounceLoopRef.current) {
-      chevronBounceLoopRef.current.stop();
-      chevronBounceLoopRef.current = null;
-    }
-    chevronBounce.stopAnimation(() => chevronBounce.setValue(0));
-  }, [chevronBounce]);
+  useEffect(() => {
+    sheetOpenRef.current = sheetOpen;
+  }, [sheetOpen]);
 
   useEffect(() => {
     if (!isFocused) {
-      stopChevronBounce();
       sheetAnimatingRef.current = false;
+      sheetOpenRef.current = false;
       sheetY.stopAnimation();
       chevronOpen.stopAnimation();
       backdropOpacity.stopAnimation();
@@ -704,18 +706,9 @@ export default function HomeScreen({
       if (sheetOpen) setSheetOpen(false);
       return;
     }
-
-    if (!sheetOpen) startChevronBounce();
-    else stopChevronBounce();
-
-    return () => {
-      stopChevronBounce();
-    };
   }, [
     isFocused,
     sheetOpen,
-    startChevronBounce,
-    stopChevronBounce,
     sheetY,
     chevronOpen,
     backdropOpacity,
@@ -723,8 +716,8 @@ export default function HomeScreen({
   ]);
 
   const openSheet = useCallback(() => {
-    if (!isFocused) return;
-    if (sheetOpen) return;
+    if (!isFocusedRef.current) return;
+    if (sheetOpenRef.current) return;
     if (sheetAnimatingRef.current) return;
     sheetAnimatingRef.current = true;
 
@@ -736,6 +729,7 @@ export default function HomeScreen({
     chevronOpen.setValue(0);
     backdropOpacity.setValue(0);
 
+    sheetOpenRef.current = true;
     setSheetOpen(true);
 
     Animated.parallel([
@@ -743,10 +737,12 @@ export default function HomeScreen({
         toValue: 1,
         duration: 140,
         easing: Easing.out(Easing.quad),
+        isInteraction: false,
         useNativeDriver: true,
       }),
       Animated.spring(sheetY, {
         toValue: 0,
+        isInteraction: false,
         useNativeDriver: true,
         damping: 18,
         stiffness: 220,
@@ -756,15 +752,16 @@ export default function HomeScreen({
         toValue: 1,
         duration: 220,
         easing: Easing.out(Easing.quad),
+        isInteraction: false,
         useNativeDriver: true,
       }),
     ]).start(() => {
       sheetAnimatingRef.current = false;
     });
-  }, [isFocused, sheetOpen, sheetY, chevronOpen, backdropOpacity, SHEET_HEIGHT]);
+  }, [sheetY, chevronOpen, backdropOpacity, SHEET_HEIGHT]);
 
   const closeSheet = useCallback(() => {
-    if (!sheetOpen && !sheetAnimatingRef.current) return;
+    if (!sheetOpenRef.current && !sheetAnimatingRef.current) return;
     if (sheetAnimatingRef.current) return;
     sheetAnimatingRef.current = true;
 
@@ -777,30 +774,34 @@ export default function HomeScreen({
         toValue: 0,
         duration: 120,
         easing: Easing.in(Easing.quad),
+        isInteraction: false,
         useNativeDriver: true,
       }),
       Animated.timing(sheetY, {
         toValue: SHEET_HEIGHT,
         duration: 220,
         easing: Easing.out(Easing.cubic),
+        isInteraction: false,
         useNativeDriver: true,
       }),
       Animated.timing(chevronOpen, {
         toValue: 0,
         duration: 160,
         easing: Easing.inOut(Easing.quad),
+        isInteraction: false,
         useNativeDriver: true,
       }),
     ]).start(({ finished }) => {
       sheetAnimatingRef.current = false;
       if (finished) {
+        sheetOpenRef.current = false;
         sheetY.setValue(SHEET_HEIGHT);
         chevronOpen.setValue(0);
         backdropOpacity.setValue(0);
         setSheetOpen(false);
       }
     });
-  }, [sheetOpen, sheetY, SHEET_HEIGHT, chevronOpen, backdropOpacity]);
+  }, [sheetY, SHEET_HEIGHT, chevronOpen, backdropOpacity]);
 
   const handlePan = useRef(
     PanResponder.create({
@@ -821,10 +822,12 @@ export default function HomeScreen({
               toValue: 1,
               duration: 120,
               easing: Easing.out(Easing.quad),
+              isInteraction: false,
               useNativeDriver: true,
             }),
             Animated.spring(sheetY, {
               toValue: 0,
+              isInteraction: false,
               useNativeDriver: true,
               damping: 18,
               stiffness: 220,
@@ -834,6 +837,7 @@ export default function HomeScreen({
               toValue: 1,
               duration: 190,
               easing: Easing.out(Easing.quad),
+              isInteraction: false,
               useNativeDriver: true,
             }),
           ]).start();
@@ -880,7 +884,7 @@ export default function HomeScreen({
   const modalChevronTranslateY = useMemo(() => Animated.add(sheetY, chevronLiftToOpen), [sheetY, chevronLiftToOpen]);
 
   const chevronRotate = chevronOpen.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] });
-  const bounceY = chevronBounce.interpolate({ inputRange: [-1, 0], outputRange: [-4, 0] });
+  const bounceY = 0;
   const chevronScale = chevronOpen.interpolate({ inputRange: [0, 1], outputRange: [1, 0.98] });
 
   const styles = useMemo(
@@ -1405,7 +1409,11 @@ export default function HomeScreen({
               hitSlop={14}
               style={({ pressed }) => [styles.chevronHandle, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
             >
-              <Animated.View style={{ transform: [{ translateY: bounceY }, { rotate: chevronRotate }, { scale: chevronScale }] }}>
+              <Animated.View
+                renderToHardwareTextureAndroid
+                shouldRasterizeIOS
+                style={{ transform: [{ translateY: bounceY }, { rotate: chevronRotate }, { scale: chevronScale }] }}
+              >
                 <Ionicons name="chevron-up" size={22} color={TEXT_DARK} />
               </Animated.View>
             </Pressable>
@@ -1443,12 +1451,21 @@ export default function HomeScreen({
         />
 
         {/* ✅ Swipe-up Sheet Modal */}
-        <Modal visible={sheetOpen} transparent animationType="none" onRequestClose={closeSheet} statusBarTranslucent>
+        <Modal
+          visible={sheetOpen}
+          transparent
+          animationType="none"
+          onRequestClose={closeSheet}
+          statusBarTranslucent
+          hardwareAccelerated
+        >
           <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
             <Pressable style={{ flex: 1 }} onPress={closeSheet} />
           </Animated.View>
 
           <Animated.View
+            renderToHardwareTextureAndroid
+            shouldRasterizeIOS
             style={[
               styles.chevronModalWrap,
               {
@@ -1462,13 +1479,21 @@ export default function HomeScreen({
               hitSlop={14}
               style={({ pressed }) => [styles.chevronHandle, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
             >
-              <Animated.View style={{ transform: [{ rotate: chevronRotate }, { scale: chevronScale }] }}>
+              <Animated.View
+                renderToHardwareTextureAndroid
+                shouldRasterizeIOS
+                style={{ transform: [{ rotate: chevronRotate }, { scale: chevronScale }] }}
+              >
                 <Ionicons name="chevron-up" size={22} color={TEXT_DARK} />
               </Animated.View>
             </Pressable>
           </Animated.View>
 
-          <Animated.View style={[styles.sheetOuter, { transform: [{ translateY: sheetY }] }]}>
+          <Animated.View
+            renderToHardwareTextureAndroid
+            shouldRasterizeIOS
+            style={[styles.sheetOuter, { transform: [{ translateY: sheetY }] }]}
+          >
             <View style={styles.sheetCard} {...handlePan.panHandlers}>
               <View style={styles.sheetGrabber} />
 

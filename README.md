@@ -4,7 +4,7 @@
 # How To Run in terminal
 npm install expo
 "Run on ios"
-npx expo start -c --dev-client --tunnel
+npx expo start --dev-client --tunnel --clear
 "Run on android"
 npx expo start -c
 
