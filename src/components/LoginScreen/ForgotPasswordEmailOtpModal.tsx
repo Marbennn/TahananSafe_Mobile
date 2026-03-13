@@ -46,7 +46,9 @@ function pad2(n: number) {
 }
 
 const TAG = "[ForgotPasswordEmailOtpModal]";
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = (process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000")
+  .trim()
+  .replace(/\/+$/, "");
 
 const SEND_OTP_PATH = "/api/mobile/v1/forgot-password/send-otp";
 const VERIFY_OTP_PATH = "/api/mobile/v1/forgot-password/verify-otp";

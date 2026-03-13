@@ -43,7 +43,9 @@ function clamp(n: number, min: number, max: number) {
 }
 
 const TAG = "[Signup EnterVerificationModal]";
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = (process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000")
+  .trim()
+  .replace(/\/+$/, "");
 
 // ✅ Signup should verify REGISTRATION OTP (NOT login OTP)
 const VERIFY_REG_OTP_PATH = "/api/mobile/v1/verify-registration-otp";

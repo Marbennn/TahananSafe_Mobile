@@ -38,7 +38,9 @@ function clamp(n: number, min: number, max: number) {
 }
 
 const TAG = "[ForgotPasswordNewPasswordModal]";
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = (process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000")
+  .trim()
+  .replace(/\/+$/, "");
 const RESET_PATH = "/api/mobile/v1/forgot-password/reset";
 
 async function resetPassword(email: string, resetToken: string, newPassword: string) {

@@ -19,7 +19,25 @@ export type AiAnalyzeResponse = {
   [key: string]: any;
 };
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = (
+  process.env.EXPO_PUBLIC_AI_URL ||
+  process.env.EXPO_PUBLIC_API_URL ||
+  "http://localhost:8000"
+)
+  .trim()
+  .replace(/\/+$/, "");
+
+const ANALYZE_PATH = (
+  process.env.EXPO_PUBLIC_AI_ANALYZE_PATH || "/analyze"
+)
+  .trim()
+  .replace(/^([^/])/, "/$1");
+
+function normalizePath(path: string) {
+  return String(path || "")
+    .trim()
+    .replace(/^([^/])/, "/$1");
+}
 
 function withTimeout(ms: number) {
   const controller = new AbortController();
@@ -39,8 +57,11 @@ export async function analyzeIncident(incidentDescription: string) {
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers.Authorization = `Bearer ${token}`;
+    const path = normalizePath(ANALYZE_PATH);
+    const endpoint = `${API_URL}${path}`;
+    console.log("[AI] analyze endpoint:", endpoint);
 
-    const res = await fetch(`${API_URL}/api/mobile/ai/analyze`, {
+    const res = await fetch(endpoint, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
@@ -56,7 +77,11 @@ export async function analyzeIncident(incidentDescription: string) {
     }
 
     if (!res.ok) {
-      throw new Error(data?.message || data?.detail || `AI analyze failed (${res.status})`);
+      throw new Error(
+        data?.message ||
+          data?.detail ||
+          `AI analyze failed (${res.status}) @ ${endpoint}`
+      );
     }
 
     return data as AiAnalyzeResponse;

@@ -47,7 +47,9 @@ function clamp(n: number, min: number, max: number) {
 }
 
 const TAG = "[Login EnterVerificationModal]";
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = (process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000")
+  .trim()
+  .replace(/\/+$/, "");
 const VERIFY_LOGIN_OTP_PATH = "/api/mobile/v1/verify-login-otp";
 
 // ✅ SecureStore keys must contain only: A-Z a-z 0-9 . - _

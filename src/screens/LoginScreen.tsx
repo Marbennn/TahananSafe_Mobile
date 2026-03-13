@@ -56,7 +56,9 @@ function clamp(n: number, min: number, max: number) {
 type ForgotStep = "none" | "emailOtp" | "newpass" | "success";
 
 const TAG = "[LoginScreen]";
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = (process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000")
+  .trim()
+  .replace(/\/+$/, "");
 
 const LOGIN_PATH = "/api/mobile/v1/login";
 const REFRESH_PATH = "/api/mobile/v1/refresh-token";
