@@ -26,13 +26,15 @@
         "backgroundColor": "#FFFFFF"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.angelgeloo0918.firstproject"
+      "package": "com.angelgeloo0918.firstproject",
+      "googleServicesFile": "./android/app/google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "@react-native-community/datetimepicker",
+      "expo-notifications",
       "expo-secure-store",
       [
         "expo-speech-recognition",

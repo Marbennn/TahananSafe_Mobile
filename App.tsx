@@ -1,12 +1,16 @@
 // App.tsx
 import "react-native-gesture-handler";
-import React, { useEffect, useState } from "react";
-import { Alert, StyleSheet } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Alert, DeviceEventEmitter, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { enableScreens } from "react-native-screens";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import * as Notifications from "expo-notifications";
 
-import { NavigationContainer } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  createNavigationContainerRef,
+} from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 // ✅ Auth
@@ -56,6 +60,10 @@ import { getMeApi, verifyPinApi } from "./src/api/pin";
 // Types
 import type { TabKey } from "./src/components/BottomNavBar";
 import type { ReportItem } from "./src/screens/ReportScreen";
+import {
+  ensurePushNotificationSetup,
+  NOTIFICATION_CHANGED_EVENT,
+} from "./src/utils/pushNotifications";
 
 enableScreens(true);
 
@@ -74,6 +82,7 @@ type RootStackParamList = {
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 type IncidentStep = "form" | "confirmed";
 type ReportStep = "list" | "detail";
@@ -637,75 +646,130 @@ function AppSplashScreenWrapper({
 
 /* ===================== APP ROOT ===================== */
 
+function AppNavigator() {
+  const auth = useAuth() as any;
+  const lastHandledNotificationIdRef = useRef<string | null>(null);
+  const pendingOpenNotificationsRef = useRef(false);
+  const [navReady, setNavReady] = useState(false);
+
+  useEffect(() => {
+    ensurePushNotificationSetup().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const openNotificationsFromResponse = (
+      response: Notifications.NotificationResponse | null | undefined
+    ) => {
+      const requestId = response?.notification?.request?.identifier ?? null;
+      if (!requestId || lastHandledNotificationIdRef.current === requestId) return;
+
+      lastHandledNotificationIdRef.current = requestId;
+      pendingOpenNotificationsRef.current = true;
+      DeviceEventEmitter.emit(NOTIFICATION_CHANGED_EVENT);
+    };
+
+    const receivedSub = Notifications.addNotificationReceivedListener(() => {
+      DeviceEventEmitter.emit(NOTIFICATION_CHANGED_EVENT);
+    });
+
+    const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      openNotificationsFromResponse(response);
+    });
+
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        openNotificationsFromResponse(response);
+      })
+      .catch(() => {});
+
+    return () => {
+      receivedSub.remove();
+      responseSub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!pendingOpenNotificationsRef.current) return;
+    if (!auth?.isLoggedIn || !navReady || !navigationRef.isReady()) return;
+
+    pendingOpenNotificationsRef.current = false;
+    navigationRef.navigate("Notifications");
+  }, [auth?.isLoggedIn, navReady]);
+
+  return (
+    <NavigationContainer ref={navigationRef} onReady={() => setNavReady(true)}>
+      <Stack.Navigator
+        id="root-stack"
+        initialRouteName="Splash"
+        screenOptions={{ headerShown: false, gestureEnabled: true }}
+      >
+        <Stack.Screen name="Splash">
+          {({ navigation }) => (
+            <AppSplashScreenWrapper
+              onGoMain={() => navigation.reset({ index: 0, routes: [{ name: "Main" }] })}
+              onGoAdminHome={() =>
+                navigation.reset({ index: 0, routes: [{ name: "AdminHomeScreen" }] })
+              }
+              onGoPin={() => navigation.reset({ index: 0, routes: [{ name: "Pin" }] })}
+              onGoCreatePin={() =>
+                navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] })
+              }
+              onGoOnboarding={() => navigation.replace("OnboardingPager")}
+              onGoAuthFlow={() =>
+                navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })
+              }
+            />
+          )}
+        </Stack.Screen>
+
+        <Stack.Screen name="OnboardingPager">
+          {({ navigation }) => (
+            <OnboardingPagerScreen
+              onDone={() => navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })}
+            />
+          )}
+        </Stack.Screen>
+
+        <Stack.Screen name="AuthFlow">
+          {({ navigation }) => <AuthFlowWrapper navigation={navigation} />}
+        </Stack.Screen>
+
+        <Stack.Screen name="Login">
+          {({ navigation }) => <LoginWrapper navigation={navigation} />}
+        </Stack.Screen>
+
+        <Stack.Screen name="CreatePin">
+          {({ navigation }) => <CreatePinWrapper navigation={navigation} />}
+        </Stack.Screen>
+
+        <Stack.Screen name="Pin">
+          {({ navigation }) => <PinScreenWrapper navigation={navigation} />}
+        </Stack.Screen>
+
+        <Stack.Screen name="Main">
+          {({ navigation, route }) => (
+            <MainScreenWrapper navigation={navigation} route={route} />
+          )}
+        </Stack.Screen>
+
+        <Stack.Screen name="AdminHomeScreen">
+          {({ navigation }) => <AdminHomeWrapper navigation={navigation} />}
+        </Stack.Screen>
+
+        <Stack.Screen name="Notifications">
+          {({ navigation }) => <NotificationsWrapper navigation={navigation} />}
+        </Stack.Screen>
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <NavigationContainer>
-            <Stack.Navigator
-              id="root-stack"
-              initialRouteName="Splash"
-              screenOptions={{ headerShown: false, gestureEnabled: true }}
-            >
-              <Stack.Screen name="Splash">
-                {({ navigation }) => (
-                  <AppSplashScreenWrapper
-                    onGoMain={() => navigation.reset({ index: 0, routes: [{ name: "Main" }] })}
-                    onGoAdminHome={() =>
-                      navigation.reset({ index: 0, routes: [{ name: "AdminHomeScreen" }] })
-                    }
-                    onGoPin={() => navigation.reset({ index: 0, routes: [{ name: "Pin" }] })}
-                    onGoCreatePin={() =>
-                      navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] })
-                    }
-                    onGoOnboarding={() => navigation.replace("OnboardingPager")}
-                    onGoAuthFlow={() =>
-                      navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })
-                    }
-                  />
-                )}
-              </Stack.Screen>
-
-              <Stack.Screen name="OnboardingPager">
-                {({ navigation }) => (
-                  <OnboardingPagerScreen
-                    onDone={() => navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })}
-                  />
-                )}
-              </Stack.Screen>
-
-              <Stack.Screen name="AuthFlow">
-                {({ navigation }) => <AuthFlowWrapper navigation={navigation} />}
-              </Stack.Screen>
-
-              <Stack.Screen name="Login">
-                {({ navigation }) => <LoginWrapper navigation={navigation} />}
-              </Stack.Screen>
-
-              <Stack.Screen name="CreatePin">
-                {({ navigation }) => <CreatePinWrapper navigation={navigation} />}
-              </Stack.Screen>
-
-              <Stack.Screen name="Pin">
-                {({ navigation }) => <PinScreenWrapper navigation={navigation} />}
-              </Stack.Screen>
-
-              <Stack.Screen name="Main">
-                {({ navigation, route }) => (
-                  <MainScreenWrapper navigation={navigation} route={route} />
-                )}
-              </Stack.Screen>
-
-              <Stack.Screen name="AdminHomeScreen">
-                {({ navigation }) => <AdminHomeWrapper navigation={navigation} />}
-              </Stack.Screen>
-
-              <Stack.Screen name="Notifications">
-                {({ navigation }) => <NotificationsWrapper navigation={navigation} />}
-              </Stack.Screen>
-            </Stack.Navigator>
-          </NavigationContainer>
+          <AppNavigator />
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

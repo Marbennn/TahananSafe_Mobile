@@ -20,6 +20,10 @@ import {
   isLoggedIn as isLoggedInFlag,
   clearSession,
 } from "./session";
+import {
+  syncPushTokenForSession,
+  unregisterStoredPushToken,
+} from "../utils/pushNotifications";
 
 export type StoredUser = {
   _id?: string;
@@ -156,6 +160,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    const tokenToClear = accessToken || (await getAccessToken());
+    if (tokenToClear) {
+      await unregisterStoredPushToken(tokenToClear).catch(() => {});
+    }
+
     setAccessTokenState(null);
     setRefreshTokenState(null);
     setUser(null);
@@ -295,6 +304,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshToken?: string;
     user?: StoredUser;
   }) => {
+    const previousToken = accessToken || (await getAccessToken());
+    if (previousToken) {
+      await unregisterStoredPushToken(previousToken).catch(() => {});
+    }
+
     await clearSession().catch(() => {});
 
     await saveTokens({
@@ -335,6 +349,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }),
     [isBooting, accessToken, refreshToken, user]
   );
+
+  useEffect(() => {
+    const currentUserId = String(user?._id ?? user?.id ?? "").trim();
+    if (!accessToken || !currentUserId) return;
+
+    syncPushTokenForSession({ accessToken, userId: currentUserId }).catch(() => {});
+  }, [accessToken, user?._id, user?.id]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

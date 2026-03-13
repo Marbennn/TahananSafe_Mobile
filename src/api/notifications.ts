@@ -69,8 +69,8 @@ async function getUserScopeKeySuffix(): Promise<string> {
 /** ------------------------------
  * Backend helpers
  * ------------------------------ */
-async function authHeaders() {
-  const token = await getAccessToken();
+async function authHeaders(explicitToken?: string | null) {
+  const token = explicitToken || (await getAccessToken());
 
   if (!token) {
     throw new Error("Please login again. (Missing access token)");
@@ -141,6 +141,46 @@ export async function clearAllNotifications(): Promise<void> {
   const url = `${API_BASE_URL}/api/mobile/v1/notifications/clear`;
 
   const res = await fetch(url, { method: "DELETE", headers });
+  const data = await parseJsonSafe(res);
+
+  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
+}
+
+type PushTokenRegistrationPayload = {
+  token: string;
+  platform?: string;
+  deviceName?: string | null;
+};
+
+export async function registerPushToken(
+  payload: PushTokenRegistrationPayload,
+  explicitToken?: string | null
+): Promise<void> {
+  const headers = await authHeaders(explicitToken);
+  const url = `${API_BASE_URL}/api/mobile/v1/notifications/push-token`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const data = await parseJsonSafe(res);
+
+  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
+}
+
+export async function unregisterPushToken(
+  payload: { token: string },
+  explicitToken?: string | null
+): Promise<void> {
+  const headers = await authHeaders(explicitToken);
+  const url = `${API_BASE_URL}/api/mobile/v1/notifications/push-token`;
+
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers,
+    body: JSON.stringify(payload),
+  });
   const data = await parseJsonSafe(res);
 
   if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);

@@ -27,7 +27,6 @@ import HomeScreenLogo from "../../../assets/HomeScreen/NewLogo.svg";
 import FabTutorialOverlay from "../../components/Tutorial/FabTutorialOverlay";
 import { useAuth } from "../../auth/AuthContext";
 import { fetchMyNotifications } from "../../api/notifications";
-import { ensureAdminAlarmNotificationPermissions, showAdminAlarmNotification } from "../../utils/adminAlarmNotifications";
 
 const BG = "#F5FAFE";
 const TEXT_DARK = "#0B2B45";
@@ -364,7 +363,6 @@ const AdminHomeScreen: React.FC<Props> = ({
   // ── Notification badge count ──────────────────────────────────────
   const [notifCount, setNotifCount] = useState(0);
   const [activeAlertCount, setActiveAlertCount] = useState(0);
-  const seenAlertIdsRef = useRef<Set<string>>(new Set());
   const alertsPrimedRef = useRef(false);
   const alertsFetchInFlightRef = useRef(false);
 
@@ -394,21 +392,9 @@ const AdminHomeScreen: React.FC<Props> = ({
       // Active Alerts card: count of alert-type notifications (unread)
       const alertUnread = notifs.filter((n) => n.type === "alert" && n.unread).length;
       setActiveAlertCount(alertUnread);
-      const unreadAlerts = notifs.filter((n) => n.type === "alert" && n.unread);
 
       if (!alertsPrimedRef.current) {
-        seenAlertIdsRef.current = new Set(unreadAlerts.map((n) => n.id));
         alertsPrimedRef.current = true;
-      } else {
-        const nextSeen = new Set(seenAlertIdsRef.current);
-        const newUnreadAlerts = unreadAlerts.filter((n) => !nextSeen.has(n.id));
-
-        for (const alert of newUnreadAlerts) {
-          nextSeen.add(alert.id);
-          await showAdminAlarmNotification(alert).catch(() => {});
-        }
-
-        seenAlertIdsRef.current = nextSeen;
       }
 
       // Cards: only alert-type, latest 3
@@ -437,7 +423,6 @@ const AdminHomeScreen: React.FC<Props> = ({
   }, []);
 
   useEffect(() => {
-    ensureAdminAlarmNotificationPermissions().catch(() => {});
     fetchRecentAlerts();
 
     const intervalId = setInterval(() => {
