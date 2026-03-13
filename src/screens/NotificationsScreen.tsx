@@ -1,5 +1,5 @@
 // src/screens/NotificationsScreen.tsx
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   Alert,
   SectionList,
   Modal,
+  DeviceEventEmitter,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,14 +22,16 @@ import { Colors } from "../theme/colors";
 import { useNavigation } from "@react-navigation/native";
 
 import {
+  syncLocalReportStatusNotifications,
   fetchMyNotificationsCombined,
   markAllNotificationsReadCombined,
   toggleNotificationReadCombined,
   clearAllNotificationsCombined,
-  deleteNotificationCombined, // ✅ ADD THIS
+  deleteNotificationCombined,
   type NotificationItem,
   type NotifType,
 } from "../api/notifications";
+import { requestJson } from "../api/http";
 
 import { getAccessToken } from "../auth/session";
 import type { ReportItem } from "./ReportScreen";
@@ -78,11 +81,11 @@ function formatTimeLabel(isoOrAny: string) {
   const hh = h % 12 === 0 ? 12 : h % 12;
   const time = `${hh}:${pad2(m)} ${ampm}`;
 
-  if (isSameDay) return `Today • ${time}`;
-  if (isYesterday) return `Yesterday • ${time}`;
+  if (isSameDay) return `Today - ${time}`;
+  if (isYesterday) return `Yesterday - ${time}`;
 
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${months[d.getMonth()]} ${d.getDate()} • ${time}`;
+  return `${months[d.getMonth()]} ${d.getDate()} - ${time}`;
 }
 
 function groupLabelFromDate(isoOrAny: string) {
@@ -122,7 +125,7 @@ function groupLabelFromDate(isoOrAny: string) {
   return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
-// ✅ Use your Expo .env variable (ngrok or LAN IP)
+// Use your Expo .env variable (ngrok or LAN IP)
 function getApiBaseUrl() {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
 
@@ -139,7 +142,14 @@ const API_BASE_URL = getApiBaseUrl();
 function normalizeStatus(dbStatus?: string): ReportItem["status"] {
   const s = String(dbStatus ?? "").trim().toLowerCase();
   if (s === "submitted" || s === "pending") return "PENDING";
-  if (s === "reviewing" || s === "ongoing" || s === "on going" || s === "in_progress" || s === "in progress")
+  if (
+    s === "reviewing" ||
+    s === "ongoing" ||
+    s === "on going" ||
+    s === "on-going" ||
+    s === "in_progress" ||
+    s === "in progress"
+  )
     return "ONGOING";
   if (s === "cancelled" || s === "canceled") return "CANCELLED";
   if (s === "resolved" || s === "done" || s === "completed") return "RESOLVED";
@@ -165,7 +175,7 @@ async function parseJsonSafe(res: Response) {
   }
 }
 
-// ✅ Fetch report detail (owned by user)
+// Fetch report detail (owned by user)
 // GET /api/mobile/v1/reports/:id  -> { report: incident }
 async function fetchMyReportDetailAsReportItem(incidentId: string): Promise<ReportItem> {
   const token = await getAccessToken();
@@ -188,10 +198,10 @@ async function fetchMyReportDetailAsReportItem(incidentId: string): Promise<Repo
 
   const id = String(doc?._id ?? doc?.id ?? "");
   const incidentType = String(doc?.incidentType ?? "") || "Incident Report";
-  const details = String(doc?.details ?? "") || "—";
+  const details = String(doc?.details ?? "") || "-";
   const offenderName = String(doc?.offenderName ?? "");
-  const dateLeft = String(doc?.dateStr ?? "") || "—";
-  const timeLeft = String(doc?.timeStr ?? "") || "—";
+  const dateLeft = String(doc?.dateStr ?? "") || "-";
+  const timeLeft = String(doc?.timeStr ?? "") || "-";
 
   const createdAtIso = doc?.createdAt ? String(doc.createdAt) : "";
   const updatedAtIso = doc?.updatedAt ? String(doc.updatedAt) : "";
@@ -207,8 +217,8 @@ async function fetchMyReportDetailAsReportItem(incidentId: string): Promise<Repo
     detail: details,
     dateLeft,
     timeLeft,
-    dateRight: "—",
-    timeRight: "—",
+    dateRight: "-",
+    timeRight: "-",
     status: normalizeStatus(doc?.status),
     witnessName: doc?.witnessName ? String(doc.witnessName) : "",
     witnessType: doc?.witnessType ? String(doc.witnessType) : "",
@@ -231,6 +241,7 @@ type NotifVM = NotificationItem & {
 };
 
 type SectionT = { title: string; data: NotifVM[]; sortKey: number };
+const NOTIF_CHANGED_EVENT = "tahanan:notifChanged";
 
 export default function NotificationsScreen({ onBack }: Props) {
   const insets = useSafeAreaInsets();
@@ -260,13 +271,56 @@ export default function NotificationsScreen({ onBack }: Props) {
   // Long-press menu (per item)
   const [itemMenuOpen, setItemMenuOpen] = useState(false);
   const [itemMenu, setItemMenu] = useState<NotifVM | null>(null);
+  const refreshInFlightRef = useRef(false);
+  const lastReportSyncAtRef = useRef(0);
 
   const unreadCount = useMemo(() => items.filter((i) => i.unread).length, [items]);
 
+  const fetchReportStatusSnapshot = useCallback(async () => {
+    try {
+      const data: any = await requestJson({
+        method: "GET",
+        path: "/api/mobile/v1/reports/my",
+        auth: true,
+      });
+
+      const rawList = Array.isArray(data) ? data : data?.incidents ?? [];
+      if (!Array.isArray(rawList) || rawList.length === 0) return [];
+
+      return rawList.map((doc: any) => ({
+        id: String(doc?._id ?? doc?.id ?? "").trim(),
+        title: String(doc?.incidentType ?? "Incident Report"),
+        status: normalizeStatus(doc?.status),
+        createdAt: doc?.createdAt ? String(doc.createdAt) : undefined,
+        updatedAt: doc?.updatedAt ? String(doc.updatedAt) : undefined,
+      }));
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const syncStatusesFromReports = useCallback(async (force = false) => {
+    try {
+      const now = Date.now();
+      if (!force && now - lastReportSyncAtRef.current < 180000) return;
+
+      const snapshot = await fetchReportStatusSnapshot();
+      if (!Array.isArray(snapshot) || snapshot.length === 0) return;
+
+      await syncLocalReportStatusNotifications(snapshot);
+      lastReportSyncAtRef.current = now;
+    } catch {
+      // Keep Notifications screen usable even if report sync fails.
+    }
+  }, [fetchReportStatusSnapshot]);
+
   const load = useCallback(async () => {
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
     try {
       setErrorMsg("");
       setLoading(true);
+      await syncStatusesFromReports(true);
       const list = await fetchMyNotificationsCombined(80);
 
       const mapped: NotifVM[] = list.map((n) => {
@@ -287,17 +341,23 @@ export default function NotificationsScreen({ onBack }: Props) {
       setItems([]);
     } finally {
       setLoading(false);
+      refreshInFlightRef.current = false;
     }
-  }, []);
+  }, [syncStatusesFromReports]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const onRefresh = useCallback(async () => {
+  const onRefresh = useCallback(async (opts?: { withStatusSync?: boolean }) => {
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
     try {
       setRefreshing(true);
       setErrorMsg("");
+      if (opts?.withStatusSync !== false) {
+        await syncStatusesFromReports();
+      }
       const list = await fetchMyNotificationsCombined(80);
 
       const mapped: NotifVM[] = list.map((n) => {
@@ -317,8 +377,23 @@ export default function NotificationsScreen({ onBack }: Props) {
       setErrorMsg(e?.message ? String(e.message) : "Failed to refresh notifications.");
     } finally {
       setRefreshing(false);
+      refreshInFlightRef.current = false;
     }
-  }, []);
+  }, [syncStatusesFromReports]);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(NOTIF_CHANGED_EVENT, () => {
+      onRefresh({ withStatusSync: false }).catch(() => {});
+    });
+    return () => sub.remove();
+  }, [onRefresh]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      onRefresh({ withStatusSync: false }).catch(() => {});
+    }, 120000);
+    return () => clearInterval(id);
+  }, [onRefresh]);
 
   const applyFilter = useCallback(
     (list: NotifVM[]) => {
@@ -395,7 +470,8 @@ export default function NotificationsScreen({ onBack }: Props) {
         onPress: async () => {
           try {
             setItems([]);
-            await clearAllNotificationsCombined();
+            const snapshot = await fetchReportStatusSnapshot();
+            await clearAllNotificationsCombined(snapshot);
           } catch (e: any) {
             await load();
             setErrorMsg(e?.message ? String(e.message) : "Failed to clear notifications.");
@@ -403,7 +479,7 @@ export default function NotificationsScreen({ onBack }: Props) {
         },
       },
     ]);
-  }, [load]);
+  }, [fetchReportStatusSnapshot, load]);
 
   // -------- Per-item actions (long press) --------
   const openItemMenu = useCallback((n: NotifVM) => {
@@ -436,7 +512,7 @@ export default function NotificationsScreen({ onBack }: Props) {
     }
   }, [closeItemMenu, itemMenu, load, setUnreadLocal]);
 
-  // ✅ FIXED: delete = remove locally + call deleteNotificationCombined (local/remote)
+  // delete = remove locally + call deleteNotificationCombined (local/remote)
   const deleteSingleFromMenu = useCallback(async () => {
     const n = itemMenu;
     if (!n) return;
@@ -553,7 +629,7 @@ export default function NotificationsScreen({ onBack }: Props) {
                 </View>
               )}
             </View>
-            <Text style={styles.subTitle}>Tap to open • Long press for actions</Text>
+            <Text style={styles.subTitle}>Tap to open - Long press for actions</Text>
           </View>
 
           <Pressable
@@ -607,10 +683,7 @@ export default function NotificationsScreen({ onBack }: Props) {
         {loading ? (
           <View style={styles.centerBox}>
             <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.centerHint}>Loading notifications…</Text>
-            <Text style={styles.smallHint} numberOfLines={2}>
-              {Platform.OS === "android" ? "Android" : "iOS"} • combined (local + backend)
-            </Text>
+            <Text style={styles.centerHint}>Loading Notifications</Text>
           </View>
         ) : errorMsg ? (
           <View style={styles.centerBox}>
@@ -632,7 +705,7 @@ export default function NotificationsScreen({ onBack }: Props) {
                 <View style={styles.emptyCard}>
                   <Ionicons name="notifications-off-outline" size={scale(30)} color="#94A3B8" />
                   <Text style={styles.emptyTitle}>No notifications</Text>
-                  <Text style={styles.emptyText}>You don’t have any notifications yet.</Text>
+                  <Text style={styles.emptyText}>You don't have any notifications yet.</Text>
                 </View>
               ) : null
             }
@@ -797,7 +870,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     topBar: {
       paddingHorizontal: scale(14),
 
-      // ✅ CHANGED: push the whole header down a bit
+      // CHANGED: push the whole header down a bit
       // was: paddingTop: vscale(6)
       paddingTop: vscale(14),
 

@@ -26,7 +26,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // ✅ NEW: refresh when Home regains focus
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 
 import { Colors } from "../theme/colors";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
@@ -55,7 +55,11 @@ import type { ReportItem } from "./ReportScreen";
 import { closeAndRemoveFromRecents } from "../utils/hideApp";
 
 // ✅ NEW: Use same API as NotificationsScreen (source of truth)
-import { fetchMyNotificationsCombined, sendSosAlert } from "../api/notifications";
+import {
+  fetchMyNotificationsCombined,
+  sendSosAlert,
+  syncLocalReportStatusNotifications,
+} from "../api/notifications";
 
 // ✅ FIX: Use requestJson with auth for auto token refresh
 import { requestJson } from "../api/http";
@@ -209,6 +213,7 @@ export default function HomeScreen({
 }: Props) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
+  const isFocused = useIsFocused();
 
   const { s, fs } = useMemo(() => makeScale(width, height), [width, height]);
 
@@ -400,33 +405,68 @@ export default function HomeScreen({
   // ✅ Notifications badge logic (UPDATED to auto-refresh)
   // =========================
   const [notifCount, setNotifCount] = useState<number>(0);
+  const notifFetchInFlightRef = useRef(false);
+  const lastNotifFetchAtRef = useRef(0);
+  const lastStatusSyncAtRef = useRef(0);
 
-  const countUnreadFromList = useCallback((list: any[]) => {
-    return list.reduce((acc, n) => {
-      const isRead = n?.isRead === true || n?.read === true || n?.seen === true;
-      return acc + (isRead ? 0 : 1);
-    }, 0);
-  }, []);
-
-  const fetchNotifCount = useCallback(async () => {
+  const syncStatusesForNotifBadge = useCallback(async () => {
     try {
-      const list = await fetchMyNotificationsCombined(80);
-      const unread = list.filter((n) => n.unread).length;
-      setNotifCount(unread > 0 ? unread : 0);
+      const data: any = await requestJson({
+        method: "GET",
+        path: "/api/mobile/v1/reports/my",
+        auth: true,
+      });
+
+      const rawList = Array.isArray(data) ? data : data?.incidents ?? [];
+      if (!Array.isArray(rawList) || rawList.length === 0) return;
+
+      await syncLocalReportStatusNotifications(
+        rawList.map((doc: any) => ({
+          id: String(doc?._id ?? doc?.id ?? "").trim(),
+          title: String(doc?.incidentType ?? "Incident Report"),
+          status: normalizeStatus(doc?.status),
+          createdAt: doc?.createdAt ? String(doc.createdAt) : undefined,
+          updatedAt: doc?.updatedAt ? String(doc.updatedAt) : undefined,
+        }))
+      );
     } catch {
-      setNotifCount(0);
+      // Keep badge fetch resilient even if report sync fails.
     }
   }, []);
 
+  const fetchNotifCount = useCallback(async (opts?: { force?: boolean; withStatusSync?: boolean }) => {
+    const force = !!opts?.force;
+    const withStatusSync = opts?.withStatusSync !== false;
+    const now = Date.now();
+
+    if (!force && now - lastNotifFetchAtRef.current < 15000) return;
+    if (notifFetchInFlightRef.current) return;
+    notifFetchInFlightRef.current = true;
+    try {
+      if (withStatusSync && now - lastStatusSyncAtRef.current >= 180000) {
+        await syncStatusesForNotifBadge();
+        lastStatusSyncAtRef.current = now;
+      }
+      const list = await fetchMyNotificationsCombined(80);
+      const unread = list.filter((n) => n.unread).length;
+      setNotifCount(unread > 0 ? unread : 0);
+      lastNotifFetchAtRef.current = Date.now();
+    } catch {
+      setNotifCount(0);
+    } finally {
+      notifFetchInFlightRef.current = false;
+    }
+  }, [syncStatusesForNotifBadge]);
+
   useEffect(() => {
-    fetchNotifCount();
+    fetchNotifCount({ force: true, withStatusSync: true });
   }, [fetchNotifCount]);
 
   useEffect(() => {
     let mounted = true;
     const onChange = (state: AppStateStatus) => {
       if (!mounted) return;
-      if (state === "active") fetchNotifCount();
+      if (state === "active") fetchNotifCount({ force: true, withStatusSync: true });
     };
     const sub = AppState.addEventListener("change", onChange);
     return () => {
@@ -437,14 +477,14 @@ export default function HomeScreen({
 
   useFocusEffect(
     useCallback(() => {
-      fetchNotifCount();
+      fetchNotifCount({ force: true, withStatusSync: true });
       return () => {};
     }, [fetchNotifCount])
   );
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(NOTIF_CHANGED_EVENT, () => {
-      fetchNotifCount();
+      fetchNotifCount({ force: true, withStatusSync: false });
     });
     return () => sub.remove();
   }, [fetchNotifCount]);
@@ -453,12 +493,12 @@ export default function HomeScreen({
     useCallback(() => {
       let alive = true;
 
-      fetchNotifCount();
+      fetchNotifCount({ force: true, withStatusSync: false });
 
       const id = setInterval(() => {
         if (!alive) return;
-        fetchNotifCount();
-      }, 15000);
+        fetchNotifCount({ withStatusSync: true });
+      }, 120000);
 
       return () => {
         alive = false;
@@ -494,7 +534,15 @@ export default function HomeScreen({
       });
 
       const rawList = Array.isArray(json) ? json : json?.incidents ?? [];
-      const mapped: ReportItem[] = rawList.map((doc: any) => {
+      const topReportsRaw = [...rawList]
+        .sort((a: any, b: any) => {
+          const ta = new Date(String(a?.createdAt ?? 0)).getTime();
+          const tb = new Date(String(b?.createdAt ?? 0)).getTime();
+          return (tb || 0) - (ta || 0);
+        })
+        .slice(0, 2);
+
+      const mapped: ReportItem[] = topReportsRaw.map((doc: any) => {
         const id = String(doc?._id ?? doc?.id ?? "");
         const incidentType = String(doc?.incidentType ?? "");
         const details = String(doc?.details ?? "");
@@ -559,13 +607,7 @@ export default function HomeScreen({
         } as ReportItem;
       });
 
-      mapped.sort((a, b) => {
-        const ta = new Date(a.createdAt || 0).getTime();
-        const tb = new Date(b.createdAt || 0).getTime();
-        return tb - ta;
-      });
-
-      setRecentReports(mapped.slice(0, 2));
+      setRecentReports(mapped);
     } catch {
       // ✅ On error (including session expired), just clear reports silently
       setRecentReports([]);
@@ -618,33 +660,74 @@ export default function HomeScreen({
 
   const SHEET_HEIGHT = useMemo(() => clamp(Math.round(height * 0.34), 250, 340), [height]);
   const sheetY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
+  const sheetAnimatingRef = useRef(false);
 
   const chevronOpen = useRef(new Animated.Value(0)).current;
   const chevronBounce = useRef(new Animated.Value(0)).current;
+  const chevronBounceLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   // ✅ Backdrop opacity animation
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
   const startChevronBounce = useCallback(() => {
+    if (chevronBounceLoopRef.current) return;
+
     chevronBounce.setValue(0);
-    Animated.loop(
+    const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(chevronBounce, { toValue: -1, duration: 650, useNativeDriver: true }),
         Animated.timing(chevronBounce, { toValue: 0, duration: 650, useNativeDriver: true }),
       ])
-    ).start();
+    );
+    chevronBounceLoopRef.current = loop;
+    loop.start();
   }, [chevronBounce]);
 
   const stopChevronBounce = useCallback(() => {
+    if (chevronBounceLoopRef.current) {
+      chevronBounceLoopRef.current.stop();
+      chevronBounceLoopRef.current = null;
+    }
     chevronBounce.stopAnimation(() => chevronBounce.setValue(0));
   }, [chevronBounce]);
 
   useEffect(() => {
+    if (!isFocused) {
+      stopChevronBounce();
+      sheetAnimatingRef.current = false;
+      sheetY.stopAnimation();
+      chevronOpen.stopAnimation();
+      backdropOpacity.stopAnimation();
+      sheetY.setValue(SHEET_HEIGHT);
+      chevronOpen.setValue(0);
+      backdropOpacity.setValue(0);
+      if (sheetOpen) setSheetOpen(false);
+      return;
+    }
+
     if (!sheetOpen) startChevronBounce();
     else stopChevronBounce();
-  }, [sheetOpen, startChevronBounce, stopChevronBounce]);
+
+    return () => {
+      stopChevronBounce();
+    };
+  }, [
+    isFocused,
+    sheetOpen,
+    startChevronBounce,
+    stopChevronBounce,
+    sheetY,
+    chevronOpen,
+    backdropOpacity,
+    SHEET_HEIGHT,
+  ]);
 
   const openSheet = useCallback(() => {
+    if (!isFocused) return;
+    if (sheetOpen) return;
+    if (sheetAnimatingRef.current) return;
+    sheetAnimatingRef.current = true;
+
     sheetY.stopAnimation();
     chevronOpen.stopAnimation();
     backdropOpacity.stopAnimation();
@@ -675,10 +758,16 @@ export default function HomeScreen({
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
-    ]).start();
-  }, [sheetY, chevronOpen, backdropOpacity, SHEET_HEIGHT]);
+    ]).start(() => {
+      sheetAnimatingRef.current = false;
+    });
+  }, [isFocused, sheetOpen, sheetY, chevronOpen, backdropOpacity, SHEET_HEIGHT]);
 
   const closeSheet = useCallback(() => {
+    if (!sheetOpen && !sheetAnimatingRef.current) return;
+    if (sheetAnimatingRef.current) return;
+    sheetAnimatingRef.current = true;
+
     sheetY.stopAnimation();
     chevronOpen.stopAnimation();
     backdropOpacity.stopAnimation();
@@ -703,6 +792,7 @@ export default function HomeScreen({
         useNativeDriver: true,
       }),
     ]).start(({ finished }) => {
+      sheetAnimatingRef.current = false;
       if (finished) {
         sheetY.setValue(SHEET_HEIGHT);
         chevronOpen.setValue(0);
@@ -710,7 +800,7 @@ export default function HomeScreen({
         setSheetOpen(false);
       }
     });
-  }, [sheetY, SHEET_HEIGHT, chevronOpen, backdropOpacity]);
+  }, [sheetOpen, sheetY, SHEET_HEIGHT, chevronOpen, backdropOpacity]);
 
   const handlePan = useRef(
     PanResponder.create({

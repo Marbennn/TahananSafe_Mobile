@@ -1,5 +1,5 @@
 // src/api/notifications.ts
-import { Platform } from "react-native";
+import { DeviceEventEmitter, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAccessToken } from "../auth/session";
 
@@ -175,7 +175,7 @@ export async function deleteNotification(id: string): Promise<void> {
 }
 
 /**
- * ✅ Existing helper (kept)
+ * âœ… Existing helper (kept)
  * GET /api/mobile/v1/reports/:id
  * Returns: { report: incident }
  */
@@ -199,13 +199,32 @@ export async function fetchMyReportDetailById(reportId: string): Promise<any | n
 }
 
 /** ------------------------------
- * ✅ LOCAL (AsyncStorage) notifications (USER-SCOPED)
+ * âœ… LOCAL (AsyncStorage) notifications (USER-SCOPED)
  * ------------------------------ */
 
 type StatusCache = Record<string, string>; // reportId -> lastKnownStatus
+const NOTIFICATION_CHANGED_EVENT = "tahanan:notifChanged";
+type ReportStatusSnapshotItem = { id: string; status?: string };
+
+function normalizeStatusKey(s?: string) {
+  const x = String(s ?? "").trim().toLowerCase();
+  if (x === "submitted" || x === "pending") return "PENDING";
+  if (
+    x === "ongoing" ||
+    x === "on going" ||
+    x === "on-going" ||
+    x === "in_progress" ||
+    x === "in progress" ||
+    x === "reviewing"
+  )
+    return "ONGOING";
+  if (x === "cancelled" || x === "canceled") return "CANCELLED";
+  if (x === "resolved" || x === "done" || x === "completed") return "RESOLVED";
+  return String(s ?? "").trim().toUpperCase();
+}
 
 function statusLabel(s?: string) {
-  const x = String(s ?? "").toUpperCase();
+  const x = normalizeStatusKey(s);
   if (x === "PENDING") return "Pending";
   if (x === "ONGOING") return "On going";
   if (x === "CANCELLED") return "Cancelled";
@@ -236,6 +255,7 @@ async function localKeys() {
   return {
     notifs: `tahanansafe_local_notifications_v1_${suf}`,
     status: `tahanansafe_report_status_cache_v1_${suf}`,
+    clearedBefore: `tahanansafe_notifications_cleared_before_v1_${suf}`,
   };
 }
 
@@ -261,8 +281,32 @@ async function setStatusCache(cache: StatusCache): Promise<void> {
   await writeJsonSafe(status, cache);
 }
 
+async function getClearedBeforeMs(): Promise<number> {
+  const { clearedBefore } = await localKeys();
+  const raw = await readJsonSafe<any>(clearedBefore, 0);
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+async function setClearedBeforeMs(ms: number): Promise<void> {
+  const { clearedBefore } = await localKeys();
+  await writeJsonSafe(clearedBefore, ms);
+}
+
+function buildStatusCacheFromSnapshot(snapshot: ReportStatusSnapshotItem[]): StatusCache {
+  const seeded: StatusCache = {};
+  for (const r of snapshot) {
+    const reportId = String((r as any)?.id ?? "").trim();
+    if (!reportId) continue;
+    const status = normalizeStatusKey((r as any)?.status);
+    if (!status) continue;
+    seeded[reportId] = status;
+  }
+  return seeded;
+}
+
 /**
- * ✅ Call this from ReportScreen right after you fetch the latest reports list.
+ * âœ… Call this from ReportScreen right after you fetch the latest reports list.
  * It will create local notifications for any status changes.
  */
 export async function syncLocalReportStatusNotifications(
@@ -282,13 +326,35 @@ export async function syncLocalReportStatusNotifications(
     const reportId = String((r as any)?.id ?? "").trim();
     if (!reportId) continue;
 
-    const newStatus = String((r as any)?.status ?? "").trim().toUpperCase();
+    const newStatus = normalizeStatusKey((r as any)?.status);
     if (!newStatus) continue;
 
-    const oldStatus = String(prevCache[reportId] ?? "").trim().toUpperCase();
+    const oldStatus = normalizeStatusKey(prevCache[reportId] ?? "");
 
     if (!oldStatus) {
       nextCache[reportId] = newStatus;
+
+      // Catch-up notification: if first seen state is already non-pending,
+      // surface it once so users don't miss status changes.
+      if (newStatus !== "PENDING") {
+        const title = String((r as any)?.title ?? "Incident Report");
+        const timeIso = new Date().toISOString();
+        const notifId = `local-report-status-${reportId}-${timeIso}`;
+        if (!localIds.has(notifId)) {
+          const notif: NotificationItem = {
+            id: notifId,
+            type: "report",
+            title: "Report status updated",
+            message: `Your report "${title}" is now ${statusLabel(newStatus)}.`,
+            time: timeIso,
+            unread: true,
+            incidentId: reportId,
+            meta: { newStatus },
+          };
+          newNotifs.push(notif);
+          localIds.add(notifId);
+        }
+      }
       continue;
     }
 
@@ -322,16 +388,18 @@ export async function syncLocalReportStatusNotifications(
   if (newNotifs.length > 0) {
     const merged = [...newNotifs, ...existingLocal].slice(0, 200);
     await setLocalNotifications(merged);
+    DeviceEventEmitter.emit(NOTIFICATION_CHANGED_EVENT);
   }
 
   await setStatusCache(nextCache);
 }
 
 /**
- * ✅ Combined (remote + local)
+ * âœ… Combined (remote + local)
  */
 export async function fetchMyNotificationsCombined(limit = 80): Promise<NotificationItem[]> {
   const [remote, local] = await Promise.all([fetchMyNotifications(limit), getLocalNotifications()]);
+  const clearedBeforeMs = await getClearedBeforeMs();
 
   const all = [...local, ...remote];
 
@@ -344,13 +412,20 @@ export async function fetchMyNotificationsCombined(limit = 80): Promise<Notifica
     deduped.push(n);
   }
 
-  deduped.sort((a, b) => {
+  const filtered = deduped.filter((n) => {
+    if (clearedBeforeMs <= 0) return true;
+    const ts = new Date(n.time).getTime();
+    if (!Number.isFinite(ts) || ts <= 0) return true;
+    return ts > clearedBeforeMs;
+  });
+
+  filtered.sort((a, b) => {
     const ta = new Date(a.time).getTime();
     const tb = new Date(b.time).getTime();
     return (tb || 0) - (ta || 0);
   });
 
-  return deduped.slice(0, limit);
+  return filtered.slice(0, limit);
 }
 
 export async function markAllNotificationsReadCombined(): Promise<void> {
@@ -377,7 +452,7 @@ export async function toggleNotificationReadCombined(id: string): Promise<Notifi
   return await toggleNotificationRead(id);
 }
 
-// ✅ NEW: delete single notification (combined)
+// âœ… NEW: delete single notification (combined)
 export async function deleteNotificationCombined(id: string): Promise<void> {
   const sid = String(id);
 
@@ -393,8 +468,19 @@ export async function deleteNotificationCombined(id: string): Promise<void> {
   await deleteNotification(sid);
 }
 
-export async function clearAllNotificationsCombined(): Promise<void> {
+export async function clearAllNotificationsCombined(
+  reportStatusSnapshot?: ReportStatusSnapshotItem[]
+): Promise<void> {
+  const clearedAt = Date.now();
   await setLocalNotifications([]);
-  await setStatusCache({});
+  await setClearedBeforeMs(clearedAt);
+
+  if (Array.isArray(reportStatusSnapshot) && reportStatusSnapshot.length > 0) {
+    await setStatusCache(buildStatusCacheFromSnapshot(reportStatusSnapshot));
+  } else {
+    await setStatusCache({});
+  }
+
   await clearAllNotifications();
+  DeviceEventEmitter.emit(NOTIFICATION_CHANGED_EVENT);
 }

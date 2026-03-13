@@ -27,6 +27,7 @@ npx expo install expo-local-authentication expo-secure-store
 winget install Cloudflare.cloudflared
 # then start CloudFlared server
 cloudflared tunnel --url http://localhost:8000
+cloudflared tunnel run tahanansafe-api
 # For Instaling Pre Build
 cd C:\Users\INTEL\OneDrive\Documents\GitHub\TahananSafe_Mobile
 
