@@ -26,6 +26,10 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 
+.gradle-user-home/
+.android-user-home/
+
+
 # macOS
 .DS_Store
 *.pem
