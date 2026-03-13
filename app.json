@@ -16,7 +16,9 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSFaceIDUsageDescription": "Use Face ID to login securely.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSSpeechRecognitionUsageDescription": "Allow TahananSafe to use speech recognition.",
+        "NSMicrophoneUsageDescription": "Allow TahananSafe to use the microphone."
       },
       "bundleIdentifier": "com.angelgeloo0918.firstproject"
     },
@@ -27,7 +29,10 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.angelgeloo0918.firstproject",
-      "googleServicesFile": "./android/app/google-services.json"
+      "googleServicesFile": "./android/app/google-services.json",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -46,8 +51,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "d1348907-6805-42cd-bd5c-e86fef9033f7"
+        "projectId": "06c77f92-0898-48a9-984e-ed13482ced03"
       }
-    }
+    },
+    "owner": "angelgeloo0918"
   }
 }
