@@ -14,11 +14,13 @@ import {
   Easing,
   ActivityIndicator,
   AppState,
+  InteractionManager,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useIsFocused } from "@react-navigation/native";
 
 import { Colors } from "../../theme/colors";
 import AdminBotNav, { TabKey } from "../../components/AdminComponents/AdminBotNav";
@@ -33,7 +35,7 @@ const BG = "#F5FAFE";
 const TEXT_DARK = "#0B2B45";
 
 const ADMIN_TUTORIAL_KEY = "tahanansafe_admin_fab_tutorial_seen_v1";
-const NOTIFICATION_POLL_MS = 10000;
+const NOTIFICATION_POLL_MS = 60000;
 
 type ReportItem = {
   id: string;
@@ -111,6 +113,8 @@ const AdminHomeScreen: React.FC<Props> = ({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { s, fs } = useMemo(() => makeScale(width, height), [width, height]);
+  const isFocused = useIsFocused();
+  const isFocusedRef = useRef(isFocused);
   const { logout } = useAuth() as any;
 
   const [activeTab, setActiveTab] = useState<TabKey>("Home");
@@ -168,28 +172,37 @@ const AdminHomeScreen: React.FC<Props> = ({
   const sheetY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const chevronOpen = useRef(new Animated.Value(0)).current;
-  const chevronBounce = useRef(new Animated.Value(0)).current;
-
-  const startChevronBounce = useCallback(() => {
-    chevronBounce.setValue(0);
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(chevronBounce, { toValue: -1, duration: 650, useNativeDriver: true }),
-        Animated.timing(chevronBounce, { toValue: 0, duration: 650, useNativeDriver: true }),
-      ])
-    ).start();
-  }, [chevronBounce]);
-
-  const stopChevronBounce = useCallback(() => {
-    chevronBounce.stopAnimation(() => chevronBounce.setValue(0));
-  }, [chevronBounce]);
+  const sheetOpenRef = useRef(false);
+  const sheetAnimatingRef = useRef(false);
 
   useEffect(() => {
-    if (!sheetOpen) startChevronBounce();
-    else stopChevronBounce();
-  }, [sheetOpen, startChevronBounce, stopChevronBounce]);
+    isFocusedRef.current = isFocused;
+  }, [isFocused]);
+
+  useEffect(() => {
+    sheetOpenRef.current = sheetOpen;
+  }, [sheetOpen]);
+
+  useEffect(() => {
+    if (!isFocused) {
+      sheetAnimatingRef.current = false;
+      sheetOpenRef.current = false;
+      sheetY.stopAnimation();
+      chevronOpen.stopAnimation();
+      backdropOpacity.stopAnimation();
+      sheetY.setValue(SHEET_HEIGHT);
+      chevronOpen.setValue(0);
+      backdropOpacity.setValue(0);
+      if (sheetOpen) setSheetOpen(false);
+    }
+  }, [isFocused, sheetOpen, sheetY, chevronOpen, backdropOpacity, SHEET_HEIGHT]);
 
   const openSheet = useCallback(() => {
+    if (!isFocusedRef.current) return;
+    if (sheetOpenRef.current) return;
+    if (sheetAnimatingRef.current) return;
+    sheetAnimatingRef.current = true;
+
     sheetY.stopAnimation();
     chevronOpen.stopAnimation();
     backdropOpacity.stopAnimation();
@@ -197,6 +210,7 @@ const AdminHomeScreen: React.FC<Props> = ({
     sheetY.setValue(SHEET_HEIGHT);
     chevronOpen.setValue(0);
     backdropOpacity.setValue(0);
+    sheetOpenRef.current = true;
     setSheetOpen(true);
 
     Animated.parallel([
@@ -204,10 +218,12 @@ const AdminHomeScreen: React.FC<Props> = ({
         toValue: 1,
         duration: 140,
         easing: Easing.out(Easing.quad),
+        isInteraction: false,
         useNativeDriver: true,
       }),
       Animated.spring(sheetY, {
         toValue: 0,
+        isInteraction: false,
         useNativeDriver: true,
         damping: 18,
         stiffness: 220,
@@ -217,12 +233,19 @@ const AdminHomeScreen: React.FC<Props> = ({
         toValue: 1,
         duration: 220,
         easing: Easing.out(Easing.quad),
+        isInteraction: false,
         useNativeDriver: true,
       }),
-    ]).start();
+    ]).start(() => {
+      sheetAnimatingRef.current = false;
+    });
   }, [sheetY, chevronOpen, backdropOpacity, SHEET_HEIGHT]);
 
   const closeSheet = useCallback(() => {
+    if (!sheetOpenRef.current && !sheetAnimatingRef.current) return;
+    if (sheetAnimatingRef.current) return;
+    sheetAnimatingRef.current = true;
+
     sheetY.stopAnimation();
     chevronOpen.stopAnimation();
     backdropOpacity.stopAnimation();
@@ -232,22 +255,27 @@ const AdminHomeScreen: React.FC<Props> = ({
         toValue: 0,
         duration: 120,
         easing: Easing.in(Easing.quad),
+        isInteraction: false,
         useNativeDriver: true,
       }),
       Animated.timing(sheetY, {
         toValue: SHEET_HEIGHT,
         duration: 220,
         easing: Easing.out(Easing.cubic),
+        isInteraction: false,
         useNativeDriver: true,
       }),
       Animated.timing(chevronOpen, {
         toValue: 0,
         duration: 160,
         easing: Easing.inOut(Easing.quad),
+        isInteraction: false,
         useNativeDriver: true,
       }),
     ]).start(({ finished }) => {
+      sheetAnimatingRef.current = false;
       if (finished) {
+        sheetOpenRef.current = false;
         sheetY.setValue(SHEET_HEIGHT);
         chevronOpen.setValue(0);
         backdropOpacity.setValue(0);
@@ -276,10 +304,12 @@ const AdminHomeScreen: React.FC<Props> = ({
               toValue: 1,
               duration: 120,
               easing: Easing.out(Easing.quad),
+              isInteraction: false,
               useNativeDriver: true,
             }),
             Animated.spring(sheetY, {
               toValue: 0,
+              isInteraction: false,
               useNativeDriver: true,
               damping: 18,
               stiffness: 220,
@@ -289,6 +319,7 @@ const AdminHomeScreen: React.FC<Props> = ({
               toValue: 1,
               duration: 190,
               easing: Easing.out(Easing.quad),
+              isInteraction: false,
               useNativeDriver: true,
             }),
           ]).start();
@@ -328,7 +359,7 @@ const AdminHomeScreen: React.FC<Props> = ({
   );
 
   const chevronRotate = chevronOpen.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] });
-  const bounceY = chevronBounce.interpolate({ inputRange: [-1, 0], outputRange: [-4, 0] });
+  const bounceY = 0;
   const chevronScale = chevronOpen.interpolate({ inputRange: [0, 1], outputRange: [1, 0.98] });
 
   // ── Tab handler ───────────────────────────────────────────────────
@@ -367,6 +398,7 @@ const AdminHomeScreen: React.FC<Props> = ({
   const seenAlertIdsRef = useRef<Set<string>>(new Set());
   const alertsPrimedRef = useRef(false);
   const alertsFetchInFlightRef = useRef(false);
+  const lastAlertsFetchAtRef = useRef(0);
 
   // ── Static admin data ─────────────────────────────────────────────
   const stats: StatCard[] = useMemo(() => [
@@ -378,7 +410,10 @@ const AdminHomeScreen: React.FC<Props> = ({
   const [recentAlerts, setRecentAlerts] = useState<ReportItem[]>([]);
   const [loadingAlerts, setLoadingAlerts] = useState(false);
 
-  const fetchRecentAlerts = useCallback(async () => {
+  const fetchRecentAlerts = useCallback(async (opts?: { force?: boolean }) => {
+    const force = !!opts?.force;
+    const now = Date.now();
+    if (!force && now - lastAlertsFetchAtRef.current < 15000) return;
     if (alertsFetchInFlightRef.current) return;
     alertsFetchInFlightRef.current = true;
 
@@ -426,6 +461,7 @@ const AdminHomeScreen: React.FC<Props> = ({
           return { id: n.id, title: n.title, subtitle: n.message, date, time, level: "High" as const };
         });
       setRecentAlerts(alerts);
+      lastAlertsFetchAtRef.current = Date.now();
     } catch {
       if (!alertsPrimedRef.current) {
         setRecentAlerts([]);
@@ -438,19 +474,22 @@ const AdminHomeScreen: React.FC<Props> = ({
 
   useEffect(() => {
     ensureAdminAlarmNotificationPermissions().catch(() => {});
-    fetchRecentAlerts();
+    const task = InteractionManager.runAfterInteractions(() => {
+      fetchRecentAlerts({ force: true }).catch(() => {});
+    });
 
     const intervalId = setInterval(() => {
-      fetchRecentAlerts();
+      fetchRecentAlerts({ force: false }).catch(() => {});
     }, NOTIFICATION_POLL_MS);
 
     const appStateSub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        fetchRecentAlerts();
+        fetchRecentAlerts({ force: true }).catch(() => {});
       }
     });
 
     return () => {
+      task.cancel();
       clearInterval(intervalId);
       appStateSub.remove();
     };
@@ -980,6 +1019,8 @@ const AdminHomeScreen: React.FC<Props> = ({
               ]}
             >
               <Animated.View
+                renderToHardwareTextureAndroid
+                shouldRasterizeIOS
                 style={{ transform: [{ translateY: bounceY }, { rotate: chevronRotate }, { scale: chevronScale }] }}
               >
                 <Ionicons name="chevron-up" size={22} color={TEXT_DARK} />
@@ -1099,12 +1140,15 @@ const AdminHomeScreen: React.FC<Props> = ({
           animationType="none"
           onRequestClose={closeSheet}
           statusBarTranslucent
+          hardwareAccelerated
         >
           <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
             <Pressable style={{ flex: 1 }} onPress={closeSheet} />
           </Animated.View>
 
           <Animated.View
+            renderToHardwareTextureAndroid
+            shouldRasterizeIOS
             style={[styles.chevronModalWrap, { transform: [{ translateY: modalChevronTranslateY }] }]}
             {...handlePan.panHandlers}
           >
@@ -1116,13 +1160,21 @@ const AdminHomeScreen: React.FC<Props> = ({
                 pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
               ]}
             >
-              <Animated.View style={{ transform: [{ rotate: chevronRotate }, { scale: chevronScale }] }}>
+              <Animated.View
+                renderToHardwareTextureAndroid
+                shouldRasterizeIOS
+                style={{ transform: [{ rotate: chevronRotate }, { scale: chevronScale }] }}
+              >
                 <Ionicons name="chevron-up" size={22} color={TEXT_DARK} />
               </Animated.View>
             </Pressable>
           </Animated.View>
 
-          <Animated.View style={[styles.sheetOuter, { transform: [{ translateY: sheetY }] }]}>
+          <Animated.View
+            renderToHardwareTextureAndroid
+            shouldRasterizeIOS
+            style={[styles.sheetOuter, { transform: [{ translateY: sheetY }] }]}
+          >
             <View style={styles.sheetCard} {...handlePan.panHandlers}>
               <View style={styles.sheetGrabber} />
 

@@ -355,7 +355,7 @@ export default function ReportDetailScreen({
   // =========================
   // ✅ REALTIME-LIKE THREADS (DEDUPED)
   // =========================
-  const POLL_MS = 2500;
+  const POLL_MS = 4000;
 
   const isAtBottomRef = useRef(true);
   const [newMsgCount, setNewMsgCount] = useState(0);
