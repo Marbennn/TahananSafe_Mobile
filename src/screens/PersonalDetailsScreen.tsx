@@ -100,7 +100,7 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
   const [lastName, setLastName] = useState(initialValues?.lastName ?? "");
   const [dob, setDob] = useState(initialValues?.dob ?? "");
   const [contactNumber, setContactNumber] = useState(initialValues?.contactNumber ?? "");
-  const [gender, setGender] = useState<"male" | "female">(initialValues?.gender ?? "male");
+  const [gender, setGender] = useState<"male" | "female" | null>(initialValues?.gender ?? null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -158,7 +158,7 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
       lastName: normalizeName(lastName),
       dob: dob.trim(),
       contactNumber: normalizePhone(contactNumber),
-      gender,
+      gender: gender as "male" | "female",
     };
 
     try {

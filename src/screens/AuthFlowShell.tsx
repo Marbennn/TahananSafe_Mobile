@@ -89,7 +89,7 @@ export default function AuthFlowShell({
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       <AuthProgressHeader
-        onBack={handleBack}
+        onBack={routeName === "Signup" ? undefined : handleBack}
         progressActiveCount={progressActiveCount}
         scale={scale}
         vscale={vscale}
@@ -109,7 +109,6 @@ export default function AuthFlowShell({
               <Stack.Screen name="Signup">
                 {() => (
                   <SignupScreen
-                    onBack={onExitToOnboarding}
                     onGoLogin={onGoLogin}
                     onSignupSuccess={() => goTo("PersonalDetails")}
                     progressActiveCount={1}

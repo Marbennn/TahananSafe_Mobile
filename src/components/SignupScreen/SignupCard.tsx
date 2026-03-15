@@ -1,5 +1,5 @@
 // src/components/SignupScreen/SignupCard.tsx
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, Pressable, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -69,6 +69,10 @@ export default function SignupCard({
 }: Props) {
   const confirmTyped = confirmPassword.trim().length > 0;
 
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [confirmFocused, setConfirmFocused] = useState(false);
+
   return (
     <View style={styles.page}>
       <View style={styles.titleBlock}>
@@ -92,7 +96,9 @@ export default function SignupCard({
             autoCapitalize="none"
             autoCorrect={false}
             maxLength={30}
-            style={styles.input}
+            style={[styles.input, emailFocused && { borderColor: "#1D4ED8" }]}
+            onFocus={() => setEmailFocused(true)}
+            onBlur={() => setEmailFocused(false)}
           />
           {!!emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
         </View>
@@ -110,7 +116,9 @@ export default function SignupCard({
               autoCapitalize="none"
               autoCorrect={false}
               maxLength={16}
-              style={[styles.input, { paddingRight: scale(44) }]}
+              style={[styles.input, { paddingRight: scale(44) }, passwordFocused && { borderColor: "#1D4ED8" }]}
+              onFocus={() => setPasswordFocused(true)}
+              onBlur={() => setPasswordFocused(false)}
             />
             <Pressable onPress={toggleShowPassword} hitSlop={10} style={styles.eyeBtn}>
               <Ionicons
@@ -136,7 +144,9 @@ export default function SignupCard({
               autoCapitalize="none"
               autoCorrect={false}
               maxLength={16}
-              style={[styles.input, { paddingRight: scale(44) }]}
+              style={[styles.input, { paddingRight: scale(44) }, confirmFocused && { borderColor: "#1D4ED8" }]}
+              onFocus={() => setConfirmFocused(true)}
+              onBlur={() => setConfirmFocused(false)}
             />
             <Pressable onPress={toggleShowConfirm} hitSlop={10} style={styles.eyeBtn}>
               <Ionicons

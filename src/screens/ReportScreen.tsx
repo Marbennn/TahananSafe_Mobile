@@ -538,8 +538,6 @@ export default function ReportScreen({
     }
   }, [fetchMyReports, userId]);
 
-  const counts = useMemo(() => countByStatus(items), [items]);
-
   const filtered = useMemo(() => {
     const want = filterToStatus(filter);
     const base = items.filter((x) => (x.status ?? "PENDING") === want);
@@ -598,8 +596,6 @@ export default function ReportScreen({
     [filter, tabAnim]
   );
 
-  const headerAccent = statusAccent(filterToStatus(filter), PRIMARY);
-
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
@@ -613,7 +609,7 @@ export default function ReportScreen({
           style={styles.headerBg}
         />
 
-        {/* ===== Top header card ===== */}
+        {/* ===== Top header ===== */}
         <View style={styles.headerWrap}>
           <View style={styles.headerTopRow}>
             <View style={{ flex: 1 }}>
@@ -622,9 +618,7 @@ export default function ReportScreen({
             </View>
           </View>
 
-          <View style={styles.headerCard}>
-            {/* search */}
-            <View style={styles.searchWrap}>
+          <View style={styles.searchWrap}>
               <Ionicons name="search-outline" size={styles._iconSize} color="#94A3B8" />
               <TextInput
                 value={query}
@@ -644,9 +638,9 @@ export default function ReportScreen({
                   <Ionicons name="close" size={styles._iconSize} color="#94A3B8" />
                 </Pressable>
               )}
-            </View>
+          </View>
 
-            {/* segmented control */}
+          <View style={styles.statusWrap}>
             <ReportStatusSegment value={filter} onChange={setFilterAnimated} styles={styles} />
           </View>
         </View>
@@ -762,21 +756,6 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       },
 
       // ✅ NO SHADOWS AT ALL (super-flat iOS feel)
-      headerCard: {
-        borderRadius: CARD_R,
-        borderWidth: 1,
-        borderColor: "#E6F0FF",
-        backgroundColor: "#FFFFFF",
-        paddingHorizontal: scale(14),
-        paddingVertical: vscale(14),
-
-        shadowColor: "transparent",
-        shadowOpacity: 0,
-        shadowRadius: 0,
-        shadowOffset: { width: 0, height: 0 },
-        elevation: 0,
-      },
-
       headerTopRow: {
         flexDirection: "row",
         alignItems: "flex-start",
@@ -850,6 +829,10 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
         borderRadius: scale(16),
         paddingHorizontal: scale(12),
         height: vscale(44),
+      },
+
+      statusWrap: {
+        marginTop: vscale(12),
       },
 
       searchInput: {

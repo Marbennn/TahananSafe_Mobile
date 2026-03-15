@@ -1,6 +1,7 @@
 // src/components/PersonalDetailsScreen/PersonalDetailsForm.tsx
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import {
+  Keyboard,
   Modal,
   Pressable,
   Text,
@@ -25,7 +26,7 @@ type Props = {
   lastName: string;
   dob: string; // MM/DD/YYYY
   contactNumber: string; // stored like "+63 XXXXXXXXXX" (local part)
-  gender: "male" | "female";
+  gender: "male" | "female" | null;
 
   // setters
   setFirstName: (v: string) => void;
@@ -122,12 +123,17 @@ export default function PersonalDetailsForm({
   const [lastFocused, setLastFocused] = useState(false);
   const [dobFocused, setDobFocused] = useState(false);
   const [contactFocused, setContactFocused] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  const firstNameRef = useRef<TextInput | null>(null);
+  const lastNameRef = useRef<TextInput | null>(null);
+  const contactRef = useRef<TextInput | null>(null);
 
   // modals
   const [genderOpen, setGenderOpen] = useState(false);
 
   const selectedGenderLabel =
-    genderOptions.find((g) => g.id === gender)?.label ?? "Select your gender";
+    genderOptions.find((g) => g.id === gender)?.label ?? "Select a gender";
 
   // ✅ local phone state
   const [localPhone, setLocalPhone] = useState("");
@@ -137,6 +143,28 @@ export default function PersonalDetailsForm({
     const local = normalizeToLocal10(contactNumber || "");
     setLocalPhone(local);
   }, [contactNumber]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const reopenKeyboardIfNeeded = (ref: React.RefObject<TextInput | null>, isFocused: boolean) => {
+    if (keyboardVisible || !isFocused) return;
+
+    ref.current?.blur();
+    requestAnimationFrame(() => {
+      ref.current?.focus();
+    });
+  };
 
   const commitPhone = (nextLocal10: string) => {
     const cleaned = digitsOnly(nextLocal10).slice(0, 10);
@@ -200,6 +228,7 @@ export default function PersonalDetailsForm({
         <View style={styles.fieldBlock}>
           <Text style={styles.label}>First Name</Text>
           <TextInput
+            ref={firstNameRef}
             value={firstName}
             onChangeText={setFirstName}
             placeholder="Enter your legal first name"
@@ -212,6 +241,7 @@ export default function PersonalDetailsForm({
             ]}
             onFocus={() => setFirstFocused(true)}
             onBlur={() => setFirstFocused(false)}
+            onTouchStart={() => reopenKeyboardIfNeeded(firstNameRef, firstFocused)}
           />
         </View>
 
@@ -219,6 +249,7 @@ export default function PersonalDetailsForm({
         <View style={styles.fieldBlock}>
           <Text style={styles.label}>Last Name</Text>
           <TextInput
+            ref={lastNameRef}
             value={lastName}
             onChangeText={setLastName}
             placeholder="Enter your legal last name"
@@ -231,6 +262,7 @@ export default function PersonalDetailsForm({
             ]}
             onFocus={() => setLastFocused(true)}
             onBlur={() => setLastFocused(false)}
+            onTouchStart={() => reopenKeyboardIfNeeded(lastNameRef, lastFocused)}
           />
         </View>
 
@@ -330,6 +362,7 @@ export default function PersonalDetailsForm({
             </Text>
 
             <TextInput
+              ref={contactRef}
               value={localPhone}
               onChangeText={commitPhone}
               placeholder="9XXXXXXXXX"
@@ -346,6 +379,7 @@ export default function PersonalDetailsForm({
                 setContactFocused(false);
                 setContactTouched(true);
               }}
+              onTouchStart={() => reopenKeyboardIfNeeded(contactRef, contactFocused)}
               maxLength={10}
             />
           </View>
@@ -366,7 +400,10 @@ export default function PersonalDetailsForm({
               pressed ? { opacity: 0.95 } : null,
             ]}
           >
-            <Text style={styles.selectText} numberOfLines={1}>
+            <Text
+              style={[styles.selectText, !gender && { color: Colors.placeholder }]}
+              numberOfLines={1}
+            >
               {selectedGenderLabel}
             </Text>
             <Ionicons name="chevron-down" size={scale(18)} color="#6B7280" />

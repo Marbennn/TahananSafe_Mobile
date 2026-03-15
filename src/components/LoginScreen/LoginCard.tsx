@@ -48,6 +48,8 @@ export default function LoginCard({
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
 
   const canLogin = email.trim().length > 0 && password.trim().length > 0 && !loading;
 
@@ -75,8 +77,10 @@ export default function LoginCard({
           placeholderTextColor={Colors.placeholder}
           keyboardType="email-address"
           autoCapitalize="none"
-          style={styles.input}
+          style={[styles.input, emailFocused && { borderColor: "#1D4ED8" }]}
           editable={!loading}
+          onFocus={() => setEmailFocused(true)}
+          onBlur={() => setEmailFocused(false)}
         />
       </View>
 
@@ -91,8 +95,10 @@ export default function LoginCard({
             placeholderTextColor={Colors.placeholder}
             secureTextEntry={!showPassword}
             autoCapitalize="none"
-            style={[styles.input, { paddingRight: scale(44) }]}
+            style={[styles.input, { paddingRight: scale(44) }, passwordFocused && { borderColor: "#1D4ED8" }]}
             editable={!loading}
+            onFocus={() => setPasswordFocused(true)}
+            onBlur={() => setPasswordFocused(false)}
           />
           <Pressable
             onPress={() => setShowPassword((v) => !v)}

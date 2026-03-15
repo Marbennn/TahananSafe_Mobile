@@ -23,7 +23,6 @@ import { registerSendOtp } from "../api/auth";
 type Props = {
   onGoLogin: () => void;
   onSignupSuccess: () => void;
-  onBack?: () => void;
   progressActiveCount?: 1 | 2 | 3;
 };
 

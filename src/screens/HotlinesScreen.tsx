@@ -85,9 +85,7 @@ export default function HotlinesScreen({
   const callIconSize = scale(18);
 
   const SEARCH_H = vscale(46);
-  const FILTER_SIZE = vscale(46);
-
-  const styles = useMemo(() => makeStyles(scale, vscale, { SEARCH_H, FILTER_SIZE }), [width, height]);
+  const styles = useMemo(() => makeStyles(scale, vscale, { SEARCH_H }), [width, height]);
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [query, setQuery] = useState("");
@@ -175,14 +173,6 @@ export default function HotlinesScreen({
               returnKeyType="search"
             />
           </View>
-
-          <Pressable
-            onPress={() => Alert.alert("Filters", "Filter options coming soon.")}
-            style={({ pressed }) => [styles.filterBtn, pressed && { transform: [{ scale: 0.98 }] }]}
-            hitSlop={10}
-          >
-            <Ionicons name="options-outline" size={iconSize} color={SUBTLE} />
-          </Pressable>
         </View>
 
         {/* Content */}
@@ -256,9 +246,9 @@ export default function HotlinesScreen({
 function makeStyles(
   scale: (n: number) => number,
   vscale: (n: number) => number,
-  dims: { SEARCH_H: number; FILTER_SIZE: number }
+  dims: { SEARCH_H: number }
 ) {
-  const { SEARCH_H, FILTER_SIZE } = dims;
+  const { SEARCH_H } = dims;
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: BG },
@@ -310,16 +300,6 @@ function makeStyles(
       fontWeight: "400",
       color: TEXT,
       paddingVertical: 0,
-    },
-    filterBtn: {
-      width: FILTER_SIZE,
-      height: FILTER_SIZE,
-      borderRadius: Math.round(FILTER_SIZE / 2),
-      backgroundColor: SURFACE,
-      borderWidth: 1,
-      borderColor: BORDER,
-      alignItems: "center",
-      justifyContent: "center",
     },
 
     content: {

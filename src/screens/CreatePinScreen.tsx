@@ -10,7 +10,6 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
@@ -20,7 +19,7 @@ import {
   setHasPin,
   setLoggedIn,
   setPinUnlockedThisRun,
-  setPinSkippedForUser, // ✅ per-user skip
+  setPinSkippedForUser,
 } from "../auth/session";
 
 import { setPinApi, getMeApi } from "../api/pin";
@@ -36,12 +35,9 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-const BLUE = "#1D4ED8";
-const BORDER = "#93C5FD";
 const TAG = "[CreatePinScreen]";
 
 export default function CreatePinScreen({ onContinue, onSkip }: Props) {
-  const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
   const s = clamp(width / 375, 0.95, 1.45);
@@ -49,7 +45,10 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
-  const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
+  const styles = useMemo(
+    () => createStyles(scale, vscale, width, height),
+    [width, height]
+  );
 
   const PIN_LENGTH = 4;
   const [pin, setPin] = useState("");
@@ -60,7 +59,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
     [pin]
   );
 
-  const canSignup = pin.length === PIN_LENGTH && !loading;
+  const canSubmit = pin.length === PIN_LENGTH && !loading;
 
   const addDigit = (d: string) => {
     if (loading) return;
@@ -74,7 +73,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
     setPin((p) => p.slice(0, -1));
   };
 
-  const handleSignup = async () => {
+  const handleSubmit = async () => {
     console.log(`${TAG} Continue pressed. pin length:`, pin.length);
     if (loading) return;
     if (pin.length !== PIN_LENGTH) return;
@@ -89,24 +88,18 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
       await setPinApi({ accessToken, pin: String(pin) });
       console.log(`${TAG} setPinApi success`);
 
-      // ✅ Persist PIN mode
       await setHasPin(true);
 
-      // ✅ Mark skip=false for this user (since they set a PIN)
       try {
         const me = await getMeApi({ accessToken });
-        const userId = String(me.user._id); // ✅ FIX: _id not id
+        const userId = String(me.user._id);
         await setPinSkippedForUser(userId, false);
       } catch {
         // ignore
       }
 
-      // ✅ Logged in
       await setLoggedIn(true);
-
-      // ✅ For THIS run: go Home immediately
       setPinUnlockedThisRun(true);
-
       onContinue(pin);
     } catch (err: any) {
       console.log(`${TAG} ERROR:`, err?.message || err);
@@ -126,21 +119,14 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
       const accessToken = await getAccessToken();
       if (!accessToken) throw new Error("Session missing. Please login again.");
 
-      // ✅ No PIN mode
       await setHasPin(false);
 
-      // ✅ Save skip choice FOR THIS USER
       const me = await getMeApi({ accessToken });
-      const userId = String(me.user._id); // ✅ FIX: _id not id
+      const userId = String(me.user._id);
       await setPinSkippedForUser(userId, true);
 
-      // ✅ Logged in
       await setLoggedIn(true);
-
-      // ✅ For THIS run: go Home immediately
       setPinUnlockedThisRun(true);
-
-      // ✅ Navigate immediately
       onSkip?.();
     } catch (err: any) {
       console.log(`${TAG} Skip ERROR:`, err?.message || err);
@@ -152,30 +138,38 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
 
   return (
     <View style={styles.safe}>
-      <View
-        style={[
-          styles.container,
-          { paddingBottom: Math.max(insets.bottom, vscale(12)) },
-        ]}
-      >
-        <View style={styles.titleBlock}>
-          <Text style={styles.screenTitle}>Enter Your Pin</Text>
+      <View style={styles.container}>
+
+        {/* ── TOP: icon · title · subtitle · dots ── */}
+        <View style={styles.topSection}>
+          <View style={styles.iconWrap}>
+            <LinearGradient
+              colors={Colors.gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.iconGradient}
+            >
+              <Ionicons name="lock-closed" size={scale(30)} color="#FFFFFF" />
+            </LinearGradient>
+          </View>
+
+          <Text style={styles.screenTitle}>Create Your PIN</Text>
           <Text style={styles.screenSub}>
-            Set up an app PIN to protect your access and keep{"\n"}
-            your information private.
+            Set a 4-digit PIN to quickly and securely{"\n"}access your account.
           </Text>
+
+          <View style={styles.dotsCard}>
+            {dots.map((filled, idx) => (
+              <View
+                key={idx}
+                style={[styles.dot, filled ? styles.dotFilled : styles.dotEmpty]}
+              />
+            ))}
+          </View>
         </View>
 
-        <View style={styles.dotsRow}>
-          {dots.map((filled, idx) => (
-            <View
-              key={idx}
-              style={[styles.dot, filled ? styles.dotFilled : styles.dotEmpty]}
-            />
-          ))}
-        </View>
-
-        <View style={styles.keypad}>
+        {/* ── KEYPAD ── */}
+        <View style={styles.keypadSection}>
           <View style={styles.keypadGrid}>
             {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
               <KeyButton
@@ -204,24 +198,29 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
                 styles.iconBtn,
                 loading && { opacity: 0.45 },
                 pressed && !loading
-                  ? { transform: [{ scale: 0.96 }], opacity: 0.85 }
+                  ? { transform: [{ scale: 0.93 }], opacity: 0.7 }
                   : null,
               ]}
             >
-              <Ionicons name="backspace-outline" size={scale(26)} color={BLUE} />
+              <Ionicons
+                name="backspace-outline"
+                size={scale(24)}
+                color="#07519C"
+              />
             </Pressable>
           </View>
         </View>
 
+        {/* ── BOTTOM: continue · skip ── */}
         <View style={styles.bottomArea}>
           <Pressable
-            onPress={handleSignup}
-            disabled={!canSignup}
+            onPress={handleSubmit}
+            disabled={!canSubmit}
             hitSlop={10}
             style={({ pressed }) => [
               styles.ctaOuter,
-              !canSignup && { opacity: 0.55 },
-              pressed && canSignup ? { transform: [{ scale: 0.99 }] } : null,
+              !canSubmit && { opacity: 0.5 },
+              pressed && canSubmit ? { transform: [{ scale: 0.99 }] } : null,
             ]}
           >
             <View style={styles.ctaInnerClip}>
@@ -231,7 +230,11 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
                 end={{ x: 1, y: 1 }}
                 style={styles.ctaGradient}
               >
-                {loading ? <ActivityIndicator /> : <Text style={styles.ctaText}>Continue</Text>}
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.ctaText}>Continue</Text>
+                )}
               </LinearGradient>
             </View>
           </Pressable>
@@ -243,17 +246,21 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
             style={({ pressed }) => [
               styles.skipWrap,
               loading && { opacity: 0.45 },
-              pressed && !loading ? { opacity: 0.7 } : null,
+              pressed && !loading ? { opacity: 0.6 } : null,
             ]}
           >
-            <Text style={styles.skipText}>Skip</Text>
+            <Text style={styles.skipText}>Skip for now</Text>
           </Pressable>
         </View>
+
       </View>
     </View>
   );
 }
 
+// ─────────────────────────────────────────────
+// Key button
+// ─────────────────────────────────────────────
 function KeyButton({
   label,
   onPress,
@@ -269,12 +276,12 @@ function KeyButton({
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      hitSlop={10}
+      hitSlop={8}
       style={({ pressed }) => [
         styles.keyBtn,
         disabled && { opacity: 0.45 },
         pressed && !disabled
-          ? { transform: [{ scale: 0.98 }], opacity: 0.95 }
+          ? { transform: [{ scale: 0.94 }], opacity: 0.85 }
           : null,
       ]}
     >
@@ -283,93 +290,169 @@ function KeyButton({
   );
 }
 
-function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
-  const dotSize = clamp(scale(18), 16, 26);
-  const dotBorder = clamp(Math.round(dotSize * 0.1), 1, 2);
-  const dotGap = clamp(scale(14), 12, 18);
+// ─────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────
+function createStyles(
+  scale: (n: number) => number,
+  vscale: (n: number) => number,
+  width: number,
+  height: number
+) {
+  const hPad = scale(24);
+  const keyGap = scale(14);
+  const keypadW = width - hPad * 2;
 
-  const spaceTitleToDots = clamp(vscale(26), 20, 34);
-  const spaceDotsToKeypad = clamp(vscale(26), 18, 34);
+  // Key is a circle: fit 3 per row (width constraint) and 4 rows (height constraint)
+  const keySizeW = Math.floor((keypadW - keyGap * 2) / 3);
+  const keySizeH = Math.floor((height * 0.46 - keyGap * 3) / 4);
+  const keySize = clamp(Math.min(keySizeW, keySizeH), 52, 84);
 
-  const keypadWidth = clamp(scale(300), 250, 340);
-  const keyW = Math.floor((keypadWidth - scale(16) * 2) / 3);
+  const dotSize = clamp(scale(22), 18, 28);
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: "#FFFFFF" },
+
     container: {
       flex: 1,
-      backgroundColor: "#FFFFFF",
-      paddingHorizontal: scale(22),
+      paddingHorizontal: hPad,
       paddingTop: vscale(6),
     },
-    titleBlock: { marginTop: vscale(18), marginBottom: vscale(22) },
-    screenTitle: { fontSize: scale(26), fontWeight: "800", color: Colors.text },
-    screenSub: {
-      marginTop: vscale(8),
-      fontSize: scale(13),
-      lineHeight: scale(18),
-      color: Colors.muted,
-      maxWidth: scale(360),
-    },
-    dotsRow: {
-      flexDirection: "row",
+
+    // ── Top ──────────────────────────────────
+    topSection: {
+      flex: 1,
       justifyContent: "center",
       alignItems: "center",
-      gap: dotGap,
-      marginTop: spaceTitleToDots,
-      marginBottom: spaceDotsToKeypad,
     },
+
+    iconWrap: {
+      width: scale(72),
+      height: scale(72),
+      borderRadius: scale(22),
+      overflow: "hidden",
+      marginBottom: vscale(16),
+      ...Platform.select({
+        ios: {
+          shadowColor: "#07519C",
+          shadowOpacity: 0.28,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 5 },
+        },
+        android: { elevation: 5 },
+      }),
+    },
+
+    iconGradient: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    screenTitle: {
+      fontSize: scale(24),
+      fontWeight: "800",
+      color: "#111827",
+      marginBottom: vscale(8),
+      textAlign: "center",
+    },
+
+    screenSub: {
+      fontSize: scale(13),
+      lineHeight: scale(20),
+      color: "#6B7280",
+      textAlign: "center",
+      marginBottom: vscale(24),
+    },
+
+    dotsCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: scale(18),
+      backgroundColor: "#F8FAFC",
+      borderRadius: scale(20),
+      borderWidth: 1,
+      borderColor: "#E2E8F0",
+      paddingVertical: vscale(16),
+      paddingHorizontal: scale(28),
+    },
+
     dot: {
       width: dotSize,
       height: dotSize,
       borderRadius: 999,
-      borderWidth: dotBorder,
+      borderWidth: 2,
     },
-    dotEmpty: { borderColor: "#CBD5E1", backgroundColor: "transparent" },
-    dotFilled: { borderColor: BLUE, backgroundColor: BLUE },
-    keypad: { alignItems: "center" },
+
+    dotEmpty: {
+      borderColor: "#BFDBFE",
+      backgroundColor: "#FFFFFF",
+    },
+
+    dotFilled: {
+      borderColor: "#07519C",
+      backgroundColor: "#07519C",
+    },
+
+    // ── Keypad ───────────────────────────────
+    keypadSection: {
+      alignItems: "center",
+      paddingBottom: vscale(8),
+    },
+
     keypadGrid: {
-      width: keypadWidth,
+      width: keypadW,
       flexDirection: "row",
       flexWrap: "wrap",
-      justifyContent: "space-between",
-      rowGap: vscale(14),
-      paddingHorizontal: scale(16),
+      columnGap: keyGap,
+      rowGap: keyGap,
     },
+
     keyBtn: {
-      width: keyW,
-      height: vscale(54),
-      borderRadius: scale(10),
-      borderWidth: scale(1.6),
-      borderColor: BORDER,
-      backgroundColor: "#FFFFFF",
+      width: keySize,
+      height: keySize,
+      borderRadius: 999,
+      backgroundColor: "#EFF6FF",
       alignItems: "center",
       justifyContent: "center",
       ...Platform.select({
-        android: { elevation: 0 },
-        ios: { shadowOpacity: 0 },
+        ios: {
+          shadowColor: "#07519C",
+          shadowOpacity: 0.1,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 2 },
+        },
+        android: { elevation: 2 },
       }),
     },
-    keyText: { fontSize: scale(16), fontWeight: "800", color: BLUE },
-    keySpacer: { width: keyW, height: vscale(54) },
+
+    keyText: {
+      fontSize: scale(20),
+      fontWeight: "700",
+      color: "#07519C",
+    },
+
+    keySpacer: { width: keySize, height: keySize },
+
     iconBtn: {
-      width: keyW,
-      height: vscale(54),
-      borderRadius: scale(10),
-      backgroundColor: "transparent",
+      width: keySize,
+      height: keySize,
+      borderRadius: 999,
       alignItems: "center",
       justifyContent: "center",
     },
+
+    // ── Bottom ───────────────────────────────
     bottomArea: {
-      marginTop: "auto",
-      paddingTop: vscale(26),
-      paddingBottom: vscale(6),
+      paddingTop: vscale(16),
+      paddingBottom: vscale(12),
       alignItems: "center",
       width: "100%",
     },
+
     ctaOuter: {
       width: "100%",
-      marginTop: vscale(4),
       borderRadius: scale(14),
       ...Platform.select({
         ios: {
@@ -381,15 +464,33 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
         android: { elevation: 7 },
       }),
     },
-    ctaInnerClip: { width: "100%", borderRadius: scale(14), overflow: "hidden" },
+
+    ctaInnerClip: {
+      borderRadius: scale(14),
+      overflow: "hidden",
+    },
+
     ctaGradient: {
-      width: "100%",
       height: vscale(52),
       alignItems: "center",
       justifyContent: "center",
     },
-    ctaText: { color: "#FFFFFF", fontSize: scale(14), fontWeight: "800" },
-    skipWrap: { marginTop: vscale(10) },
-    skipText: { fontSize: scale(12), fontWeight: "700", color: "#111827" },
+
+    ctaText: {
+      color: "#FFFFFF",
+      fontSize: scale(14),
+      fontWeight: "800",
+    },
+
+    skipWrap: {
+      marginTop: vscale(14),
+      paddingVertical: vscale(4),
+    },
+
+    skipText: {
+      fontSize: scale(13),
+      fontWeight: "600",
+      color: "#6B7280",
+    },
   });
 }
