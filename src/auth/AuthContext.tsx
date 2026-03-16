@@ -7,10 +7,12 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AppState, AppStateStatus } from "react-native";
+import { AppState, AppStateStatus, View } from "react-native";
 
 import { getMeApi } from "../api/pin";
-import { refreshAccessTokenApi } from "../api/auth";
+import { refreshAccessTokenApi, logoutApi } from "../api/auth";
+
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
 import {
   getAccessToken,
@@ -139,6 +141,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<StoredUser | null>(null);
 
   const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
+  const backgroundedAtRef = useRef<number | null>(null);
 
   const refreshMe = async () => {
     const token = accessToken || (await getAccessToken());
@@ -156,6 +160,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    logoutApi().catch(() => {}); // revoke refresh token on backend (fire-and-forget)
+
     setAccessTokenState(null);
     setRefreshTokenState(null);
     setUser(null);
@@ -270,10 +276,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // AppState: record background time, check idle on resume
   useEffect(() => {
     const sub = AppState.addEventListener("change", async (nextState: AppStateStatus) => {
       if (nextState === "active") {
+        const backgroundedAt = backgroundedAtRef.current;
+        if (backgroundedAt !== null && Date.now() - backgroundedAt >= IDLE_TIMEOUT_MS) {
+          await logout();
+          return;
+        }
+        backgroundedAtRef.current = null;
+        lastActivityRef.current = Date.now();
         await ensureValidAccessToken();
+      } else if (nextState === "background" || nextState === "inactive") {
+        backgroundedAtRef.current = Date.now();
       }
     });
 
@@ -282,10 +298,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [accessToken, refreshToken]);
 
+  // Foreground idle check every 30 s
   useEffect(() => {
     const interval = setInterval(() => {
+      if (accessToken && Date.now() - lastActivityRef.current >= IDLE_TIMEOUT_MS) {
+        logout().catch(() => {});
+        return;
+      }
       ensureValidAccessToken().catch(() => {});
-    }, 60 * 1000);
+    }, 30 * 1000);
 
     return () => clearInterval(interval);
   }, [accessToken, refreshToken]);
@@ -336,7 +357,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [isBooting, accessToken, refreshToken, user]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      <View
+        style={{ flex: 1 }}
+        onStartShouldSetResponderCapture={() => {
+          lastActivityRef.current = Date.now();
+          return false; // don't steal touches from children
+        }}
+        onMoveShouldSetResponderCapture={() => {
+          lastActivityRef.current = Date.now();
+          return false;
+        }}
+      >
+        {children}
+      </View>
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

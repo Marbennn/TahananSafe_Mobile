@@ -53,7 +53,6 @@ import { getMeApi } from "../api/pin";
 import type { ReportItem } from "./ReportScreen";
 
 // ✅ HIDE APP helper
-import { closeAndRemoveFromRecents } from "../utils/hideApp";
 
 // ✅ NEW: Use same API as NotificationsScreen (source of truth)
 import {
@@ -1535,19 +1534,6 @@ export default function HomeScreen({
                 <Ionicons name="warning-outline" size={20} color="#fff" style={styles.actionIcon} />
                 <Text style={styles.actionText} allowFontScaling={false}>
                   Alert
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => {
-                  closeSheet();
-                  closeAndRemoveFromRecents();
-                }}
-                style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
-              >
-                <Ionicons name="eye-off-outline" size={20} color="#fff" style={styles.actionIcon} />
-                <Text style={styles.actionText} allowFontScaling={false}>
-                  Hide App
                 </Text>
               </Pressable>
 

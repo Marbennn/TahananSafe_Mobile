@@ -65,6 +65,18 @@ export async function verifyRegistrationOtp(
  * - /api/mobile/v1/auth/refresh
  * - /api/auth/refresh-token
  */
+export async function logoutApi(): Promise<void> {
+  try {
+    await requestJson({
+      method: "POST",
+      path: "/api/mobile/v1/logout",
+      auth: true,
+    });
+  } catch {
+    // fire-and-forget — backend revocation is best-effort
+  }
+}
+
 export async function refreshAccessTokenApi(
   refreshToken: string
 ): Promise<RefreshTokenResponse> {
