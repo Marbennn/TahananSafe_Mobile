@@ -74,6 +74,11 @@ export default function AdminShell({ onOpenNotifications, onLogout }: Props) {
       <AdminReportsScreen
         onBack={goHome}
         onOpenReportDetail={openReportDetail}
+        onTabChange={(tab) => {
+          if (tab === "Home") goHome();
+          else if (tab === "Inbox") setView({ type: "alerts" });
+          else if (tab === "Settings") setView({ type: "settings" });
+        }}
       />
     );
   }

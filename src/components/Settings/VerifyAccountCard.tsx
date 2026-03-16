@@ -215,18 +215,6 @@ export default function VerifyAccountCard({
   if (hasLogin && selfieVerified) stage = 2;
   if (isApproved) stage = 3;
 
-  const verifyTitle =
-    verStatus === "pending"
-      ? "Under Review"
-      : verStatus === "rejected"
-        ? "Rejected"
-        : stage === 3
-          ? "Fully Verified"
-          : stage === 2
-            ? "Semi-verified"
-            : stage === 1
-              ? "Basic Level"
-              : "Verify Account";
 
   const displayName = hasLogin ? displayNameFromEmail(userEmail) : "Guest";
   const displaySub = hasLogin ? maskEmail(userEmail) : "Not signed in";
@@ -562,10 +550,7 @@ export default function VerifyAccountCard({
             </View>
           </View>
 
-          <Text style={styles.stepStatusText} numberOfLines={1}>
-            Status: {verifyTitle}
-          </Text>
-          {verStatus === "rejected" && !!verReason ? (
+            {verStatus === "rejected" && !!verReason ? (
             <Text style={styles.rejectedReason} numberOfLines={2}>
               Reason: {verReason}
             </Text>
@@ -589,39 +574,31 @@ export default function VerifyAccountCard({
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.centerTitle, { color: "#0F172A" }]}>Selfie verification</Text>
                   <Text style={[styles.centerSub, { color: "#64748B" }]}>
-                    Take a clear selfie (front camera).
+                    Take a clear picture.
                   </Text>
                 </View>
               </View>
 
-              <Pressable onPress={closeSelfieModal} hitSlop={10} style={styles.centerCloseBtn}>
-                <Ionicons name="close" size={scale(18)} color="#64748B" />
-              </Pressable>
             </View>
 
             <View style={styles.previewWrap}>
               {selfieUri ? (
                 <Image source={{ uri: selfieUri }} style={styles.previewImg} />
               ) : (
-                <View style={[styles.previewPlaceholder, { borderColor: divider }]}>
-                  <Ionicons name="person-circle-outline" size={scale(26)} color="#94A3B8" />
-                  <Text style={[styles.previewText, { color: "#64748B" }]}>No selfie yet</Text>
-                </View>
+                <Pressable
+                  onPress={takeSelfie}
+                  disabled={selfieLoading}
+                  android_ripple={{ color: "rgba(0,0,0,0.06)" }}
+                  style={[styles.previewPlaceholder, { borderColor: divider }]}
+                >
+                  <Ionicons name="camera-outline" size={scale(26)} color={primary} />
+                  <Text style={[styles.previewText, { color: primary }]}>Take a selfie</Text>
+                </Pressable>
               )}
             </View>
 
-            <View style={styles.uploadRow}>
-              <Pressable
-                onPress={takeSelfie}
-                disabled={selfieLoading}
-                android_ripple={{ color: "rgba(0,0,0,0.06)" }}
-                style={[styles.uploadBtn, { borderColor: divider }]}
-              >
-                <Ionicons name="camera-outline" size={scale(16)} color={primary} />
-                <Text style={[styles.uploadBtnText, { color: "#0F172A" }]}>Take selfie</Text>
-              </Pressable>
-
-              {!!selfieUri && (
+            {!!selfieUri && (
+              <View style={styles.uploadRow}>
                 <Pressable
                   onPress={() => setSelfieUri("")}
                   disabled={selfieLoading}
@@ -631,10 +608,10 @@ export default function VerifyAccountCard({
                   <Ionicons name="trash-outline" size={scale(16)} color="#DC2626" />
                   <Text style={[styles.uploadBtnText, { color: "#DC2626" }]}>Remove</Text>
                 </Pressable>
-              )}
-            </View>
+              </View>
+            )}
 
-            <View style={styles.centerActions}>
+            <View style={[styles.centerActions, { justifyContent: "center" }]}>
               <Pressable
                 onPress={closeSelfieModal}
                 disabled={selfieLoading}
@@ -661,10 +638,6 @@ export default function VerifyAccountCard({
                 )}
               </Pressable>
             </View>
-
-            <Text style={[styles.centerFoot, { color: "#64748B" }]}>
-              Tip: Good lighting, no blur, face centered.
-            </Text>
 
             {Platform.OS === "ios" ? <View style={{ height: vscale(2) }} /> : null}
           </View>
@@ -885,7 +858,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     verifyNowText: {
       color: "#fff",
       fontSize: scale(11),
-      fontWeight: "900",
+      fontWeight: "600",
       letterSpacing: 0.2,
     },
 
@@ -916,7 +889,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       marginTop: vscale(2),
       color: "rgba(255,255,255,0.82)",
       fontSize: scale(12),
-      fontWeight: "800",
+      fontWeight: "600",
       letterSpacing: 0.2,
     },
 
@@ -1002,7 +975,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       textAlign: "center",
       color: "rgba(255,255,255,0.85)",
       fontSize: scale(10),
-      fontWeight: "900",
+      fontWeight: "600",
     },
 
     stepStatusText: {

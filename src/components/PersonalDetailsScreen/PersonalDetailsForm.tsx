@@ -1,9 +1,11 @@
 // src/components/PersonalDetailsScreen/PersonalDetailsForm.tsx
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import {
+  Animated,
   Keyboard,
   Modal,
   Pressable,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -35,8 +37,6 @@ type Props = {
   setContactNumber: (v: string) => void;
   setGender: (v: "male" | "female") => void;
 
-  // ui
-  activeBlue: string; // for checkmark color
 };
 
 const PREFIX = "+63";
@@ -107,8 +107,6 @@ export default function PersonalDetailsForm({
   setDob,
   setContactNumber,
   setGender,
-
-  activeBlue,
 }: Props) {
   const genderOptions: GenderOption[] = useMemo(
     () => [
@@ -131,9 +129,30 @@ export default function PersonalDetailsForm({
 
   // modals
   const [genderOpen, setGenderOpen] = useState(false);
+  const genderFade = useRef(new Animated.Value(0)).current;
+  const genderSlide = useRef(new Animated.Value(500)).current;
 
-  const selectedGenderLabel =
-    genderOptions.find((g) => g.id === gender)?.label ?? "Select a gender";
+  const openGender = () => {
+    setGenderOpen(true);
+    genderFade.setValue(0);
+    genderSlide.setValue(500);
+    Animated.parallel([
+      Animated.timing(genderFade, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.spring(genderSlide, { toValue: 0, speed: 16, bounciness: 5, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const closeGender = () => {
+    Animated.parallel([
+      Animated.timing(genderFade, { toValue: 0, duration: 180, useNativeDriver: true }),
+      Animated.timing(genderSlide, { toValue: 500, duration: 180, useNativeDriver: true }),
+    ]).start(({ finished }) => {
+      if (finished) setGenderOpen(false);
+    });
+  };
+
+  const selectedGender = genderOptions.find((g) => g.id === gender);
+  const selectedGenderLabel = selectedGender?.label ?? "Select a gender";
 
   // ✅ local phone state
   const [localPhone, setLocalPhone] = useState("");
@@ -304,10 +323,14 @@ export default function PersonalDetailsForm({
               style={{
                 marginTop: vscale(10),
                 borderWidth: 1.4,
-                borderColor: "#E5E7EB",
-                borderRadius: scale(14),
+                borderColor: Colors.border,
+                borderRadius: scale(24),
                 overflow: "hidden",
-                backgroundColor: "#FFFFFF",
+                backgroundColor: "#F0F6FF",
+                shadowColor: Colors.primary,
+                shadowOpacity: 0.08,
+                shadowRadius: 10,
+                shadowOffset: { width: 0, height: 4 },
               }}
             >
               <DateTimePicker
@@ -317,6 +340,7 @@ export default function PersonalDetailsForm({
                 minimumDate={minDobDate}
                 maximumDate={maxDobDate}
                 onChange={onChangeIosInline}
+                accentColor={Colors.primary}
                 style={{ alignSelf: "stretch" }}
               />
             </View>
@@ -332,6 +356,7 @@ export default function PersonalDetailsForm({
             minimumDate={minDobDate}
             maximumDate={maxDobDate}
             onChange={onChangeAndroid}
+            accentColor={Colors.primary}
           />
         )}
 
@@ -393,11 +418,12 @@ export default function PersonalDetailsForm({
         <View style={styles.fieldBlock}>
           <Text style={styles.label}>Gender</Text>
           <Pressable
-            onPress={() => setGenderOpen(true)}
+            onPress={openGender}
             hitSlop={10}
             style={({ pressed }) => [
               styles.select,
-              pressed ? { opacity: 0.95 } : null,
+              gender ? styles.selectFilled : null,
+              pressed ? { opacity: 0.92 } : null,
             ]}
           >
             <Text
@@ -406,60 +432,88 @@ export default function PersonalDetailsForm({
             >
               {selectedGenderLabel}
             </Text>
-            <Ionicons name="chevron-down" size={scale(18)} color="#6B7280" />
+            <Ionicons name="chevron-down" size={scale(16)} color="#9CA3AF" />
           </Pressable>
         </View>
 
         <View style={{ height: vscale(80) }} />
       </View>
 
-      {/* ---------------- Gender Modal ---------------- */}
+      {/* ---------------- Gender Bottom Sheet ---------------- */}
       <Modal
         visible={genderOpen}
         transparent
-        animationType="fade"
-        onRequestClose={() => setGenderOpen(false)}
+        animationType="none"
+        onRequestClose={closeGender}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setGenderOpen(false)}>
-          <Pressable style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Select Gender</Text>
+        <View style={{ flex: 1, justifyContent: "flex-end" }}>
+          {/* Backdrop */}
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFillObject,
+              { backgroundColor: "rgba(0,0,0,0.4)", opacity: genderFade },
+            ]}
+          >
+            <Pressable style={{ flex: 1 }} onPress={closeGender} />
+          </Animated.View>
+
+          {/* Sheet */}
+          <Animated.View
+            style={[
+              styles.genderSheet,
+              { transform: [{ translateY: genderSlide }] },
+            ]}
+          >
+            <View style={styles.genderSheetHandle} />
+            <Text style={styles.genderSheetTitle}>Select Gender</Text>
 
             {genderOptions.map((opt) => {
               const active = opt.id === gender;
+              const iconName = opt.id === "male" ? "male" : "female";
+              const subLabel = opt.id === "male" ? "He / Him" : "She / Her";
               return (
                 <Pressable
                   key={opt.id}
                   onPress={() => {
                     setGender(opt.id);
-                    setGenderOpen(false);
+                    closeGender();
                   }}
                   style={({ pressed }) => [
-                    styles.modalItem,
-                    active ? styles.modalItemActive : null,
-                    pressed ? { opacity: 0.92 } : null,
+                    styles.genderOption,
+                    active && styles.genderOptionActive,
+                    pressed && { opacity: 0.88 },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.modalItemText,
-                      active ? styles.modalItemTextActive : null,
-                    ]}
-                  >
-                    {opt.label}
-                  </Text>
-
+                  <View style={[styles.genderIconBadge, active && styles.genderIconBadgeActive]}>
+                    <Ionicons
+                      name={iconName}
+                      size={scale(20)}
+                      color={active ? Colors.primary : "#9CA3AF"}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.genderOptionText, active && styles.genderOptionTextActive]}>
+                      {opt.label}
+                    </Text>
+                    <Text style={styles.genderOptionSub}>{subLabel}</Text>
+                  </View>
                   {active ? (
-                    <Ionicons name="checkmark" size={scale(18)} color={activeBlue} />
-                  ) : null}
+                    <Ionicons name="checkmark-circle" size={scale(22)} color={Colors.primary} />
+                  ) : (
+                    <View style={styles.genderOptionCircle} />
+                  )}
                 </Pressable>
               );
             })}
 
-            <Pressable onPress={() => setGenderOpen(false)} style={styles.modalCancel}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
+            <Pressable
+              onPress={closeGender}
+              style={({ pressed }) => [styles.genderCancel, pressed && { opacity: 0.8 }]}
+            >
+              <Text style={styles.genderCancelText}>Cancel</Text>
             </Pressable>
-          </Pressable>
-        </Pressable>
+          </Animated.View>
+        </View>
       </Modal>
     </>
   );

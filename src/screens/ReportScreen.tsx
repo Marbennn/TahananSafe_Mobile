@@ -156,11 +156,11 @@ function statusLabel(s?: ReportItem["status"]) {
   return "Pending";
 }
 
-function statusAccent(s?: ReportItem["status"], primary: string = PRIMARY) {
+function statusAccent(s?: ReportItem["status"]) {
   if (s === "RESOLVED") return "#16A34A";
   if (s === "CANCELLED") return "#DC2626";
   if (s === "ONGOING") return "#2563EB";
-  return primary;
+  return "#EAB308";
 }
 
 function statusIcon(s?: ReportItem["status"]) {
@@ -201,7 +201,7 @@ function ReportStatusSegment({
     <View style={styles.segmentWrap}>
       {options.map((k) => {
         const active = k === value;
-        const accent = statusAccent(filterToStatus(k), PRIMARY);
+        const accent = statusAccent(filterToStatus(k));
         return (
           <Pressable
             key={k}
@@ -229,14 +229,12 @@ function ReportCard({
   item,
   onPress,
   styles,
-  primary,
 }: {
   item: ReportItem;
   onPress?: () => void;
   styles: ReturnType<typeof makeStyles>;
-  primary: string;
 }) {
-  const accent = statusAccent(item.status, primary);
+  const accent = statusAccent(item.status);
   const icon = statusIcon(item.status);
 
   return (
@@ -683,7 +681,7 @@ export default function ReportScreen({
                 </View>
               )}
               renderItem={({ item }) => (
-                <ReportCard item={item} onPress={() => onOpenReport?.(item)} styles={styles} primary={PRIMARY} />
+                <ReportCard item={item} onPress={() => onOpenReport?.(item)} styles={styles} />
               )}
               ItemSeparatorComponent={() => <View style={{ height: vscale(10) }} />}
             />
@@ -880,7 +878,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
 
       segmentText: {
         fontSize: scale(11),
-        fontWeight: "900",
+        fontWeight: "600",
       },
 
       // List
@@ -1024,6 +1022,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
         justifyContent: "center",
         paddingHorizontal: scale(20),
         gap: vscale(10),
+        paddingBottom: vscale(160),
       },
 
       centerHint: {

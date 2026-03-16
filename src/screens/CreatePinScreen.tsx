@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../theme/colors";
+import SavedModal from "../components/SavedModal";
 
 import {
   getAccessToken,
@@ -53,6 +54,8 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
   const PIN_LENGTH = 4;
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
+  const [savedVisible, setSavedVisible] = useState(false);
+  const [savedPin, setSavedPin] = useState("");
 
   const dots = useMemo(
     () => Array.from({ length: PIN_LENGTH }).map((_, i) => i < pin.length),
@@ -100,7 +103,8 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
 
       await setLoggedIn(true);
       setPinUnlockedThisRun(true);
-      onContinue(pin);
+      setSavedPin(pin);
+      setSavedVisible(true);
     } catch (err: any) {
       console.log(`${TAG} ERROR:`, err?.message || err);
       Alert.alert("PIN Setup Failed", err?.message || "Something went wrong.");
@@ -138,6 +142,16 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
 
   return (
     <View style={styles.safe}>
+      <SavedModal
+        visible={savedVisible}
+        title="PIN Created!"
+        message={"Your 4-digit PIN has been set.\nYou can use it to quickly access your account."}
+        buttonLabel="Continue"
+        onClose={() => {
+          setSavedVisible(false);
+          onContinue(savedPin);
+        }}
+      />
       <View style={styles.container}>
 
         {/* ── TOP: icon · title · subtitle · dots ── */}
@@ -149,7 +163,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
               end={{ x: 1, y: 1 }}
               style={styles.iconGradient}
             >
-              <Ionicons name="lock-closed" size={scale(30)} color="#FFFFFF" />
+              <Ionicons name="lock-closed" size={scale(20)} color="#FFFFFF" />
             </LinearGradient>
           </View>
 
@@ -300,13 +314,15 @@ function createStyles(
   height: number
 ) {
   const hPad = scale(24);
-  const keyGap = scale(14);
-  const keypadW = width - hPad * 2;
+  const keyGap = scale(16);
 
-  // Key is a circle: fit 3 per row (width constraint) and 4 rows (height constraint)
-  const keySizeW = Math.floor((keypadW - keyGap * 2) / 3);
-  const keySizeH = Math.floor((height * 0.46 - keyGap * 3) / 4);
-  const keySize = clamp(Math.min(keySizeW, keySizeH), 52, 84);
+  // Responsive key size — constrained by both screen width and height
+  const availW = width - hPad * 2;
+  const keySizeW = Math.floor((availW - keyGap * 2) / 3);
+  const keySizeH = Math.floor((height * 0.44 - keyGap * 3) / 4);
+  const keySize = clamp(Math.min(keySizeW, keySizeH), 64, 80);
+  // Grid width = exactly 3 buttons + 2 gaps so the grid centers inside keypadSection
+  const fixedGridW = keySize * 3 + keyGap * 2;
 
   const dotSize = clamp(scale(22), 18, 28);
 
@@ -327,9 +343,9 @@ function createStyles(
     },
 
     iconWrap: {
-      width: scale(72),
-      height: scale(72),
-      borderRadius: scale(22),
+      width: scale(50),
+      height: scale(50),
+      borderRadius: scale(16),
       overflow: "hidden",
       marginBottom: vscale(16),
       ...Platform.select({
@@ -370,12 +386,7 @@ function createStyles(
       alignItems: "center",
       justifyContent: "center",
       gap: scale(18),
-      backgroundColor: "#F8FAFC",
-      borderRadius: scale(20),
-      borderWidth: 1,
-      borderColor: "#E2E8F0",
       paddingVertical: vscale(16),
-      paddingHorizontal: scale(28),
     },
 
     dot: {
@@ -402,7 +413,7 @@ function createStyles(
     },
 
     keypadGrid: {
-      width: keypadW,
+      width: fixedGridW,
       flexDirection: "row",
       flexWrap: "wrap",
       columnGap: keyGap,

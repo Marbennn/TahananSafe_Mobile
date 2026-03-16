@@ -414,6 +414,8 @@ function NotificationsWrapper({ navigation }: { navigation: any }) {
 function PinScreenWrapper({ navigation }: { navigation: any }) {
   const auth = useAuth() as any;
   const targetHome = getHomeRouteNameByRole(auth?.user?.role);
+  const [pinErrVisible, setPinErrVisible] = React.useState(false);
+  const [pinErrMsg, setPinErrMsg] = React.useState("");
 
   const handleBack = async () => {
     resetPinUnlockedThisRun();
@@ -440,6 +442,9 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
         setPinUnlockedThisRun(true);
         navigation.reset({ index: 0, routes: [{ name: targetHome }] });
       }}
+      invalidPinVisible={pinErrVisible}
+      invalidPinMsg={pinErrMsg}
+      onInvalidPinDismiss={() => setPinErrVisible(false)}
       onVerified={async (pin) => {
         try {
           const token = await getAccessToken();
@@ -458,7 +463,8 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
           setPinUnlockedThisRun(true);
           navigation.reset({ index: 0, routes: [{ name: targetHome }] });
         } catch (e: any) {
-          Alert.alert("Invalid PIN", e?.message || "Try again.");
+          setPinErrMsg(e?.message || "The PIN you entered is incorrect. Please try again.");
+          setPinErrVisible(true);
         }
       }}
     />

@@ -17,6 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { Colors } from "../theme/colors";
 import PersonalDetailsForm from "../components/PersonalDetailsScreen/PersonalDetailsForm";
+import SavedModal from "../components/SavedModal";
 
 // ✅ API (separated)
 import { savePersonalDetails } from "../api/user";
@@ -39,8 +40,6 @@ type Props = {
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
-
-const BLUE = "#1D4ED8";
 
 /** ---------- VALIDATION HELPERS ---------- **/
 function normalizeName(s: string) {
@@ -103,6 +102,8 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
   const [gender, setGender] = useState<"male" | "female" | null>(initialValues?.gender ?? null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [savedVisible, setSavedVisible] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState<SubmitPayload | null>(null);
 
   const canContinue =
     normalizeName(firstName).length > 0 &&
@@ -165,8 +166,8 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
       setIsSubmitting(true);
       await savePersonalDetails(payload);
 
-      Alert.alert("Saved", "Personal details saved successfully.");
-      onSubmit?.(payload);
+      setPendingPayload(payload);
+      setSavedVisible(true);
     } catch (err: any) {
       Alert.alert("Error", err?.message ?? "Something went wrong.");
     } finally {
@@ -176,6 +177,16 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
 
   return (
     <View style={styles.safe}>
+      <SavedModal
+        visible={savedVisible}
+        title="Saved!"
+        message="Personal details saved successfully."
+        buttonLabel="OK"
+        onClose={() => {
+          setSavedVisible(false);
+          onSubmit?.(pendingPayload!);
+        }}
+      />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={styles.body}>
           <ScrollView bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scrollContent}>
@@ -201,7 +212,6 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
                 setDob={setDob}
                 setContactNumber={setContactNumber}
                 setGender={setGender}
-                activeBlue={BLUE}
               />
             </View>
           </ScrollView>
@@ -286,7 +296,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     inputIdle: { borderColor: "#E5E7EB" },
-    inputFocused: { borderColor: "#1D4ED8" },
+    inputFocused: { borderColor: Colors.primary },
 
     // ✅ NEW: red validation text style
     errorText: {
@@ -306,14 +316,27 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
+      gap: scale(8),
     },
 
-    // ✅ Gender text color black
+    selectFilled: {
+      borderColor: Colors.primary,
+      backgroundColor: "rgba(7, 81, 156, 0.03)",
+    },
+
     selectText: {
       flex: 1,
-      paddingRight: scale(10),
       fontSize: scale(14),
-      color: "#111827",
+      color: Colors.text,
+    },
+
+    genderIconInline: {
+      width: scale(26),
+      height: scale(26),
+      borderRadius: scale(13),
+      backgroundColor: "rgba(7, 81, 156, 0.10)",
+      alignItems: "center",
+      justifyContent: "center",
     },
 
     bottomBar: { paddingHorizontal: scale(22), paddingTop: vscale(10), backgroundColor: "#FFFFFF" },
@@ -336,40 +359,102 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     loadingRow: { flexDirection: "row", alignItems: "center", gap: scale(10) },
     loadingText: { color: "#FFFFFF", fontSize: scale(14), fontWeight: "800" },
 
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: "rgba(0,0,0,0.35)",
-      justifyContent: "center",
-      paddingHorizontal: scale(18),
+    genderSheet: {
+      backgroundColor: "#FFFFFF",
+      borderTopLeftRadius: scale(28),
+      borderTopRightRadius: scale(28),
+      paddingHorizontal: scale(20),
+      paddingTop: scale(10),
+      paddingBottom: scale(32),
+      ...Platform.select({
+        ios: { shadowColor: "#000", shadowOpacity: 0.22, shadowRadius: 28, shadowOffset: { width: 0, height: -6 } },
+        android: { elevation: 18 },
+      }),
     },
 
-    modalSheet: { backgroundColor: "#FFFFFF", borderRadius: scale(16), padding: scale(14), maxHeight: "70%" },
+    genderSheetHandle: {
+      width: scale(40),
+      height: scale(4),
+      borderRadius: scale(2),
+      backgroundColor: "#E5E7EB",
+      alignSelf: "center",
+      marginBottom: scale(18),
+    },
 
-    modalTitle: { fontSize: scale(14), fontWeight: "800", color: "#111827", marginBottom: vscale(10) },
+    genderSheetTitle: {
+      fontSize: scale(16),
+      fontWeight: "800",
+      color: Colors.text,
+      marginBottom: scale(14),
+    },
 
-    modalItem: {
-      paddingVertical: vscale(10),
-      paddingHorizontal: scale(10),
-      borderRadius: scale(12),
+    genderOption: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
+      gap: scale(14),
+      paddingVertical: vscale(14),
+      paddingHorizontal: scale(14),
+      borderRadius: scale(18),
+      borderWidth: 1.5,
+      borderColor: "#E5E7EB",
+      backgroundColor: "#FFFFFF",
+      marginBottom: scale(10),
     },
 
-    modalItemActive: { backgroundColor: "rgba(29, 78, 216, 0.08)" },
+    genderOptionActive: {
+      borderColor: Colors.primary,
+      backgroundColor: "rgba(7, 81, 156, 0.05)",
+    },
 
-    modalItemText: { color: "#111827", fontSize: scale(13), flex: 1, paddingRight: scale(10) },
-
-    modalItemTextActive: { fontWeight: "800", color: "#1D4ED8" },
-
-    modalCancel: {
-      marginTop: vscale(10),
-      paddingVertical: vscale(10),
+    genderIconBadge: {
+      width: scale(44),
+      height: scale(44),
+      borderRadius: scale(22),
+      backgroundColor: "#F3F4F6",
       alignItems: "center",
-      borderRadius: scale(12),
+      justifyContent: "center",
+    },
+
+    genderIconBadgeActive: {
+      backgroundColor: "rgba(7, 81, 156, 0.12)",
+    },
+
+    genderOptionText: {
+      fontSize: scale(15),
+      fontWeight: "700",
+      color: Colors.text,
+    },
+
+    genderOptionTextActive: {
+      color: Colors.primary,
+    },
+
+    genderOptionSub: {
+      fontSize: scale(12),
+      color: Colors.muted,
+      marginTop: scale(2),
+    },
+
+    genderOptionCircle: {
+      width: scale(22),
+      height: scale(22),
+      borderRadius: scale(11),
+      borderWidth: 1.5,
+      borderColor: "#D1D5DB",
+    },
+
+    genderCancel: {
+      marginTop: scale(4),
+      paddingVertical: vscale(14),
+      alignItems: "center",
+      borderRadius: scale(14),
       backgroundColor: "#F3F4F6",
     },
 
-    modalCancelText: { fontWeight: "800", color: "#111827" },
+    genderCancelText: {
+      fontSize: scale(14),
+      fontWeight: "700",
+      color: Colors.muted,
+    },
   });
 }

@@ -9,10 +9,13 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+
 import { Colors } from "../theme/colors";
 
-// ✅ popup
+// ✅ popups
 import EnterVerificationModal from "../components/SignupScreen/EnterVerificationModal";
+import TooManyRequestsModal from "../components/SignupScreen/TooManyRequestsModal";
+import SignupErrorModal from "../components/SignupScreen/SignupErrorModal";
 
 // ✅ Signup card component
 import SignupCard from "../components/SignupScreen/SignupCard";
@@ -70,8 +73,10 @@ function hasUppercase(p: string) {
 function hasNumber(p: string) {
   return /[0-9]/.test(p);
 }
+// Explicit, comprehensive list — covers all printable non-alphanumeric ASCII
+// plus common extras: . > / { } [ ] @ # $ % ^ & * ( ) _ + = - ! ? , ; : ' " \ | ~ `
 function hasSpecialChar(p: string) {
-  return /[^A-Za-z0-9]/.test(p);
+  return /[^A-Za-z0-9\s]/.test(p);
 }
 function getPasswordError(p: string) {
   // spaces are removed in the input, but keep this safe anyway
@@ -83,7 +88,7 @@ function getPasswordError(p: string) {
   if (!hasUppercase(pass)) return "Password must include at least 1 uppercase letter (A-Z).";
   if (!hasNumber(pass)) return "Password must include at least 1 number (0-9).";
   if (!hasSpecialChar(pass))
-    return "Password must include at least 1 special character (e.g. !@#$%).";
+    return "Password must include at least 1 special character (e.g. !@#$%^&*()_+-=[]{}|;':\",./<>?`~\\).";
 
   return null;
 }
@@ -113,6 +118,8 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
   const [showConfirm, setShowConfirm] = useState(false);
 
   const [verifyOpen, setVerifyOpen] = useState(false);
+  const [tooManyOpen, setTooManyOpen] = useState(false);
+  const [errorModal, setErrorModal] = useState<{ title: string; message: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const emailError = useMemo(() => getEmailError(email), [email]);
@@ -169,7 +176,12 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
 
     } catch (err: any) {
       log("[SIGNUP] error", err);
-      Alert.alert("Signup failed", err?.message ? String(err.message) : "Please try again.");
+      const msg = String(err?.message ?? "");
+      if (err?.status === 429 || /too many/i.test(msg) || /rate limit/i.test(msg)) {
+        setTooManyOpen(true);
+      } else {
+        setErrorModal({ title: "Signup Failed", message: msg || "Please try again." });
+      }
     } finally {
       setIsSubmitting(false);
       log("[SIGNUP] submitting END");
@@ -198,7 +210,12 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
       await registerSendOtp(e, p);
     } catch (err: any) {
       log("[RESEND] error", err);
-      Alert.alert("Resend failed", err?.message ? String(err.message) : "Please try again.");
+      const msg = String(err?.message ?? "");
+      if (err?.status === 429 || /too many/i.test(msg) || /rate limit/i.test(msg)) {
+        setTooManyOpen(true);
+      } else {
+        setErrorModal({ title: "Resend Failed", message: msg || "Please try again." });
+      }
     } finally {
       setIsSubmitting(false);
       log("[RESEND] submitting END");
@@ -244,6 +261,18 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
           />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <TooManyRequestsModal
+        visible={tooManyOpen}
+        onClose={() => setTooManyOpen(false)}
+      />
+
+      <SignupErrorModal
+        visible={errorModal !== null}
+        title={errorModal?.title}
+        message={errorModal?.message ?? ""}
+        onClose={() => setErrorModal(null)}
+      />
 
       <EnterVerificationModal
         visible={verifyOpen}

@@ -16,6 +16,17 @@ export type NotificationItem = {
   meta?: { oldStatus?: string; newStatus?: string };
 };
 
+function normalizeReplyTitle(item: NotificationItem): NotificationItem {
+  const rawTitle = String(item?.title ?? "").trim();
+  const isReplyTitle = /^reply\s+from\s+/i.test(rawTitle);
+  if (!isReplyTitle) return item;
+
+  return {
+    ...item,
+    title: "Reply from admin",
+  };
+}
+
 function getApiBaseUrl() {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
 
@@ -401,7 +412,7 @@ export async function fetchMyNotificationsCombined(limit = 80): Promise<Notifica
   const [remote, local] = await Promise.all([fetchMyNotifications(limit), getLocalNotifications()]);
   const clearedBeforeMs = await getClearedBeforeMs();
 
-  const all = [...local, ...remote];
+  const all = [...local, ...remote].map(normalizeReplyTitle);
 
   const seen = new Set<string>();
   const deduped: NotificationItem[] = [];

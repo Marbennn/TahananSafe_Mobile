@@ -611,6 +611,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       alignItems: "center",
       flexWrap: "wrap",
       gap: scale(4),
+      marginTop: vscale(6),
     },
     metaText: {
       fontSize: scale(11),

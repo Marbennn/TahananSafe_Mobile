@@ -12,12 +12,27 @@ export type LogItem = {
   timeLeft: string;
   dateRight: string;
   timeRight: string;
+  updatedAt?: string;
 };
 
 type Props = {
   item: LogItem;
   onPress?: () => void;
 };
+
+function formatUpdatedAt(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const month = d.toLocaleString("en-US", { month: "long" });
+  const day = d.getDate();
+  const year = d.getFullYear();
+  const h = d.getHours();
+  const m = d.getMinutes();
+  const ampm = h >= 12 ? "PM" : "AM";
+  const hh = h % 12 === 0 ? 12 : h % 12;
+  const mm = String(m).padStart(2, "0");
+  return `${month} ${day}, ${year} at ${hh}:${mm} ${ampm}`;
+}
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -60,30 +75,15 @@ export default function RecentLogCard({ item, onPress }: Props) {
           <Ionicons name="chevron-forward" size={clamp(Math.round(18 * fs), 16, 20)} color="#94A3B8" />
         </View>
 
-        {/* ✅ Reserve 2 lines so every card has same height */}
         <Text style={styles.detail} numberOfLines={2} ellipsizeMode="tail" allowFontScaling={false}>
           {item.detail || "—"}
         </Text>
 
-        <View style={styles.bottomRow}>
-          <View style={styles.col}>
-            <Text style={styles.metaLabel} numberOfLines={1} allowFontScaling={false}>
-              {item.dateLeft || "—"}
-            </Text>
-            <Text style={styles.metaValue} numberOfLines={1} allowFontScaling={false}>
-              {item.timeLeft || "—"}
-            </Text>
-          </View>
-
-          <View style={styles.colRight}>
-            <Text style={styles.metaLabel} numberOfLines={1} allowFontScaling={false}>
-              {item.dateRight || "—"}
-            </Text>
-            <Text style={styles.metaValue} numberOfLines={1} allowFontScaling={false}>
-              {item.timeRight || "—"}
-            </Text>
-          </View>
-        </View>
+        {!!item.updatedAt && (
+          <Text style={styles.updatedAt} numberOfLines={1} allowFontScaling={false}>
+            Updated: {formatUpdatedAt(item.updatedAt)}
+          </Text>
+        )}
       </View>
     </Pressable>
   );
@@ -97,7 +97,6 @@ function makeStyles(s: number, fs: number) {
   // ✅ Two-line reservation math
   const detailFont = clamp(Math.round(12 * fs), 11, 13);
   const detailLine = clamp(Math.round(16 * fs), 14, 18);
-  const detailMinH = detailLine * 2; // 2 lines always
 
   return StyleSheet.create({
     card: {
@@ -128,6 +127,7 @@ function makeStyles(s: number, fs: number) {
       flex: 1,
       paddingHorizontal: PAD_X,
       paddingVertical: PAD_Y,
+      justifyContent: "center",
     },
 
     topRow: {
@@ -151,7 +151,13 @@ function makeStyles(s: number, fs: number) {
       lineHeight: detailLine,
       fontWeight: "600",
       color: "#64748B",
-      minHeight: detailMinH, // ✅ reserves space so cards match
+    },
+
+    updatedAt: {
+      marginTop: clamp(Math.round(18 * s), 14, 24),
+      fontSize: clamp(Math.round(10 * fs), 9, 11),
+      fontWeight: "600",
+      color: Colors.primary,
     },
 
     bottomRow: {

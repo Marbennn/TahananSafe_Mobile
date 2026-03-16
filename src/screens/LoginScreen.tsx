@@ -40,6 +40,10 @@ import LegalModal, { type LegalMode } from "../components/LoginScreen/LegalModal
 
 // ✅ custom biometrics modal
 import BiometricsOptInModal from "../components/LoginScreen/BiometricsOptInModal";
+import BiometricsEnabledModal from "../components/LoginScreen/BiometricsEnabledModal";
+
+// ✅ invalid credentials modal
+import SignupErrorModal from "../components/SignupScreen/SignupErrorModal";
 
 // ✅ Session storage
 import { saveTokens, setLoggedIn } from "../auth/session";
@@ -77,12 +81,6 @@ type LoginCheckResponse = {
 
 type LoginSendOtpResponse = { message?: string };
 
-const INVALID_CREDENTIALS_TITLE = "Invalid Credentials";
-const INVALID_CREDENTIALS_BODY = "Invalid Credentials";
-
-function showInvalidCredentials() {
-  Alert.alert(INVALID_CREDENTIALS_TITLE, INVALID_CREDENTIALS_BODY);
-}
 
 function showServerUnavailable() {
   Alert.alert("Server unavailable", "Please try again. (Tunnel/Server issue)");
@@ -519,6 +517,9 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   // ✅ Legal modal
   const [legalOpen, setLegalOpen] = useState(false);
   const [legalMode, setLegalMode] = useState<LegalMode>("terms");
+  const [credErrorVisible, setCredErrorVisible] = useState(false);
+  const [bioEnabledVisible, setBioEnabledVisible] = useState(false);
+  const [pendingRoleAfterBioEnabled, setPendingRoleAfterBioEnabled] = useState<string>("user");
 
   const goAfterLoginByRole = (role?: string) => {
     if (isBarangayOfficial(role)) {
@@ -617,19 +618,8 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       setBioModalVisible(false);
       setBioPromptEmail("");
       setPendingRoleAfterBioModal("user");
-
-      Alert.alert(
-        "Biometrics Enabled",
-        Platform.OS === "ios"
-          ? "Face ID will be available on your next login."
-          : "Fingerprint login will be available on your next login.",
-        [
-          {
-            text: "OK",
-            onPress: () => goAfterLoginByRole(roleToGo),
-          },
-        ]
-      );
+      setPendingRoleAfterBioEnabled(roleToGo);
+      setBioEnabledVisible(true);
     }
   };
 
@@ -662,7 +652,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     const passwordNorm = String(password ?? "");
 
     if (!emailNorm || !passwordNorm) {
-      showInvalidCredentials();
+      setCredErrorVisible(true);
       return;
     }
 
@@ -760,7 +750,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       openOtpModal(emailNorm, passwordNorm);
     } catch (err: any) {
       console.log(`${TAG} handleLoginPressed ERROR:`, err?.message || err);
-      showInvalidCredentials();
+      setCredErrorVisible(true);
     } finally {
       setSendingOtp(false);
       console.log(`${TAG} handleLoginPressed END`);
@@ -769,7 +759,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
 
   const handleResend = async () => {
     if (!verifyEmail || !verifyPassword) {
-      showInvalidCredentials();
+      setCredErrorVisible(true);
       return;
     }
 
@@ -807,7 +797,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       console.log(`${TAG} resend END`);
     } catch (err: any) {
       console.log(`${TAG} resend ERROR:`, err?.message || err);
-      showInvalidCredentials();
+      setCredErrorVisible(true);
     }
   };
 
@@ -957,6 +947,21 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         onNotNow={handleBiometricsNotNow}
         scale={scale}
         vscale={vscale}
+      />
+
+      <BiometricsEnabledModal
+        visible={bioEnabledVisible}
+        onClose={() => {
+          setBioEnabledVisible(false);
+          goAfterLoginByRole(pendingRoleAfterBioEnabled);
+        }}
+      />
+
+      <SignupErrorModal
+        visible={credErrorVisible}
+        title="Invalid Credentials"
+        message="The email or password you entered is incorrect. Please try again."
+        onClose={() => setCredErrorVisible(false)}
       />
     </SafeAreaView>
   );

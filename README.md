@@ -34,3 +34,4 @@ cd C:\Users\INTEL\OneDrive\Documents\GitHub\TahananSafe_Mobile
 cd android
 
  cmd /c "set ""JAVA_HOME=C:\Program Files\Java\jdk-17.0.2"" && set ""PATH=%JAVA_HOME%\bin;%PATH%"" && gradlew.bat :app:installDebug"
+ 

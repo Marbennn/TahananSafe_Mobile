@@ -654,6 +654,7 @@ export default function HomeScreen({
       timeLeft: r.timeLeft,
       dateRight: r.dateRight,
       timeRight: r.timeRight,
+      updatedAt: r.updatedAt,
     }));
   }, [recentReports]);
 
@@ -944,7 +945,7 @@ export default function HomeScreen({
         },
 
         sectionRow: {
-          marginTop: clamp(Math.round(6 * s), 4, 8),
+          marginTop: clamp(Math.round(22 * s), 18, 28),
           paddingHorizontal: PAD,
           flexDirection: "row",
           alignItems: "center",
@@ -952,7 +953,7 @@ export default function HomeScreen({
         },
 
         sectionTitle: { fontSize: clamp(Math.round(14 * fs), 13, 16), fontWeight: "900", color: TEXT_DARK },
-        seeMore: { fontSize: clamp(Math.round(13 * fs), 12, 15), fontWeight: "900", color: Colors.link },
+        seeMore: { fontSize: clamp(Math.round(13 * fs), 12, 15), fontWeight: "600", color: Colors.link },
 
         logsWrap: { paddingHorizontal: PAD, paddingTop: clamp(Math.round(10 * s), 8, 12) },
         logsGap: { height: GAP },
@@ -1002,7 +1003,7 @@ export default function HomeScreen({
         },
         emergencyLabel: {
           fontSize: clamp(Math.round(11 * fs), 10, 12),
-          fontWeight: "800",
+          fontWeight: "600",
           color: "rgba(255,255,255,0.85)",
         },
         emergencySub: {
@@ -1077,22 +1078,22 @@ export default function HomeScreen({
           gap: clamp(Math.round(6 * s), 4, 8),
         },
         emptyLogsIconWrap: {
-          width: clamp(Math.round(52 * s), 44, 60),
-          height: clamp(Math.round(52 * s), 44, 60),
-          borderRadius: clamp(Math.round(16 * s), 12, 18),
+          width: clamp(Math.round(36 * s), 30, 42),
+          height: clamp(Math.round(36 * s), 30, 42),
+          borderRadius: clamp(Math.round(10 * s), 8, 12),
           backgroundColor: "#EAF3FF",
           alignItems: "center",
           justifyContent: "center",
           marginBottom: clamp(Math.round(2 * s), 1, 4),
         },
         emptyLogsTitle: {
-          fontSize: clamp(Math.round(15 * fs), 13, 17),
-          fontWeight: "900",
+          fontSize: clamp(Math.round(12 * fs), 11, 13),
+          fontWeight: "600",
           color: TEXT_DARK,
         },
         emptyLogsText: {
           fontSize: clamp(Math.round(12 * fs), 11, 13),
-          fontWeight: "600",
+          fontWeight: "400",
           color: "#94A3B8",
           textAlign: "center",
         },
@@ -1279,9 +1280,6 @@ export default function HomeScreen({
 
           <View style={styles.sectionRow}>
             <View style={styles.sectionTitleRow}>
-              <View style={[styles.sectionIcon, { backgroundColor: "#EAF3FF" }]}>
-                <Ionicons name="document-text-outline" size={14} color={Colors.primary} />
-              </View>
               <Text style={styles.sectionTitle} allowFontScaling={false}>
                 Recent Logs
               </Text>
@@ -1302,7 +1300,7 @@ export default function HomeScreen({
             ) : logs.length === 0 ? (
               <View style={styles.emptyLogsCard}>
                 <View style={styles.emptyLogsIconWrap}>
-                  <Ionicons name="document-text-outline" size={26} color={Colors.primary} />
+                  <Ionicons name="document-text-outline" size={14} color={Colors.primary} />
                 </View>
                 <Text style={styles.emptyLogsTitle} allowFontScaling={false}>No reports yet</Text>
                 <Text style={styles.emptyLogsText} allowFontScaling={false}>
@@ -1332,9 +1330,6 @@ export default function HomeScreen({
           {/* Emergency Contacts */}
           <View style={styles.sectionRow}>
             <View style={styles.sectionTitleRow}>
-              <View style={[styles.sectionIcon, { backgroundColor: "#FFEDE9" }]}>
-                <Ionicons name="call-outline" size={14} color="#DC2626" />
-              </View>
               <Text style={styles.sectionTitle} allowFontScaling={false}>
                 Emergency Contacts
               </Text>
@@ -1364,7 +1359,6 @@ export default function HomeScreen({
                       <Text style={styles.emergencyNum} allowFontScaling={false}>911</Text>
                     </View>
                     <Text style={styles.emergencyLabel} allowFontScaling={false}>Emergency Hotline</Text>
-                    <Text style={styles.emergencySub} allowFontScaling={false}>Tap to call immediately</Text>
                   </LinearGradient>
                 </Animated.View>
               </Pressable>
@@ -1390,7 +1384,6 @@ export default function HomeScreen({
                       <Text style={styles.emergencyNum} allowFontScaling={false}>117</Text>
                     </View>
                     <Text style={styles.emergencyLabel} allowFontScaling={false}>Police Assistance</Text>
-                    <Text style={styles.emergencySub} allowFontScaling={false}>Tap to call immediately</Text>
                   </LinearGradient>
                 </Animated.View>
               </Pressable>

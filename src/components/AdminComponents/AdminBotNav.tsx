@@ -11,7 +11,6 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../theme/colors";
-import AdminElepsis from "../../../assets/Admin/BottomNavBar/AdminElepsis.svg";
 
 export type TabKey =
   | "Home"
@@ -30,17 +29,13 @@ type Props = {
   navHeight: number;
   paddingBottom: number;
 
-  // compatibility (kept so other screens don't break)
-  chevronBottom: number;
-  fabBottom: number;
-
+  // kept for compatibility — unused after FAB removal
+  chevronBottom?: number;
+  fabBottom?: number;
   fabSize?: number;
-
-  onFabPress: () => void;
+  onFabPress?: () => void;
   onFabLongPress?: () => void;
-
   centerLabel?: string;
-
   Chevron?: React.ComponentType<{ width?: number; height?: number }>;
 };
 
@@ -62,12 +57,6 @@ export default function AdminBotNav({
   onTabPress,
   navHeight,
   paddingBottom,
-  chevronBottom,
-  fabSize: fabSizeProp = 62,
-  onFabPress,
-  onFabLongPress,
-  centerLabel = "Admin Menu",
-  Chevron,
 }: Props) {
   const { width } = useWindowDimensions();
   const { s } = useMemo(() => makeScale(width), [width]);
@@ -91,60 +80,10 @@ export default function AdminBotNav({
     [s]
   );
 
-  // base size reference
-  const fabSize = useMemo(() => {
-    const raw = fabSizeProp * s;
-    if (width < 360) return clamp(Math.round(raw), 52, 62);
-    if (width < 400) return clamp(Math.round(raw), 56, 68);
-    return clamp(Math.round(raw), 60, 76);
-  }, [fabSizeProp, s, width]);
-
-  const fabSvgWidth = fabSize;
-  const fabSvgHeight = fabSize;
-
-  const cutoutSize = useMemo(
-    () => clamp(Math.round(fabSize * 1.42), fabSize + 22, fabSize + 40),
-    [fabSize]
-  );
-
-  const fabLift = useMemo(() => {
-    const base = clamp(Math.round(fabSize * 0.86), 30, 54);
-    if (width < 360) return clamp(Math.round(base * 0.93), 28, 50);
-    if (width < 400) return clamp(Math.round(base * 0.96), 29, 52);
-    return base;
-  }, [fabSize, width]);
-
   const effectiveNavHeight = useMemo(
     () => navHeight + EXTRA_BAR_HEIGHT,
     [navHeight, EXTRA_BAR_HEIGHT]
   );
-
-  const centerLabelBottom = useMemo(
-    () => clamp(Math.round(12 * s), 10, 16),
-    [s]
-  );
-
-  const cutoutVisibleHeight = useMemo(() => {
-    const h = cutoutSize * 0.52;
-    return clamp(
-      Math.round(h),
-      Math.round(cutoutSize * 0.48),
-      Math.round(cutoutSize * 0.62)
-    );
-  }, [cutoutSize]);
-
-  const haloUp = useMemo(() => {
-    const base = clamp(Math.round(fabSize * 0.18), 10, 20);
-    if (width < 360) return clamp(Math.round(base * 0.9), 9, 18);
-    return base;
-  }, [fabSize, width]);
-
-  const haloLiftExtra = useMemo(() => {
-    return clamp(Math.round(58 * s), 8, 80);
-  }, [s]);
-
-  const baseBottom =
-    paddingBottom + (effectiveNavHeight - paddingBottom) - fabLift;
 
   /* ── Tab click animations ── */
   const tabScalesRef = useRef<Record<TabKey, Animated.Value>>({
@@ -193,14 +132,6 @@ export default function AdminBotNav({
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        chevronWrap: {
-          position: "absolute",
-          left: 0,
-          right: 0,
-          alignItems: "center",
-          justifyContent: "center",
-        },
-
         navWrap: {
           position: "absolute",
           left: 0,
@@ -241,96 +172,6 @@ export default function AdminBotNav({
           color: Colors.primary,
           fontWeight: "800",
         },
-
-        centerSlot: {
-          flex: 1,
-          minWidth: 0,
-          position: "relative",
-          alignItems: "center",
-          justifyContent: "center",
-          paddingBottom: itemPaddingBottom + EXTRA_BAR_HEIGHT * 0.35,
-        },
-
-        centerLabel: {
-          position: "absolute",
-          bottom: centerLabelBottom,
-          fontSize: labelFont,
-          color: INACTIVE,
-          fontWeight: "600",
-          includeFontPadding: false,
-        },
-
-        haloLayer: {
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: baseBottom + haloLiftExtra,
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 9,
-          pointerEvents: "none",
-        },
-
-        cutoutClip: {
-          position: "absolute",
-          top: -haloUp,
-          width: cutoutSize,
-          height: cutoutVisibleHeight,
-          overflow: "hidden",
-          alignItems: "center",
-          justifyContent: "flex-start",
-        },
-
-        cutout: {
-          width: cutoutSize,
-          height: cutoutSize,
-          borderRadius: cutoutSize / 2,
-          backgroundColor: NAV_BG,
-          borderWidth: 0,
-          ...(Platform.OS === "ios"
-            ? {
-                shadowColor: "transparent",
-                shadowOpacity: 0,
-                shadowRadius: 0,
-                shadowOffset: { width: 0, height: 0 },
-              }
-            : { elevation: 0 }),
-        },
-
-        fabLayer: {
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: baseBottom,
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 10,
-        },
-
-        fabPressable: {
-          width: fabSvgWidth,
-          height: fabSvgHeight,
-          borderRadius: fabSvgWidth / 2,
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "hidden",
-          ...Platform.select({
-            ios: {
-              shadowColor: "#000",
-              shadowOpacity: 0.18,
-              shadowRadius: 14,
-              shadowOffset: { width: 0, height: 8 },
-            },
-            android: { elevation: 10 },
-          }),
-        },
-
-        fabSvgWrap: {
-          width: fabSvgWidth,
-          height: fabSvgHeight,
-          alignItems: "center",
-          justifyContent: "center",
-        },
       }),
     [
       effectiveNavHeight,
@@ -340,133 +181,78 @@ export default function AdminBotNav({
       itemPaddingBottom,
       labelMarginTop,
       labelFont,
-      fabSvgWidth,
-      fabSvgHeight,
-      cutoutSize,
       EXTRA_BAR_HEIGHT,
-      centerLabelBottom,
-      cutoutVisibleHeight,
-      haloUp,
-      haloLiftExtra,
-      baseBottom,
     ]
   );
 
   return (
-    <>
-      {Chevron ? (
-        <View
-          style={[styles.chevronWrap, { bottom: chevronBottom }]}
-          pointerEvents="none"
-        >
-          <Chevron
-            width={clamp(Math.round(22 * s), 18, 26)}
-            height={clamp(Math.round(22 * s), 18, 26)}
-          />
-        </View>
-      ) : null}
+    <View style={styles.navWrap}>
+      <NavItem
+        icon="home-outline"
+        activeIcon="home"
+        label="Home"
+        active={activeTab === "Home"}
+        onPress={() => handleTabPress("Home")}
+        iconSize={iconSize}
+        labelStyle={styles.label}
+        labelActiveStyle={styles.labelActive}
+        itemStyle={styles.item}
+        innerStyle={styles.itemInner}
+        scaleAnim={tabScalesRef.current.Home}
+        pressInScale={pressInScale}
+      />
 
-      <View style={styles.navWrap}>
-        <NavItem
-          icon="home-outline"
-          label="Home"
-          active={activeTab === "Home"}
-          onPress={() => handleTabPress("Home")}
-          iconSize={iconSize}
-          labelStyle={styles.label}
-          labelActiveStyle={styles.labelActive}
-          itemStyle={styles.item}
-          innerStyle={styles.itemInner}
-          scaleAnim={tabScalesRef.current.Home}
-          pressInScale={pressInScale}
-        />
+      <NavItem
+        icon="notifications-outline"
+        activeIcon="notifications"
+        label="Alerts"
+        active={activeTab === "Inbox"}
+        onPress={() => handleTabPress("Inbox")}
+        iconSize={iconSize}
+        labelStyle={styles.label}
+        labelActiveStyle={styles.labelActive}
+        itemStyle={styles.item}
+        innerStyle={styles.itemInner}
+        scaleAnim={tabScalesRef.current.Inbox}
+        pressInScale={pressInScale}
+      />
 
-        <NavItem
-          icon="notifications-outline"
-          label="Alerts"
-          active={activeTab === "Inbox"}
-          onPress={() => handleTabPress("Inbox")}
-          iconSize={iconSize}
-          labelStyle={styles.label}
-          labelActiveStyle={styles.labelActive}
-          itemStyle={styles.item}
-          innerStyle={styles.itemInner}
-          scaleAnim={tabScalesRef.current.Inbox}
-          pressInScale={pressInScale}
-        />
+      <NavItem
+        icon="stats-chart-outline"
+        activeIcon="stats-chart"
+        label="Reports"
+        active={activeTab === "Reports"}
+        onPress={() => handleTabPress("Reports")}
+        iconSize={iconSize}
+        labelStyle={styles.label}
+        labelActiveStyle={styles.labelActive}
+        itemStyle={styles.item}
+        innerStyle={styles.itemInner}
+        scaleAnim={tabScalesRef.current.Reports}
+        pressInScale={pressInScale}
+      />
 
-        <View style={styles.centerSlot} pointerEvents="none">
-          <Text
-            style={[
-              styles.centerLabel,
-              activeTab === "Incident" && styles.labelActive,
-            ]}
-            numberOfLines={1}
-            allowFontScaling={false}
-          >
-            {centerLabel}
-          </Text>
-        </View>
-
-        <NavItem
-          icon="stats-chart-outline"
-          label="Reports"
-          active={activeTab === "Reports"}
-          onPress={() => handleTabPress("Reports")}
-          iconSize={iconSize}
-          labelStyle={styles.label}
-          labelActiveStyle={styles.labelActive}
-          itemStyle={styles.item}
-          innerStyle={styles.itemInner}
-          scaleAnim={tabScalesRef.current.Reports}
-          pressInScale={pressInScale}
-        />
-
-        <NavItem
-          icon="settings-outline"
-          label="Settings"
-          active={activeTab === "Settings"}
-          onPress={() => handleTabPress("Settings")}
-          iconSize={iconSize}
-          labelStyle={styles.label}
-          labelActiveStyle={styles.labelActive}
-          itemStyle={styles.item}
-          innerStyle={styles.itemInner}
-          scaleAnim={tabScalesRef.current.Settings}
-          pressInScale={pressInScale}
-        />
-      </View>
-
-      {/* Halo / cutout */}
-      <View style={styles.haloLayer}>
-        <View style={styles.cutoutClip}>
-          <View style={styles.cutout} />
-        </View>
-      </View>
-
-      {/* AdminElepsis.svg fully replaces FAB */}
-      <View style={styles.fabLayer} pointerEvents="box-none">
-        <Pressable
-          onPress={onFabPress}
-          onLongPress={onFabLongPress}
-          delayLongPress={350}
-          style={({ pressed }) => [
-            styles.fabPressable,
-            pressed && { transform: [{ scale: 0.96 }] },
-          ]}
-          hitSlop={10}
-        >
-          <View style={styles.fabSvgWrap}>
-            <AdminElepsis width={fabSvgWidth} height={fabSvgHeight} />
-          </View>
-        </Pressable>
-      </View>
-    </>
+      <NavItem
+        icon="settings-outline"
+        activeIcon="settings"
+        label="Settings"
+        active={activeTab === "Settings"}
+        onPress={() => handleTabPress("Settings")}
+        iconSize={iconSize}
+        labelStyle={styles.label}
+        labelActiveStyle={styles.labelActive}
+        itemStyle={styles.item}
+        innerStyle={styles.itemInner}
+        scaleAnim={tabScalesRef.current.Settings}
+        pressInScale={pressInScale}
+      />
+    </View>
   );
 }
 
 function NavItem({
   icon,
+  activeIcon,
   label,
   active,
   onPress,
@@ -479,6 +265,7 @@ function NavItem({
   pressInScale,
 }: {
   icon: IoniconName;
+  activeIcon?: IoniconName;
   label: string;
   active: boolean;
   onPress: () => void;
@@ -522,7 +309,7 @@ function NavItem({
     >
       <Animated.View style={[innerStyle, { transform: [{ scale: scaleAnim }] }]}>
         <Ionicons
-          name={icon}
+          name={active && activeIcon ? activeIcon : icon}
           size={iconSize}
           color={active ? Colors.primary : "#9AA4B2"}
         />

@@ -423,6 +423,7 @@ export default function BottomNavBar({
       <View style={styles.navWrap}>
         <NavItem
           icon="home-outline"
+          activeIcon="home"
           label="Home"
           active={activeTab === "Home"}
           onPress={() => handleTabPress("Home")}
@@ -437,6 +438,7 @@ export default function BottomNavBar({
 
         <NavItem
           icon="call-outline"
+          activeIcon="call"
           label="Hotlines"
           active={activeTab === "Inbox"}
           onPress={() => handleTabPress("Inbox")}
@@ -464,6 +466,7 @@ export default function BottomNavBar({
 
         <NavItem
           icon="stats-chart-outline"
+          activeIcon="stats-chart"
           label="Reports"
           active={activeTab === "Reports"}
           onPress={() => handleTabPress("Reports")}
@@ -478,6 +481,7 @@ export default function BottomNavBar({
 
         <NavItem
           icon="settings-outline"
+          activeIcon="settings"
           label="Settings"
           active={activeTab === "Settings"}
           onPress={() => handleTabPress("Settings")}
@@ -526,6 +530,7 @@ export default function BottomNavBar({
 
 function NavItem({
   icon,
+  activeIcon,
   label,
   active,
   onPress,
@@ -538,6 +543,7 @@ function NavItem({
   pressInScale,
 }: {
   icon: IoniconName;
+  activeIcon?: IoniconName;
   label: string;
   active: boolean;
   onPress: () => void;
@@ -582,7 +588,7 @@ function NavItem({
     >
       <Animated.View style={[innerStyle, { transform: [{ scale: scaleAnim }] }]}>
         <Ionicons
-          name={icon}
+          name={active && activeIcon ? activeIcon : icon}
           size={iconSize}
           color={active ? Colors.primary : "#9AA4B2"}
         />

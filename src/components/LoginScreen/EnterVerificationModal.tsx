@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "../../theme/colors";
@@ -53,7 +54,6 @@ const API_URL = (process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000")
 const VERIFY_LOGIN_OTP_PATH = "/api/mobile/v1/verify-login-otp";
 
 // ✅ SecureStore keys must contain only: A-Z a-z 0-9 . - _
-// So we sanitize email and DO NOT use "@"
 function safeKeyPart(input: string) {
   return String(input || "")
     .trim()
@@ -61,9 +61,7 @@ function safeKeyPart(input: string) {
     .replace(/[^a-z0-9._-]/g, "_");
 }
 
-// ✅ key for storing per-email refresh token used by biometric quick-login
 function refreshKeyForEmail(email: string) {
-  // ✅ removed "@" prefix
   return `tahanansafe_refresh_${safeKeyPart(email)}`;
 }
 
@@ -123,9 +121,8 @@ export default function EnterVerificationModal({
 
   const [code, setCode] = useState<string>("");
   const [secondsLeft, setSecondsLeft] = useState<number>(initialSeconds);
-
-  // ✅ internal verifying state (so we can disable UI while verifying)
   const [verifying, setVerifying] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
 
   const inputRef = useRef<TextInput>(null);
 
@@ -135,22 +132,15 @@ export default function EnterVerificationModal({
   const timeText = `00:${String(secondsLeft).padStart(2, "0")}`;
   const canContinue = code.length === 4 && !isVerifying && !verifying;
 
-  const focusInput = () =>
-    requestAnimationFrame(() => inputRef.current?.focus?.());
+  const focusInput = () => {
+    setTimeout(() => inputRef.current?.focus?.(), 100);
+  };
 
   const closeWithAnim = () => {
     if (isVerifying || verifying) return;
     Animated.parallel([
-      Animated.timing(fade, {
-        toValue: 0,
-        duration: 120,
-        useNativeDriver: true,
-      }),
-      Animated.timing(pop, {
-        toValue: 0.98,
-        duration: 120,
-        useNativeDriver: true,
-      }),
+      Animated.timing(fade, { toValue: 0, duration: 120, useNativeDriver: true }),
+      Animated.timing(pop, { toValue: 0.98, duration: 120, useNativeDriver: true }),
     ]).start(({ finished }) => {
       if (finished) onClose();
     });
@@ -161,16 +151,14 @@ export default function EnterVerificationModal({
 
     setCode("");
     setSecondsLeft(initialSeconds);
+    setVerifying(false);
+    setOtpError(null);
 
     fade.setValue(0);
     pop.setValue(0.96);
 
     Animated.parallel([
-      Animated.timing(fade, {
-        toValue: 1,
-        duration: 160,
-        useNativeDriver: true,
-      }),
+      Animated.timing(fade, { toValue: 1, duration: 160, useNativeDriver: true }),
       Animated.spring(pop, {
         toValue: 1,
         speed: 18,
@@ -194,18 +182,18 @@ export default function EnterVerificationModal({
     return () => clearInterval(t);
   }, [visible, secondsLeft]);
 
-  const handleChange = (t: string) =>
+  const handleChange = (t: string) => {
     setCode(t.replace(/\D/g, "").slice(0, 4));
+    if (otpError) setOtpError(null);
+  };
 
   const handleContinue = async () => {
     if (!canContinue) return;
 
     const e = String(email || "").trim().toLowerCase();
     if (!e) {
-      return Alert.alert(
-        "Missing Email",
-        "Email is required for OTP verification."
-      );
+      Alert.alert("Missing Email", "Email is required for OTP verification.");
+      return;
     }
 
     const otp = code.trim();
@@ -258,7 +246,7 @@ export default function EnterVerificationModal({
       onVerified(otp);
     } catch (err: any) {
       console.log(`${TAG} verify ERROR:`, err?.message || err);
-      Alert.alert("Verification Failed", err?.message || "OTP is incorrect.");
+      setOtpError("Invalid OTP. Please try again.");
     } finally {
       setVerifying(false);
       console.log(`${TAG} verify END`);
@@ -273,18 +261,31 @@ export default function EnterVerificationModal({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={closeWithAnim}
-    >
-      <View style={styles.modalRoot}>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={closeWithAnim}>
+      <View style={{ flex: 1 }}>
         <Animated.View style={[styles.backdrop, { opacity: fade }]} />
+      <KeyboardAvoidingView
+        style={styles.modalRoot}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
+      >
 
         <Animated.View
           style={[styles.card, { opacity: fade, transform: [{ scale: pop }] }]}
         >
+          {/* X close button */}
+          <Pressable
+            onPress={closeWithAnim}
+            hitSlop={10}
+            disabled={isVerifying || verifying}
+            style={[styles.closeBtn, (isVerifying || verifying) && { opacity: 0.35 }]}
+          >
+            <View style={styles.xWrap}>
+              <View style={[styles.xBar, { transform: [{ rotate: "45deg" }] }]} />
+              <View style={[styles.xBar, { transform: [{ rotate: "-45deg" }] }]} />
+            </View>
+          </Pressable>
+
           <View style={styles.badgeWrap}>
             <ChecklistBadge size={scale(86)} />
           </View>
@@ -295,41 +296,46 @@ export default function EnterVerificationModal({
             Enter the 4 - digit verification code sent to{"\n"}your email address
           </Text>
 
-          <Pressable
-            onPress={focusInput}
-            style={styles.otpRow}
-            disabled={isVerifying || verifying}
-          >
-            {[0, 1, 2, 3].map((i) => {
-              const ch = code[i] ?? "";
-              const isActive = i === code.length && code.length < 4;
-              const isFilled = ch.length > 0;
-              return (
-                <View
-                  key={i}
-                  style={[
-                    styles.otpBox,
-                    (isActive || isFilled) && styles.otpBoxActive,
-                  ]}
-                >
-                  <Text style={styles.otpChar}>{ch}</Text>
-                </View>
-              );
-            })}
-          </Pressable>
+          <View style={styles.otpWrapper}>
+            <View style={styles.otpRow}>
+              {[0, 1, 2, 3].map((i) => {
+                const ch = code[i] ?? "";
+                const isActive = i === code.length && code.length < 4;
+                const isFilled = ch.length > 0;
+                return (
+                  <View
+                    key={i}
+                    style={[
+                      styles.otpBox,
+                      (isActive || isFilled) && styles.otpBoxActive,
+                    ]}
+                  >
+                    <Text style={styles.otpChar}>{ch}</Text>
+                  </View>
+                );
+              })}
+            </View>
 
-          {!!errorText && <Text style={styles.errorText}>{errorText}</Text>}
+            {/* Overlay the input over the entire OTP row so taps hit it directly */}
+            <TextInput
+              ref={inputRef}
+              value={code}
+              onChangeText={handleChange}
+              keyboardType="number-pad"
+              returnKeyType="done"
+              maxLength={4}
+              style={styles.hiddenInput}
+              autoFocus={false}
+              blurOnSubmit={false}
+              showSoftInputOnFocus={true}
+              onSubmitEditing={handleContinue}
+              editable={!isVerifying && !verifying}
+            />
 
-          <TextInput
-            ref={inputRef}
-            value={code}
-            onChangeText={handleChange}
-            keyboardType="number-pad"
-            maxLength={4}
-            style={styles.hiddenInput}
-            editable={!isVerifying && !verifying}
-            onSubmitEditing={handleContinue}
-          />
+            {!!(errorText || otpError) && (
+              <Text style={styles.errorText}>{otpError ?? errorText}</Text>
+            )}
+          </View>
 
           <View style={styles.infoRow}>
             <Text style={styles.timer}>
@@ -337,7 +343,7 @@ export default function EnterVerificationModal({
             </Text>
 
             <View style={styles.resendRow}>
-              <Text style={styles.mutedSmall}>Didn’t get the code </Text>
+              <Text style={styles.mutedSmall}>Didn't get the code </Text>
               <Pressable
                 onPress={handleResend}
                 hitSlop={10}
@@ -346,9 +352,7 @@ export default function EnterVerificationModal({
                 <Text
                   style={[
                     styles.resend,
-                    (secondsLeft > 0 || isVerifying || verifying) && {
-                      opacity: 0.45,
-                    },
+                    (secondsLeft > 0 || isVerifying || verifying) && { opacity: 0.45 },
                   ]}
                 >
                   Resend it
@@ -382,28 +386,14 @@ export default function EnterVerificationModal({
               </LinearGradient>
             </View>
           </Pressable>
-
-          <Pressable
-            onPress={closeWithAnim}
-            hitSlop={10}
-            style={[
-              styles.cancelBtn,
-              (isVerifying || verifying) && { opacity: 0.45 },
-            ]}
-            disabled={isVerifying || verifying}
-          >
-            <Text style={styles.cancelText}>Cancel</Text>
-          </Pressable>
         </Animated.View>
+      </KeyboardAvoidingView>
       </View>
     </Modal>
   );
 }
 
-function createStyles(
-  scale: (n: number) => number,
-  vscale: (n: number) => number
-) {
+function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
   return StyleSheet.create({
     modalRoot: {
       flex: 1,
@@ -433,6 +423,28 @@ function createStyles(
         android: { elevation: 10 },
       }),
     },
+
+    closeBtn: {
+      position: "absolute",
+      top: scale(12),
+      right: scale(12),
+      zIndex: 10,
+      padding: scale(4),
+    },
+    xWrap: {
+      width: scale(20),
+      height: scale(20),
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    xBar: {
+      position: "absolute",
+      width: scale(14),
+      height: scale(2),
+      borderRadius: scale(1),
+      backgroundColor: "#9CA3AF",
+    },
+
     badgeWrap: {
       alignItems: "center",
       marginTop: scale(2),
@@ -452,12 +464,16 @@ function createStyles(
       color: "#6B7280",
       marginBottom: scale(12),
     },
+
+    otpWrapper: {
+      alignSelf: "stretch",
+      marginBottom: scale(20),
+    },
     otpRow: {
       flexDirection: "row",
       justifyContent: "space-between",
       gap: scale(10),
       paddingHorizontal: scale(6),
-      marginBottom: scale(10),
     },
     otpBox: {
       flex: 1,
@@ -476,33 +492,50 @@ function createStyles(
       color: Colors.text,
     },
     errorText: {
-      textAlign: "center",
-      marginBottom: scale(10),
+      textAlign: "left",
+      paddingHorizontal: scale(6),
+      marginTop: scale(5),
+      marginBottom: scale(0),
       fontSize: scale(10.5),
       color: "#DC2626",
       fontWeight: "800",
     },
-    hiddenInput: { position: "absolute", opacity: 0, height: 1, width: 1 },
+    hiddenInput: {
+      ...StyleSheet.absoluteFillObject,
+      opacity: 0,
+    },
+
     infoRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
       flexWrap: "wrap",
       gap: scale(8),
-      marginBottom: scale(12),
+      marginBottom: scale(20),
     },
-    timer: { fontSize: scale(10), color: "#6B7280", fontWeight: "700" },
+    timer: {
+      fontSize: scale(10),
+      color: "#6B7280",
+      fontWeight: "400",
+    },
     timerStrong: { color: Colors.primary, fontWeight: "900" },
     resendRow: { flexDirection: "row", alignItems: "center" },
-    mutedSmall: { fontSize: scale(10), color: "#6B7280", fontWeight: "600" },
+    mutedSmall: {
+      fontSize: scale(10),
+      color: "#6B7280",
+      fontWeight: "400",
+    },
     resend: {
       fontSize: scale(10),
       fontWeight: "900",
       color: Colors.link,
       textDecorationLine: "underline",
     },
+
     btnOuter: {
-      borderRadius: scale(14),
+      alignSelf: "center",
+      width: "55%",
+      borderRadius: scale(50),
       marginTop: scale(2),
       ...Platform.select({
         ios: {
@@ -514,14 +547,15 @@ function createStyles(
         android: { elevation: 7 },
       }),
     },
-    btnClip: { borderRadius: scale(14), overflow: "hidden" },
+    btnClip: {
+      borderRadius: scale(50),
+      overflow: "hidden",
+    },
     btnGradient: {
       height: vscale(46),
       alignItems: "center",
       justifyContent: "center",
     },
     btnText: { color: "#FFFFFF", fontSize: scale(12.8), fontWeight: "900" },
-    cancelBtn: { alignItems: "center", paddingVertical: scale(10) },
-    cancelText: { fontSize: scale(11.5), fontWeight: "800", color: Colors.link },
   });
 }

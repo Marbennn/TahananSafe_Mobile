@@ -33,6 +33,7 @@ import { setPinApi, getMeApi } from "../api/pin";
 
 // ✅ NEW: Verify Account card component
 import VerifyAccountCard from "../components/Settings/VerifyAccountCard";
+import LogoutModal from "../components/LogoutModal";
 
 type Props = {
   onAccountPress?: () => void;
@@ -265,6 +266,7 @@ export default function SettingsScreen({
   const [pinLoading, setPinLoading] = useState(true);
 
   const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [pinDraft, setPinDraft] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
 
@@ -576,7 +578,7 @@ export default function SettingsScreen({
                     <Ionicons name="person-outline" size={iconSize} color={primary} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.settingTitle, { color: textDark }]}>Profile</Text>
+                    <Text style={[styles.settingTitleInner, { color: textDark }]}>Profile</Text>
                     <Text style={[styles.settingSub, { color: muted }]}>Name, personal info</Text>
                   </View>
                 </View>
@@ -593,7 +595,7 @@ export default function SettingsScreen({
                     <Ionicons name="mail-outline" size={iconSize} color={primary} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.settingTitle, { color: textDark }]}>Email</Text>
+                    <Text style={[styles.settingTitleInner, { color: textDark }]}>Email</Text>
                     <Text style={[styles.settingSub, { color: muted }]}>Update email address</Text>
                   </View>
                 </View>
@@ -610,7 +612,7 @@ export default function SettingsScreen({
                     <Ionicons name="shield-checkmark-outline" size={iconSize} color={primary} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.settingTitle, { color: textDark }]}>Sessions</Text>
+                    <Text style={[styles.settingTitleInner, { color: textDark }]}>Sessions</Text>
                     <Text style={[styles.settingSub, { color: muted }]}>Logged-in devices</Text>
                   </View>
                 </View>
@@ -671,7 +673,7 @@ export default function SettingsScreen({
                     <Ionicons name="shield-checkmark-outline" size={iconSize} color={primary} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.settingTitle, { color: textDark }]}>Privacy</Text>
+                    <Text style={[styles.settingTitleInner, { color: textDark }]}>Privacy</Text>
                     <Text style={[styles.settingSub, { color: muted }]}>Permissions, data protection</Text>
                   </View>
                 </View>
@@ -686,7 +688,7 @@ export default function SettingsScreen({
                       <Ionicons name="finger-print-outline" size={iconSize} color={primary} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.settingTitle, { color: textDark }]}>Biometrics</Text>
+                      <Text style={[styles.settingTitleInner, { color: textDark }]}>Biometrics</Text>
                       <Text style={[styles.settingSub, { color: muted }]}>Face ID / fingerprint quick login</Text>
                     </View>
                   </View>
@@ -735,7 +737,7 @@ export default function SettingsScreen({
                       <Ionicons name="keypad-outline" size={iconSize} color={primary} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.settingTitle, { color: textDark }]}>PIN</Text>
+                      <Text style={[styles.settingTitleInner, { color: textDark }]}>PIN</Text>
                       <Text style={[styles.settingSub, { color: muted }]}>4-digit PIN as extra login option</Text>
                     </View>
                   </View>
@@ -831,7 +833,7 @@ export default function SettingsScreen({
                       <Ionicons name="contract-outline" size={iconSize} color={primary} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.settingTitle, { color: textDark }]}>Compact layout</Text>
+                      <Text style={[styles.settingTitleInner, { color: textDark }]}>Compact layout</Text>
                       <Text style={[styles.settingSub, { color: muted }]}>Tighter spacing for lists and cards</Text>
                     </View>
                   </View>
@@ -853,7 +855,7 @@ export default function SettingsScreen({
                       <Ionicons name="phone-portrait-outline" size={iconSize} color={primary} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.settingTitle, { color: textDark }]}>Haptic feedback</Text>
+                      <Text style={[styles.settingTitleInner, { color: textDark }]}>Haptic feedback</Text>
                       <Text style={[styles.settingSub, { color: muted }]}>Vibration feedback on key actions</Text>
                     </View>
                   </View>
@@ -875,7 +877,7 @@ export default function SettingsScreen({
                       <Ionicons name="volume-high-outline" size={iconSize} color={primary} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.settingTitle, { color: textDark }]}>App sounds</Text>
+                      <Text style={[styles.settingTitleInner, { color: textDark }]}>App sounds</Text>
                       <Text style={[styles.settingSub, { color: muted }]}>Sound cues for notifications and actions</Text>
                     </View>
                   </View>
@@ -900,7 +902,7 @@ export default function SettingsScreen({
                     <Ionicons name="refresh-outline" size={iconSize} color={primary} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.settingTitle, { color: textDark }]}>Reset personalization</Text>
+                    <Text style={[styles.settingTitleInner, { color: textDark }]}>Reset personalization</Text>
                     <Text style={[styles.settingSub, { color: muted }]}>Restore default preferences for this account</Text>
                   </View>
                 </View>
@@ -969,14 +971,13 @@ export default function SettingsScreen({
 
           {/* ✅ Logout card */}
           <View style={[styles.logoutCard, { backgroundColor: surface, borderColor: divider }]}>
-            <Pressable onPress={onLogout} android_ripple={{ color: "rgba(0,0,0,0.06)" }} style={styles.settingRow}>
+            <Pressable onPress={() => setLogoutModalVisible(true)} android_ripple={{ color: "rgba(0,0,0,0.06)" }} style={styles.settingRow}>
               <View style={styles.settingLeft}>
                 <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
                   <Ionicons name="log-out-outline" size={iconSize} color={primary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.settingTitle, { color: textDark }]}>Log out</Text>
-                  <Text style={[styles.settingSub, { color: muted }]}>End your session on this device</Text>
+                  <Text style={[styles.settingTitleInner, { color: textDark }]}>Log out</Text>
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={iconSize} color={primary} />
@@ -1075,6 +1076,15 @@ export default function SettingsScreen({
           centerLabel="Incident Log"
         />
       </View>
+
+      <LogoutModal
+        visible={logoutModalVisible}
+        onCancel={() => setLogoutModalVisible(false)}
+        onConfirm={() => {
+          setLogoutModalVisible(false);
+          onLogout?.();
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -1188,12 +1198,13 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       justifyContent: "center",
     },
 
-    settingTitle: { fontSize: scale(14), fontWeight: "900" },
+    settingTitle: { fontSize: scale(14), fontWeight: "600" },
+    settingTitleInner: { fontSize: scale(14), fontWeight: "400" },
 
     settingSub: {
       marginTop: vscale(2),
       fontSize: scale(11),
-      fontWeight: "500",
+      fontWeight: "400",
       lineHeight: scale(15),
     },
 

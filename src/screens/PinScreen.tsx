@@ -1,5 +1,6 @@
 // src/screens/PinScreen.tsx
 import React, { useEffect, useMemo, useState } from "react";
+import InvalidPinModal from "../components/PinScreen/InvalidPinModal";
 import {
   View,
   Text,
@@ -12,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { Colors } from "../theme/colors";
 
 import NewLogo from "../../assets/NewLogo.svg";
 
@@ -25,21 +27,18 @@ type Props = {
   onVerified: (pin: string) => void;
   onForgotPin: () => void;
   onBack?: () => void;
-
-  /**
-   * ✅ NEW:
-   * If PIN is disabled from Settings (device-level), we bypass this screen.
-   * In App.tsx PinScreenWrapper, pass: onBypass={() => navigation.reset({ index: 0, routes: [{ name: "Main" }] })}
-   */
   onBypass?: () => void;
+
+  invalidPinVisible?: boolean;
+  invalidPinMsg?: string;
+  onInvalidPinDismiss?: () => void;
 };
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-const BLUE = "#1D4ED8";
-const BORDER = "#93C5FD";
+const BLUE = Colors.primary;
 
 /** SecureStore keys must only contain: A-Z a-z 0-9 . - _ */
 function safeKeyPart(input: string) {
@@ -66,7 +65,7 @@ async function isPinEnabledLocally(email: string): Promise<boolean> {
   }
 }
 
-export default function PinScreen({ onVerified, onForgotPin, onBack, onBypass }: Props) {
+export default function PinScreen({ onVerified, onForgotPin, onBack, onBypass, invalidPinVisible = false, invalidPinMsg, onInvalidPinDismiss }: Props) {
   const { width, height } = useWindowDimensions();
 
   const s = clamp(width / 375, 0.95, 1.45);
@@ -78,6 +77,11 @@ export default function PinScreen({ onVerified, onForgotPin, onBack, onBypass }:
 
   const [pin, setPin] = useState("");
   const PIN_LENGTH = 4;
+
+  // Reset pin when invalid PIN modal appears
+  useEffect(() => {
+    if (invalidPinVisible) setPin("");
+  }, [invalidPinVisible]);
 
   // ✅ Check if PIN is disabled (device-level) then bypass this screen
   const { user } = useAuth() as any;
@@ -134,8 +138,9 @@ export default function PinScreen({ onVerified, onForgotPin, onBack, onBypass }:
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <>
+      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F0F4F8" />
 
       <View style={styles.container}>
         {/* Top Bar */}
@@ -166,7 +171,7 @@ export default function PinScreen({ onVerified, onForgotPin, onBack, onBypass }:
           <>
             {/* Title + Dots */}
             <View style={styles.pinHeader}>
-              <Text style={styles.title}>Enter Current PIN</Text>
+              <Text style={styles.title}>Enter Your Current PIN</Text>
 
               <View style={styles.dotsRow}>
                 {dots.map((filled, idx) => (
@@ -177,15 +182,16 @@ export default function PinScreen({ onVerified, onForgotPin, onBack, onBypass }:
                 ))}
               </View>
 
-              {/* Optional help row */}
-              <Pressable
-                onPress={onForgotPin}
-                hitSlop={10}
-                style={({ pressed }) => [styles.forgotBtn, pressed && { opacity: 0.7 }]}
-              >
-                <Text style={styles.forgotText}>Forgot PIN?</Text>
-              </Pressable>
             </View>
+
+            {/* Forgot PIN — sits just above the keypad */}
+            <Pressable
+              onPress={onForgotPin}
+              hitSlop={10}
+              style={({ pressed }) => [styles.forgotBtn, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.forgotText}>Forgot PIN?</Text>
+            </Pressable>
 
             {/* Keypad */}
             <View style={styles.keypad}>
@@ -197,7 +203,7 @@ export default function PinScreen({ onVerified, onForgotPin, onBack, onBypass }:
                     hitSlop={10}
                     style={({ pressed }) => [
                       styles.keyBtn,
-                      pressed && { transform: [{ scale: 0.98 }], opacity: 0.95 },
+                      pressed ? { transform: [{ scale: 0.94 }], opacity: 0.85 } : null,
                     ]}
                   >
                     <Text style={styles.keyText}>{d}</Text>
@@ -211,13 +217,12 @@ export default function PinScreen({ onVerified, onForgotPin, onBack, onBypass }:
                   hitSlop={10}
                   style={({ pressed }) => [
                     styles.keyBtn,
-                    pressed && { transform: [{ scale: 0.98 }], opacity: 0.95 },
+                    pressed ? { transform: [{ scale: 0.94 }], opacity: 0.85 } : null,
                   ]}
                 >
                   <Text style={styles.keyText}>0</Text>
                 </Pressable>
 
-                {/* ✅ BIGGER backspace icon */}
                 <Pressable
                   onPress={backspace}
                   hitSlop={14}
@@ -229,33 +234,42 @@ export default function PinScreen({ onVerified, onForgotPin, onBack, onBypass }:
                   <Ionicons name="backspace-outline" size={scale(26)} color={BLUE} />
                 </Pressable>
               </View>
+
             </View>
           </>
         )}
       </View>
-    </SafeAreaView>
+      </SafeAreaView>
+
+      <InvalidPinModal
+        visible={invalidPinVisible}
+        message={invalidPinMsg}
+        onClose={() => onInvalidPinDismiss?.()}
+      />
+    </>
   );
 }
 
 function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
-  const dotSize = clamp(scale(18), 16, 26);
-  const dotBorder = clamp(Math.round(dotSize * 0.1), 1, 2);
-  const dotGap = clamp(scale(14), 12, 18);
+  const dotSize = clamp(scale(22), 18, 28);
 
   const spaceLogoToTitle = clamp(vscale(22), 16, 30);
   const spaceTitleToDots = clamp(vscale(18), 14, 26);
-  const spaceDotsToKeypad = clamp(vscale(28), 22, 44);
-  const keypadTop = clamp(vscale(10), 8, 18);
-  const keypadRowGap = clamp(vscale(18), 14, 24);
+  const spaceDotsToKeypad = clamp(vscale(10), 6, 14);
+  const keypadTop = clamp(vscale(48), 40, 70);
+  const keypadRowGap = clamp(vscale(12), 10, 18);
+
+  const btnSize = scale(70);
 
   return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: "#FFFFFF" },
+    safe: { flex: 1, backgroundColor: "#F0F4F8" },
 
     container: {
       flex: 1,
       paddingHorizontal: scale(22),
       paddingTop: vscale(6),
       alignItems: "center",
+      backgroundColor: "#F0F4F8",
     },
 
     topBar: {
@@ -293,17 +307,20 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
 
     pinHeader: {
       alignItems: "center",
+      marginTop: vscale(48),
     },
 
+
     title: {
-      fontSize: scale(13),
+      fontSize: scale(15),
       fontWeight: "800",
+      color: "#111827",
       marginBottom: spaceTitleToDots,
     },
 
     dotsRow: {
       flexDirection: "row",
-      gap: dotGap,
+      gap: scale(18),
       marginBottom: spaceDotsToKeypad,
     },
 
@@ -311,11 +328,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       width: dotSize,
       height: dotSize,
       borderRadius: 999,
-      borderWidth: dotBorder,
+      borderWidth: 2,
     },
 
     dotEmpty: {
-      borderColor: "#CBD5E1",
+      borderColor: "#BFDBFE",
+      backgroundColor: "#FFFFFF",
     },
 
     dotFilled: {
@@ -324,7 +342,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     forgotBtn: {
-      marginTop: vscale(2),
+      marginBottom: vscale(8),
       paddingVertical: vscale(6),
       paddingHorizontal: scale(10),
       borderRadius: scale(10),
@@ -349,29 +367,38 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     keyBtn: {
-      width: scale(74),
-      height: vscale(54),
-      borderRadius: scale(10),
-      borderWidth: scale(1.6),
-      borderColor: BORDER,
+      width: btnSize,
+      height: btnSize,
+      borderRadius: btnSize / 2,
+      backgroundColor: "#FFFFFF",
       alignItems: "center",
       justifyContent: "center",
+      ...Platform.select({
+        ios: {
+          shadowColor: "#94A3B8",
+          shadowOpacity: 0.45,
+          shadowRadius: 10,
+          shadowOffset: { width: 4, height: 6 },
+        },
+        android: { elevation: 6 },
+      }),
     },
 
     keyText: {
-      fontSize: scale(16),
-      fontWeight: "800",
+      fontSize: scale(20),
+      fontWeight: "700",
       color: BLUE,
     },
 
     keySpacer: {
-      width: scale(74),
-      height: vscale(54),
+      width: btnSize,
+      height: btnSize,
     },
 
     iconBtn: {
-      width: scale(74),
-      height: vscale(54),
+      width: btnSize,
+      height: btnSize,
+      borderRadius: btnSize / 2,
       alignItems: "center",
       justifyContent: "center",
     },

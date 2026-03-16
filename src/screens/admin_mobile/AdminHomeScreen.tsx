@@ -18,7 +18,6 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
 
@@ -504,17 +503,6 @@ const AdminHomeScreen: React.FC<Props> = ({
     return "#35B56A";
   };
 
-  const quickActions = [
-    {
-      id: "1",
-      label: "Alerts",
-      icon: "notifications-outline" as keyof typeof Ionicons.glyphMap,
-      colors: ["#DC2626", "#991B1B"] as [string, string],
-      sub: "System notifications",
-      onPress: onOpenAlerts,
-    },
-  ];
-
   // ── Styles ────────────────────────────────────────────────────────
   const styles = useMemo(
     () =>
@@ -569,7 +557,7 @@ const AdminHomeScreen: React.FC<Props> = ({
         },
 
         sectionRow: {
-          marginTop: clamp(Math.round(6 * s), 4, 8),
+          marginTop: clamp(Math.round(20 * s), 16, 24),
           paddingHorizontal: PAD,
           flexDirection: "row",
           alignItems: "center",
@@ -594,7 +582,7 @@ const AdminHomeScreen: React.FC<Props> = ({
         },
         seeMore: {
           fontSize: clamp(Math.round(13 * fs), 12, 15),
-          fontWeight: "900",
+          fontWeight: "600",
           color: Colors.primary,
         },
 
@@ -882,9 +870,6 @@ const AdminHomeScreen: React.FC<Props> = ({
           {/* System Overview */}
           <View style={styles.sectionRow}>
             <View style={styles.sectionTitleRow}>
-              <View style={[styles.sectionIcon, { backgroundColor: "#EAF3FF" }]}>
-                <Ionicons name="grid-outline" size={14} color={Colors.primary} />
-              </View>
               <Text style={styles.sectionTitle} allowFontScaling={false}>
                 System Overview
               </Text>
@@ -914,9 +899,6 @@ const AdminHomeScreen: React.FC<Props> = ({
           {/* Recent Alerts */}
           <View style={styles.sectionRow}>
             <View style={styles.sectionTitleRow}>
-              <View style={[styles.sectionIcon, { backgroundColor: "#EAF3FF" }]}>
-                <Ionicons name="notifications-outline" size={14} color={Colors.primary} />
-              </View>
               <Text style={styles.sectionTitle} allowFontScaling={false}>
                 Recent Alerts
               </Text>
@@ -971,40 +953,6 @@ const AdminHomeScreen: React.FC<Props> = ({
             )}
           </View>
 
-          {/* Quick Actions */}
-          <View style={styles.sectionRow}>
-            <View style={styles.sectionTitleRow}>
-              <View style={[styles.sectionIcon, { backgroundColor: "#FFEDE9" }]}>
-                <Ionicons name="flash-outline" size={14} color="#DC2626" />
-              </View>
-              <Text style={styles.sectionTitle} allowFontScaling={false}>
-                Quick Actions
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.actionsWrap}>
-            <View style={styles.actionsRow}>
-              {quickActions.map((action) => (
-                <Pressable key={action.id} style={styles.actionCardOuter} onPress={action.onPress}>
-                  <LinearGradient
-                    colors={action.colors}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.actionCard}
-                  >
-                    <View style={styles.actionCardIconRow}>
-                      <View style={styles.actionCardCircle}>
-                        <Ionicons name={action.icon} size={16} color="#fff" />
-                      </View>
-                    </View>
-                    <Text style={styles.actionCardLabel} allowFontScaling={false}>{action.label}</Text>
-                    <Text style={styles.actionCardSub} allowFontScaling={false}>{action.sub}</Text>
-                  </LinearGradient>
-                </Pressable>
-              ))}
-            </View>
-          </View>
         </ScrollView>
 
         {/* ── Chevron handle (closed state) ── */}
