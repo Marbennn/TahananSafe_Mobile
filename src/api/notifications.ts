@@ -13,7 +13,16 @@ export type NotificationItem = {
   time: string; // ISO string
   unread: boolean;
   incidentId?: string | null;
-  meta?: { oldStatus?: string; newStatus?: string };
+  meta?: {
+    oldStatus?: string;
+    newStatus?: string;
+    action?: string;
+    senderId?: string;
+    senderName?: string;
+    address?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+  };
 };
 
 function normalizeReplyTitle(item: NotificationItem): NotificationItem {
@@ -158,14 +167,22 @@ export async function clearAllNotifications(): Promise<void> {
 }
 
 // POST /api/mobile/v1/notifications/send-sos
-export async function sendSosAlert(address?: string): Promise<{ sent: number; message: string }> {
+export async function sendSosAlert(opts?: {
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+}): Promise<{ sent: number; message: string }> {
   const headers = await authHeaders();
   const url = `${API_BASE_URL}/api/mobile/v1/notifications/send-sos`;
 
   const res = await fetch(url, {
     method: "POST",
     headers,
-    body: JSON.stringify({ address: address ?? null }),
+    body: JSON.stringify({
+      address: opts?.address ?? null,
+      latitude: opts?.latitude ?? null,
+      longitude: opts?.longitude ?? null,
+    }),
   });
   const data = await parseJsonSafe(res);
 

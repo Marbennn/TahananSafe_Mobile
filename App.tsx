@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import IdleTimerWrapper from "./src/components/IdleTimerWrapper";
 
 // ✅ Auth
 import { AuthProvider, useAuth } from "./src/auth/AuthContext";
@@ -344,32 +345,25 @@ function MainScreenWrapper({ navigation, route }: { navigation: any; route: any 
 
   const incomingReport: ReportItem | null = route?.params?.openReport ?? null;
 
+  const handleLogout = async () => {
+    resetPinUnlockedThisRun();
+    try { await authLogout(); } catch { /* ignore */ }
+    await setLoggedIn(false);
+    await setHasPin(false);
+    navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
+  };
+
   return (
-    <MainShell
-      onLogout={async () => {
-        resetPinUnlockedThisRun();
-
-        try {
-          await authLogout();
-        } catch {
-          // ignore
-        }
-
-        await setLoggedIn(false);
-        await setHasPin(false);
-
-        navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
-      }}
-      onOpenNotifications={() => navigation.navigate("Notifications")}
-      incomingReport={incomingReport}
-      clearIncomingReport={() => {
-        try {
-          navigation.setParams({ openReport: undefined });
-        } catch {
-          // ignore
-        }
-      }}
-    />
+    <IdleTimerWrapper onTimeout={handleLogout}>
+      <MainShell
+        onLogout={handleLogout}
+        onOpenNotifications={() => navigation.navigate("Notifications")}
+        incomingReport={incomingReport}
+        clearIncomingReport={() => {
+          try { navigation.setParams({ openReport: undefined }); } catch { /* ignore */ }
+        }}
+      />
+    </IdleTimerWrapper>
   );
 }
 
@@ -378,24 +372,21 @@ function MainScreenWrapper({ navigation, route }: { navigation: any; route: any 
 function AdminHomeWrapper({ navigation }: { navigation: any }) {
   const { logout: authLogout } = useAuth() as any;
 
+  const handleLogout = async () => {
+    resetPinUnlockedThisRun();
+    try { await authLogout(); } catch { /* ignore */ }
+    await setLoggedIn(false);
+    await setHasPin(false);
+    navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
+  };
+
   return (
-    <AdminShell
-      onOpenNotifications={() => navigation.navigate("Notifications")}
-      onLogout={async () => {
-        resetPinUnlockedThisRun();
-
-        try {
-          await authLogout();
-        } catch {
-          // ignore
-        }
-
-        await setLoggedIn(false);
-        await setHasPin(false);
-
-        navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
-      }}
-    />
+    <IdleTimerWrapper onTimeout={handleLogout}>
+      <AdminShell
+        onOpenNotifications={() => navigation.navigate("Notifications")}
+        onLogout={handleLogout}
+      />
+    </IdleTimerWrapper>
   );
 }
 

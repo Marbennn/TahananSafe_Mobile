@@ -885,8 +885,27 @@ export default function HomeScreen({
   const modalChevronTranslateY = useMemo(() => Animated.add(sheetY, chevronLiftToOpen), [sheetY, chevronLiftToOpen]);
 
   const chevronRotate = chevronOpen.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] });
-  const bounceY = 0;
   const chevronScale = chevronOpen.interpolate({ inputRange: [0, 1], outputRange: [1, 0.98] });
+
+  // Gentle looping bounce while sheet is closed
+  const bounceAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    let loop: Animated.CompositeAnimation;
+    if (!sheetOpen) {
+      loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(bounceAnim, { toValue: -5, duration: 500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(bounceAnim, { toValue:  0, duration: 500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      );
+      loop.start();
+    } else {
+      bounceAnim.stopAnimation();
+      bounceAnim.setValue(0);
+    }
+    return () => { if (loop) loop.stop(); };
+  }, [sheetOpen, bounceAnim]);
+  const bounceY = bounceAnim;
 
   const styles = useMemo(
     () =>
@@ -1503,13 +1522,17 @@ export default function HomeScreen({
                         onPress: async () => {
                           closeSheet();
                           let address: string | undefined;
+                          let latitude: number | undefined;
+                          let longitude: number | undefined;
                           try {
                             const { status } = await Location.requestForegroundPermissionsAsync();
                             if (status === "granted") {
-                              const coords = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                              const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                              latitude = loc.coords.latitude;
+                              longitude = loc.coords.longitude;
                               const [place] = await Location.reverseGeocodeAsync({
-                                latitude: coords.coords.latitude,
-                                longitude: coords.coords.longitude,
+                                latitude,
+                                longitude,
                               });
                               if (place) {
                                 const parts = [place.street, place.district, place.city, place.region].filter(Boolean);
@@ -1520,7 +1543,7 @@ export default function HomeScreen({
                             // location failed — send without address
                           }
                           try {
-                            const result = await sendSosAlert(address);
+                            const result = await sendSosAlert({ address, latitude, longitude });
                             Alert.alert("Alert Sent", result.message);
                           } catch (e: any) {
                             Alert.alert("Failed", e?.message ?? "Could not send alert. Please try again.");

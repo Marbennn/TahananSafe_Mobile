@@ -20,6 +20,8 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
+import { WebView } from "react-native-webview";
+import * as Location from "expo-location";
 
 import { Colors } from "../../theme/colors";
 import AdminBotNav, { TabKey } from "../../components/AdminComponents/AdminBotNav";
@@ -43,6 +45,10 @@ type ReportItem = {
   date: string;
   time: string;
   level: "Low" | "Moderate" | "High";
+  latitude?: number | null;
+  longitude?: number | null;
+  address?: string | null;
+  senderName?: string | null;
 };
 
 type StatCard = {
@@ -98,6 +104,145 @@ function makeDateLine(d: Date) {
     hour12: true,
   });
   return `${weekday} | ${monthDayYear} | ${time}`;
+}
+
+function buildLeafletHtml(
+  userLat: number | null,
+  userLng: number | null,
+  adminLat: number | null,
+  adminLng: number | null,
+  senderName: string,
+  address: string,
+): string {
+  const hasUser = userLat != null && userLng != null;
+  const hasAdmin = adminLat != null && adminLng != null;
+  const hasBoth = hasUser && hasAdmin;
+
+  // Default center: Philippines
+  let centerLat = 12.8797;
+  let centerLng = 121.774;
+  let zoom = 6;
+
+  if (hasBoth) {
+    centerLat = (userLat + adminLat) / 2;
+    centerLng = (userLng + adminLng) / 2;
+    zoom = 13;
+  } else if (hasUser) {
+    centerLat = userLat;
+    centerLng = userLng;
+    zoom = 16;
+  } else if (hasAdmin) {
+    centerLat = adminLat;
+    centerLng = adminLng;
+    zoom = 16;
+  }
+
+  const esc = (s: string) => s.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
+  <style>
+    * { margin: 0; padding: 0; }
+    html, body, #map { width: 100%; height: 100%; }
+    .legend {
+      background: #fff; padding: 8px 12px; border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2); font: 13px/1.4 sans-serif;
+    }
+    .legend-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+    .dot-red { background: #DC2626; }
+    .dot-blue { background: #2563EB; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var map = L.map('map', { zoomControl: false }).setView([${centerLat}, ${centerLng}], ${zoom});
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '\\u00a9 OpenStreetMap',
+      maxZoom: 19,
+    }).addTo(map);
+
+    var redIcon = L.icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+    var blueIcon = L.icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+
+    var bounds = [];
+
+    ${hasUser ? `
+    var userMarker = L.marker([${userLat}, ${userLng}], { icon: redIcon }).addTo(map);
+    userMarker.bindPopup('<b>${esc(senderName)} (Alert)</b>${address ? "<br/>" + esc(address) : ""}').openPopup();
+    bounds.push([${userLat}, ${userLng}]);
+    ` : ""}
+
+    ${hasAdmin ? `
+    var adminMarker = L.marker([${adminLat}, ${adminLng}], { icon: blueIcon }).addTo(map);
+    adminMarker.bindPopup('<b>You (Admin)</b><br/>Your current location');
+    bounds.push([${adminLat}, ${adminLng}]);
+    ` : ""}
+
+    ${hasBoth ? `
+    // Fetch actual road route from OSRM (free, no API key)
+    fetch('https://router.project-osrm.org/route/v1/driving/${adminLng},${adminLat};${userLng},${userLat}?overview=full&geometries=geojson')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.routes && data.routes.length > 0) {
+          var coords = data.routes[0].geometry.coordinates.map(function(c) { return [c[1], c[0]]; });
+          L.polyline(coords, { color: '#07519C', weight: 4, opacity: 0.8 }).addTo(map);
+
+          // Show distance & duration
+          var dist = data.routes[0].distance;
+          var dur = data.routes[0].duration;
+          var distKm = (dist / 1000).toFixed(1);
+          var durMin = Math.ceil(dur / 60);
+          var info = L.control({ position: 'bottomleft' });
+          info.onAdd = function() {
+            var div = L.DomUtil.create('div', 'legend');
+            div.innerHTML = '<b>' + distKm + ' km</b> &bull; ~' + durMin + ' min drive';
+            return div;
+          };
+          info.addTo(map);
+
+          map.fitBounds(coords, { padding: [50, 50], maxZoom: 16 });
+        }
+      })
+      .catch(function() {
+        // Fallback: straight dashed line if routing fails
+        L.polyline([[${userLat}, ${userLng}], [${adminLat}, ${adminLng}]], {
+          color: '#07519C', weight: 3, opacity: 0.6, dashArray: '8, 8'
+        }).addTo(map);
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+      });
+    ` : ""}
+
+    if (bounds.length === 2) {
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+    }
+
+    var legend = L.control({ position: 'topright' });
+    legend.onAdd = function() {
+      var div = L.DomUtil.create('div', 'legend');
+      div.innerHTML =
+        '<div class="legend-row"><span class="dot dot-red"></span> Alert Location</div>' +
+        '<div class="legend-row"><span class="dot dot-blue"></span> Your Location</div>';
+      return div;
+    };
+    legend.addTo(map);
+  <\/script>
+</body>
+</html>`;
 }
 
 const AdminHomeScreen: React.FC<Props> = ({
@@ -457,7 +602,18 @@ const AdminHomeScreen: React.FC<Props> = ({
           const time = isNaN(d.getTime())
             ? "—"
             : d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
-          return { id: n.id, title: n.title, subtitle: n.message, date, time, level: "High" as const };
+          return {
+            id: n.id,
+            title: n.title,
+            subtitle: n.message,
+            date,
+            time,
+            level: "High" as const,
+            latitude: n.meta?.latitude ?? null,
+            longitude: n.meta?.longitude ?? null,
+            address: n.meta?.address ?? null,
+            senderName: n.meta?.senderName ?? null,
+          };
         });
       setRecentAlerts(alerts);
       lastAlertsFetchAtRef.current = Date.now();
@@ -496,6 +652,29 @@ const AdminHomeScreen: React.FC<Props> = ({
 
   // ── Alert detail modal ────────────────────────────────────────────
   const [selectedAlert, setSelectedAlert] = useState<ReportItem | null>(null);
+  const [adminCoords, setAdminCoords] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Fetch admin location when an alert is selected
+  useEffect(() => {
+    if (!selectedAlert) {
+      setAdminCoords(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted" || cancelled) return;
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (!cancelled) {
+          setAdminCoords({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+        }
+      } catch {
+        // location unavailable — map will show without admin pin
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedAlert]);
 
   const getRiskColor = (level: ReportItem["level"]) => {
     if (level === "High") return "#F04452";
@@ -1003,82 +1182,118 @@ const AdminHomeScreen: React.FC<Props> = ({
           message="Tap the center button to access admin actions."
         />
 
-        {/* ── Alert Detail Modal ── */}
+        {/* ── Alert Detail Modal with Map ── */}
         <Modal
           visible={!!selectedAlert}
           transparent
-          animationType="fade"
+          animationType="slide"
           onRequestClose={() => setSelectedAlert(null)}
           statusBarTranslucent
         >
-          <Pressable
-            style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", paddingHorizontal: PAD + 8 }}
-            onPress={() => setSelectedAlert(null)}
-          >
-            <Pressable onPress={() => {}} style={{
-              backgroundColor: "#FFFFFF",
-              borderRadius: 20,
-              padding: clamp(Math.round(20 * s), 16, 24),
-              shadowColor: "#000",
-              shadowOpacity: 0.18,
-              shadowRadius: 20,
-              shadowOffset: { width: 0, height: 6 },
-              elevation: 14,
-            }}>
-              {/* Header row */}
-              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 10 }}>
-                <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: "#FEE2E2", alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name="warning" size={20} color="#DC2626" />
+          <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)" }}>
+            {/* Top bar */}
+            <SafeAreaView edges={["top"]} style={{ backgroundColor: Colors.primary }}>
+              <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, backgroundColor: Colors.primary }}>
+                <Pressable onPress={() => setSelectedAlert(null)} hitSlop={12} style={{ marginRight: 12 }}>
+                  <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+                </Pressable>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 16, fontWeight: "900", color: "#FFFFFF" }} allowFontScaling={false} numberOfLines={1}>
+                    {selectedAlert?.title ?? "SOS Alert"}
+                  </Text>
+                  <Text style={{ fontSize: 12, fontWeight: "600", color: "rgba(255,255,255,0.8)", marginTop: 2 }} allowFontScaling={false}>
+                    {selectedAlert?.date ?? ""} {selectedAlert?.time ? `• ${selectedAlert.time}` : ""}
+                  </Text>
                 </View>
-                <Text style={{ flex: 1, fontSize: clamp(Math.round(15 * fs), 14, 17), fontWeight: "900", color: TEXT_DARK }} allowFontScaling={false} numberOfLines={2}>
-                  {selectedAlert?.title ?? ""}
-                </Text>
-                <Pressable onPress={() => setSelectedAlert(null)} hitSlop={10}>
-                  <Ionicons name="close-circle" size={24} color="#94A3B8" />
+              </View>
+            </SafeAreaView>
+
+            {/* Map via WebView + OpenStreetMap (free, no API key) */}
+            <View style={{ flex: 1 }}>
+              <WebView
+                style={{ flex: 1 }}
+                originWhitelist={["*"]}
+                javaScriptEnabled
+                source={{ html: buildLeafletHtml(
+                  selectedAlert?.latitude ?? null,
+                  selectedAlert?.longitude ?? null,
+                  adminCoords?.lat ?? null,
+                  adminCoords?.lng ?? null,
+                  selectedAlert?.senderName ?? "SOS Alert",
+                  selectedAlert?.address ?? "",
+                ) }}
+              />
+            </View>
+
+            {/* Bottom info card */}
+            <SafeAreaView edges={["bottom"]} style={{ backgroundColor: "#FFFFFF" }}>
+              <View style={{
+                backgroundColor: "#FFFFFF",
+                paddingHorizontal: 20,
+                paddingTop: 16,
+                paddingBottom: 8,
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                marginTop: -20,
+                shadowColor: "#000",
+                shadowOpacity: 0.1,
+                shadowRadius: 10,
+                shadowOffset: { width: 0, height: -4 },
+                elevation: 10,
+              }}>
+                {/* Alert info */}
+                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 10 }}>
+                  <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: "#FEE2E2", alignItems: "center", justifyContent: "center" }}>
+                    <Ionicons name="warning" size={20} color="#DC2626" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: "800", color: TEXT_DARK }} allowFontScaling={false} numberOfLines={1}>
+                      {selectedAlert?.senderName ?? "Unknown Sender"}
+                    </Text>
+                    <Text style={{ fontSize: 12, fontWeight: "500", color: "#64748B", marginTop: 2 }} allowFontScaling={false}>
+                      {selectedAlert?.subtitle ?? ""}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Location info */}
+                {selectedAlert?.address ? (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                    <Ionicons name="location" size={16} color={Colors.primary} />
+                    <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: "#334155" }} allowFontScaling={false} numberOfLines={2}>
+                      {selectedAlert.address}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {selectedAlert?.latitude == null || selectedAlert?.longitude == null ? (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10, backgroundColor: "#FEF3C7", borderRadius: 8, padding: 10 }}>
+                    <Ionicons name="alert-circle" size={16} color="#D97706" />
+                    <Text style={{ flex: 1, fontSize: 12, fontWeight: "600", color: "#92400E" }} allowFontScaling={false}>
+                      Location coordinates not available for this alert.
+                    </Text>
+                  </View>
+                ) : null}
+
+                {/* Dismiss */}
+                <Pressable
+                  onPress={() => setSelectedAlert(null)}
+                  style={({ pressed }) => [{
+                    backgroundColor: Colors.primary,
+                    borderRadius: 14,
+                    paddingVertical: 12,
+                    alignItems: "center" as const,
+                    opacity: pressed ? 0.85 : 1,
+                    marginTop: 4,
+                  }]}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: "800", color: "#FFFFFF" }} allowFontScaling={false}>
+                    Dismiss
+                  </Text>
                 </Pressable>
               </View>
-
-              {/* Divider */}
-              <View style={{ height: 1, backgroundColor: "#F1F5F9", marginBottom: 12 }} />
-
-              {/* Message */}
-              <Text style={{ fontSize: clamp(Math.round(13 * fs), 12, 15), color: "#334155", lineHeight: 20, fontWeight: "500", marginBottom: 16 }} allowFontScaling={false}>
-                {selectedAlert?.subtitle ?? ""}
-              </Text>
-
-              {/* Date + Time */}
-              <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 16 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                  <Ionicons name="calendar-outline" size={14} color="#64748B" />
-                  <Text style={{ fontSize: clamp(Math.round(12 * fs), 11, 13), color: "#64748B", fontWeight: "600" }} allowFontScaling={false}>
-                    {selectedAlert?.date ?? ""}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                  <Ionicons name="time-outline" size={14} color="#64748B" />
-                  <Text style={{ fontSize: clamp(Math.round(12 * fs), 11, 13), color: "#64748B", fontWeight: "600" }} allowFontScaling={false}>
-                    {selectedAlert?.time ?? ""}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Dismiss button */}
-              <Pressable
-                onPress={() => setSelectedAlert(null)}
-                style={({ pressed }) => [{
-                  backgroundColor: Colors.primary,
-                  borderRadius: 14,
-                  paddingVertical: 12,
-                  alignItems: "center" as const,
-                  opacity: pressed ? 0.85 : 1,
-                }]}
-              >
-                <Text style={{ fontSize: clamp(Math.round(14 * fs), 13, 15), fontWeight: "800", color: "#FFFFFF" }} allowFontScaling={false}>
-                  Dismiss
-                </Text>
-              </Pressable>
-            </Pressable>
-          </Pressable>
+            </SafeAreaView>
+          </View>
         </Modal>
 
         {/* ── Sheet Modal ── */}
