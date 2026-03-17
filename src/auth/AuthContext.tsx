@@ -21,6 +21,8 @@ import {
   clearSession,
 } from "./session";
 
+import { setupPushNotifications, removePushTokenFromBackend } from "../utils/pushNotifications";
+
 export type StoredUser = {
   _id?: string;
   id?: string;
@@ -156,6 +158,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    // Remove push token from backend before clearing session
+    await removePushTokenFromBackend().catch(() => {});
+
     setAccessTokenState(null);
     setRefreshTokenState(null);
     setUser(null);
@@ -254,6 +259,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } catch {
               // ignore
             }
+            // Re-register push token on app boot (token may have changed)
+            setupPushNotifications().catch(() => {});
           }
         } else {
           setAccessTokenState(null);
@@ -318,6 +325,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // ignore
       }
     }
+
+    // Register push token after login — small delay to ensure tokens are persisted
+    setTimeout(() => {
+      setupPushNotifications().catch((e) => console.error("[Push] login registration error:", e));
+    }, 1500);
   };
 
   const value = useMemo<AuthContextType>(

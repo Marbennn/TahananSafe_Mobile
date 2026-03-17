@@ -3,6 +3,9 @@
 # dependencies
 node_modules/
 
+# Firebase service account keys (secrets)
+tahanan-safe-firebase-*.json
+
 # Expo
 .expo/
 dist/

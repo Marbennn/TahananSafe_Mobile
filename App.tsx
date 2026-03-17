@@ -54,11 +54,24 @@ import {
 // APIs for PIN & profile
 import { getMeApi, verifyPinApi } from "./src/api/pin";
 
+// Push notifications
+import * as Notifications from "expo-notifications";
+
 // Types
 import type { TabKey } from "./src/components/BottomNavBar";
 import type { ReportItem } from "./src/screens/ReportScreen";
 
 enableScreens(true);
+
+// Configure how push notifications behave when app is in foreground
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 type RootStackParamList = {
   Splash: undefined;

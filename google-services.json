@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "607844602288",
+    "project_id": "tahanan-safe",
+    "storage_bucket": "tahanan-safe.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:607844602288:android:fedf126695673afdb08675",
+        "android_client_info": {
+          "package_name": "com.angelgeloo0918.firstproject"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCjMA1cW_CWoX0gNzIfrhYKq3VZe7w3GfE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

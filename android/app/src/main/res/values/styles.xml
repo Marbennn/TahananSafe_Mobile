@@ -4,18 +4,16 @@
     <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
     <item name="colorPrimary">@color/colorPrimary</item>
     <item name="colorAccent">@color/colorAccent</item>
-    <item name="android:statusBarColor">#000000</item>
+    <item name="android:statusBarColor">#FFFFFF</item>
     <item name="materialCalendarStyle">@style/CustomMaterialCalendar</item>
     <item name="materialCalendarFullscreenTheme">@style/CustomMaterialCalendarFullscreen</item>
     <item name="materialCalendarTheme">@style/CustomMaterialCalendarTheme</item>
   </style>
-
   <style name="CustomMaterialCalendar" parent="Widget.MaterialComponents.MaterialCalendar">
     <item name="shapeAppearanceSmallComponent">@style/RoundedShapeSmall</item>
     <item name="shapeAppearanceMediumComponent">@style/RoundedShapeMedium</item>
     <item name="shapeAppearanceLargeComponent">@style/RoundedShapeLarge</item>
   </style>
-
   <style name="CustomMaterialCalendarFullscreen" parent="ThemeOverlay.MaterialComponents.MaterialCalendar.Fullscreen">
     <item name="colorPrimary">@color/colorPrimary</item>
     <item name="colorOnPrimary">#FFFFFF</item>
@@ -23,7 +21,6 @@
     <item name="shapeAppearanceMediumComponent">@style/RoundedShapeMedium</item>
     <item name="shapeAppearanceLargeComponent">@style/RoundedShapeLarge</item>
   </style>
-
   <style name="CustomMaterialCalendarTheme" parent="ThemeOverlay.MaterialComponents.MaterialCalendar">
     <item name="colorPrimary">@color/colorPrimary</item>
     <item name="colorOnPrimary">#FFFFFF</item>
@@ -31,17 +28,14 @@
     <item name="shapeAppearanceMediumComponent">@style/RoundedShapeMedium</item>
     <item name="shapeAppearanceLargeComponent">@style/RoundedShapeLarge</item>
   </style>
-
   <style name="RoundedShapeSmall" parent="ShapeAppearance.MaterialComponents.SmallComponent">
     <item name="cornerFamily">rounded</item>
     <item name="cornerSize">8dp</item>
   </style>
-
   <style name="RoundedShapeMedium" parent="ShapeAppearance.MaterialComponents.MediumComponent">
     <item name="cornerFamily">rounded</item>
     <item name="cornerSize">16dp</item>
   </style>
-
   <style name="RoundedShapeLarge" parent="ShapeAppearance.MaterialComponents.LargeComponent">
     <item name="cornerFamily">rounded</item>
     <item name="cornerSize">24dp</item>

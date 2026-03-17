@@ -47,6 +47,7 @@ import SignupErrorModal from "../components/SignupScreen/SignupErrorModal";
 
 // ✅ Session storage
 import { saveTokens, setLoggedIn } from "../auth/session";
+import { setupPushNotifications } from "../utils/pushNotifications";
 
 type Props = {
   onGoSignup: () => void;
@@ -522,6 +523,9 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const [pendingRoleAfterBioEnabled, setPendingRoleAfterBioEnabled] = useState<string>("user");
 
   const goAfterLoginByRole = (role?: string) => {
+    // Register push token for whichever user just logged in
+    setupPushNotifications().catch((e) => console.error("[Push] login registration error:", e));
+
     if (isBarangayOfficial(role)) {
       navigation.reset({
         index: 0,
