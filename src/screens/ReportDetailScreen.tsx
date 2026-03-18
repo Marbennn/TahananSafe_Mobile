@@ -745,7 +745,12 @@ export default function ReportDetailScreen({
   const photosRaw = ((detail?.photos ?? (report as any)?.photos) || []) as any[];
 
   const photoUrls = useMemo(() => {
-    return photosRaw.map((p) => buildReportPhotoUrl(reportId, p)).filter(Boolean) as string[];
+    const urls = photosRaw.map((p) => buildReportPhotoUrl(reportId, p)).filter(Boolean) as string[];
+    if (__DEV__) {
+      console.log("[ReportDetail] photosRaw:", JSON.stringify(photosRaw));
+      console.log("[ReportDetail] photoUrls:", urls);
+    }
+    return urls;
   }, [photosRaw, reportId]);
 
   const reportCode = String((report as any)?.alertNo ?? (reportId ? `#${reportId.slice(-4)}` : "#—"));
@@ -1050,7 +1055,14 @@ export default function ReportDetailScreen({
                       onPress={() => openViewer(i)}
                       style={({ pressed }) => [styles.photoCard, pressed && { opacity: 0.92 }]}
                     >
-                      <Image source={{ uri: u }} style={styles.photoImg} resizeMode="cover" />
+                      <Image
+                        source={{ uri: u }}
+                        style={styles.photoImg}
+                        resizeMode="cover"
+                        onError={(e) => {
+                          if (__DEV__) console.log("[ReportDetail] Image load error:", u, e.nativeEvent?.error);
+                        }}
+                      />
                       <View style={styles.photoOverlay}>
                         <Ionicons name="expand-outline" size={styles._miniIcon} color="#FFFFFF" />
                       </View>
