@@ -15,7 +15,7 @@ import {
   SectionList,
   SectionListData,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -595,11 +595,11 @@ export default function ReportScreen({
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+    <View style={styles.safe}>
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
 
       <View style={styles.page}>
-        {/* ===== Gradient header backdrop ===== */}
+        {/* ===== Gradient header backdrop — extends behind status bar ===== */}
         <LinearGradient
           colors={["#EAF3FF", "#F5FAFE"]}
           start={{ x: 0, y: 0 }}
@@ -608,7 +608,7 @@ export default function ReportScreen({
         />
 
         {/* ===== Top header ===== */}
-        <View style={styles.headerWrap}>
+        <View style={[styles.headerWrap, { paddingTop: insets.top + vscale(8) }]}>
           <View style={styles.headerTopRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.headerTitle}>Reports</Text>
@@ -701,7 +701,7 @@ export default function ReportScreen({
           centerLabel="Incident Log"
         />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 

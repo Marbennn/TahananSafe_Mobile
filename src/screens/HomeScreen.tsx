@@ -39,6 +39,7 @@ import HomeScreenLogo from "../../assets/HomeScreen/NewLogo.svg";
 
 // ✅ Tutorial overlay
 import FabTutorialOverlay from "../components/Tutorial/FabTutorialOverlay";
+import ReportTutorialModal from "../components/Tutorial/ReportTutorialModal";
 
 // ✅ Auth context
 import { useAuth } from "../auth/AuthContext";
@@ -226,6 +227,7 @@ export default function HomeScreen({
 
   // ✅ Tutorial
   const [showFabTutorial, setShowFabTutorial] = useState(false);
+  const [showReportTutorial, setShowReportTutorial] = useState(false);
   const tutorialBootRef = useRef(false);
 
   const showFabTutorialOnce = useCallback(async () => {
@@ -1278,7 +1280,7 @@ export default function HomeScreen({
             <Pressable
               onPress={() => {
                 if (sheetOpen) closeSheet();
-                setShowFabTutorial(true);
+                setShowReportTutorial(true);
               }}
               hitSlop={12}
               style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
@@ -1460,6 +1462,12 @@ export default function HomeScreen({
           navHeight={navHeight}
           title="Create an Incident Log"
           message="Tap the + button to add a new report."
+        />
+
+        {/* ✅ Report submission tutorial modal */}
+        <ReportTutorialModal
+          visible={showReportTutorial}
+          onClose={() => setShowReportTutorial(false)}
         />
 
         {/* ✅ Swipe-up Sheet Modal */}
