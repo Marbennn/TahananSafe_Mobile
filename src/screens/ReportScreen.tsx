@@ -21,7 +21,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 import { useAuth } from "../auth/AuthContext";
 
 // ✅ FIX: Use requestJson with auth for auto token refresh (replaces raw fetch + getAccessToken)
@@ -191,14 +191,16 @@ function ReportStatusSegment({
   value,
   onChange,
   styles,
+  TC,
 }: {
   value: FilterKey;
   onChange: (k: FilterKey) => void;
   styles: ReturnType<typeof makeStyles>;
+  TC: ReturnType<typeof useColors>;
 }) {
   const options: FilterKey[] = ["Pending", "On going", "Cancelled", "Resolved"];
   return (
-    <View style={styles.segmentWrap}>
+    <View style={[styles.segmentWrap, { borderColor: TC.divider, backgroundColor: TC.isDark ? TC.surface : "#F3F8FF" }]}>
       {options.map((k) => {
         const active = k === value;
         const accent = statusAccent(filterToStatus(k));
@@ -208,13 +210,13 @@ function ReportStatusSegment({
             onPress={() => onChange(k)}
             style={({ pressed }) => [
               styles.segmentBtn,
-              active ? { backgroundColor: "#FFFFFF", borderColor: "transparent" } : { backgroundColor: "transparent" },
+              active ? { backgroundColor: TC.surface, borderColor: "transparent" } : { backgroundColor: "transparent" },
               pressed && { opacity: 0.95 },
             ]}
           >
             <View style={styles.segmentInner}>
               <View style={[styles.segmentDot, { backgroundColor: active ? accent : "#CBD5E1" }]} />
-              <Text style={[styles.segmentText, { color: active ? TEXT_DARK : "#64748B" }]} numberOfLines={1}>
+              <Text style={[styles.segmentText, { color: active ? TC.textDark : TC.muted }]} numberOfLines={1}>
                 {k}
               </Text>
             </View>
@@ -229,57 +231,59 @@ function ReportCard({
   item,
   onPress,
   styles,
+  TC,
 }: {
   item: ReportItem;
   onPress?: () => void;
   styles: ReturnType<typeof makeStyles>;
+  TC: ReturnType<typeof useColors>;
 }) {
   const accent = statusAccent(item.status);
   const icon = statusIcon(item.status);
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && { opacity: 0.98 }]}>
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.card, { borderColor: TC.divider, backgroundColor: TC.card }, pressed && { opacity: 0.98 }]}>
       <View style={styles.cardInner}>
         <View style={[styles.accentEdge, { backgroundColor: accent }]} />
 
         <View style={styles.cardTopRow}>
-          <View style={[styles.leadingIconWrap, { backgroundColor: "#EEF6FF", borderColor: BORDER }]}>
+          <View style={[styles.leadingIconWrap, { backgroundColor: TC.chipBg, borderColor: TC.divider }]}>
             <Ionicons name={icon} size={styles._iconSize} color={accent} />
           </View>
 
           <View style={{ flex: 1, minWidth: 0 }}>
             <View style={styles.titleRow}>
-              <Text style={styles.cardTitle} numberOfLines={1}>
+              <Text style={[styles.cardTitle, { color: TC.textDark }]} numberOfLines={1}>
                 {item.title}
               </Text>
 
               {!!item.alertNo && (
-                <View style={styles.alertTag}>
-                  <Ionicons name="alert-circle-outline" size={styles._miniIcon} color="#64748B" />
-                  <Text style={styles.alertTagText} numberOfLines={1}>
+                <View style={[styles.alertTag, { borderColor: TC.divider, backgroundColor: TC.surface }]}>
+                  <Ionicons name="alert-circle-outline" size={styles._miniIcon} color={TC.muted} />
+                  <Text style={[styles.alertTagText, { color: TC.muted }]} numberOfLines={1}>
                     {item.alertNo}
                   </Text>
                 </View>
               )}
             </View>
 
-            <Text style={styles.cardDetail} numberOfLines={2}>
+            <Text style={[styles.cardDetail, { color: TC.muted }]} numberOfLines={2}>
               {item.detail}
             </Text>
           </View>
 
-          <Ionicons name="chevron-forward" size={styles._chevron} color="#94A3B8" />
+          <Ionicons name="chevron-forward" size={styles._chevron} color={TC.muted} />
         </View>
 
         <View style={styles.cardBottomRow}>
-          <View style={[styles.statusPill, { borderColor: "#EAF2FF", backgroundColor: "#F3F8FF" }]}>
+          <View style={[styles.statusPill, { borderColor: TC.divider, backgroundColor: TC.isDark ? TC.surface : "#F3F8FF" }]}>
             <View style={[styles.statusDot, { backgroundColor: accent }]} />
             <Text style={[styles.statusPillText, { color: accent }]}>{statusLabel(item.status)}</Text>
           </View>
 
           <View style={styles.metaRow}>
-            <Ionicons name="time-outline" size={styles._miniIcon} color="#94A3B8" />
-            <Text style={styles.metaText} numberOfLines={1}>
+            <Ionicons name="time-outline" size={styles._miniIcon} color={TC.muted} />
+            <Text style={[styles.metaText, { color: TC.muted }]} numberOfLines={1}>
               Updated {item.timeRight}
             </Text>
           </View>
@@ -308,6 +312,7 @@ export default function ReportScreen({
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
   const { width, height } = useWindowDimensions();
+  const TC = useColors();
 
   const { user } = useAuth() as any;
 
@@ -595,13 +600,13 @@ export default function ReportScreen({
   );
 
   return (
-    <View style={styles.safe}>
-      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+    <View style={[styles.safe, { backgroundColor: TC.screenBg }]}>
+      <StatusBar barStyle={TC.statusBar} translucent backgroundColor="transparent" />
 
-      <View style={styles.page}>
+      <View style={[styles.page, { backgroundColor: TC.screenBg }]}>
         {/* ===== Gradient header backdrop — extends behind status bar ===== */}
         <LinearGradient
-          colors={["#EAF3FF", "#F5FAFE"]}
+          colors={TC.isDark ? [TC.surface, TC.screenBg] : ["#EAF3FF", "#F5FAFE"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
           style={styles.headerBg}
@@ -611,19 +616,19 @@ export default function ReportScreen({
         <View style={[styles.headerWrap, { paddingTop: insets.top + vscale(8) }]}>
           <View style={styles.headerTopRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Reports</Text>
-              <Text style={styles.headerSub}>Track your incident progress by status</Text>
+              <Text style={[styles.headerTitle, { color: TC.textDark }]}>Reports</Text>
+              <Text style={[styles.headerSub, { color: TC.muted }]}>Track your incident progress by status</Text>
             </View>
           </View>
 
-          <View style={styles.searchWrap}>
-              <Ionicons name="search-outline" size={styles._iconSize} color="#94A3B8" />
+          <View style={[styles.searchWrap, { borderColor: TC.divider, backgroundColor: TC.isDark ? TC.surface : "#F8FBFF" }]}>
+              <Ionicons name="search-outline" size={styles._iconSize} color={TC.muted} />
               <TextInput
                 value={query}
                 onChangeText={setQuery}
                 placeholder="Search reports…"
-                placeholderTextColor="#94A3B8"
-                style={styles.searchInput}
+                placeholderTextColor={TC.muted}
+                style={[styles.searchInput, { color: TC.textDark }]}
                 autoCorrect={false}
                 autoCapitalize="none"
                 returnKeyType="search"
@@ -631,37 +636,37 @@ export default function ReportScreen({
               {!!query && (
                 <Pressable
                   onPress={() => setQuery("")}
-                  style={({ pressed }) => [styles.clearBtn, pressed && { opacity: 0.85 }]}
+                  style={({ pressed }) => [styles.clearBtn, { backgroundColor: TC.surface, borderColor: TC.divider }, pressed && { opacity: 0.85 }]}
                 >
-                  <Ionicons name="close" size={styles._iconSize} color="#94A3B8" />
+                  <Ionicons name="close" size={styles._iconSize} color={TC.muted} />
                 </Pressable>
               )}
           </View>
 
           <View style={styles.statusWrap}>
-            <ReportStatusSegment value={filter} onChange={setFilterAnimated} styles={styles} />
+            <ReportStatusSegment value={filter} onChange={setFilterAnimated} styles={styles} TC={TC} />
           </View>
         </View>
 
         {/* ===== Body ===== */}
         {loading ? (
           <View style={styles.centerBox}>
-            <ActivityIndicator size="large" color={PRIMARY} />
-            <Text style={styles.centerHint}>Loading reports…</Text>
+            <ActivityIndicator size="large" color={TC.primary} />
+            <Text style={[styles.centerHint, { color: TC.muted }]}>Loading reports…</Text>
           </View>
         ) : errorMsg ? (
           <View style={styles.centerBox}>
             <Ionicons name="warning-outline" size={styles._emptyIcon} color="#F59E0B" />
             <Text style={styles.errorText}>{errorMsg}</Text>
-            <Pressable onPress={load} style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.92 }]}>
+            <Pressable onPress={load} style={({ pressed }) => [styles.retryBtn, { backgroundColor: TC.primary }, pressed && { opacity: 0.92 }]}>
               <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           </View>
         ) : filtered.length === 0 ? (
           <Animated.View style={[styles.centerBox, listAnimStyle]}>
             <Ionicons name="document-text-outline" size={styles._emptyIcon} color="#94A3B8" />
-            <Text style={styles.centerHint}>No reports found for {filter}.</Text>
-            {!!query && <Text style={styles.centerSubHint}>Try a different keyword.</Text>}
+            <Text style={[styles.centerHint, { color: TC.muted }]}>No reports found for {filter}.</Text>
+            {!!query && <Text style={[styles.centerSubHint, { color: TC.muted }]}>Try a different keyword.</Text>}
           </Animated.View>
         ) : (
           <Animated.View style={[{ flex: 1 }, listAnimStyle]}>
@@ -674,14 +679,14 @@ export default function ReportScreen({
               contentContainerStyle={[styles.listContent, { paddingBottom: CONTENT_BOTTOM_PAD }]}
               renderSectionHeader={({ section }) => (
                 <View style={styles.sectionHeaderWrap}>
-                  <View style={styles.sectionPill}>
-                    <Ionicons name="calendar-outline" size={styles._miniIcon} color="#94A3B8" />
-                    <Text style={styles.sectionPillText}>{section.title}</Text>
+                  <View style={[styles.sectionPill, { borderColor: TC.divider, backgroundColor: TC.surface }]}>
+                    <Ionicons name="calendar-outline" size={styles._miniIcon} color={TC.muted} />
+                    <Text style={[styles.sectionPillText, { color: TC.muted }]}>{section.title}</Text>
                   </View>
                 </View>
               )}
               renderItem={({ item }) => (
-                <ReportCard item={item} onPress={() => onOpenReport?.(item)} styles={styles} />
+                <ReportCard item={item} onPress={() => onOpenReport?.(item)} styles={styles} TC={TC} />
               )}
               ItemSeparatorComponent={() => <View style={{ height: vscale(10) }} />}
             />

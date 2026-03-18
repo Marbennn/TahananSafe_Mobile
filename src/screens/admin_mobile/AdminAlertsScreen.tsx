@@ -17,7 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { WebView } from "react-native-webview";
 import * as Location from "expo-location";
 import AdminBotNav, { TabKey } from "../../components/AdminComponents/AdminBotNav";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 import {
   fetchMyNotificationsCombined,
   toggleNotificationReadCombined,
@@ -297,6 +297,7 @@ export default function AdminAlertsScreen({
   initialTab = "Inbox",
   onFabPress,
 }: Props) {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
@@ -416,7 +417,7 @@ export default function AdminAlertsScreen({
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle={TC.statusBar} />
 
       <View style={styles.page}>
         <View style={styles.header}>

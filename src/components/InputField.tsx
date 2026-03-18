@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, TextInputProps } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 
 type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -31,25 +31,26 @@ export default function InputField({
   rightIconName,
   onPressRightIcon,
 }: Props) {
+  const TC = useColors();
   const [focused, setFocused] = useState(false);
 
   return (
     <View style={styles.block}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, { color: TC.text }]}>{label}</Text>
 
-      <View style={[styles.inputWrap, focused && styles.focused]}>
+      <View style={[styles.inputWrap, { borderColor: TC.border, backgroundColor: TC.inputBg }, focused && { borderColor: TC.link }]}>
         <TextInput
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor={Colors.placeholder}
+          placeholderTextColor={TC.placeholder}
           keyboardType={keyboardType}
           secureTextEntry={secureTextEntry}
           autoCapitalize={autoCapitalize}
           autoCorrect={autoCorrect}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          style={styles.input}
+          style={[styles.input, { color: TC.text }]}
         />
 
         {rightIconName ? (
@@ -58,7 +59,7 @@ export default function InputField({
             hitSlop={12}
             style={styles.eyeBtn}
           >
-            <Ionicons name={rightIconName} size={20} color="#6B7785" />
+            <Ionicons name={rightIconName} size={20} color={TC.muted} />
           </Pressable>
         ) : null}
       </View>

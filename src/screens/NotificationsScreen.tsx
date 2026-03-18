@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 import { useNavigation } from "@react-navigation/native";
 
 import {
@@ -40,10 +40,7 @@ type Props = {
   onBack: () => void;
 };
 
-const BG = "#F5FAFE";
-const BORDER = "#E7EEF7";
-const TEXT_DARK = "#0B2B45";
-const SUBTLE = "#64748B";
+// Colors now provided by useColors() hook for dark mode support
 
 type FilterKey = "all" | "unread" | "alert" | "report" | "thread" | "info";
 
@@ -247,6 +244,7 @@ export default function NotificationsScreen({ onBack }: Props) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const navigation = useNavigation<any>();
+  const TC = useColors();
 
   const wScale = Math.min(Math.max(width / 375, 0.9), 1.25);
   const hScale = Math.min(Math.max(height / 812, 0.9), 1.2);
@@ -254,7 +252,7 @@ export default function NotificationsScreen({ onBack }: Props) {
   const scale = (n: number) => Math.round(n * wScale);
   const vscale = (n: number) => Math.round(n * hScale);
 
-  const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
+  const styles = useMemo(() => makeStyles(scale, vscale, TC), [width, height, TC.isDark]);
 
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<NotifVM[]>([]);
@@ -602,7 +600,7 @@ export default function NotificationsScreen({ onBack }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle={TC.statusBar} />
 
       <View style={styles.page}>
         {/* Top Bar */}
@@ -612,7 +610,7 @@ export default function NotificationsScreen({ onBack }: Props) {
             hitSlop={12}
             style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
           >
-            <Ionicons name="chevron-back" size={scale(22)} color={Colors.primary} />
+            <Ionicons name="chevron-back" size={scale(22)} color={TC.primary} />
           </Pressable>
 
           <View style={{ flex: 1 }}>
@@ -637,19 +635,19 @@ export default function NotificationsScreen({ onBack }: Props) {
             hitSlop={10}
             style={({ pressed }) => [styles.menuBtn, pressed && { opacity: 0.75 }]}
           >
-            <Ionicons name="ellipsis-horizontal" size={scale(18)} color={SUBTLE} />
+            <Ionicons name="ellipsis-horizontal" size={scale(18)} color={TC.muted} />
           </Pressable>
         </View>
 
         {/* Search */}
         <View style={styles.searchRow}>
           <View style={styles.searchBox}>
-            <Ionicons name="search-outline" size={scale(18)} color="#9AA4B2" />
+            <Ionicons name="search-outline" size={scale(18)} color={TC.muted} />
             <TextInput
               value={query}
               onChangeText={setQuery}
               placeholder="Search notifications"
-              placeholderTextColor="#9AA4B2"
+              placeholderTextColor={TC.placeholder}
               style={styles.searchInput}
               returnKeyType="search"
               autoCorrect={false}
@@ -660,7 +658,7 @@ export default function NotificationsScreen({ onBack }: Props) {
                 hitSlop={10}
                 style={({ pressed }) => [styles.clearQueryBtn, pressed && { opacity: 0.7 }]}
               >
-                <Ionicons name="close-circle" size={scale(18)} color="#94A3B8" />
+                <Ionicons name="close-circle" size={scale(18)} color={TC.muted} />
               </Pressable>
             ) : null}
           </View>
@@ -682,7 +680,7 @@ export default function NotificationsScreen({ onBack }: Props) {
         {/* Body */}
         {loading ? (
           <View style={styles.centerBox}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <ActivityIndicator size="large" color={TC.primary} />
             <Text style={styles.centerHint}>Loading Notifications</Text>
           </View>
         ) : errorMsg ? (
@@ -703,7 +701,7 @@ export default function NotificationsScreen({ onBack }: Props) {
             ListEmptyComponent={
               listEmpty ? (
                 <View style={styles.emptyCard}>
-                  <Ionicons name="notifications-off-outline" size={scale(30)} color="#94A3B8" />
+                  <Ionicons name="notifications-off-outline" size={scale(30)} color={TC.muted} />
                   <Text style={styles.emptyTitle}>No notifications</Text>
                   <Text style={styles.emptyText}>You don't have any notifications yet.</Text>
                 </View>
@@ -735,7 +733,7 @@ export default function NotificationsScreen({ onBack }: Props) {
                   <View style={[styles.leftRail, isUnread ? styles.leftRailUnread : styles.leftRailRead]} />
                   <View style={styles.cardInner}>
                     <View style={styles.iconWrap}>
-                      <Ionicons name={iconForType(n.type)} size={scale(20)} color={Colors.primary} />
+                      <Ionicons name={iconForType(n.type)} size={scale(20)} color={TC.primary} />
                     </View>
 
                     <View style={{ flex: 1 }}>
@@ -751,15 +749,15 @@ export default function NotificationsScreen({ onBack }: Props) {
                       </Text>
 
                       <View style={styles.metaRow}>
-                        <Ionicons name="time-outline" size={scale(12)} color="#94A3B8" />
+                        <Ionicons name="time-outline" size={scale(12)} color={TC.muted} />
                         <Text style={styles.cardTime}>{n.timeLabel}</Text>
                       </View>
                     </View>
 
                     {isBusy ? (
-                      <ActivityIndicator size="small" color="#94A3B8" />
+                      <ActivityIndicator size="small" color={TC.muted} />
                     ) : (
-                      <Ionicons name="chevron-forward" size={scale(18)} color="#94A3B8" />
+                      <Ionicons name="chevron-forward" size={scale(18)} color={TC.muted} />
                     )}
                   </View>
                 </Pressable>
@@ -776,7 +774,7 @@ export default function NotificationsScreen({ onBack }: Props) {
               <Text style={styles.menuTitle}>Quick actions</Text>
 
               <Pressable onPress={markAllRead} style={({ pressed }) => [styles.menuItem, pressed && { opacity: 0.8 }]}>
-                <Ionicons name="checkmark-done-outline" size={scale(18)} color={Colors.primary} />
+                <Ionicons name="checkmark-done-outline" size={scale(18)} color={TC.primary} />
                 <Text style={styles.menuItemText}>Mark all as read</Text>
               </Pressable>
 
@@ -815,7 +813,7 @@ export default function NotificationsScreen({ onBack }: Props) {
                   {selectedMsg}
                 </Text>
                 <View style={styles.previewMeta}>
-                  <Ionicons name="time-outline" size={scale(12)} color="#94A3B8" />
+                  <Ionicons name="time-outline" size={scale(12)} color={TC.muted} />
                   <Text style={styles.previewTime}>{selectedTime}</Text>
                 </View>
               </View>
@@ -828,7 +826,7 @@ export default function NotificationsScreen({ onBack }: Props) {
                 <Ionicons
                   name={itemMenu?.unread ? "mail-open-outline" : "mail-unread-outline"}
                   size={scale(18)}
-                  color={Colors.primary}
+                  color={TC.primary}
                 />
                 <Text style={styles.menuItemText}>{itemMenu?.unread ? "Mark as read" : "Mark as unread"}</Text>
               </Pressable>
@@ -860,12 +858,12 @@ export default function NotificationsScreen({ onBack }: Props) {
   );
 }
 
-function makeStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+function makeStyles(scale: (n: number) => number, vscale: (n: number) => number, TC: ReturnType<typeof useColors>) {
   const SEARCH_H = vscale(40);
 
   return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: BG },
-    page: { flex: 1, backgroundColor: BG },
+    safe: { flex: 1, backgroundColor: TC.screenBg },
+    page: { flex: 1, backgroundColor: TC.screenBg },
 
     topBar: {
       paddingHorizontal: scale(14),
@@ -896,27 +894,27 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     topTitle: {
       fontSize: scale(22),
       fontWeight: "900",
-      color: TEXT_DARK,
+      color: TC.textDark,
     },
     subTitle: {
       marginTop: vscale(2),
       fontSize: scale(11),
       fontWeight: "700",
-      color: "#94A3B8",
+      color: TC.muted,
     },
 
     unreadPill: {
       paddingHorizontal: scale(10),
       paddingVertical: vscale(5),
       borderRadius: scale(999),
-      backgroundColor: "#EEF6FF",
+      backgroundColor: TC.chipBg,
       borderWidth: 1,
-      borderColor: "#D8E9FF",
+      borderColor: TC.divider,
     },
     unreadPillText: {
       fontSize: scale(10),
       fontWeight: "900",
-      color: Colors.primary,
+      color: TC.primary,
     },
 
     caughtPill: {
@@ -926,14 +924,14 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       paddingHorizontal: scale(10),
       paddingVertical: vscale(5),
       borderRadius: scale(999),
-      backgroundColor: "#ECFDF5",
+      backgroundColor: TC.isDark ? "#064E3B" : "#ECFDF5",
       borderWidth: 1,
-      borderColor: "#BBF7D0",
+      borderColor: TC.isDark ? "#065F46" : "#BBF7D0",
     },
     caughtPillText: {
       fontSize: scale(10),
       fontWeight: "900",
-      color: "#166534",
+      color: TC.isDark ? "#6EE7B7" : "#166534",
     },
 
     menuBtn: {
@@ -942,9 +940,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       borderRadius: scale(12),
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "#FFFFFF",
+      backgroundColor: TC.surface,
       borderWidth: 1,
-      borderColor: BORDER,
+      borderColor: TC.divider,
     },
 
     searchRow: {
@@ -954,10 +952,10 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
     searchBox: {
       height: SEARCH_H,
-      backgroundColor: "#FFFFFF",
+      backgroundColor: TC.surface,
       borderRadius: Math.round(SEARCH_H / 2),
       borderWidth: 1,
-      borderColor: BORDER,
+      borderColor: TC.divider,
       paddingHorizontal: scale(12),
       flexDirection: "row",
       alignItems: "center",
@@ -966,7 +964,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     searchInput: {
       flex: 1,
       fontSize: scale(13),
-      color: "#111827",
+      color: TC.textDark,
       paddingVertical: 0,
       fontWeight: "600",
     },
@@ -986,21 +984,21 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       paddingHorizontal: scale(12),
       paddingVertical: vscale(7),
       borderRadius: scale(999),
-      backgroundColor: "#FFFFFF",
+      backgroundColor: TC.surface,
       borderWidth: 1,
-      borderColor: BORDER,
+      borderColor: TC.divider,
     },
     pillActive: {
-      backgroundColor: "#EEF6FF",
-      borderColor: "#D8E9FF",
+      backgroundColor: TC.chipBg,
+      borderColor: TC.divider,
     },
     pillText: {
       fontSize: scale(11),
       fontWeight: "900",
-      color: "#475569",
+      color: TC.muted,
     },
     pillTextActive: {
-      color: Colors.primary,
+      color: TC.primary,
     },
 
     content: {
@@ -1019,24 +1017,24 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     sectionTitle: {
       fontSize: scale(12),
       fontWeight: "900",
-      color: "#334155",
+      color: TC.muted,
     },
     sectionLine: {
       flex: 1,
       height: 1,
-      backgroundColor: "#E2E8F0",
+      backgroundColor: TC.divider,
     },
 
     card: {
-      backgroundColor: "#FFFFFF",
+      backgroundColor: TC.surface,
       borderWidth: 1,
-      borderColor: BORDER,
+      borderColor: TC.divider,
       borderRadius: scale(16),
       overflow: "hidden",
     },
     cardUnread: {
-      borderColor: "#D8E9FF",
-      backgroundColor: "#FBFDFF",
+      borderColor: TC.isDark ? TC.primary : "#D8E9FF",
+      backgroundColor: TC.isDark ? "#1A2A3F" : "#FBFDFF",
     },
     leftRail: {
       position: "absolute",
@@ -1046,10 +1044,10 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       width: scale(4),
     },
     leftRailUnread: {
-      backgroundColor: Colors.primary,
+      backgroundColor: TC.primary,
     },
     leftRailRead: {
-      backgroundColor: "#E5E7EB",
+      backgroundColor: TC.divider,
     },
     cardInner: {
       flexDirection: "row",
@@ -1064,11 +1062,11 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       width: scale(40),
       height: scale(40),
       borderRadius: scale(14),
-      backgroundColor: "#F2F6FF",
+      backgroundColor: TC.chipBg,
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 1,
-      borderColor: "#E5EDFF",
+      borderColor: TC.divider,
     },
 
     titleRow: {
@@ -1080,10 +1078,10 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       flex: 1,
       fontSize: scale(12),
       fontWeight: "900",
-      color: "#1F2A37",
+      color: TC.textDark,
     },
     cardTitleUnread: {
-      color: Colors.primary,
+      color: TC.primary,
     },
     dot: {
       width: scale(8),
@@ -1096,7 +1094,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       marginTop: vscale(3),
       fontSize: scale(10),
       fontWeight: "700",
-      color: "#6B7280",
+      color: TC.muted,
       lineHeight: vscale(14),
     },
 
@@ -1109,13 +1107,13 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     cardTime: {
       fontSize: scale(9),
       fontWeight: "800",
-      color: "#94A3B8",
+      color: TC.muted,
     },
 
     emptyCard: {
-      backgroundColor: "#FFFFFF",
+      backgroundColor: TC.surface,
       borderWidth: 1,
-      borderColor: BORDER,
+      borderColor: TC.divider,
       borderRadius: scale(16),
       paddingVertical: vscale(24),
       paddingHorizontal: scale(16),
@@ -1127,12 +1125,12 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       marginTop: vscale(6),
       fontSize: scale(14),
       fontWeight: "900",
-      color: "#1F2A37",
+      color: TC.textDark,
     },
     emptyText: {
       fontSize: scale(11),
       fontWeight: "700",
-      color: "#6B7280",
+      color: TC.muted,
       textAlign: "center",
       lineHeight: vscale(16),
     },
@@ -1147,13 +1145,13 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     centerHint: {
       fontSize: scale(13),
       fontWeight: "800",
-      color: "#64748B",
+      color: TC.muted,
       textAlign: "center",
     },
     smallHint: {
       fontSize: scale(11),
       fontWeight: "700",
-      color: "#94A3B8",
+      color: TC.muted,
       textAlign: "center",
     },
     errorText: {
@@ -1166,7 +1164,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       marginTop: vscale(6),
       paddingVertical: vscale(10),
       paddingHorizontal: scale(18),
-      backgroundColor: Colors.primary,
+      backgroundColor: TC.primary,
       borderRadius: scale(999),
     },
     retryText: {
@@ -1178,15 +1176,15 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     // Menu modal shared
     menuOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0,0,0,0.25)",
+      backgroundColor: TC.overlay,
       justifyContent: "flex-end",
     },
     menuSheet: {
-      backgroundColor: "#FFFFFF",
+      backgroundColor: TC.surface,
       borderTopLeftRadius: scale(18),
       borderTopRightRadius: scale(18),
       borderWidth: 1,
-      borderColor: BORDER,
+      borderColor: TC.divider,
       paddingHorizontal: scale(14),
       paddingTop: vscale(10),
     },
@@ -1195,13 +1193,13 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       width: scale(46),
       height: vscale(5),
       borderRadius: 999,
-      backgroundColor: "#E2E8F0",
+      backgroundColor: TC.divider,
       marginBottom: vscale(10),
     },
     menuTitle: {
       fontSize: scale(13),
       fontWeight: "900",
-      color: "#0F172A",
+      color: TC.textDark,
       marginBottom: vscale(10),
     },
     menuItem: {
@@ -1212,35 +1210,35 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       paddingHorizontal: scale(10),
       borderRadius: scale(12),
       borderWidth: 1,
-      borderColor: BORDER,
-      backgroundColor: "#FFFFFF",
+      borderColor: TC.divider,
+      backgroundColor: TC.surface,
       marginBottom: vscale(10),
     },
     menuItemText: {
       fontSize: scale(12),
       fontWeight: "900",
-      color: "#0F172A",
+      color: TC.textDark,
     },
     menuCancel: {
       alignItems: "center",
       justifyContent: "center",
       paddingVertical: vscale(12),
       borderRadius: scale(12),
-      backgroundColor: "#F8FAFC",
+      backgroundColor: TC.screenBg,
       borderWidth: 1,
-      borderColor: BORDER,
+      borderColor: TC.divider,
     },
     menuCancelText: {
       fontSize: scale(12),
       fontWeight: "900",
-      color: "#334155",
+      color: TC.muted,
     },
 
     // Selected notification preview inside item menu
     previewCard: {
       borderWidth: 1,
-      borderColor: BORDER,
-      backgroundColor: "#F8FAFC",
+      borderColor: TC.divider,
+      backgroundColor: TC.screenBg,
       borderRadius: scale(14),
       paddingVertical: vscale(12),
       paddingHorizontal: scale(12),
@@ -1249,13 +1247,13 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     previewTitle: {
       fontSize: scale(12),
       fontWeight: "900",
-      color: "#0F172A",
+      color: TC.textDark,
     },
     previewMsg: {
       marginTop: vscale(4),
       fontSize: scale(10),
       fontWeight: "700",
-      color: "#475569",
+      color: TC.muted,
       lineHeight: vscale(14),
     },
     previewMeta: {
@@ -1267,7 +1265,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     previewTime: {
       fontSize: scale(9),
       fontWeight: "800",
-      color: "#94A3B8",
+      color: TC.muted,
     },
   });
 }

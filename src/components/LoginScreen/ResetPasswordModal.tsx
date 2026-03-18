@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 // ✅ use your existing badge (check icon)
 import ChecklistBadge from "../ChecklistBadge";
@@ -56,6 +56,7 @@ export default function ResetPasswordModal({
   scale,
   vscale,
 }: Props) {
+  const TC = useColors();
   const styles = useMemo(() => createStyles(scale, vscale), [scale, vscale]);
 
   const [step, setStep] = useState<Step>("email");
@@ -210,7 +211,7 @@ export default function ResetPasswordModal({
         ]}
       >
         <LinearGradient
-          colors={Colors.gradient}
+          colors={TC.gradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.btn}
@@ -294,7 +295,7 @@ export default function ResetPasswordModal({
         ]}
       >
         <LinearGradient
-          colors={Colors.gradient}
+          colors={TC.gradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.btn}
@@ -380,7 +381,7 @@ export default function ResetPasswordModal({
         ]}
       >
         <LinearGradient
-          colors={Colors.gradient}
+          colors={TC.gradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.btn}
@@ -408,7 +409,7 @@ export default function ResetPasswordModal({
         ]}
       >
         <LinearGradient
-          colors={Colors.gradient}
+          colors={TC.gradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.btn}
@@ -424,7 +425,7 @@ export default function ResetPasswordModal({
       <View style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: TC.surface }]}>
           {/* small close only for non-success */}
           {step !== "success" ? (
             <Pressable
@@ -432,11 +433,11 @@ export default function ResetPasswordModal({
               hitSlop={12}
               style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
             >
-              <Ionicons name="close" size={scale(18)} color="#111827" />
+              <Ionicons name="close" size={scale(18)} color={TC.textDark} />
             </Pressable>
           ) : null}
 
-          <Text style={styles.title}>Reset Password</Text>
+          <Text style={[styles.title, { color: TC.textDark }]}>Reset Password</Text>
 
           {step === "email" ? renderEmailStep() : null}
           {step === "otp" ? renderOtpStep() : null}

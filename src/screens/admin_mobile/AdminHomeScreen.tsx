@@ -23,7 +23,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { WebView } from "react-native-webview";
 import * as Location from "expo-location";
 
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 import AdminBotNav, { TabKey } from "../../components/AdminComponents/AdminBotNav";
 import GreetingCard from "../../components/HomeScreen/GreetingCard";
 import HomeScreenLogo from "../../../assets/HomeScreen/NewLogo.svg";
@@ -254,6 +254,7 @@ const AdminHomeScreen: React.FC<Props> = ({
   onOpenSettings,
   onLogout,
 }) => {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { s, fs } = useMemo(() => makeScale(width, height), [width, height]);
@@ -1000,7 +1001,7 @@ const AdminHomeScreen: React.FC<Props> = ({
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle={TC.statusBar} />
 
       <View style={styles.page}>
         {/* ── Header ── */}

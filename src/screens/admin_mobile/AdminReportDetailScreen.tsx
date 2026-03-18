@@ -18,7 +18,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 import {
   fetchAdminIncidentById,
   AdminIncident,
@@ -157,6 +157,7 @@ function getInitials(user: AdminIncident["user"]): string {
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function AdminReportDetailScreen({ reportId, onBack }: Props) {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
 
   const [incident,   setIncident]   = useState<AdminIncident | null>(null);
@@ -208,7 +209,7 @@ export default function AdminReportDetailScreen({ reportId, onBack }: Props) {
 
   return (
     <SafeAreaView style={s.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" backgroundColor={BG} />
+      <StatusBar barStyle={TC.statusBar} backgroundColor={TC.screenBg} />
 
       {/* ─── Header (matching ReportDetailScreen heroCard) ──────────── */}
       <View style={[s.heroWrap, { paddingTop: Math.max(insets.top - 44, 6) }]}>

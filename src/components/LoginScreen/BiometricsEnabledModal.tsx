@@ -11,7 +11,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 type Props = {
   visible: boolean;
@@ -23,6 +23,7 @@ function clamp(n: number, min: number, max: number) {
 }
 
 export default function BiometricsEnabledModal({ visible, onClose }: Props) {
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
 
   const s = clamp(width / 375, 0.95, 1.45);
@@ -75,19 +76,19 @@ export default function BiometricsEnabledModal({ visible, onClose }: Props) {
         <Animated.View
           style={[
             styles.card,
-            { opacity: fade, transform: [{ scale: pop }] },
+            { opacity: fade, transform: [{ scale: pop }], backgroundColor: TC.surface },
           ]}
         >
           {/* Icon badge */}
           <View style={styles.badgeWrap}>
             <View style={[styles.badgeHalo, { width: scale(80), height: scale(80), borderRadius: scale(40) }]}>
-              <Ionicons name={biometricIcon as any} size={scale(36)} color={Colors.primary} />
+              <Ionicons name={biometricIcon as any} size={scale(36)} color={TC.primary} />
             </View>
           </View>
 
-          <Text style={styles.title}>Biometrics Enabled!</Text>
+          <Text style={[styles.title, { color: TC.textDark }]}>Biometrics Enabled!</Text>
 
-          <Text style={styles.sub}>
+          <Text style={[styles.sub, { color: TC.muted }]}>
             {biometricLabel} has been set up successfully.{"\n"}
             You can use it to log in on your next visit.
           </Text>

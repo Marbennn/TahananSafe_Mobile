@@ -25,6 +25,7 @@ import * as SecureStore from "expo-secure-store";
 import { useNavigation } from "@react-navigation/native";
 import type { NavigationProp, ParamListBase } from "@react-navigation/native";
 
+import { useColors } from "../theme/colors";
 import LoginCard from "../components/LoginScreen/LoginCard";
 
 // ✅ Login OTP modal
@@ -481,6 +482,7 @@ async function runBiometricsGate(): Promise<{
 
 export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
 
   const s = clamp(width / 375, 0.95, 1.45);
@@ -849,8 +851,8 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: TC.surface }]} edges={["top", "bottom"]}>
+      <StatusBar barStyle={TC.statusBar} backgroundColor={TC.surface} />
 
       <View style={styles.header}>
         <Pressable
@@ -858,7 +860,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
           hitSlop={12}
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
         >
-          <Ionicons name="chevron-back" size={backIconSize} color="#111827" />
+          <Ionicons name="chevron-back" size={backIconSize} color={TC.textDark} />
         </Pressable>
       </View>
 
@@ -880,17 +882,17 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
             />
 
             <View style={styles.termsWrap}>
-              <Text style={styles.termsText}>
+              <Text style={[styles.termsText, { color: TC.muted }]}>
                 By clicking create account you agree to recognizes
               </Text>
 
               <View style={styles.termsRow}>
                 <Pressable onPress={handleTerms} hitSlop={8}>
-                  <Text style={styles.termsLink}>Terms of use</Text>
+                  <Text style={[styles.termsLink, { color: TC.primary }]}>Terms of use</Text>
                 </Pressable>
-                <Text style={styles.termsText}> and </Text>
+                <Text style={[styles.termsText, { color: TC.muted }]}> and </Text>
                 <Pressable onPress={handlePrivacy} hitSlop={8}>
-                  <Text style={styles.termsLink}>Privacy Policy</Text>
+                  <Text style={[styles.termsLink, { color: TC.primary }]}>Privacy Policy</Text>
                 </Pressable>
               </View>
             </View>

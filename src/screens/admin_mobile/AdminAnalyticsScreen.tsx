@@ -13,7 +13,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 import { fetchAdminStats, fetchAdminIncidents, AdminStats, AdminIncident } from "../../api/admin";
 
 type Props = {
@@ -113,6 +113,7 @@ function deriveStatsFromIncidents(
 }
 
 export default function AdminAnalyticsScreen({ onBack }: Props) {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
 
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -218,7 +219,7 @@ export default function AdminAnalyticsScreen({ onBack }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#EEF3F8" />
+      <StatusBar barStyle={TC.statusBar} backgroundColor={TC.screenBg} />
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>

@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 
 // ✅ popups
 import EnterVerificationModal from "../components/SignupScreen/EnterVerificationModal";
@@ -99,6 +99,7 @@ function log(tag: string, ...args: any[]) {
 }
 
 export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
 
   const s = clamp(width / 375, 0.95, 1.45);
@@ -226,7 +227,7 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
   const handlePrivacy = () => Alert.alert("Privacy Policy", "Open Privacy Policy screen/link.");
 
   return (
-    <View style={styles.safe}>
+    <View style={[styles.safe, { backgroundColor: TC.surface }]}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}

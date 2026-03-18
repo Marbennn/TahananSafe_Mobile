@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 type Props = {
   // ✅ UPDATED: now receives email + password (supports async)
@@ -34,6 +34,7 @@ export default function LoginCard({
   onForgotPassword,
   loading = false,
 }: Props) {
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
 
   // ✅ Responsive scaling (same logic as Signup)
@@ -61,23 +62,23 @@ export default function LoginCard({
   return (
     <View style={styles.container}>
       {/* HEADER */}
-      <Text style={styles.title}>Login</Text>
-      <Text style={styles.subtitle}>
+      <Text style={[styles.title, { color: TC.text }]}>Login</Text>
+      <Text style={[styles.subtitle, { color: TC.muted }]}>
         Welcome back! Log in to securely access your{"\n"}
         account and continue using the app.
       </Text>
 
       {/* Email */}
       <View style={styles.fieldBlock}>
-        <Text style={styles.label}>Email</Text>
+        <Text style={[styles.label, { color: TC.text }]}>Email</Text>
         <TextInput
           value={email}
           onChangeText={setEmail}
           placeholder="JohnDoe@gmail.com"
-          placeholderTextColor={Colors.placeholder}
+          placeholderTextColor={TC.placeholder}
           keyboardType="email-address"
           autoCapitalize="none"
-          style={[styles.input, emailFocused && { borderColor: "#1D4ED8" }]}
+          style={[styles.input, { backgroundColor: TC.inputBg, borderColor: TC.border, color: TC.text }, emailFocused && { borderColor: "#1D4ED8" }]}
           editable={!loading}
           onFocus={() => setEmailFocused(true)}
           onBlur={() => setEmailFocused(false)}
@@ -86,16 +87,16 @@ export default function LoginCard({
 
       {/* Password */}
       <View style={styles.fieldBlock}>
-        <Text style={styles.label}>Password</Text>
+        <Text style={[styles.label, { color: TC.text }]}>Password</Text>
         <View style={styles.inputWrap}>
           <TextInput
             value={password}
             onChangeText={setPassword}
             placeholder="********"
-            placeholderTextColor={Colors.placeholder}
+            placeholderTextColor={TC.placeholder}
             secureTextEntry={!showPassword}
             autoCapitalize="none"
-            style={[styles.input, { paddingRight: scale(44) }, passwordFocused && { borderColor: "#1D4ED8" }]}
+            style={[styles.input, { paddingRight: scale(44), backgroundColor: TC.inputBg, borderColor: TC.border, color: TC.text }, passwordFocused && { borderColor: "#1D4ED8" }]}
             editable={!loading}
             onFocus={() => setPasswordFocused(true)}
             onBlur={() => setPasswordFocused(false)}
@@ -112,7 +113,7 @@ export default function LoginCard({
             <Ionicons
               name={showPassword ? "eye-off-outline" : "eye-outline"}
               size={scale(18)}
-              color={Colors.muted}
+              color={TC.muted}
             />
           </Pressable>
         </View>
@@ -126,16 +127,16 @@ export default function LoginCard({
           hitSlop={8}
           disabled={loading}
         >
-          <View style={[styles.checkbox, rememberMe && styles.checkboxChecked, loading && { opacity: 0.6 }]}>
+          <View style={[styles.checkbox, { borderColor: TC.border }, rememberMe && [styles.checkboxChecked, { backgroundColor: TC.primary, borderColor: TC.primary }], loading && { opacity: 0.6 }]}>
             {rememberMe && (
               <Ionicons name="checkmark" size={scale(14)} color="#FFFFFF" />
             )}
           </View>
-          <Text style={[styles.rememberText, loading && { opacity: 0.6 }]}>Remember me</Text>
+          <Text style={[styles.rememberText, { color: TC.muted }, loading && { opacity: 0.6 }]}>Remember me</Text>
         </Pressable>
 
         <Pressable onPress={onForgotPassword} hitSlop={10} disabled={loading}>
-          <Text style={[styles.forgotText, loading && { opacity: 0.6 }]}>
+          <Text style={[styles.forgotText, { color: TC.link }, loading && { opacity: 0.6 }]}>
             Forgot Password?
           </Text>
         </Pressable>
@@ -154,7 +155,7 @@ export default function LoginCard({
       >
         <View style={styles.ctaInnerClip}>
           <LinearGradient
-            colors={Colors.gradient}
+            colors={TC.gradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.ctaGradient}

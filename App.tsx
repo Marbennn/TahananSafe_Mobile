@@ -13,6 +13,9 @@ import IdleTimerWrapper from "./src/components/IdleTimerWrapper";
 // ✅ Auth
 import { AuthProvider, useAuth } from "./src/auth/AuthContext";
 
+// ✅ Theme
+import { ThemeProvider } from "./src/theme/ThemeContext";
+
 // ✅ SecureStore (for local PIN enable/disable toggle)
 import * as SecureStore from "expo-secure-store";
 
@@ -23,6 +26,7 @@ import AuthFlowShell from "./src/screens/AuthFlowShell";
 import OnboardingPagerScreen from "./src/screens/OnboardingPagerScreen";
 import PinScreen from "./src/screens/PinScreen";
 import CreatePinScreen from "./src/screens/CreatePinScreen";
+import InvalidPinModal from "./src/components/PinScreen/InvalidPinModal";
 
 import HomeScreen from "./src/screens/HomeScreen";
 import InboxScreen from "./src/screens/HotlinesScreen";
@@ -128,6 +132,8 @@ function getHomeRouteNameByRole(
 ): "Main" | "AdminHomeScreen" {
   return isBarangayOfficial(role) ? "AdminHomeScreen" : "Main";
 }
+
+const PIN_ENTRY_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 /* ===================== ✅ LOCAL PIN ENABLE FLAG (DEVICE-LEVEL) ===================== */
 /** SecureStore keys must only contain: A-Z a-z 0-9 . - _ */
@@ -420,8 +426,59 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
   const targetHome = getHomeRouteNameByRole(auth?.user?.role);
   const [pinErrVisible, setPinErrVisible] = React.useState(false);
   const [pinErrMsg, setPinErrMsg] = React.useState("");
+  const [pinTimeoutVisible, setPinTimeoutVisible] = React.useState(false);
+  const pinTimeoutTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pinTimeoutHandledRef = React.useRef(false);
+
+  const clearPinTimeoutTimer = React.useCallback(() => {
+    if (pinTimeoutTimerRef.current) {
+      clearTimeout(pinTimeoutTimerRef.current);
+      pinTimeoutTimerRef.current = null;
+    }
+  }, []);
+
+  const stopPinTimeout = React.useCallback(() => {
+    pinTimeoutHandledRef.current = true;
+    clearPinTimeoutTimer();
+  }, [clearPinTimeoutTimer]);
+
+  const handlePinTimeout = React.useCallback(async () => {
+    if (pinTimeoutHandledRef.current) return;
+    pinTimeoutHandledRef.current = true;
+    clearPinTimeoutTimer();
+    setPinErrVisible(false);
+    setPinErrMsg("");
+
+    resetPinUnlockedThisRun();
+    try {
+      await auth.logout();
+    } catch {
+      // ignore
+    }
+    await setLoggedIn(false);
+    await setHasPin(false);
+    setPinTimeoutVisible(true);
+  }, [auth, clearPinTimeoutTimer]);
+
+  const resetPinTimeout = React.useCallback(() => {
+    if (pinTimeoutHandledRef.current) return;
+    clearPinTimeoutTimer();
+    pinTimeoutTimerRef.current = setTimeout(() => {
+      void handlePinTimeout();
+    }, PIN_ENTRY_IDLE_TIMEOUT_MS);
+  }, [clearPinTimeoutTimer, handlePinTimeout]);
+
+  React.useEffect(() => {
+    pinTimeoutHandledRef.current = false;
+    resetPinTimeout();
+
+    return () => {
+      stopPinTimeout();
+    };
+  }, [resetPinTimeout, stopPinTimeout]);
 
   const handleBack = async () => {
+    stopPinTimeout();
     resetPinUnlockedThisRun();
 
     try {
@@ -437,41 +494,62 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
   };
 
   return (
-    <PinScreen
-      onBack={handleBack}
-      onForgotPin={() => {
-        Alert.alert("Forgot PIN", "Recovery coming soon.");
-      }}
-      onBypass={() => {
-        setPinUnlockedThisRun(true);
-        navigation.reset({ index: 0, routes: [{ name: targetHome }] });
-      }}
-      invalidPinVisible={pinErrVisible}
-      invalidPinMsg={pinErrMsg}
-      onInvalidPinDismiss={() => setPinErrVisible(false)}
-      onVerified={async (pin) => {
-        try {
-          const token = await getAccessToken();
-          if (!token) {
-            await setLoggedIn(false);
-            resetPinUnlockedThisRun();
-            try {
-              await auth.logout();
-            } catch {}
-            navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
-            return;
-          }
-
-          await verifyPinApi({ accessToken: token, pin });
-
+    <>
+      <PinScreen
+        onBack={handleBack}
+        onUserActivity={resetPinTimeout}
+        onForgotPin={() => {
+          Alert.alert("Forgot PIN", "Recovery coming soon.");
+        }}
+        onBypass={() => {
+          stopPinTimeout();
           setPinUnlockedThisRun(true);
           navigation.reset({ index: 0, routes: [{ name: targetHome }] });
-        } catch (e: any) {
-          setPinErrMsg(e?.message || "The PIN you entered is incorrect. Please try again.");
-          setPinErrVisible(true);
-        }
-      }}
-    />
+        }}
+        invalidPinVisible={pinErrVisible}
+        invalidPinMsg={pinErrMsg}
+        onInvalidPinDismiss={() => setPinErrVisible(false)}
+        onVerified={async (pin) => {
+          clearPinTimeoutTimer();
+
+          try {
+            const token = await getAccessToken();
+            if (!token) {
+              stopPinTimeout();
+              await setLoggedIn(false);
+              resetPinUnlockedThisRun();
+              try {
+                await auth.logout();
+              } catch {}
+              navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
+              return;
+            }
+
+            await verifyPinApi({ accessToken: token, pin });
+
+            stopPinTimeout();
+            setPinUnlockedThisRun(true);
+            navigation.reset({ index: 0, routes: [{ name: targetHome }] });
+          } catch (e: any) {
+            if (pinTimeoutHandledRef.current) return;
+            setPinErrMsg(e?.message || "The PIN you entered is incorrect. Please try again.");
+            setPinErrVisible(true);
+            resetPinTimeout();
+          }
+        }}
+      />
+
+      <InvalidPinModal
+        visible={pinTimeoutVisible}
+        title="Logged Out"
+        message="You were logged out for not entering your PIN for too long."
+        buttonText="OK"
+        onClose={() => {
+          setPinTimeoutVisible(false);
+          navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+        }}
+      />
+    </>
   );
 }
 
@@ -651,6 +729,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
+        <ThemeProvider>
         <AuthProvider>
           <NavigationContainer>
             <Stack.Navigator
@@ -717,6 +796,7 @@ export default function App() {
             </Stack.Navigator>
           </NavigationContainer>
         </AuthProvider>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

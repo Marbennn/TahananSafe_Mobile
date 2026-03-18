@@ -29,7 +29,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 // ✅ NEW: refresh when Home regains focus
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 
 import GreetingCard from "../components/HomeScreen/GreetingCard";
@@ -213,6 +213,7 @@ export default function HomeScreen({
   onOpenNotifications,
   onOpenReport,
 }: Props) {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isFocused = useIsFocused();
@@ -1248,10 +1249,10 @@ export default function HomeScreen({
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: TC.screenBg }]} edges={["top"]}>
+      <StatusBar barStyle={TC.statusBar} />
 
-      <View style={styles.page}>
+      <View style={[styles.page, { backgroundColor: TC.screenBg }]}>
         {/* Top header */}
         <View style={styles.topBar}>
           <View style={styles.logoWrap}>
@@ -1262,9 +1263,9 @@ export default function HomeScreen({
             <Pressable
               onPress={handleOpenNotifications}
               hitSlop={12}
-              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
+              style={({ pressed }) => [styles.iconBtn, { backgroundColor: TC.chipBg, borderColor: TC.divider }, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
             >
-              <Ionicons name="notifications-outline" size={notifIconSize} color={TEXT_DARK} />
+              <Ionicons name="notifications-outline" size={notifIconSize} color={TC.textDark} />
 
               {notifCount > 0 ? (
                 <View style={styles.badge}>
@@ -1283,9 +1284,9 @@ export default function HomeScreen({
                 setShowReportTutorial(true);
               }}
               hitSlop={12}
-              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
+              style={({ pressed }) => [styles.iconBtn, { backgroundColor: TC.chipBg, borderColor: TC.divider }, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
             >
-              <Ionicons name="help-circle-outline" size={helpIconSize} color={TEXT_DARK} />
+              <Ionicons name="help-circle-outline" size={helpIconSize} color={TC.textDark} />
             </Pressable>
           </View>
         </View>
@@ -1301,13 +1302,13 @@ export default function HomeScreen({
 
           <View style={styles.sectionRow}>
             <View style={styles.sectionTitleRow}>
-              <Text style={styles.sectionTitle} allowFontScaling={false}>
+              <Text style={[styles.sectionTitle, { color: TC.textDark }]} allowFontScaling={false}>
                 Recent Logs
               </Text>
             </View>
 
             <Pressable onPress={() => onTabChange?.("Reports")} hitSlop={10}>
-              <Text style={styles.seeMore} allowFontScaling={false}>
+              <Text style={[styles.seeMore, { color: TC.primary }]} allowFontScaling={false}>
                 See more
               </Text>
             </Pressable>
@@ -1316,15 +1317,15 @@ export default function HomeScreen({
           <View style={styles.logsWrap}>
             {loadingReports ? (
               <View style={styles.miniCenter}>
-                <ActivityIndicator size="small" color={Colors.primary} />
+                <ActivityIndicator size="small" color={TC.primary} />
               </View>
             ) : logs.length === 0 ? (
-              <View style={styles.emptyLogsCard}>
-                <View style={styles.emptyLogsIconWrap}>
-                  <Ionicons name="document-text-outline" size={14} color={Colors.primary} />
+              <View style={[styles.emptyLogsCard, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
+                <View style={[styles.emptyLogsIconWrap, { backgroundColor: TC.chipBg }]}>
+                  <Ionicons name="document-text-outline" size={14} color={TC.primary} />
                 </View>
-                <Text style={styles.emptyLogsTitle} allowFontScaling={false}>No reports yet</Text>
-                <Text style={styles.emptyLogsText} allowFontScaling={false}>
+                <Text style={[styles.emptyLogsTitle, { color: TC.textDark }]} allowFontScaling={false}>No reports yet</Text>
+                <Text style={[styles.emptyLogsText, { color: TC.muted }]} allowFontScaling={false}>
                   Your incident logs will appear here once you submit a report.
                 </Text>
                
@@ -1351,7 +1352,7 @@ export default function HomeScreen({
           {/* Emergency Contacts */}
           <View style={styles.sectionRow}>
             <View style={styles.sectionTitleRow}>
-              <Text style={styles.sectionTitle} allowFontScaling={false}>
+              <Text style={[styles.sectionTitle, { color: TC.textDark }]} allowFontScaling={false}>
                 Emergency Contacts
               </Text>
             </View>
@@ -1421,14 +1422,14 @@ export default function HomeScreen({
                 else openSheet();
               }}
               hitSlop={14}
-              style={({ pressed }) => [styles.chevronHandle, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
+              style={({ pressed }) => [styles.chevronHandle, { backgroundColor: TC.chipBg, borderColor: TC.divider }, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
             >
               <Animated.View
                 renderToHardwareTextureAndroid
                 shouldRasterizeIOS
                 style={{ transform: [{ translateY: bounceY }, { rotate: chevronRotate }, { scale: chevronScale }] }}
               >
-                <Ionicons name="chevron-up" size={22} color={TEXT_DARK} />
+                <Ionicons name="chevron-up" size={22} color={TC.textDark} />
               </Animated.View>
             </Pressable>
           </View>
@@ -1497,14 +1498,14 @@ export default function HomeScreen({
             <Pressable
               onPress={() => closeSheet()}
               hitSlop={14}
-              style={({ pressed }) => [styles.chevronHandle, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
+              style={({ pressed }) => [styles.chevronHandle, { backgroundColor: TC.chipBg, borderColor: TC.divider }, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
             >
               <Animated.View
                 renderToHardwareTextureAndroid
                 shouldRasterizeIOS
                 style={{ transform: [{ rotate: chevronRotate }, { scale: chevronScale }] }}
               >
-                <Ionicons name="chevron-up" size={22} color={TEXT_DARK} />
+                <Ionicons name="chevron-up" size={22} color={TC.textDark} />
               </Animated.View>
             </Pressable>
           </Animated.View>
@@ -1514,7 +1515,7 @@ export default function HomeScreen({
             shouldRasterizeIOS
             style={[styles.sheetOuter, { transform: [{ translateY: sheetY }] }]}
           >
-            <View style={styles.sheetCard} {...handlePan.panHandlers}>
+            <View style={[styles.sheetCard, { backgroundColor: TC.surface }]} {...handlePan.panHandlers}>
               <View style={styles.sheetGrabber} />
 
               <Pressable

@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "../theme/colors";
+import { useColors } from "../theme/colors";
 
 // ✅ use your SVG check asset
 import ConfirmedCheckSvg from "../../assets/ConfirmedCheck.svg";
@@ -27,6 +27,7 @@ function clamp(n: number, min: number, max: number) {
 }
 
 export default function IncidentLogConfirmedScreen({ alertNo, dateLine, onGoHome }: Props) {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const s = useMemo(() => clamp(screenWidth / 375, 0.9, 1.2), [screenWidth]);
@@ -42,14 +43,14 @@ export default function IncidentLogConfirmedScreen({ alertNo, dateLine, onGoHome
   }, [screenHeight]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: TC.screenBg }]} edges={["top"]}>
+      <StatusBar barStyle={TC.statusBar} />
 
-      <View style={styles.page}>
+      <View style={[styles.page, { backgroundColor: TC.screenBg }]}>
         {/* Title (same spacing vibe as confirmation screen) */}
         <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 8) }]}>
           <View style={{ width: 40, height: 40 }} />
-          <Text style={styles.topTitle}>Incident Log Confirmation</Text>
+          <Text style={[styles.topTitle, { color: TC.textDark }]}>Incident Log Confirmation</Text>
           <View style={{ width: 40, height: 40 }} />
         </View>
 
@@ -61,7 +62,7 @@ export default function IncidentLogConfirmedScreen({ alertNo, dateLine, onGoHome
             { paddingBottom: CONTENT_BOTTOM_PAD },
           ]}
         >
-          <View style={[styles.card, { height: CARD_H }]}>
+          <View style={[styles.card, { height: CARD_H, backgroundColor: TC.surface, borderColor: TC.divider }]}>
   <View style={{ flex: 1, width: "100%" }}>
 
     {/* 🔽 PUSHED DOWN TOP CONTENT */}
@@ -77,12 +78,12 @@ export default function IncidentLogConfirmedScreen({ alertNo, dateLine, onGoHome
         />
       </View>
 
-            <Text style={[styles.h1, { fontSize: 16 * s }]}>
+            <Text style={[styles.h1, { fontSize: 16 * s, color: TC.textDark }]}>
               Submission Confirmed
             </Text>
 
             <Text
-              style={[styles.sub, { fontSize: 12 * s, lineHeight: 18 * s }]}
+              style={[styles.sub, { fontSize: 12 * s, lineHeight: 18 * s, color: TC.muted }]}
             >
               Barangay officials will be notified, and you will{"\n"}
               receive updates accordingly
@@ -91,10 +92,10 @@ export default function IncidentLogConfirmedScreen({ alertNo, dateLine, onGoHome
 
           {/* ✅ META stays down */}
           <View style={[styles.meta, { marginTop: "auto", paddingBottom: 6 }]}>
-            <Text style={[styles.metaText, { fontSize: 11 * s }]}>
+            <Text style={[styles.metaText, { fontSize: 11 * s, color: TC.muted }]}>
               Alert no. {alertNo}
             </Text>
-            <Text style={[styles.metaText, { fontSize: 11 * s }]}>
+            <Text style={[styles.metaText, { fontSize: 11 * s, color: TC.muted }]}>
               {dateLine}
             </Text>
           </View>
@@ -104,13 +105,13 @@ export default function IncidentLogConfirmedScreen({ alertNo, dateLine, onGoHome
         </ScrollView>
 
         {/* ✅ Fixed bottom button (same as confirmation screen) */}
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 10), backgroundColor: TC.screenBg }]}>
           <Pressable
             onPress={onGoHome}
             style={({ pressed }) => [styles.submitShadow, pressed && { opacity: 0.95 }]}
           >
             <LinearGradient
-              colors={Colors.gradient}
+              colors={TC.gradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={[styles.submitBtn, { height: 56 * s }]}

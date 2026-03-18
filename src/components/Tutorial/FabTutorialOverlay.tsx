@@ -2,7 +2,7 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -35,6 +35,7 @@ export default function FabTutorialOverlay({
   title = "Create an Incident Log",
   message = "Tap the + button to add a new report.",
 }: Props) {
+  const TC = useColors();
   if (!visible) return null;
 
   // ✅ Tutorial positioning (based on center FAB)

@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { View, Text, Pressable, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 type Props = {
   scale: (n: number) => number;
@@ -67,6 +67,7 @@ export default function SignupCard({
   passwordError,
   confirmError,
 }: Props) {
+  const TC = useColors();
   const confirmTyped = confirmPassword.trim().length > 0;
 
   const [emailFocused, setEmailFocused] = useState(false);
@@ -177,7 +178,7 @@ export default function SignupCard({
         >
           <View style={styles.ctaInnerClip}>
             <LinearGradient
-              colors={Colors.gradient}
+              colors={TC.gradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.ctaGradient}

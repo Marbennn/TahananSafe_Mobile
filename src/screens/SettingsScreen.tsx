@@ -20,6 +20,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { Colors } from "../theme/colors";
+import { useTheme, ThemeMode } from "../theme/ThemeContext";
 
 // ✅ Auth context (for current account email)
 import { useAuth } from "../auth/AuthContext";
@@ -178,6 +179,8 @@ export default function SettingsScreen({
   const iconSize = scale(20);
   const smallIcon = scale(16);
 
+  const { mode: themeMode, isDark, setMode: setThemeMode } = useTheme();
+
   const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
   const C = Colors as any;
 
@@ -196,13 +199,15 @@ export default function SettingsScreen({
   // ✅ More scrollable (extra breathing room at bottom)
   const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + vscale(40);
 
-  const screenBg = C.screenBg ?? C.background ?? BG;
-  const surface = C.surface ?? C.card ?? "#FFFFFF";
-  const textDark = "#0F172A";
-  const muted = C.mutedText ?? C.muted ?? "#64748B";
-  const primary = C.primary ?? Colors.primary ?? "#1E63D0";
-  const divider = C.divider ?? "#E7EEF7";
-  const chipBg = "#EEF6FF";
+  const screenBg = isDark ? "#0F172A" : (C.screenBg ?? C.background ?? BG);
+  const surface = isDark ? "#1E293B" : (C.surface ?? C.card ?? "#FFFFFF");
+  const textDark = isDark ? "#F1F5F9" : "#0F172A";
+  const muted = isDark ? "#94A3B8" : (C.mutedText ?? C.muted ?? "#64748B");
+  const primary = isDark ? "#4A9EF5" : (C.primary ?? Colors.primary ?? "#1E63D0");
+  const divider = isDark ? "#334155" : (C.divider ?? "#E7EEF7");
+  const chipBg = isDark ? "#1E3A5F" : "#EEF6FF";
+  const cardBg = isDark ? "#1E293B" : "#FFFFFF";
+  const cardBorder = isDark ? "#334155" : "#E7EEF7";
 
   const handleTab = (tab: TabKey) => {
     setActiveTab(tab);
@@ -514,7 +519,7 @@ export default function SettingsScreen({
       {
         key: "personalization",
         label: "Personalization",
-        subtitle: "Layout, haptics, app sounds",
+        subtitle: "Theme, layout, haptics, sounds",
         icon: "color-palette-outline",
         onPress: openPersonalizationModal,
       },
@@ -528,7 +533,7 @@ export default function SettingsScreen({
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: screenBg }]} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* ✅ Account Modal */}
       <Modal visible={accountModalVisible} transparent animationType="slide" onRequestClose={closeAccountModal}>
@@ -825,11 +830,74 @@ export default function SettingsScreen({
             <View style={[styles.line, { backgroundColor: divider }]} />
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountModalContent}>
-              {/* Compact layout */}
-              <View style={[styles.accountModalItem, styles.persExpandedCard]}>
+              {/* Theme / Dark mode selector */}
+              <View style={[styles.accountModalItem, styles.persExpandedCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
                 <View style={styles.persTopRow}>
                   <View style={styles.settingLeft}>
-                    <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                    <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
+                      <Ionicons name={isDark ? "moon" : "sunny"} size={iconSize} color={primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.settingTitleInner, { color: textDark, fontWeight: "600" }]}>Appearance</Text>
+                      <Text style={[styles.settingSub, { color: muted }]}>Choose your preferred theme</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={[styles.line, { backgroundColor: divider }]} />
+
+                <View style={styles.themePickerWrap}>
+                  {([
+                    { key: "light" as ThemeMode, icon: "sunny-outline" as const, label: "Light" },
+                    { key: "dark" as ThemeMode, icon: "moon-outline" as const, label: "Dark" },
+                    { key: "system" as ThemeMode, icon: "phone-portrait-outline" as const, label: "System" },
+                  ]).map((opt) => {
+                    const isActive = themeMode === opt.key;
+                    return (
+                      <Pressable
+                        key={opt.key}
+                        onPress={() => setThemeMode(opt.key)}
+                        style={[
+                          styles.themeOption,
+                          {
+                            backgroundColor: isActive ? (isDark ? "#2563EB22" : "#EEF6FF") : "transparent",
+                            borderColor: isActive ? primary : (isDark ? "#334155" : "#E7EEF7"),
+                            borderWidth: isActive ? 2 : 1,
+                          },
+                        ]}
+                      >
+                        <View style={[
+                          styles.themeOptionIcon,
+                          { backgroundColor: isActive ? (isDark ? "#1E3A5F" : "#DBEAFE") : (isDark ? "#334155" : "#F1F5F9") },
+                        ]}>
+                          <Ionicons
+                            name={opt.icon}
+                            size={scale(22)}
+                            color={isActive ? primary : muted}
+                          />
+                        </View>
+                        <Text style={[
+                          styles.themeOptionLabel,
+                          { color: isActive ? primary : textDark, fontWeight: isActive ? "800" : "500" },
+                        ]}>
+                          {opt.label}
+                        </Text>
+                        {isActive && (
+                          <View style={[styles.themeCheckBadge, { backgroundColor: primary }]}>
+                            <Ionicons name="checkmark" size={scale(10)} color="#fff" />
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Compact layout */}
+              <View style={[styles.accountModalItem, styles.persExpandedCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+                <View style={styles.persTopRow}>
+                  <View style={styles.settingLeft}>
+                    <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
                       <Ionicons name="contract-outline" size={iconSize} color={primary} />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -841,8 +909,8 @@ export default function SettingsScreen({
                   <Switch
                     value={prefCompact}
                     onValueChange={onToggleCompact}
-                    trackColor={{ false: "#D1D5DB", true: "#93C5FD" }}
-                    thumbColor={prefCompact ? primary : "#F3F4F6"}
+                    trackColor={{ false: isDark ? "#475569" : "#D1D5DB", true: "#93C5FD" }}
+                    thumbColor={prefCompact ? primary : (isDark ? "#94A3B8" : "#F3F4F6")}
                   />
                 </View>
 
@@ -851,7 +919,7 @@ export default function SettingsScreen({
                 {/* Haptics */}
                 <View style={styles.persTopRow}>
                   <View style={styles.settingLeft}>
-                    <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                    <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
                       <Ionicons name="phone-portrait-outline" size={iconSize} color={primary} />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -863,8 +931,8 @@ export default function SettingsScreen({
                   <Switch
                     value={prefHaptics}
                     onValueChange={onToggleHaptics}
-                    trackColor={{ false: "#D1D5DB", true: "#93C5FD" }}
-                    thumbColor={prefHaptics ? primary : "#F3F4F6"}
+                    trackColor={{ false: isDark ? "#475569" : "#D1D5DB", true: "#93C5FD" }}
+                    thumbColor={prefHaptics ? primary : (isDark ? "#94A3B8" : "#F3F4F6")}
                   />
                 </View>
 
@@ -873,7 +941,7 @@ export default function SettingsScreen({
                 {/* Sounds */}
                 <View style={styles.persTopRow}>
                   <View style={styles.settingLeft}>
-                    <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                    <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
                       <Ionicons name="volume-high-outline" size={iconSize} color={primary} />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -885,8 +953,8 @@ export default function SettingsScreen({
                   <Switch
                     value={prefSounds}
                     onValueChange={onToggleSounds}
-                    trackColor={{ false: "#D1D5DB", true: "#93C5FD" }}
-                    thumbColor={prefSounds ? primary : "#F3F4F6"}
+                    trackColor={{ false: isDark ? "#475569" : "#D1D5DB", true: "#93C5FD" }}
+                    thumbColor={prefSounds ? primary : (isDark ? "#94A3B8" : "#F3F4F6")}
                   />
                 </View>
               </View>
@@ -894,8 +962,8 @@ export default function SettingsScreen({
               {/* Reset */}
               <Pressable
                 onPress={onResetPersonalization}
-                android_ripple={{ color: "rgba(0,0,0,0.06)" }}
-                style={styles.accountModalItem}
+                android_ripple={{ color: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }}
+                style={[styles.accountModalItem, { backgroundColor: cardBg, borderColor: cardBorder }]}
               >
                 <View style={styles.settingLeft}>
                   <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
@@ -963,6 +1031,8 @@ export default function SettingsScreen({
                   divider={divider}
                   iconSize={iconSize}
                   styles={styles}
+                  isDark={isDark}
+                  chipBg={chipBg}
                 />
                 {idx !== mainItems.length - 1 && <View style={[styles.line, { backgroundColor: divider }]} />}
               </React.Fragment>
@@ -971,7 +1041,7 @@ export default function SettingsScreen({
 
           {/* ✅ Logout card */}
           <View style={[styles.logoutCard, { backgroundColor: surface, borderColor: divider }]}>
-            <Pressable onPress={() => setLogoutModalVisible(true)} android_ripple={{ color: "rgba(0,0,0,0.06)" }} style={styles.settingRow}>
+            <Pressable onPress={() => setLogoutModalVisible(true)} android_ripple={{ color: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }} style={styles.settingRow}>
               <View style={styles.settingLeft}>
                 <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
                   <Ionicons name="log-out-outline" size={iconSize} color={primary} />
@@ -1101,6 +1171,8 @@ function SettingRow({
   divider,
   iconSize,
   styles,
+  isDark,
+  chipBg,
 }: {
   label: string;
   subtitle?: string;
@@ -1112,11 +1184,13 @@ function SettingRow({
   divider: string;
   iconSize: number;
   styles: any;
+  isDark?: boolean;
+  chipBg?: string;
 }) {
   return (
-    <Pressable onPress={onPress} android_ripple={{ color: "rgba(0,0,0,0.06)" }} style={styles.settingRow}>
+    <Pressable onPress={onPress} android_ripple={{ color: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }} style={styles.settingRow}>
       <View style={styles.settingLeft}>
-        <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+        <View style={[styles.settingIconWrap, { backgroundColor: chipBg || "#EEF6FF" }]}>
           <Ionicons name={icon} size={iconSize} color={primary} />
         </View>
         <View style={{ flex: 1 }}>
@@ -1460,6 +1534,44 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       alignItems: "center",
       justifyContent: "space-between",
       gap: scale(12),
+    },
+
+    // Theme picker
+    themePickerWrap: {
+      flexDirection: "row",
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(14),
+      gap: scale(10),
+    },
+    themeOption: {
+      flex: 1,
+      borderRadius: scale(16),
+      paddingVertical: vscale(14),
+      alignItems: "center",
+      justifyContent: "center",
+      gap: vscale(8),
+      position: "relative" as const,
+    },
+    themeOptionIcon: {
+      width: scale(44),
+      height: scale(44),
+      borderRadius: scale(22),
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    themeOptionLabel: {
+      fontSize: scale(12),
+      fontWeight: "600",
+    },
+    themeCheckBadge: {
+      position: "absolute" as const,
+      top: scale(8),
+      right: scale(8),
+      width: scale(18),
+      height: scale(18),
+      borderRadius: scale(9),
+      alignItems: "center",
+      justifyContent: "center",
     },
   });
 }

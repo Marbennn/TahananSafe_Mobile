@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { useColors } from "../../theme/colors";
 import { getAccessToken } from "../../auth/session";
 import {
   getVerificationStatusApi,

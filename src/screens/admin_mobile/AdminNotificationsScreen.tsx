@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 import {
   fetchMyNotificationsCombined,
@@ -217,6 +217,7 @@ type NotifVM = NotificationItem & {
 type SectionT = { title: string; data: NotifVM[]; sortKey: number };
 
 export default function AdminNotificationsScreen({ onBack, onOpenReport }: Props) {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
@@ -497,7 +498,7 @@ export default function AdminNotificationsScreen({ onBack, onOpenReport }: Props
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle={TC.statusBar} />
 
       <View style={styles.page}>
         {/* Top Bar */}

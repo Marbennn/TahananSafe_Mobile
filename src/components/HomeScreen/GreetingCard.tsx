@@ -12,6 +12,7 @@ import {
   PixelRatio,
 } from "react-native";
 
+import { useColors } from "../../theme/colors";
 import GreetingCardSvg from "../../../assets/HomeScreen/GreetingCard.svg";
 import Carousel2Svg from "../../../assets/HomeScreen/Carousel2.svg";
 
@@ -48,6 +49,7 @@ function makeScale(width: number) {
 }
 
 export default function GreetingCard({ greeting, dateLine, userName = "User" }: Props) {
+  const TC = useColors();
   const { width: screenW } = useWindowDimensions();
   const { s, fs } = useMemo(() => makeScale(screenW), [screenW]);
 

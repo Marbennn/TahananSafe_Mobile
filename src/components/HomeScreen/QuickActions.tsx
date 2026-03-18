@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import { useColors } from "../../theme/colors";
 import BlueBoxSvg from "../../../assets/HomeScreen/BlueBox.svg";
 import AlertSvg from "../../../assets/HomeScreen/AlertIcon.svg";
 import ProfileIconSvg from "../../../assets/HomeScreen/ProfileIcon.svg";
@@ -32,6 +33,7 @@ export default function QuickActions({
   onAlert,
   onProfile,
 }: Props) {
+  const TC = useColors();
   const { width } = useWindowDimensions();
 
   // scale factor
@@ -76,7 +78,7 @@ export default function QuickActions({
           paddingHorizontal: sidePad,
           fontSize: clamp(Math.round(14 * fs), 13, 16),
           fontWeight: "900",
-          color: "#0B2B45",
+          color: TC.textDark,
         },
 
         row: {
@@ -111,11 +113,11 @@ export default function QuickActions({
           marginTop: clamp(Math.round(8 * s), 6, 10),
           fontSize: clamp(Math.round(12 * fs), 11, 14),
           fontWeight: "900",
-          color: "#0B2B45",
+          color: TC.textDark,
           textAlign: "center",
         },
       }),
-    [s, fs, sidePad, GAP, btnSize]
+    [s, fs, sidePad, GAP, btnSize, TC]
   );
 
   return (

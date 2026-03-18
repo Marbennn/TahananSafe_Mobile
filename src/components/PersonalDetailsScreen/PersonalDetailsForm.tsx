@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 type GenderOption = { id: "male" | "female"; label: string };
 
@@ -108,6 +108,7 @@ export default function PersonalDetailsForm({
   setContactNumber,
   setGender,
 }: Props) {
+  const TC = useColors();
   const genderOptions: GenderOption[] = useMemo(
     () => [
       { id: "male", label: "Male" },

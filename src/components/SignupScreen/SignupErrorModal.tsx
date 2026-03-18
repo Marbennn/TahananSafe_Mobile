@@ -9,7 +9,7 @@ import {
   Animated,
   useWindowDimensions,
 } from "react-native";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 type Props = {
   visible: boolean;
@@ -28,6 +28,7 @@ export default function SignupErrorModal({
   message,
   onClose,
 }: Props) {
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
 
   const s = clamp(width / 375, 0.95, 1.45);
@@ -74,12 +75,12 @@ export default function SignupErrorModal({
         <Animated.View
           style={[
             styles.card,
-            { opacity: fade, transform: [{ scale: pop }] },
+            { opacity: fade, transform: [{ scale: pop }], backgroundColor: TC.surface },
           ]}
         >
-          <Text style={styles.title}>{title}</Text>
+          <Text style={[styles.title, { color: TC.textDark }]}>{title}</Text>
 
-          <Text style={styles.message}>{message}</Text>
+          <Text style={[styles.message, { color: TC.muted }]}>{message}</Text>
 
           <Pressable
             onPress={closeWithAnim}

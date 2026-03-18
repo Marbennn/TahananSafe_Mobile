@@ -7,7 +7,7 @@ import {
   useWindowDimensions,
   Platform,
 } from "react-native";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -20,6 +20,7 @@ type Props = {
 };
 
 export default function OnboardingSlide({ Svg, title, description }: Props) {
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
 
   // ✅ responsive scale
@@ -35,13 +36,13 @@ export default function OnboardingSlide({ Svg, title, description }: Props) {
   const illusH = Math.round(illusW * 0.82);
 
   return (
-    <View style={styles.slide}>
+    <View style={[styles.slide, { backgroundColor: TC.surface }]}>
       <View style={styles.illustrationWrap}>
         <Svg width={illusW} height={illusH} />
       </View>
 
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.desc}>{description}</Text>
+      <Text style={[styles.title, { color: TC.textDark }]}>{title}</Text>
+      <Text style={[styles.desc, { color: TC.muted }]}>{description}</Text>
     </View>
   );
 }

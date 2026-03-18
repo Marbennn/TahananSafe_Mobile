@@ -21,7 +21,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 
 // ✅ Speech-to-text (voice input)
 import {
@@ -204,6 +204,7 @@ export default function IncidentLogScreen({
   onSubmitted,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const TC = useColors();
   const { width: screenWidth } = useWindowDimensions();
   const s = useMemo(() => clamp(screenWidth / 375, 0.9, 1.2), [screenWidth]);
 
@@ -822,11 +823,11 @@ export default function IncidentLogScreen({
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: TC.screenBg }]} edges={["top"]}>
+      <StatusBar barStyle={TC.statusBar} />
 
       <KeyboardAvoidingView
-        style={styles.page}
+        style={[styles.page, { backgroundColor: TC.screenBg }]}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
       >
@@ -841,10 +842,10 @@ export default function IncidentLogScreen({
               (pressed || submitting || aiLoading) && { opacity: 0.7 },
             ]}
           >
-            <Ionicons name="chevron-back" size={24} color={Colors.primary} />
+            <Ionicons name="chevron-back" size={24} color={TC.primary} />
           </Pressable>
 
-          <Text style={styles.topTitle}>Incident Log</Text>
+          <Text style={[styles.topTitle, { color: TC.textDark }]}>Incident Log</Text>
 
           <View style={{ width: 36, height: 36 }} />
         </View>
@@ -856,9 +857,9 @@ export default function IncidentLogScreen({
             { paddingBottom: CONTENT_BOTTOM_PAD },
           ]}
         >
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: TC.isDark ? "#1E293B" : "#F3F7FB", borderColor: TC.divider }]}>
             <View style={styles.detailsHeaderRow}>
-              <Text style={styles.sectionTitle}>
+              <Text style={[styles.sectionTitle, { color: TC.textDark }]}>
                 {detailsLabel} <Text style={styles.required}>*</Text>
               </Text>
 
@@ -868,6 +869,7 @@ export default function IncidentLogScreen({
                 hitSlop={10}
                 style={({ pressed }) => [
                   styles.micBtn,
+                  !recognizing && { backgroundColor: TC.surface, borderColor: TC.divider },
                   recognizing && styles.micBtnActive,
                   (pressed || submitting || aiLoading) && { opacity: 0.9 },
                 ]}
@@ -875,9 +877,9 @@ export default function IncidentLogScreen({
                 <Ionicons
                   name={recognizing ? "mic" : "mic-outline"}
                   size={16}
-                  color={recognizing ? "#FFFFFF" : Colors.primary}
+                  color={recognizing ? "#FFFFFF" : TC.primary}
                 />
-                <Text style={[styles.micText, recognizing && { color: "#FFFFFF" }]}>
+                <Text style={[styles.micText, !recognizing && { color: TC.primary }, recognizing && { color: "#FFFFFF" }]}>
                   {recognizing ? "Listening..." : "Voice"}
                 </Text>
               </Pressable>
@@ -886,7 +888,7 @@ export default function IncidentLogScreen({
             {!!speechError && <Text style={styles.speechErrorText}>{speechError}</Text>}
             {!!aiError && <Text style={styles.aiErrorText}>{aiError}</Text>}
 
-            <View style={[styles.input, styles.textArea]}>
+            <View style={[styles.input, styles.textArea, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
               <TextInput
                 ref={detailsInputRef}
                 editable={!submitting && !aiLoading}
@@ -900,15 +902,15 @@ export default function IncidentLogScreen({
                   setAiError(null);
                 }}
                 placeholder="A detailed explanation of what happened, including actions, sequence of events, and any relevant details observed during the incident."
-                placeholderTextColor="#9AA7B5"
+                placeholderTextColor={TC.placeholder}
                 multiline
                 textAlignVertical="top"
-                style={styles.textAreaInput}
+                style={[styles.textAreaInput, { color: TC.textDark }]}
               />
             </View>
 
             {recognizing && (
-              <Text style={styles.speechHint}>Speak now. Tap “Listening...” to stop.</Text>
+              <Text style={[styles.speechHint, { color: TC.muted }]}>Speak now. Tap “Listening...” to stop.</Text>
             )}
 
             {/* Add Photo */}
@@ -918,14 +920,15 @@ export default function IncidentLogScreen({
                 onPress={onAddPhoto}
                 style={({ pressed }) => [
                   styles.photoBtn,
+                  { backgroundColor: TC.surface, borderColor: TC.divider },
                   (pressed || submitting || aiLoading) && { opacity: 0.9 },
                 ]}
               >
-                <Ionicons name="cloud-upload-outline" size={18} color={Colors.primary} />
-                <Text style={styles.photoBtnText}>Add Photo</Text>
+                <Ionicons name="cloud-upload-outline" size={18} color={TC.primary} />
+                <Text style={[styles.photoBtnText, { color: TC.primary }]}>Add Photo</Text>
               </Pressable>
 
-              <Text style={styles.maxText}>(Max {MAX_PHOTOS})</Text>
+              <Text style={[styles.maxText, { color: TC.muted }]}>(Max {MAX_PHOTOS})</Text>
             </View>
 
             {photos.length > 0 && (
@@ -946,6 +949,7 @@ export default function IncidentLogScreen({
                     }}
                     style={({ pressed }) => [
                       styles.thumbBox,
+                      { borderColor: TC.divider, backgroundColor: TC.isDark ? "#1E3A5F" : "#EEF4FB" },
                       (pressed || submitting || aiLoading) && { opacity: 0.92 },
                     ]}
                   >
@@ -958,62 +962,63 @@ export default function IncidentLogScreen({
               </View>
             )}
 
-            <Text style={[styles.sectionTitle, { marginTop: 14 }]}>
+            <Text style={[styles.sectionTitle, { marginTop: 14, color: TC.textDark }]}>
               Offender (Optional)
             </Text>
 
-            <View style={styles.input}>
+            <View style={[styles.input, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
               <TextInput
                 editable={!submitting && !aiLoading}
                 value={offenderName}
                 onChangeText={setOffenderName}
                 placeholder="Name of Offender"
-                placeholderTextColor="#9AA7B5"
-                style={styles.textInput}
+                placeholderTextColor={TC.placeholder}
+                style={[styles.textInput, { color: TC.textDark }]}
               />
             </View>
 
-            <Text style={[styles.sectionTitle, { marginTop: 14 }]}>Witness</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 14, color: TC.textDark }]}>Witness</Text>
 
-            <View style={styles.input}>
+            <View style={[styles.input, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
               <TextInput
                 editable={!submitting && !aiLoading}
                 value={witnessName}
                 onChangeText={setWitnessName}
                 placeholder="Name (Optional)"
-                placeholderTextColor="#9AA7B5"
-                style={styles.textInput}
+                placeholderTextColor={TC.placeholder}
+                style={[styles.textInput, { color: TC.textDark }]}
               />
             </View>
 
-            <View style={styles.input}>
+            <View style={[styles.input, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
               <TextInput
                 editable={!submitting && !aiLoading}
                 value={witnessType}
                 onChangeText={setWitnessType}
                 placeholder="Type (Neighbor, Family, etc.)."
-                placeholderTextColor="#9AA7B5"
-                style={styles.textInput}
+                placeholderTextColor={TC.placeholder}
+                style={[styles.textInput, { color: TC.textDark }]}
               />
             </View>
 
             <View style={{ marginTop: 6, marginBottom: 6 }}>
-              <Text style={styles.sectionTitle}>Location</Text>
+              <Text style={[styles.sectionTitle, { color: TC.textDark }]}>Location</Text>
 
               <Pressable
                 disabled={submitting || aiLoading || locationLoading}
                 onPress={() => requestAndSetCurrentLocation({ silent: false })}
                 style={({ pressed }) => [
                   styles.locationBtnSolo,
+                  { backgroundColor: TC.surface, borderColor: TC.divider },
                   (pressed || locationLoading || submitting || aiLoading) && { opacity: 0.9 },
                 ]}
               >
                 {locationLoading ? (
                   <ActivityIndicator />
                 ) : (
-                  <Ionicons name="locate-outline" size={16} color={Colors.primary} />
+                  <Ionicons name="locate-outline" size={16} color={TC.primary} />
                 )}
-                <Text style={styles.locationBtnText}>
+                <Text style={[styles.locationBtnText, { color: TC.primary }]}>
                   {locationLoading ? "Updating..." : "Use Current Location"}
                 </Text>
               </Pressable>
@@ -1027,24 +1032,24 @@ export default function IncidentLogScreen({
 
             <View style={styles.metaRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.metaText}>
-                  <Text style={styles.metaLabel}>Date:</Text> {dateStr}
+                <Text style={[styles.metaText, { color: TC.textDark }]}>
+                  <Text style={[styles.metaLabel, { color: TC.muted }]}>Date:</Text> {dateStr}
                 </Text>
-                <Text style={[styles.metaText, { marginTop: 6 }]}>
-                  <Text style={styles.metaLabel}>Location:</Text> {locationStr}
+                <Text style={[styles.metaText, { marginTop: 6, color: TC.textDark }]}>
+                  <Text style={[styles.metaLabel, { color: TC.muted }]}>Location:</Text> {locationStr}
                 </Text>
               </View>
 
               <View style={{ alignItems: "flex-end" }}>
-                <Text style={styles.metaText}>
-                  <Text style={styles.metaLabel}>Time:</Text> {timeStr}
+                <Text style={[styles.metaText, { color: TC.textDark }]}>
+                  <Text style={[styles.metaLabel, { color: TC.muted }]}>Time:</Text> {timeStr}
                 </Text>
               </View>
             </View>
           </View>
         </ScrollView>
 
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 10), backgroundColor: TC.screenBg }]}>
           <Pressable
             disabled={submitting || aiLoading}
             onPress={onSubmit}
@@ -1054,7 +1059,7 @@ export default function IncidentLogScreen({
             ]}
           >
             <LinearGradient
-              colors={Colors.gradient}
+              colors={TC.gradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={[styles.submitBtn, { height: 56 * s }]}

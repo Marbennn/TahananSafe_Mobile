@@ -2,7 +2,7 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable, TextInput, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 type Mode = "complain" | "emergency";
 

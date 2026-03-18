@@ -15,7 +15,7 @@ import {
   KeyboardAvoidingView,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 import * as SecureStore from "expo-secure-store";
 
@@ -110,6 +110,7 @@ export default function EnterVerificationModal({
   isVerifying = false,
   errorText = null,
 }: Props) {
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
 
   const s = clamp(width / 375, 0.95, 1.45);
@@ -271,7 +272,7 @@ export default function EnterVerificationModal({
       >
 
         <Animated.View
-          style={[styles.card, { opacity: fade, transform: [{ scale: pop }] }]}
+          style={[styles.card, { opacity: fade, transform: [{ scale: pop }], backgroundColor: TC.surface }]}
         >
           {/* X close button */}
           <Pressable
@@ -290,9 +291,9 @@ export default function EnterVerificationModal({
             <ChecklistBadge size={scale(86)} />
           </View>
 
-          <Text style={styles.title}>Enter Verification Code!</Text>
+          <Text style={[styles.title, { color: TC.textDark }]}>Enter Verification Code!</Text>
 
-          <Text style={styles.sub}>
+          <Text style={[styles.sub, { color: TC.muted }]}>
             Enter the 4 - digit verification code sent to{"\n"}your email address
           </Text>
 
@@ -373,7 +374,7 @@ export default function EnterVerificationModal({
           >
             <View style={styles.btnClip}>
               <LinearGradient
-                colors={Colors.gradient}
+                colors={TC.gradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.btnGradient}

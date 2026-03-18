@@ -9,7 +9,7 @@ import {
   Animated,
   useWindowDimensions,
 } from "react-native";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 type Props = {
   visible: boolean;
@@ -21,6 +21,7 @@ function clamp(n: number, min: number, max: number) {
 }
 
 export default function TooManyRequestsModal({ visible, onClose }: Props) {
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
 
   const s = clamp(width / 375, 0.95, 1.45);
@@ -67,12 +68,12 @@ export default function TooManyRequestsModal({ visible, onClose }: Props) {
         <Animated.View
           style={[
             styles.card,
-            { opacity: fade, transform: [{ scale: pop }] },
+            { opacity: fade, transform: [{ scale: pop }], backgroundColor: TC.surface },
           ]}
         >
-          <Text style={styles.title}>Too Many Requests</Text>
+          <Text style={[styles.title, { color: TC.textDark }]}>Too Many Requests</Text>
 
-          <Text style={styles.sub}>
+          <Text style={[styles.sub, { color: TC.muted }]}>
             You've made too many attempts.{"\n"}Please try again later.
           </Text>
 

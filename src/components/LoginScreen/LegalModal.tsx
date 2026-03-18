@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 export type LegalMode = "terms" | "privacy";
 
@@ -29,6 +29,7 @@ export default function LegalModal({
   scale,
   vscale,
 }: Props) {
+  const TC = useColors();
   const styles = useMemo(() => createStyles(scale, vscale), [scale, vscale]);
 
   // ✅ checkbox required for BOTH
@@ -163,9 +164,9 @@ By checking the box below, you confirm you have read and understood this Privacy
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <View style={styles.card}>
-          <View style={styles.header}>
-            <Text style={styles.title} numberOfLines={1}>
+        <View style={[styles.card, { backgroundColor: TC.surface }]}>
+          <View style={[styles.header, { borderBottomColor: TC.divider }]}>
+            <Text style={[styles.title, { color: TC.textDark }]} numberOfLines={1}>
               {title}
             </Text>
 
@@ -177,7 +178,7 @@ By checking the box below, you confirm you have read and understood this Privacy
                 pressed && { opacity: 0.65 },
               ]}
             >
-              <Ionicons name="close" size={scale(18)} color="#111827" />
+              <Ionicons name="close" size={scale(18)} color={TC.textDark} />
             </Pressable>
           </View>
 
@@ -186,7 +187,7 @@ By checking the box below, you confirm you have read and understood this Privacy
             showsVerticalScrollIndicator
             contentContainerStyle={styles.body}
           >
-            <Text style={styles.text}>{body}</Text>
+            <Text style={[styles.text, { color: TC.body }]}>{body}</Text>
 
             {/* ✅ Checkbox for BOTH */}
             <Pressable
@@ -213,7 +214,7 @@ By checking the box below, you confirm you have read and understood this Privacy
             <View style={{ height: vscale(8) }} />
           </ScrollView>
 
-          <View style={styles.footer}>
+          <View style={[styles.footer, { borderTopColor: TC.divider }]}>
             <Pressable
               disabled={isButtonDisabled}
               onPress={onClose}
@@ -224,7 +225,7 @@ By checking the box below, you confirm you have read and understood this Privacy
               ]}
             >
               <LinearGradient
-                colors={Colors.gradient}
+                colors={TC.gradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.primaryBtnGradient}

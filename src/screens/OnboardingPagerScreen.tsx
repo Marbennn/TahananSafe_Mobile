@@ -17,7 +17,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 import OnboardingSlide from "../components/OnBoarding/OnboardingSlide";
 import { setOnboardingSeen } from "../auth/session";
 
@@ -36,6 +36,7 @@ function clamp(n: number, min: number, max: number) {
 }
 
 export default function OnboardingPagerScreen({ onDone }: Props) {
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
@@ -130,8 +131,8 @@ export default function OnboardingPagerScreen({ onDone }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: TC.surface }]} edges={["top", "bottom"]}>
+      <StatusBar barStyle={TC.statusBar} backgroundColor={TC.surface} />
 
       {/* ✅ FIXED HEADER */}
       <View style={styles.header}>
@@ -145,7 +146,7 @@ export default function OnboardingPagerScreen({ onDone }: Props) {
             pressed && page !== 0 ? { opacity: 0.55 } : null,
           ]}
         >
-          <Ionicons name="chevron-back" size={scale(22)} color={Colors.text} />
+          <Ionicons name="chevron-back" size={scale(22)} color={TC.text} />
         </Pressable>
       </View>
 

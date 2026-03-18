@@ -15,7 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 import PersonalDetailsForm from "../components/PersonalDetailsScreen/PersonalDetailsForm";
 import SavedModal from "../components/SavedModal";
 
@@ -85,6 +85,7 @@ function calcAge(dob: Date) {
 }
 
 export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props) {
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
@@ -176,7 +177,7 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
   };
 
   return (
-    <View style={styles.safe}>
+    <View style={[styles.safe, { backgroundColor: TC.surface }]}>
       <SavedModal
         visible={savedVisible}
         title="Saved!"
@@ -229,7 +230,7 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
             >
               <View style={styles.ctaInnerClip}>
                 <LinearGradient
-                  colors={Colors.gradient}
+                  colors={TC.gradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.ctaGradient}

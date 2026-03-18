@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 import { fetchAdminUsers, AdminUser } from "../../api/admin";
 
 type RoleFilter = "All" | "Resident" | "Barangay Official" | "Staff";
@@ -63,6 +63,7 @@ function normalizeRole(role?: string): string {
 const ROLE_FILTERS: RoleFilter[] = ["All", "Resident", "Barangay Official", "Staff"];
 
 export default function AdminUsersScreen({ onBack }: Props) {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
 
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -147,20 +148,20 @@ export default function AdminUsersScreen({ onBack }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#EEF3F8" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: TC.screenBg }]} edges={["top"]}>
+      <StatusBar barStyle={TC.statusBar} backgroundColor={TC.screenBg} />
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>
-        <Pressable onPress={onBack} style={styles.backBtn} hitSlop={10}>
-          <Ionicons name="arrow-back" size={22} color={Colors.primary} />
+        <Pressable onPress={onBack} style={[styles.backBtn, { backgroundColor: TC.surface, borderColor: TC.divider }]} hitSlop={10}>
+          <Ionicons name="arrow-back" size={22} color={TC.primary} />
         </Pressable>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Users</Text>
+          <Text style={[styles.headerTitle, { color: TC.textDark }]}>Users</Text>
           <Text style={styles.headerSub}>{counts.all} registered users</Text>
         </View>
-        <View style={styles.headerBadge}>
-          <Ionicons name="people" size={16} color={Colors.primary} />
+        <View style={[styles.headerBadge, { backgroundColor: TC.chipBg }]}>
+          <Ionicons name="people" size={16} color={TC.primary} />
         </View>
       </View>
 
@@ -171,7 +172,7 @@ export default function AdminUsersScreen({ onBack }: Props) {
         contentContainerStyle={styles.summaryRow}
         style={styles.summaryScroll}
       >
-        <View style={styles.summaryCard}>
+        <View style={[styles.summaryCard, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
           <Text style={styles.summaryValue}>{counts.all}</Text>
           <Text style={styles.summaryLabel}>Total</Text>
         </View>
@@ -196,8 +197,8 @@ export default function AdminUsersScreen({ onBack }: Props) {
       </ScrollView>
 
       {/* Search */}
-      <View style={styles.searchWrap}>
-        <Ionicons name="search-outline" size={16} color="#9AA4B2" />
+      <View style={[styles.searchWrap, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
+        <Ionicons name="search-outline" size={16} color={TC.muted} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search by name or email..."
@@ -227,7 +228,7 @@ export default function AdminUsersScreen({ onBack }: Props) {
             <Pressable
               key={f}
               onPress={() => setRoleFilter(f)}
-              style={[styles.chip, active && styles.chipActive]}
+              style={[styles.chip, { backgroundColor: TC.surface, borderColor: TC.divider }, active && [styles.chipActive, { backgroundColor: TC.primary, borderColor: TC.primary }]]}
             >
               <Text style={[styles.chipText, active && styles.chipTextActive]}>
                 {f} ({getFilterCount(f)})
@@ -240,7 +241,7 @@ export default function AdminUsersScreen({ onBack }: Props) {
       {/* Content */}
       {loading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ActivityIndicator size="large" color={TC.primary} />
           <Text style={styles.loadingText}>Loading users...</Text>
         </View>
       ) : error ? (
@@ -262,8 +263,8 @@ export default function AdminUsersScreen({ onBack }: Props) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => { setRefreshing(true); load(true); }}
-              tintColor={Colors.primary}
-              colors={[Colors.primary]}
+              tintColor={TC.primary}
+              colors={[TC.primary]}
             />
           }
         >
@@ -285,7 +286,7 @@ export default function AdminUsersScreen({ onBack }: Props) {
               const role = normalizeRole(user.role);
 
               return (
-                <View key={user._id} style={styles.userCard}>
+                <View key={user._id} style={[styles.userCard, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
                   <View style={[styles.avatar, { backgroundColor: `${avatarColor}20` }]}>
                     <Text style={[styles.avatarText, { color: avatarColor }]}>
                       {initials}
@@ -294,7 +295,7 @@ export default function AdminUsersScreen({ onBack }: Props) {
 
                   <View style={styles.userInfo}>
                     <View style={styles.userTopRow}>
-                      <Text style={styles.userName} numberOfLines={1}>
+                      <Text style={[styles.userName, { color: TC.textDark }]} numberOfLines={1}>
                         {fullName}
                       </Text>
                       {user.isVerified ? (
@@ -311,8 +312,8 @@ export default function AdminUsersScreen({ onBack }: Props) {
                     </Text>
 
                     <View style={styles.userBottomRow}>
-                      <View style={styles.rolePill}>
-                        <Text style={styles.rolePillText}>{role}</Text>
+                      <View style={[styles.rolePill, { backgroundColor: TC.chipBg }]}>
+                        <Text style={[styles.rolePillText, { color: TC.primary }]}>{role}</Text>
                       </View>
                       {user.createdAt ? (
                         <Text style={styles.joinedText}>

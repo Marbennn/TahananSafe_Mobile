@@ -2,7 +2,7 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -36,6 +36,7 @@ export default function IncidentSubmitTutorialOverlay({
   title = "Submit your report",
   message = "Tap this button to securely send your incident.",
 }: Props) {
+  const TC = useColors();
   if (!visible) return null;
 
   const ringPad = clamp(Math.round(10 * s), 8, 14);

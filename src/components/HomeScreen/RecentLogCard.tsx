@@ -2,7 +2,7 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 export type LogItem = {
   id: string;
@@ -50,10 +50,11 @@ function makeScale(width: number, height: number) {
 }
 
 export default function RecentLogCard({ item, onPress }: Props) {
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
   const { s, fs } = useMemo(() => makeScale(width, height), [width, height]);
 
-  const styles = useMemo(() => makeStyles(s, fs), [s, fs]);
+  const styles = useMemo(() => makeStyles(s, fs, TC), [s, fs, TC]);
 
   return (
     <Pressable
@@ -89,7 +90,7 @@ export default function RecentLogCard({ item, onPress }: Props) {
   );
 }
 
-function makeStyles(s: number, fs: number) {
+function makeStyles(s: number, fs: number, TC: ReturnType<typeof useColors>) {
   const R = clamp(Math.round(16 * s), 14, 18);
   const PAD_X = clamp(Math.round(14 * s), 12, 16);
   const PAD_Y = clamp(Math.round(12 * s), 10, 14);
@@ -103,9 +104,9 @@ function makeStyles(s: number, fs: number) {
       flexDirection: "row",
       alignItems: "stretch",
       borderRadius: R,
-      backgroundColor: "#FFFFFF",
+      backgroundColor: TC.surface,
       borderWidth: 1,
-      borderColor: "#E7EEF7",
+      borderColor: TC.divider,
 
       // ✅ Make overall height consistent even if other parts vary slightly
       minHeight: clamp(Math.round(96 * s), 90, 112),

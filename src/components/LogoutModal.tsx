@@ -10,7 +10,7 @@ import {
   Animated,
   useWindowDimensions,
 } from "react-native";
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 
 type Props = {
   visible: boolean;
@@ -23,6 +23,7 @@ function clamp(n: number, min: number, max: number) {
 }
 
 export default function LogoutModal({ visible, onConfirm, onCancel }: Props) {
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
 
   const s = clamp(width / 375, 0.95, 1.45);
@@ -64,14 +65,14 @@ export default function LogoutModal({ visible, onConfirm, onCancel }: Props) {
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={() => closeWithAnim(onCancel)}>
       <View style={styles.modalRoot}>
-        <Animated.View style={[styles.backdrop, { opacity: fade }]} />
+        <Animated.View style={[styles.backdrop, { opacity: fade, backgroundColor: TC.overlay }]} />
 
         <Animated.View
-          style={[styles.card, { opacity: fade, transform: [{ scale: pop }] }]}
+          style={[styles.card, { opacity: fade, transform: [{ scale: pop }], backgroundColor: TC.surface }]}
         >
-          <Text style={styles.title}>Log Out</Text>
+          <Text style={[styles.title, { color: TC.textDark }]}>Log Out</Text>
 
-          <Text style={styles.sub}>
+          <Text style={[styles.sub, { color: TC.muted }]}>
             Are you sure you want to log out?
           </Text>
 
@@ -86,7 +87,7 @@ export default function LogoutModal({ visible, onConfirm, onCancel }: Props) {
                 pressed && { opacity: 0.75 },
               ]}
             >
-              <Text style={styles.btnCancelText}>Cancel</Text>
+              <Text style={[styles.btnCancelText, { color: TC.textDark }]}>Cancel</Text>
             </Pressable>
 
             {/* Confirm */}
@@ -95,6 +96,7 @@ export default function LogoutModal({ visible, onConfirm, onCancel }: Props) {
               hitSlop={8}
               style={({ pressed }) => [
                 styles.btnConfirm,
+                { backgroundColor: TC.primary },
                 pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
               ]}
             >

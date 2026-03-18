@@ -17,7 +17,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 import { fetchAdminIncidents, AdminIncident } from "../../api/admin";
 import AdminBotNav, { TabKey } from "../../components/AdminComponents/AdminBotNav";
 
@@ -130,6 +130,7 @@ function filterAccent(f: FilterKey): string {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function AdminReportsScreen({ onBack, onOpenReportDetail, onTabChange }: Props) {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
@@ -356,7 +357,7 @@ export default function AdminReportsScreen({ onBack, onOpenReportDetail, onTabCh
 
   return (
     <View style={styles.safe}>
-      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+      <StatusBar barStyle={TC.statusBar} translucent backgroundColor="transparent" />
 
       <View style={styles.page}>
         {/* Gradient header backdrop — extends behind status bar */}

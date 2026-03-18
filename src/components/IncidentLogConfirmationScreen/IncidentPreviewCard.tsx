@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useColors } from "../../theme/colors";
 
 export type IncidentPreviewData = {
   incidentType: string;
@@ -35,6 +36,7 @@ function clamp(n: number, min: number, max: number) {
 }
 
 export default function IncidentPreviewCard({ data }: Props) {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const s = useMemo(() => clamp(screenWidth / 375, 0.9, 1.22), [screenWidth]);
@@ -77,25 +79,25 @@ export default function IncidentPreviewCard({ data }: Props) {
 
   return (
     <>
-      <View style={[styles.card, { padding: CARD_PAD, height: CARD_H }]}>
+      <View style={[styles.card, { padding: CARD_PAD, height: CARD_H, backgroundColor: TC.surface, borderColor: TC.divider }]}>
         {/* ✅ This wrapper uses flex so we can push meta down */}
         <View style={{ flex: 1 }}>
           {/* Top content (Incident details + photos + witness) */}
           <View>
             {/* Incident Detail */}
-            <Text style={[styles.sectionTitle, { fontSize: TITLE, marginBottom: TITLE_MB }]}>
+            <Text style={[styles.sectionTitle, { fontSize: TITLE, marginBottom: TITLE_MB, color: TC.textDark }]}>
               Incident Detail
             </Text>
 
             <Text
-              style={[styles.smallLine, { fontSize: TYPE_LINE, marginBottom: Math.round(8 * s) }]}
+              style={[styles.smallLine, { fontSize: TYPE_LINE, marginBottom: Math.round(8 * s), color: TC.muted }]}
               numberOfLines={1}
             >
               {incidentType}
             </Text>
 
             <Text
-              style={[styles.detailsItalic, { fontSize: DETAILS, lineHeight: DETAILS_LH }]}
+              style={[styles.detailsItalic, { fontSize: DETAILS, lineHeight: DETAILS_LH, color: TC.textDark }]}
               numberOfLines={4}
             >
               {details}
@@ -116,6 +118,8 @@ export default function IncidentPreviewCard({ data }: Props) {
                       {
                         height: PHOTO_H,
                         borderRadius: RADIUS,
+                        borderColor: TC.divider,
+                        backgroundColor: TC.chipBg,
                       },
                     ]}
                   >
@@ -144,14 +148,14 @@ export default function IncidentPreviewCard({ data }: Props) {
           <Text
             style={[
               styles.sectionTitle,
-              { fontSize: TITLE, marginBottom: TITLE_MB },
+              { fontSize: TITLE, marginBottom: TITLE_MB, color: TC.textDark },
             ]}>
           Witness
         </Text>
-        <Text style={[styles.witnessName, { fontSize: WITNESS_NAME }]} numberOfLines={1}>
+        <Text style={[styles.witnessName, { fontSize: WITNESS_NAME, color: TC.textDark }]} numberOfLines={1}>
           {witnessName}
         </Text>
-        <Text style={[styles.witnessType, { fontSize: WITNESS_TYPE }]} numberOfLines={1}>
+        <Text style={[styles.witnessType, { fontSize: WITNESS_TYPE, color: TC.muted }]} numberOfLines={1}>
           {witnessType}
             </Text>
             </View>
@@ -162,12 +166,12 @@ export default function IncidentPreviewCard({ data }: Props) {
             {/* Date + Time */}
             <View style={[styles.metaRow, { marginTop: Math.round(14 * s) }]}>
               <View style={styles.metaPair}>
-                <Text style={[styles.metaLabel, { fontSize: META_LABEL }]}>Date:</Text>
-                <Text style={[styles.metaValue, { fontSize: META_VALUE }]}>{data.dateStr || "—"}</Text>
+                <Text style={[styles.metaLabel, { fontSize: META_LABEL, color: TC.muted }]}>Date:</Text>
+                <Text style={[styles.metaValue, { fontSize: META_VALUE, color: TC.textDark }]}>{data.dateStr || "—"}</Text>
               </View>
 
               <View style={styles.metaPair}>
-                <Text style={[styles.metaLabel, { fontSize: META_LABEL }]}>Time:</Text>
+                <Text style={[styles.metaLabel, { fontSize: META_LABEL, color: TC.muted }]}>Time:</Text>
                 <Text style={[styles.metaValue, { fontSize: META_VALUE }]}>{data.timeStr || "—"}</Text>
               </View>
             </View>

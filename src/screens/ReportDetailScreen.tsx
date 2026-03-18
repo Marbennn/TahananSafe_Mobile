@@ -28,7 +28,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 
 import type { ReportItem } from "./ReportScreen";
 import {
@@ -153,6 +153,17 @@ async function readJsonSafe(res: Response) {
   }
 }
 
+function sanitizeApiMessage(msg: any, fallback: string) {
+  const s = String(msg || "").trim();
+  if (!s) return fallback;
+  if (s.includes("<!DOCTYPE") || s.includes("<html")) return fallback;
+  return s;
+}
+
+function isObjectId24(v: string) {
+  return /^[a-fA-F0-9]{24}$/.test(String(v || "").trim());
+}
+
 export default function ReportDetailScreen({
   report,
   initialTab = "Reports",
@@ -160,6 +171,7 @@ export default function ReportDetailScreen({
   onQuickExit,
   onBack,
 }: Props) {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
@@ -271,8 +283,15 @@ export default function ReportDetailScreen({
 
   const reportId = useMemo(() => {
     const id = (report as any)?.id || (report as any)?._id || "";
-    return String(id || "");
+    return String(id || "").trim();
   }, [report]);
+
+  const resolvedReportId = useMemo(() => {
+    if (isObjectId24(reportId)) return reportId;
+    const detailId = String((detail as any)?._id || "").trim();
+    if (isObjectId24(detailId)) return detailId;
+    return reportId;
+  }, [reportId, detail]);
 
   const detailAbortRef = useRef<AbortController | null>(null);
   const threadsAbortRef = useRef<AbortController | null>(null);
@@ -634,6 +653,10 @@ export default function ReportDetailScreen({
           onPress: async () => {
             setCancelling(true);
             try {
+              if (!isObjectId24(resolvedReportId)) {
+                throw new Error("Cannot cancel yet. Please wait for report details to load, then try again.");
+              }
+
               const token = await getAccessToken();
               if (!token) throw new Error("Please login again. (Missing access token)");
 
@@ -643,22 +666,35 @@ export default function ReportDetailScreen({
                 Authorization: `Bearer ${token}`,
               };
 
-              let res = await fetch(`${API_BASE_URL}/api/mobile/v1/reports/${reportId}/cancel`, {
-                method: "POST",
-                headers,
-                body: JSON.stringify({ reason: "User cancelled" }),
-              });
-
-              if (!res.ok) {
-                res = await fetch(`${API_BASE_URL}/api/mobile/v1/reports/${reportId}`, {
-                  method: "PATCH",
+              const res = await fetch(
+                `${API_BASE_URL}/api/mobile/v1/reports/${encodeURIComponent(resolvedReportId)}/cancel`,
+                {
+                  method: "POST",
                   headers,
-                  body: JSON.stringify({ status: "CANCELLED" }),
-                });
-              }
+                  body: JSON.stringify({ reason: "User cancelled" }),
+                }
+              );
 
               const data: any = await readJsonSafe(res);
-              if (!res.ok) throw new Error(data?.message || `Cancel failed (${res.status})`);
+              if (!res.ok) {
+                if (res.status === 401) {
+                  throw new Error("Session expired. Please log in again.");
+                }
+                if (res.status === 403) {
+                  throw new Error(
+                    sanitizeApiMessage(
+                      data?.message,
+                      "You are not allowed to cancel this report."
+                    )
+                  );
+                }
+                throw new Error(
+                  sanitizeApiMessage(
+                    data?.message || `Cancel failed (${res.status})`,
+                    "Could not cancel report on the server."
+                  )
+                );
+              }
 
               setDetail((prev) => {
                 const base: any = prev ?? {};
@@ -678,7 +714,7 @@ export default function ReportDetailScreen({
         },
       ]
     );
-  }, [reportId, cancelling, loadDetail]);
+  }, [reportId, resolvedReportId, cancelling, loadDetail]);
 
   const incidentTitle =
     detail?.incidentType ||
@@ -734,7 +770,11 @@ export default function ReportDetailScreen({
   const canPrev = viewerIndex > 0;
   const canNext = viewerIndex < photoUrls.length - 1;
 
-  const canCancel = !!reportId && statusUpper !== "CANCELLED" && statusUpper !== "RESOLVED";
+  const canCancel =
+    !!resolvedReportId &&
+    isObjectId24(resolvedReportId) &&
+    statusUpper !== "CANCELLED" &&
+    statusUpper !== "RESOLVED";
   const canChat = !!reportId && statusUpper !== "CANCELLED" && statusUpper !== "RESOLVED";
 
   const [composerH, setComposerH] = useState(vscale(64));
@@ -766,8 +806,8 @@ export default function ReportDetailScreen({
   }, []);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: TC.screenBg }]} edges={["top"]}>
+      <StatusBar barStyle={TC.statusBar} />
 
       {/* Image Viewer Modal */}
       <Modal visible={viewerVisible} animationType="fade" transparent onRequestClose={closeViewer}>
@@ -843,19 +883,19 @@ export default function ReportDetailScreen({
         </View>
       </Modal>
 
-      <View style={styles.page}>
-        <View style={[styles.heroWrap, { paddingTop: Math.max(insets.top, vscale(6)) }]}>
-          <View style={styles.heroCard}>
+      <View style={[styles.page, { backgroundColor: TC.screenBg }]}>
+        <View style={[styles.heroWrap, { paddingTop: Math.max(insets.top, vscale(6)), backgroundColor: TC.screenBg }]}>
+          <View style={[styles.heroCard, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
             <View style={styles.heroHeaderRow}>
               <Pressable
                 onPress={onBack}
                 hitSlop={12}
-                style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.75 }]}
+                style={({ pressed }) => [styles.backBtn, { backgroundColor: TC.surface, borderColor: TC.divider }, pressed && { opacity: 0.75 }]}
               >
-                <Ionicons name="chevron-back" size={styles._backIcon} color={TEXT_DARK} />
+                <Ionicons name="chevron-back" size={styles._backIcon} color={TC.textDark} />
               </Pressable>
 
-              <Text style={styles.heroTitle} numberOfLines={1}>
+              <Text style={[styles.heroTitle, { color: TC.textDark }]} numberOfLines={1}>
                 {incidentTitle}
               </Text>
 
@@ -863,7 +903,7 @@ export default function ReportDetailScreen({
             </View>
 
             <View style={styles.heroStatusCenterRow}>
-              <View style={[styles.statusPill, { borderColor: BORDER, backgroundColor: "#FFFFFF" }]}>
+              <View style={[styles.statusPill, { borderColor: TC.divider, backgroundColor: TC.surface }]}>
                 <View style={[styles.dot, { backgroundColor: accent }]} />
                 <Ionicons name={sIcon} size={styles._miniIcon} color={accent} />
                 <Text style={[styles.statusPillText, { color: accent }]} numberOfLines={1}>
@@ -872,7 +912,7 @@ export default function ReportDetailScreen({
               </View>
             </View>
 
-            <View style={styles.tabsWrap} onLayout={(e) => setTabW(e.nativeEvent.layout.width)}>
+            <View style={[styles.tabsWrap, { borderColor: TC.divider, backgroundColor: TC.inputBg }]} onLayout={(e) => setTabW(e.nativeEvent.layout.width)}>
               <Animated.View
                 pointerEvents="none"
                 style={[
@@ -884,7 +924,7 @@ export default function ReportDetailScreen({
                 ]}
               >
                 <LinearGradient
-                  colors={gradColors}
+                  colors={TC.gradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={StyleSheet.absoluteFillObject}
@@ -895,14 +935,14 @@ export default function ReportDetailScreen({
                 onPress={() => setView("details")}
                 style={({ pressed }) => [styles.tabBtn, pressed && { opacity: 0.92 }]}
               >
-                <Text style={[styles.tabText, view === "details" && styles.tabTextActive]}>Incident Details</Text>
+                <Text style={[styles.tabText, { color: TC.primary }, view === "details" && styles.tabTextActive]}>Incident Details</Text>
               </Pressable>
 
               <Pressable
                 onPress={() => setView("threads")}
                 style={({ pressed }) => [styles.tabBtn, pressed && { opacity: 0.92 }]}
               >
-                <Text style={[styles.tabText, view === "threads" && styles.tabTextActive]}>Threads</Text>
+                <Text style={[styles.tabText, { color: TC.primary }, view === "threads" && styles.tabTextActive]}>Threads</Text>
               </Pressable>
             </View>
           </View>
@@ -911,7 +951,7 @@ export default function ReportDetailScreen({
         {view === "details" ? (
           <ScrollView
             showsVerticalScrollIndicator={false}
-            style={styles.detailsScroll}
+            style={[styles.detailsScroll, { backgroundColor: TC.screenBg }]}
             contentContainerStyle={[styles.scrollContent, { paddingBottom: RESERVED_BOTTOM + DETAILS_EXTRA_BOTTOM }]}
           >
             {!reportId ? (
@@ -940,12 +980,12 @@ export default function ReportDetailScreen({
               </View>
             ) : null}
 
-            <View style={styles.sectionCard}>
+            <View style={[styles.sectionCard, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
               <View style={styles.sectionHeaderRow}>
-                <Ionicons name="document-text-outline" size={styles._iconSize} color={TEXT_DARK} />
-                <Text style={styles.sectionTitle}>Incident narrative</Text>
+                <Ionicons name="document-text-outline" size={styles._iconSize} color={TC.textDark} />
+                <Text style={[styles.sectionTitle, { color: TC.textDark }]}>Incident narrative</Text>
               </View>
-              <Text style={styles.narrativeText}>{incidentNarrative}</Text>
+              <Text style={[styles.narrativeText, { color: TC.muted }]}>{incidentNarrative}</Text>
             </View>
 
             <View style={styles.metaGrid}>

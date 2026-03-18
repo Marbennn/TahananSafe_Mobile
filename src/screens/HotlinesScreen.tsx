@@ -16,7 +16,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 
 type Hotline = {
   number: string;
@@ -70,6 +70,7 @@ export default function HotlinesScreen({
   onTabChange,
   initialTab = "Inbox", // Inbox = Hotlines
 }: Props) {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
@@ -150,26 +151,26 @@ export default function HotlinesScreen({
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: TC.screenBg }]} edges={["top"]}>
+      <StatusBar barStyle={TC.statusBar} />
 
-      <View style={styles.page}>
+      <View style={[styles.page, { backgroundColor: TC.screenBg }]}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Hotlines</Text>
-          <Text style={styles.subtitle}>Quick-dial emergency and local contacts</Text>
+          <Text style={[styles.title, { color: TC.textDark }]}>Hotlines</Text>
+          <Text style={[styles.subtitle, { color: TC.muted }]}>Quick-dial emergency and local contacts</Text>
         </View>
 
         {/* Search row */}
         <View style={styles.searchRow}>
-          <View style={styles.searchBox}>
-            <Ionicons name="search-outline" size={iconSize} color={SUBTLE} />
+          <View style={[styles.searchBox, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
+            <Ionicons name="search-outline" size={iconSize} color={TC.placeholder} />
             <TextInput
               value={query}
               onChangeText={setQuery}
               placeholder="Search hotlines"
-              placeholderTextColor={SUBTLE}
-              style={styles.searchInput}
+              placeholderTextColor={TC.placeholder}
+              style={[styles.searchInput, { color: TC.textDark }]}
               returnKeyType="search"
             />
           </View>
@@ -184,32 +185,32 @@ export default function HotlinesScreen({
             <View key={sec.title} style={styles.section}>
               {/* Minimal section header */}
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>{sec.title}</Text>
-                <View style={styles.sectionLine} />
+                <Text style={[styles.sectionTitle, { color: TC.muted }]}>{sec.title}</Text>
+                <View style={[styles.sectionLine, { backgroundColor: TC.divider }]} />
               </View>
 
               {sec.items.map((h, idx) => (
-                <View key={`${h.number}-${idx}`} style={styles.card}>
-                  <View style={styles.leftIcon}>
-                    <Ionicons name="call-outline" size={scale(18)} color={Colors.primary} />
+                <View key={`${h.number}-${idx}`} style={[styles.card, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
+                  <View style={[styles.leftIcon, { backgroundColor: TC.chipBg }]}>
+                    <Ionicons name="call-outline" size={scale(18)} color={TC.primary} />
                   </View>
 
                   <View style={styles.cardBody}>
-                    <Text style={styles.cardNumber} numberOfLines={1}>
+                    <Text style={[styles.cardNumber, { color: TC.textDark }]} numberOfLines={1}>
                       {h.number}
                     </Text>
-                    <Text style={styles.cardLabel} numberOfLines={2}>
+                    <Text style={[styles.cardLabel, { color: TC.muted }]} numberOfLines={2}>
                       {h.label}
                     </Text>
                   </View>
 
                   <Pressable
                     onPress={() => callNumber(h.number)}
-                    style={({ pressed }) => [styles.callPill, pressed && { transform: [{ scale: 0.98 }] }]}
+                    style={({ pressed }) => [styles.callPill, { backgroundColor: TC.chipBg, borderColor: TC.divider }, pressed && { transform: [{ scale: 0.98 }] }]}
                     hitSlop={10}
                   >
-                    <Ionicons name="call" size={callIconSize} color={Colors.primary} />
-                    <Text style={styles.callText}>Call</Text>
+                    <Ionicons name="call" size={callIconSize} color={TC.primary} />
+                    <Text style={[styles.callText, { color: TC.primary }]}>Call</Text>
                   </Pressable>
                 </View>
               ))}
@@ -218,10 +219,10 @@ export default function HotlinesScreen({
 
           {/* Empty state */}
           {filteredSections.length === 0 && (
-            <View style={styles.emptyWrap}>
-              <Ionicons name="search-outline" size={scale(34)} color={SUBTLE} />
-              <Text style={styles.emptyTitle}>No results</Text>
-              <Text style={styles.emptyText}>Try searching by number or label.</Text>
+            <View style={[styles.emptyWrap, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
+              <Ionicons name="search-outline" size={scale(34)} color={TC.placeholder} />
+              <Text style={[styles.emptyTitle, { color: TC.textDark }]}>No results</Text>
+              <Text style={[styles.emptyText, { color: TC.muted }]}>Try searching by number or label.</Text>
             </View>
           )}
         </ScrollView>

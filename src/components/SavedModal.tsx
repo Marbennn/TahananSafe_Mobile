@@ -10,7 +10,7 @@ import {
   Animated,
   useWindowDimensions,
 } from "react-native";
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 
 type Props = {
   visible: boolean;
@@ -31,6 +31,7 @@ export default function SavedModal({
   buttonLabel = "OK",
   onClose,
 }: Props) {
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
 
   const s = clamp(width / 375, 0.95, 1.45);
@@ -72,14 +73,14 @@ export default function SavedModal({
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={closeWithAnim}>
       <View style={styles.modalRoot}>
-        <Animated.View style={[styles.backdrop, { opacity: fade }]} />
+        <Animated.View style={[styles.backdrop, { opacity: fade, backgroundColor: TC.overlay }]} />
 
         <Animated.View
-          style={[styles.card, { opacity: fade, transform: [{ scale: pop }] }]}
+          style={[styles.card, { opacity: fade, transform: [{ scale: pop }], backgroundColor: TC.surface }]}
         >
-          <Text style={styles.title}>{title}</Text>
+          <Text style={[styles.title, { color: TC.textDark }]}>{title}</Text>
 
-          <Text style={styles.sub}>{message}</Text>
+          <Text style={[styles.sub, { color: TC.muted }]}>{message}</Text>
 
           <Pressable
             onPress={closeWithAnim}
@@ -89,7 +90,7 @@ export default function SavedModal({
               pressed ? { opacity: 0.85, transform: [{ scale: 0.99 }] } : null,
             ]}
           >
-            <View style={styles.btnInner}>
+            <View style={[styles.btnInner, { backgroundColor: TC.primary }]}>
               <Text style={styles.btnText}>{buttonLabel}</Text>
             </View>
           </Pressable>

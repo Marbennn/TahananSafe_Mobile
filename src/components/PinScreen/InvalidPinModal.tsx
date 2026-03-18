@@ -11,11 +11,13 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 type Props = {
   visible: boolean;
   message?: string;
+  title?: string;
+  buttonText?: string;
   onClose: () => void;
 };
 
@@ -23,7 +25,14 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-export default function InvalidPinModal({ visible, message, onClose }: Props) {
+export default function InvalidPinModal({
+  visible,
+  message,
+  title,
+  buttonText,
+  onClose,
+}: Props) {
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
 
   const s = clamp(width / 375, 0.95, 1.45);
@@ -68,7 +77,7 @@ export default function InvalidPinModal({ visible, message, onClose }: Props) {
         <Animated.View style={[styles.backdrop, { opacity: fade }]} />
 
         <Animated.View
-          style={[styles.card, { opacity: fade, transform: [{ scale: pop }] }]}
+          style={[styles.card, { opacity: fade, transform: [{ scale: pop }], backgroundColor: TC.surface }]}
         >
           {/* Icon badge */}
           <View style={styles.badgeWrap}>
@@ -77,9 +86,9 @@ export default function InvalidPinModal({ visible, message, onClose }: Props) {
             </View>
           </View>
 
-          <Text style={styles.title}>Incorrect PIN</Text>
+          <Text style={[styles.title, { color: TC.textDark }]}>{title || "Incorrect PIN"}</Text>
 
-          <Text style={styles.sub}>
+          <Text style={[styles.sub, { color: TC.muted }]}>
             {message || "The PIN you entered is incorrect.\nPlease try again."}
           </Text>
 
@@ -92,7 +101,7 @@ export default function InvalidPinModal({ visible, message, onClose }: Props) {
             ]}
           >
             <View style={styles.btnInner}>
-              <Text style={styles.btnText}>Try Again</Text>
+              <Text style={styles.btnText}>{buttonText || "Try Again"}</Text>
             </View>
           </Pressable>
         </Animated.View>

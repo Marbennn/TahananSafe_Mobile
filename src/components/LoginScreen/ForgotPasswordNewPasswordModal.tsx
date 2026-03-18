@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 type Props = {
   visible: boolean;
@@ -75,6 +75,7 @@ export default function ForgotPasswordNewPasswordModal({
   scale,
   vscale,
 }: Props) {
+  const TC = useColors();
   const styles = useMemo(() => createStyles(scale, vscale), [scale, vscale]);
 
   const [newPassword, setNewPassword] = useState("");
@@ -150,19 +151,19 @@ export default function ForgotPasswordNewPasswordModal({
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollInner}
           >
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: TC.surface }]}>
               <Pressable
                 onPress={onClose}
                 hitSlop={12}
                 style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
               >
-                <Ionicons name="close" size={scale(18)} color="#111827" />
+                <Ionicons name="close" size={scale(18)} color={TC.textDark} />
               </Pressable>
 
-              <Text style={styles.title}>Reset Password</Text>
-              <Text style={styles.subtitle}>Create a new password for your account.</Text>
+              <Text style={[styles.title, { color: TC.textDark }]}>Reset Password</Text>
+              <Text style={[styles.subtitle, { color: TC.muted }]}>Create a new password for your account.</Text>
 
-              <Text style={styles.label}>New Password</Text>
+              <Text style={[styles.label, { color: TC.textDark }]}>New Password</Text>
               <View style={styles.passWrap}>
                 <TextInput
                   value={newPassword}
@@ -227,7 +228,7 @@ export default function ForgotPasswordNewPasswordModal({
                 ]}
               >
                 <LinearGradient
-                  colors={Colors.gradient}
+                  colors={TC.gradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.btn}

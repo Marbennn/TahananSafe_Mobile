@@ -13,7 +13,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 
 // ✅ preview card
 import IncidentPreviewCard, {
@@ -73,6 +73,7 @@ export default function IncidentLogConfirmationScreen({
   submitting = false,
   onGoHome,
 }: Props) {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const s = useMemo(() => clamp(screenWidth / 375, 0.9, 1.2), [screenWidth]);
@@ -112,10 +113,10 @@ export default function IncidentLogConfirmationScreen({
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: TC.screenBg }]} edges={["top"]}>
+      <StatusBar barStyle={TC.statusBar} />
 
-      <View style={styles.page}>
+      <View style={[styles.page, { backgroundColor: TC.screenBg }]}>
         {/* Top bar */}
         <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 8) }]}>
           <Pressable
@@ -127,10 +128,10 @@ export default function IncidentLogConfirmationScreen({
               (pressed || submitting) && { opacity: 0.7 },
             ]}
           >
-            <Ionicons name="chevron-back" size={24} color={Colors.primary} />
+            <Ionicons name="chevron-back" size={24} color={TC.primary} />
           </Pressable>
 
-          <Text style={styles.topTitle}>Incident Log Preview</Text>
+          <Text style={[styles.topTitle, { color: TC.textDark }]}>Incident Log Preview</Text>
 
           <View style={{ width: 36, height: 36 }} />
         </View>
@@ -147,7 +148,7 @@ export default function IncidentLogConfirmationScreen({
         </ScrollView>
 
         {/* Fixed bottom button */}
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 10), backgroundColor: TC.screenBg }]}>
           <Pressable
             disabled={submitting}
             onPress={handleConfirm}
@@ -157,7 +158,7 @@ export default function IncidentLogConfirmationScreen({
             ]}
           >
             <LinearGradient
-              colors={Colors.gradient}
+              colors={TC.gradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={[styles.submitBtn, { height: 56 * s }]}

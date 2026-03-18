@@ -1,7 +1,7 @@
 // src/components/PrimaryButton.tsx
 import React from "react";
 import { Pressable, Text, StyleSheet, GestureResponderEvent } from "react-native";
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 
 type Props = {
   title: string;
@@ -10,12 +10,14 @@ type Props = {
 };
 
 export default function PrimaryButton({ title, onPress, disabled }: Props) {
+  const TC = useColors();
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
       style={({ pressed }) => [
         styles.btn,
+        { backgroundColor: TC.primary },
         disabled && styles.disabled,
         pressed && !disabled && { transform: [{ scale: 0.99 }] },
       ]}

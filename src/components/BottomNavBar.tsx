@@ -13,7 +13,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 
 export type TabKey =
   | "Home"
@@ -83,6 +83,10 @@ export default function BottomNavBar({
 }: Props) {
   const { width } = useWindowDimensions();
   const { s } = useMemo(() => makeScale(width), [width]);
+  const TC = useColors();
+  const navBg = TC.isDark ? "#1E293B" : NAV_BG;
+  const inactive = TC.isDark ? "#64748B" : INACTIVE;
+  const activePrimary = TC.primary;
 
   const EXTRA_BAR_HEIGHT = useMemo(
     () => clamp(Math.round(12 * s), 10, 18),
@@ -420,7 +424,7 @@ export default function BottomNavBar({
         </View>
       ) : null}
 
-      <View style={styles.navWrap}>
+      <View style={[styles.navWrap, { backgroundColor: navBg }]}>
         <NavItem
           icon="home-outline"
           activeIcon="home"
@@ -428,12 +432,14 @@ export default function BottomNavBar({
           active={activeTab === "Home"}
           onPress={() => handleTabPress("Home")}
           iconSize={iconSize}
-          labelStyle={styles.label}
-          labelActiveStyle={styles.labelActive}
+          labelStyle={[styles.label, { color: inactive }]}
+          labelActiveStyle={{ color: activePrimary }}
           itemStyle={styles.item}
           innerStyle={styles.itemInner}
           scaleAnim={tabScalesRef.current.Home}
           pressInScale={pressInScale}
+          activeColor={activePrimary}
+          inactiveColor={inactive}
         />
 
         <NavItem
@@ -443,19 +449,22 @@ export default function BottomNavBar({
           active={activeTab === "Inbox"}
           onPress={() => handleTabPress("Inbox")}
           iconSize={iconSize}
-          labelStyle={styles.label}
-          labelActiveStyle={styles.labelActive}
+          labelStyle={[styles.label, { color: inactive }]}
+          labelActiveStyle={{ color: activePrimary }}
           itemStyle={styles.item}
           innerStyle={styles.itemInner}
           scaleAnim={tabScalesRef.current.Inbox}
           pressInScale={pressInScale}
+          activeColor={activePrimary}
+          inactiveColor={inactive}
         />
 
         <View style={styles.centerSlot} pointerEvents="none">
           <Text
             style={[
               styles.centerLabel,
-              activeTab === "Incident" && styles.labelActive,
+              { color: inactive },
+              activeTab === "Incident" && { color: activePrimary, fontWeight: "800" },
             ]}
             numberOfLines={1}
             allowFontScaling={false}
@@ -471,12 +480,14 @@ export default function BottomNavBar({
           active={activeTab === "Reports"}
           onPress={() => handleTabPress("Reports")}
           iconSize={iconSize}
-          labelStyle={styles.label}
-          labelActiveStyle={styles.labelActive}
+          labelStyle={[styles.label, { color: inactive }]}
+          labelActiveStyle={{ color: activePrimary }}
           itemStyle={styles.item}
           innerStyle={styles.itemInner}
           scaleAnim={tabScalesRef.current.Reports}
           pressInScale={pressInScale}
+          activeColor={activePrimary}
+          inactiveColor={inactive}
         />
 
         <NavItem
@@ -486,19 +497,21 @@ export default function BottomNavBar({
           active={activeTab === "Settings"}
           onPress={() => handleTabPress("Settings")}
           iconSize={iconSize}
-          labelStyle={styles.label}
-          labelActiveStyle={styles.labelActive}
+          labelStyle={[styles.label, { color: inactive }]}
+          labelActiveStyle={{ color: activePrimary }}
           itemStyle={styles.item}
           innerStyle={styles.itemInner}
           scaleAnim={tabScalesRef.current.Settings}
           pressInScale={pressInScale}
+          activeColor={activePrimary}
+          inactiveColor={inactive}
         />
       </View>
 
       {/* ✅ HALO only */}
       <View style={styles.haloLayer}>
         <View style={styles.cutoutClip}>
-          <View style={styles.cutout} />
+          <View style={[styles.cutout, { backgroundColor: navBg }]} />
         </View>
       </View>
 
@@ -515,7 +528,7 @@ export default function BottomNavBar({
         >
           <View style={styles.fabInner}>
             <LinearGradient
-              colors={Colors.gradient}
+              colors={TC.gradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFillObject}
@@ -541,6 +554,8 @@ function NavItem({
   labelActiveStyle,
   scaleAnim,
   pressInScale,
+  activeColor,
+  inactiveColor,
 }: {
   icon: IoniconName;
   activeIcon?: IoniconName;
@@ -554,7 +569,10 @@ function NavItem({
   labelActiveStyle: any;
   scaleAnim: Animated.Value;
   pressInScale: number;
+  activeColor?: string;
+  inactiveColor?: string;
 }) {
+  const iconColor = active ? (activeColor ?? Colors.primary) : (inactiveColor ?? "#9AA4B2");
   const handlePressIn = useCallback(() => {
     scaleAnim.stopAnimation();
     Animated.timing(scaleAnim, {
@@ -590,7 +608,7 @@ function NavItem({
         <Ionicons
           name={active && activeIcon ? activeIcon : icon}
           size={iconSize}
-          color={active ? Colors.primary : "#9AA4B2"}
+          color={iconColor}
         />
         <Text
           style={[labelStyle, active && labelActiveStyle]}

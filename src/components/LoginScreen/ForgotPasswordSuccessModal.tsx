@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 import ChecklistBadge from "../ChecklistBadge";
 
 type Props = {
@@ -30,6 +30,7 @@ export default function ForgotPasswordSuccessModal({
   scale,
   vscale,
 }: Props) {
+  const TC = useColors();
   const styles = useMemo(() => createStyles(scale, vscale), [scale, vscale]);
 
   return (
@@ -46,12 +47,12 @@ export default function ForgotPasswordSuccessModal({
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollInner}
           >
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: TC.surface }]}>
               <View style={styles.badgeWrap}>
                 <ChecklistBadge size={clamp(scale(78), 66, 92)} />
               </View>
 
-              <Text style={styles.successTitle}>Password Reset{"\n"}Successfully</Text>
+              <Text style={[styles.successTitle, { color: TC.textDark }]}>Password Reset{"\n"}Successfully</Text>
 
               <View style={styles.spacer} />
 
@@ -64,7 +65,7 @@ export default function ForgotPasswordSuccessModal({
                 ]}
               >
                 <LinearGradient
-                  colors={Colors.gradient}
+                  colors={TC.gradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.btn}

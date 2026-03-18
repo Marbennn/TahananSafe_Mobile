@@ -16,7 +16,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import BottomNavBar, { TabKey } from "../../components/BottomNavBar";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 type Hotline = {
   number: string;
@@ -71,6 +71,7 @@ export default function HotlinesScreen({
   onTabChange,
   initialTab = "Inbox", // Inbox = Hotlines
 }: Props) {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
@@ -154,7 +155,7 @@ export default function HotlinesScreen({
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle={TC.statusBar} />
 
       <View style={styles.page}>
         {/* Header */}

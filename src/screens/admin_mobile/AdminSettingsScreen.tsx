@@ -18,7 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as SecureStore from "expo-secure-store";
 
 import AdminBotNav, { TabKey } from "../../components/AdminComponents/AdminBotNav";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 import { useAuth } from "../../auth/AuthContext";
 import LogoutModal from "../../components/LogoutModal";
 
@@ -74,6 +74,7 @@ export default function AdminSettingsScreen({
   onFabPress,
   onLogout,
 }: Props) {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { user, logout } = useAuth() as any;
@@ -188,7 +189,7 @@ export default function AdminSettingsScreen({
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle={TC.statusBar} />
 
       {/* ══════════════════════════════════════════════════════════════════════
           ACCOUNT MODAL

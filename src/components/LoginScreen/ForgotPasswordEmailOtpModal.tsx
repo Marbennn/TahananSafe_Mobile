@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 type Props = {
   visible: boolean;
@@ -106,6 +106,7 @@ export default function ForgotPasswordEmailOtpModal({
   vscale,
   initialSeconds = 34,
 }: Props) {
+  const TC = useColors();
   const styles = useMemo(() => createStyles(scale, vscale), [scale, vscale]);
 
   const [otpVisible, setOtpVisible] = useState(false);
@@ -267,22 +268,22 @@ export default function ForgotPasswordEmailOtpModal({
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollInner}
           >
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: TC.surface }]}>
               <Pressable
                 onPress={onClose}
                 hitSlop={12}
                 style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
               >
-                <Ionicons name="close" size={scale(18)} color="#111827" />
+                <Ionicons name="close" size={scale(18)} color={TC.textDark} />
               </Pressable>
 
-              <Text style={styles.title}>Reset Password</Text>
-              <Text style={styles.subtitle}>
+              <Text style={[styles.title, { color: TC.textDark }]}>Reset Password</Text>
+              <Text style={[styles.subtitle, { color: TC.muted }]}>
                 Forgot your password? Enter your email{"\n"}
                 address and we’ll help you reset it.
               </Text>
 
-              <Text style={styles.label}>Email</Text>
+              <Text style={[styles.label, { color: TC.textDark }]}>Email</Text>
               <TextInput
                 value={email}
                 onChangeText={(v) => {
@@ -365,7 +366,7 @@ export default function ForgotPasswordEmailOtpModal({
                 ]}
               >
                 <LinearGradient
-                  colors={Colors.gradient}
+                  colors={TC.gradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.btn}

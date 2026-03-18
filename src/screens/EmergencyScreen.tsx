@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 
 type TabKey = "Domestic" | "Emergency";
 
@@ -60,6 +60,7 @@ export default function EmergencyScreen({
   onCallHotline,
   onReviewComplaint,
 }: Props) {
+  const TC = useColors();
   const insets = useSafeAreaInsets();
   const now = useMemo(() => new Date(), []);
 
@@ -81,10 +82,10 @@ export default function EmergencyScreen({
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: TC.surface }]} edges={["top"]}>
+      <StatusBar barStyle={TC.statusBar} />
 
-      <View style={[styles.page, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+      <View style={[styles.page, { paddingBottom: Math.max(insets.bottom, 12), backgroundColor: TC.surface }]}>
         {/* Header */}
         <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>
           <Pressable
@@ -92,10 +93,10 @@ export default function EmergencyScreen({
             hitSlop={10}
             style={styles.backBtn}
           >
-            <Ionicons name="chevron-back" size={22} color={Colors.heading} />
+            <Ionicons name="chevron-back" size={22} color={TC.heading} />
           </Pressable>
 
-          <Text style={styles.headerTitle}>Incident Log</Text>
+          <Text style={[styles.headerTitle, { color: TC.heading }]}>Incident Log</Text>
 
           <View style={styles.headerRightSpacer} />
         </View>
@@ -145,52 +146,52 @@ export default function EmergencyScreen({
           keyboardShouldPersistTaps="handled"
         >
           {/* Emergency detail card */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Emergency Detail *</Text>
+          <View style={[styles.card, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
+            <Text style={[styles.cardTitle, { color: TC.heading }]}>Emergency Detail *</Text>
 
             <TextInput
               value={detail}
               onChangeText={setDetail}
               placeholder="Describe the emergency"
-              placeholderTextColor={Colors.muted}
+              placeholderTextColor={TC.placeholder}
               multiline
-              style={styles.textArea}
+              style={[styles.textArea, { backgroundColor: TC.surface, borderColor: TC.divider, color: TC.body }]}
               textAlignVertical="top"
             />
 
-            <Text style={styles.helperText}>
+            <Text style={[styles.helperText, { color: TC.muted }]}>
               A brief explanation of what happened, including location, injuries, and any
               urgent threats.
             </Text>
 
             {/* Actions */}
             <View style={styles.actionRow}>
-              <Pressable onPress={onSmsAlert ?? (() => {})} style={styles.actionBtnLight}>
+              <Pressable onPress={onSmsAlert ?? (() => {})} style={[styles.actionBtnLight, { borderColor: TC.primary }]}>
                 <Ionicons
                   name="chatbubble-ellipses-outline"
                   size={16}
-                  color={Colors.primary}
+                  color={TC.primary}
                 />
-                <Text style={styles.actionBtnLightText}>SMS Alert</Text>
+                <Text style={[styles.actionBtnLightText, { color: TC.primary }]}>SMS Alert</Text>
               </Pressable>
 
-              <Pressable onPress={onCallHotline ?? (() => {})} style={styles.actionBtnLight}>
-                <Ionicons name="call-outline" size={16} color={Colors.primary} />
-                <Text style={styles.actionBtnLightText}>Hotline</Text>
+              <Pressable onPress={onCallHotline ?? (() => {})} style={[styles.actionBtnLight, { borderColor: TC.primary }]}>
+                <Ionicons name="call-outline" size={16} color={TC.primary} />
+                <Text style={[styles.actionBtnLightText, { color: TC.primary }]}>Hotline</Text>
               </Pressable>
             </View>
           </View>
 
           {/* Witnesses */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Witnesses</Text>
+          <View style={[styles.card, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
+            <Text style={[styles.cardTitle, { color: TC.heading }]}>Witnesses</Text>
 
             <TextInput
               value={witnessName}
               onChangeText={setWitnessName}
               placeholder="Name (optional)"
-              placeholderTextColor={Colors.muted}
-              style={styles.input}
+              placeholderTextColor={TC.placeholder}
+              style={[styles.input, { backgroundColor: TC.surface, borderColor: TC.divider, color: TC.body }]}
             />
 
             <View style={{ height: 10 }} />
@@ -199,9 +200,9 @@ export default function EmergencyScreen({
               value={witnessPhone}
               onChangeText={setWitnessPhone}
               placeholder="Your Phone (optional)"
-              placeholderTextColor={Colors.muted}
+              placeholderTextColor={TC.placeholder}
               keyboardType={Platform.select({ ios: "number-pad", android: "phone-pad" })}
-              style={styles.input}
+              style={[styles.input, { backgroundColor: TC.surface, borderColor: TC.divider, color: TC.body }]}
             />
 
             <View style={{ height: 12 }} />
@@ -227,7 +228,7 @@ export default function EmergencyScreen({
           {/* Bottom button */}
           <Pressable
             onPress={handleReview}
-            style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.92 }]}
+            style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.92 }, { backgroundColor: TC.primary }]}
           >
             <Text style={styles.primaryBtnText}>Review Complaint</Text>
           </Pressable>

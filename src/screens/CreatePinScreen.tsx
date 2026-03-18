@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 import SavedModal from "../components/SavedModal";
 
 import {
@@ -39,6 +39,7 @@ function clamp(n: number, min: number, max: number) {
 const TAG = "[CreatePinScreen]";
 
 export default function CreatePinScreen({ onContinue, onSkip }: Props) {
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
 
   const s = clamp(width / 375, 0.95, 1.45);
@@ -141,7 +142,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
   };
 
   return (
-    <View style={styles.safe}>
+    <View style={[styles.safe, { backgroundColor: TC.surface }]}>
       <SavedModal
         visible={savedVisible}
         title="PIN Created!"
@@ -158,7 +159,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
         <View style={styles.topSection}>
           <View style={styles.iconWrap}>
             <LinearGradient
-              colors={Colors.gradient}
+              colors={TC.gradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.iconGradient}
@@ -167,8 +168,8 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
             </LinearGradient>
           </View>
 
-          <Text style={styles.screenTitle}>Create Your PIN</Text>
-          <Text style={styles.screenSub}>
+          <Text style={[styles.screenTitle, { color: TC.textDark }]}>Create Your PIN</Text>
+          <Text style={[styles.screenSub, { color: TC.muted }]}>
             Set a 4-digit PIN to quickly and securely{"\n"}access your account.
           </Text>
 
@@ -219,7 +220,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
               <Ionicons
                 name="backspace-outline"
                 size={scale(24)}
-                color="#07519C"
+                color={TC.primary}
               />
             </Pressable>
           </View>
@@ -239,7 +240,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
           >
             <View style={styles.ctaInnerClip}>
               <LinearGradient
-                colors={Colors.gradient}
+                colors={TC.gradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.ctaGradient}

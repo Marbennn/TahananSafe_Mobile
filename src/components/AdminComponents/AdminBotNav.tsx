@@ -10,7 +10,7 @@ import {
   Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../../theme/colors";
+import { Colors, useColors } from "../../theme/colors";
 
 export type TabKey =
   | "Home"
@@ -58,6 +58,7 @@ export default function AdminBotNav({
   navHeight,
   paddingBottom,
 }: Props) {
+  const TC = useColors();
   const { width } = useWindowDimensions();
   const { s } = useMemo(() => makeScale(width), [width]);
 
@@ -186,7 +187,7 @@ export default function AdminBotNav({
   );
 
   return (
-    <View style={styles.navWrap}>
+    <View style={[styles.navWrap, { backgroundColor: TC.surface }]}>
       <NavItem
         icon="home-outline"
         activeIcon="home"
@@ -195,7 +196,7 @@ export default function AdminBotNav({
         onPress={() => handleTabPress("Home")}
         iconSize={iconSize}
         labelStyle={styles.label}
-        labelActiveStyle={styles.labelActive}
+        labelActiveStyle={[styles.labelActive, { color: TC.primary }]}
         itemStyle={styles.item}
         innerStyle={styles.itemInner}
         scaleAnim={tabScalesRef.current.Home}
@@ -210,7 +211,7 @@ export default function AdminBotNav({
         onPress={() => handleTabPress("Inbox")}
         iconSize={iconSize}
         labelStyle={styles.label}
-        labelActiveStyle={styles.labelActive}
+        labelActiveStyle={[styles.labelActive, { color: TC.primary }]}
         itemStyle={styles.item}
         innerStyle={styles.itemInner}
         scaleAnim={tabScalesRef.current.Inbox}
@@ -225,7 +226,7 @@ export default function AdminBotNav({
         onPress={() => handleTabPress("Reports")}
         iconSize={iconSize}
         labelStyle={styles.label}
-        labelActiveStyle={styles.labelActive}
+        labelActiveStyle={[styles.labelActive, { color: TC.primary }]}
         itemStyle={styles.item}
         innerStyle={styles.itemInner}
         scaleAnim={tabScalesRef.current.Reports}
@@ -240,7 +241,7 @@ export default function AdminBotNav({
         onPress={() => handleTabPress("Settings")}
         iconSize={iconSize}
         labelStyle={styles.label}
-        labelActiveStyle={styles.labelActive}
+        labelActiveStyle={[styles.labelActive, { color: TC.primary }]}
         itemStyle={styles.item}
         innerStyle={styles.itemInner}
         scaleAnim={tabScalesRef.current.Settings}

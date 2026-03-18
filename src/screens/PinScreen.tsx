@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "../theme/colors";
+import { Colors, useColors } from "../theme/colors";
 
 import NewLogo from "../../assets/NewLogo.svg";
 
@@ -28,6 +28,7 @@ type Props = {
   onForgotPin: () => void;
   onBack?: () => void;
   onBypass?: () => void;
+  onUserActivity?: () => void;
 
   invalidPinVisible?: boolean;
   invalidPinMsg?: string;
@@ -65,7 +66,17 @@ async function isPinEnabledLocally(email: string): Promise<boolean> {
   }
 }
 
-export default function PinScreen({ onVerified, onForgotPin, onBack, onBypass, invalidPinVisible = false, invalidPinMsg, onInvalidPinDismiss }: Props) {
+export default function PinScreen({
+  onVerified,
+  onForgotPin,
+  onBack,
+  onBypass,
+  onUserActivity,
+  invalidPinVisible = false,
+  invalidPinMsg,
+  onInvalidPinDismiss,
+}: Props) {
+  const TC = useColors();
   const { width, height } = useWindowDimensions();
 
   const s = clamp(width / 375, 0.95, 1.45);
@@ -122,6 +133,7 @@ export default function PinScreen({ onVerified, onForgotPin, onBack, onBypass, i
   }, [pin]);
 
   const addDigit = (d: string) => {
+    onUserActivity?.();
     if (pin.length >= PIN_LENGTH) return;
 
     const next = pin + d;
@@ -133,24 +145,28 @@ export default function PinScreen({ onVerified, onForgotPin, onBack, onBypass, i
   };
 
   const backspace = () => {
+    onUserActivity?.();
     if (!pin.length) return;
     setPin((p) => p.slice(0, -1));
   };
 
   return (
     <>
-      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F0F4F8" />
+      <SafeAreaView style={[styles.safe, { backgroundColor: TC.screenBg }]} edges={["top", "bottom"]}>
+      <StatusBar barStyle={TC.statusBar} backgroundColor={TC.screenBg} />
 
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: TC.screenBg }]}>
         {/* Top Bar */}
         <View style={styles.topBar}>
           <Pressable
-            onPress={() => (onBack ? onBack() : undefined)}
+            onPress={() => {
+              onUserActivity?.();
+              onBack?.();
+            }}
             hitSlop={12}
             style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
           >
-            <Ionicons name="chevron-back" size={scale(22)} color="#111827" />
+            <Ionicons name="chevron-back" size={scale(22)} color={TC.textDark} />
           </Pressable>
 
           <View style={styles.headerSpacer} />
@@ -165,19 +181,19 @@ export default function PinScreen({ onVerified, onForgotPin, onBack, onBypass, i
         {checkingLocal ? (
           <View style={styles.loadingWrap}>
             <ActivityIndicator />
-            <Text style={styles.loadingText}>Checking security settings...</Text>
+            <Text style={[styles.loadingText, { color: TC.muted }]}>Checking security settings...</Text>
           </View>
         ) : (
           <>
             {/* Title + Dots */}
             <View style={styles.pinHeader}>
-              <Text style={styles.title}>Enter Your Current PIN</Text>
+              <Text style={[styles.title, { color: TC.textDark }]}>Enter Your Current PIN</Text>
 
               <View style={styles.dotsRow}>
                 {dots.map((filled, idx) => (
                   <View
                     key={idx}
-                    style={[styles.dot, filled ? styles.dotFilled : styles.dotEmpty]}
+                    style={[styles.dot, filled ? { borderColor: TC.primary, backgroundColor: TC.primary } : { borderColor: TC.isDark ? "#334155" : "#BFDBFE", backgroundColor: TC.surface }]}
                   />
                 ))}
               </View>
@@ -186,7 +202,10 @@ export default function PinScreen({ onVerified, onForgotPin, onBack, onBypass, i
 
             {/* Forgot PIN — sits just above the keypad */}
             <Pressable
-              onPress={onForgotPin}
+              onPress={() => {
+                onUserActivity?.();
+                onForgotPin();
+              }}
               hitSlop={10}
               style={({ pressed }) => [styles.forgotBtn, pressed && { opacity: 0.7 }]}
             >
