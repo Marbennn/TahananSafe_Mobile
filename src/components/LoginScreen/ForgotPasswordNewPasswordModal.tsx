@@ -123,7 +123,7 @@ export default function ForgotPasswordNewPasswordModal({
 
     try {
       setLoading(true);
-      console.log(`${TAG} reset START`, { email });
+      // ✅ SECURITY: No email logged
 
       await resetPassword(email.trim().toLowerCase(), resetToken, newPassword.trim());
 

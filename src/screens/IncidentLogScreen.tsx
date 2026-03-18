@@ -264,8 +264,10 @@ export default function IncidentLogScreen({
    * ✅ Auto-analyze when user clicks "Secure Complaint"
    * - Only runs for complain mode
    * - Only runs if no aiResult OR stale
-   * - If AI fails, we STOP (so user can retry)
+   * - Retries automatically until AI responds (no failure alert)
    */
+  const MAX_AI_RETRIES = 10;
+
   const autoAnalyzeIfNeeded = React.useCallback(async (): Promise<boolean> => {
     if (mode !== "complain") return true;
     if (submitting) return false;
@@ -284,20 +286,33 @@ export default function IncidentLogScreen({
     setAiLoading(true);
     setAiError(null);
 
-    try {
-      const res = await analyzeIncident(text);
-      setAiResult(res);
-      lastAnalyzedTextRef.current = text;
-      return true;
-    } catch (e: any) {
-      setAiResult(null);
-      const msg = e?.message || "AI analyze failed.";
-      setAiError(msg);
-      Alert.alert("AI Analyze Failed", msg);
-      return false;
-    } finally {
-      setAiLoading(false);
+    for (let attempt = 1; attempt <= MAX_AI_RETRIES; attempt++) {
+      try {
+        const res = await analyzeIncident(text);
+        setAiResult(res);
+        lastAnalyzedTextRef.current = text;
+        setAiLoading(false);
+        return true;
+      } catch (e: any) {
+        const msg = e?.message || "AI analyze failed.";
+        setAiError(`Retrying analysis... (attempt ${attempt})`);
+        log(`AI analyze attempt ${attempt} failed`, msg);
+
+        if (attempt >= MAX_AI_RETRIES) {
+          setAiResult(null);
+          setAiError(msg);
+          setAiLoading(false);
+          Alert.alert("AI Analyze Failed", "Could not reach the AI after multiple attempts. Please try again later.");
+          return false;
+        }
+
+        // Wait before retrying (2 seconds between attempts)
+        await new Promise((r) => setTimeout(r, 2000));
+      }
     }
+
+    setAiLoading(false);
+    return false;
   }, [mode, submitting, recognizing, details, aiResult, aiIsStale]);
 
   const speechBaseRef = React.useRef("");

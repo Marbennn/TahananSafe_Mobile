@@ -158,7 +158,7 @@ export default function ForgotPasswordEmailOtpModal({
 
     try {
       setSending(true);
-      console.log(`${TAG} send OTP`, { email: emailNorm });
+      // ✅ SECURITY: No email logged
 
       await sendForgotOtp(emailNorm);
 
@@ -185,7 +185,7 @@ export default function ForgotPasswordEmailOtpModal({
 
     try {
       setSending(true);
-      console.log(`${TAG} resend OTP`, { email: emailNorm });
+      // ✅ SECURITY: No email logged
 
       await sendForgotOtp(emailNorm);
 
@@ -238,7 +238,7 @@ export default function ForgotPasswordEmailOtpModal({
 
     try {
       setVerifying(true);
-      console.log(`${TAG} verify OTP`, { email: emailNorm });
+      // ✅ SECURITY: No email logged
 
       const data = await verifyForgotOtp(emailNorm, codeJoined);
 

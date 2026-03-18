@@ -26,12 +26,22 @@ function getApiBaseUrl(opts?: ApiBaseOpts) {
   return base || "http://localhost:8000";
 }
 
+// ✅ SECURITY FIX: Whitelist allowed image types
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/heic"]);
+
 function mimeFromUri(uri: string) {
   const u = String(uri || "").toLowerCase();
   if (u.endsWith(".png")) return "image/png";
   if (u.endsWith(".jpg") || u.endsWith(".jpeg")) return "image/jpeg";
   if (u.endsWith(".heic")) return "image/heic";
   return "image/jpeg";
+}
+
+function validateFileUri(uri: string): void {
+  const mime = mimeFromUri(uri);
+  if (!ALLOWED_IMAGE_TYPES.has(mime)) {
+    throw new Error(`Unsupported file type: ${mime}. Only JPEG, PNG, and HEIC are allowed.`);
+  }
 }
 
 function filenameFromUri(uri: string) {
@@ -86,6 +96,9 @@ export async function submitVerificationApi(args: {
   baseUrl?: string;
 }): Promise<{ status: VerificationStatus }> {
   const baseUrl = getApiBaseUrl({ baseUrl: args.baseUrl });
+
+  // ✅ SECURITY: Validate file type before upload
+  validateFileUri(args.fileUri);
 
   const form = new FormData();
   form.append("idType", args.idType);

@@ -10,6 +10,8 @@ import {
   Platform,
   useWindowDimensions,
   ActivityIndicator,
+  Modal,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -66,6 +68,37 @@ async function isPinEnabledLocally(email: string): Promise<boolean> {
   }
 }
 
+// ✅ SECURITY FIX: PIN brute-force rate limiting
+const MAX_PIN_ATTEMPTS = 5;
+const PIN_LOCKOUT_MS = 5 * 60 * 1000; // 5-minute lockout after max attempts
+
+async function getPinAttemptCount(email: string): Promise<{ count: number; lockedUntil: number }> {
+  try {
+    const raw = await SecureStore.getItemAsync(`tahanansafe_pin_attempts_${safeKeyPart(email)}`);
+    if (!raw) return { count: 0, lockedUntil: 0 };
+    const parsed = JSON.parse(raw);
+    return { count: parsed.count || 0, lockedUntil: parsed.lockedUntil || 0 };
+  } catch {
+    return { count: 0, lockedUntil: 0 };
+  }
+}
+
+async function incrementPinAttempt(email: string): Promise<{ count: number; locked: boolean }> {
+  const data = await getPinAttemptCount(email);
+  const newCount = data.count + 1;
+  const locked = newCount >= MAX_PIN_ATTEMPTS;
+  const lockedUntil = locked ? Date.now() + PIN_LOCKOUT_MS : 0;
+  await SecureStore.setItemAsync(
+    `tahanansafe_pin_attempts_${safeKeyPart(email)}`,
+    JSON.stringify({ count: newCount, lockedUntil })
+  );
+  return { count: newCount, locked };
+}
+
+export async function resetPinAttempts(email: string) {
+  await SecureStore.deleteItemAsync(`tahanansafe_pin_attempts_${safeKeyPart(email)}`).catch(() => {});
+}
+
 export default function PinScreen({
   onVerified,
   onForgotPin,
@@ -87,17 +120,72 @@ export default function PinScreen({
   const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
 
   const [pin, setPin] = useState("");
+  const [lockedOut, setLockedOut] = useState(false);
+  const [lockSeconds, setLockSeconds] = useState(0);
   const PIN_LENGTH = 4;
 
-  // Reset pin when invalid PIN modal appears
+  // Lockout modal animation
+  const lockFade = React.useRef(new Animated.Value(0)).current;
+  const lockPop = React.useRef(new Animated.Value(0.96)).current;
+
   useEffect(() => {
-    if (invalidPinVisible) setPin("");
+    if (!lockedOut) return;
+    lockFade.setValue(0);
+    lockPop.setValue(0.96);
+    Animated.parallel([
+      Animated.timing(lockFade, { toValue: 1, duration: 160, useNativeDriver: true }),
+      Animated.spring(lockPop, { toValue: 1, speed: 18, bounciness: 6, useNativeDriver: true }),
+    ]).start();
+  }, [lockedOut]);
+
+  // Reset pin when invalid PIN modal appears + track failed attempt
+  useEffect(() => {
+    if (invalidPinVisible) {
+      setPin("");
+      // ✅ SECURITY: Track failed PIN attempt
+      if (userEmail) {
+        incrementPinAttempt(userEmail).then(({ locked }) => {
+          if (locked) {
+            setLockedOut(true);
+            setLockSeconds(Math.ceil(PIN_LOCKOUT_MS / 1000));
+          }
+        });
+      }
+    }
   }, [invalidPinVisible]);
 
   // ✅ Check if PIN is disabled (device-level) then bypass this screen
   const { user } = useAuth() as any;
   const userEmail: string = (user?.email ? String(user.email) : "").trim().toLowerCase();
   const [checkingLocal, setCheckingLocal] = useState(true);
+
+  // ✅ SECURITY: Check lockout status on mount
+  useEffect(() => {
+    if (!userEmail) return;
+    getPinAttemptCount(userEmail).then(({ lockedUntil }) => {
+      if (lockedUntil > Date.now()) {
+        setLockedOut(true);
+        setLockSeconds(Math.ceil((lockedUntil - Date.now()) / 1000));
+      }
+    });
+  }, [userEmail]);
+
+  // ✅ SECURITY: Countdown timer for lockout
+  useEffect(() => {
+    if (!lockedOut || lockSeconds <= 0) return;
+    const t = setInterval(() => {
+      setLockSeconds((s) => {
+        if (s <= 1) {
+          setLockedOut(false);
+          if (userEmail) resetPinAttempts(userEmail);
+          clearInterval(t);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [lockedOut, lockSeconds > 0]);
 
   useEffect(() => {
     let mounted = true;
@@ -134,12 +222,14 @@ export default function PinScreen({
 
   const addDigit = (d: string) => {
     onUserActivity?.();
+    if (lockedOut) return; // ✅ SECURITY: Block input during lockout
     if (pin.length >= PIN_LENGTH) return;
 
     const next = pin + d;
     setPin(next);
 
     if (next.length === PIN_LENGTH) {
+      // NOTE: Do NOT reset attempts here — only reset after parent confirms success
       setTimeout(() => onVerified(next), 90);
     }
   };
@@ -265,6 +355,56 @@ export default function PinScreen({
         message={invalidPinMsg}
         onClose={() => onInvalidPinDismiss?.()}
       />
+
+      {/* ✅ SECURITY: Lockout modal */}
+      <Modal visible={lockedOut} transparent animationType="none">
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: scale(18) }}>
+          <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.32)", opacity: lockFade }]} />
+
+          <Animated.View
+            style={{
+              opacity: lockFade,
+              transform: [{ scale: lockPop }],
+              width: "100%",
+              maxWidth: scale(320),
+              borderRadius: scale(18),
+              backgroundColor: TC.surface,
+              paddingHorizontal: scale(24),
+              paddingTop: scale(28),
+              paddingBottom: scale(24),
+              alignItems: "center" as const,
+              ...Platform.select({
+                ios: { shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 10 } },
+                android: { elevation: 10 },
+              }),
+            }}
+          >
+            {/* Icon */}
+            <View style={{ width: scale(72), height: scale(72), borderRadius: scale(36), backgroundColor: "#FEE2E2", alignItems: "center", justifyContent: "center", marginBottom: scale(16) }}>
+              <Ionicons name="lock-closed" size={scale(34)} color="#DC2626" />
+            </View>
+
+            <Text style={{ textAlign: "center", fontSize: scale(16), fontWeight: "900", color: TC.textDark, marginBottom: scale(10) }}>
+              Too Many Attempts
+            </Text>
+
+            <Text style={{ textAlign: "center", fontSize: scale(12), lineHeight: scale(18), color: TC.muted, marginBottom: scale(8) }}>
+              You've entered the wrong PIN too many times.{"\n"}Please wait before trying again.
+            </Text>
+
+            {/* Countdown */}
+            <View style={{ backgroundColor: TC.isDark ? "#1E293B" : "#F1F5F9", borderRadius: scale(12), paddingVertical: vscale(12), paddingHorizontal: scale(20), marginBottom: scale(20), alignItems: "center" }}>
+              <Text style={{ fontSize: scale(28), fontWeight: "900", color: "#DC2626", fontVariant: ["tabular-nums"] }}>
+                {Math.floor(lockSeconds / 60)}:{String(lockSeconds % 60).padStart(2, "0")}
+              </Text>
+            </View>
+
+            <Text style={{ textAlign: "center", fontSize: scale(11), color: TC.muted }}>
+              The keypad will unlock automatically
+            </Text>
+          </Animated.View>
+        </View>
+      </Modal>
     </>
   );
 }

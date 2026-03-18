@@ -53,9 +53,7 @@ const VERIFY_REG_OTP_PATH = "/api/mobile/v1/verify-registration-otp";
 
 async function verifyRegistrationOtpRequest(email: string, otp: string) {
   const url = `${API_URL}${VERIFY_REG_OTP_PATH}`;
-  console.log(`${TAG} verify URL:`, url);
-  console.log(`${TAG} verify email:`, email);
-  console.log(`${TAG} verify otpLen:`, otp.length);
+  // ✅ SECURITY: No sensitive data in production logs
 
   const res = await fetch(url, {
     method: "POST",
@@ -64,8 +62,7 @@ async function verifyRegistrationOtpRequest(email: string, otp: string) {
   });
 
   const raw = await res.text().catch(() => "");
-  console.log(`${TAG} verify status:`, res.status);
-  console.log(`${TAG} verify raw:`, raw);
+  // ✅ SECURITY: status only, no raw response
 
   let data: any = {};
   if (raw) {

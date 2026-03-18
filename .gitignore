@@ -67,6 +67,10 @@ dist/
 # Environment
 .env
 
+# ✅ SECURITY: Firebase config contains API keys
+google-services.json
+GoogleService-Info.plist
+
 # OS
 .DS_Store
 Thumbs.db

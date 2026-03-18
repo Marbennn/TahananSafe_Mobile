@@ -4,16 +4,17 @@ import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
 import { requestJson } from "../api/http";
+import { devLog } from "./safeLog";
 
 /**
  * Register for push notifications and return the Expo Push Token.
  * Returns null if permissions denied or not a physical device.
  */
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
-  console.log("[Push] isDevice:", Device.isDevice);
+  devLog("[Push] isDevice:", Device.isDevice);
   // Push only works on physical devices
   if (!Device.isDevice) {
-    console.log("[Push] Must use physical device for push notifications");
+    devLog("[Push] Must use physical device for push notifications");
     return null;
   }
 
@@ -32,28 +33,28 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 
   // Check / request permission
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  console.log("[Push] existingStatus:", existingStatus);
+  devLog("[Push] existingStatus:", existingStatus);
   let finalStatus = existingStatus;
 
   if (existingStatus !== "granted") {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
-    console.log("[Push] requestedStatus:", finalStatus);
+    devLog("[Push] requestedStatus:", finalStatus);
   }
 
   if (finalStatus !== "granted") {
-    console.log("[Push] Permission not granted");
+    devLog("[Push] Permission not granted");
     return null;
   }
 
   // Get the Expo push token
   const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-  console.log("[Push] projectId:", projectId);
+  devLog("[Push] projectId:", projectId);
   const tokenData = await Notifications.getExpoPushTokenAsync({
     projectId,
   });
 
-  console.log("[Push] token:", tokenData.data);
+  // ✅ SECURITY: Don't log full push token in production
   return tokenData.data; // e.g. "ExponentPushToken[xxxxx]"
 }
 
@@ -69,7 +70,7 @@ export async function sendPushTokenToBackend(token: string): Promise<void> {
       auth: true,
     });
   } catch (e) {
-    console.warn("[Push] Failed to register token with backend:", e);
+    devLog("[Push] Failed to register token with backend:", e);
   }
 }
 
@@ -92,17 +93,17 @@ export async function removePushTokenFromBackend(): Promise<void> {
  * Full registration flow: get token + send to backend.
  */
 export async function setupPushNotifications(): Promise<void> {
-  console.log("[Push] setupPushNotifications started");
+  devLog("[Push] setupPushNotifications started");
   try {
     const token = await registerForPushNotificationsAsync();
-    console.log("[Push] Token obtained:", token ? token.substring(0, 30) + "..." : "null");
+    devLog("[Push] Token obtained:", token ? token.substring(0, 30) + "..." : "null");
     if (token) {
       await sendPushTokenToBackend(token);
-      console.log("[Push] Token sent to backend successfully");
+      devLog("[Push] Token sent to backend successfully");
     } else {
-      console.log("[Push] No token — skipping backend registration");
+      devLog("[Push] No token — skipping backend registration");
     }
   } catch (e) {
-    console.error("[Push] setupPushNotifications error:", e);
+    devLog("[Push] setupPushNotifications error:", e);
   }
 }

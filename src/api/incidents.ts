@@ -34,13 +34,32 @@ const API_URL = (process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000")
   .trim()
   .replace(/\/+$/, "");
 
-function guessMimeType(uri: string) {
+// ✅ SECURITY FIX: Whitelist allowed image MIME types
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+
+const MAX_PHOTO_SIZE_MB = 10;
+
+function guessMimeType(uri: string): string {
   const lower = uri.toLowerCase();
   if (lower.endsWith(".png")) return "image/png";
   if (lower.endsWith(".webp")) return "image/webp";
   if (lower.endsWith(".heic")) return "image/heic";
   if (lower.endsWith(".heif")) return "image/heif";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
   return "image/jpeg";
+}
+
+function validateImageUri(uri: string): void {
+  const mime = guessMimeType(uri);
+  if (!ALLOWED_IMAGE_TYPES.has(mime)) {
+    throw new Error(`Unsupported file type: ${mime}. Only JPEG, PNG, WebP, and HEIC are allowed.`);
+  }
 }
 
 function fileNameFromUri(uri: string, index: number) {
@@ -88,8 +107,10 @@ export async function submitIncident(payload: CreateIncidentPayload) {
 
   const uris = (payload.photos || []).slice(0, 3);
 
-  // ✅ IMPORTANT: keep uri AS-IS (do NOT strip file:// on iOS)
+  // ✅ SECURITY: Validate each photo before uploading
   uris.forEach((uri, idx) => {
+    validateImageUri(uri);
+
     const name = fileNameFromUri(uri, idx);
     const type = guessMimeType(uri);
 

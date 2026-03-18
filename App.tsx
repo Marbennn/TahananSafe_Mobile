@@ -24,7 +24,7 @@ import AppSplashScreen from "./src/screens/AppSplashScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import AuthFlowShell from "./src/screens/AuthFlowShell";
 import OnboardingPagerScreen from "./src/screens/OnboardingPagerScreen";
-import PinScreen from "./src/screens/PinScreen";
+import PinScreen, { resetPinAttempts } from "./src/screens/PinScreen";
 import CreatePinScreen from "./src/screens/CreatePinScreen";
 import InvalidPinModal from "./src/components/PinScreen/InvalidPinModal";
 
@@ -47,6 +47,7 @@ import {
   isLoggedIn,
   setLoggedIn,
   getAccessToken,
+  getRefreshToken,
   setHasPin,
   isPinUnlockedThisRun,
   setPinUnlockedThisRun,
@@ -57,6 +58,7 @@ import {
 
 // APIs for PIN & profile
 import { getMeApi, verifyPinApi } from "./src/api/pin";
+import { refreshAccessTokenApi } from "./src/api/auth";
 
 // Push notifications
 import * as Notifications from "expo-notifications";
@@ -513,7 +515,19 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
           clearPinTimeoutTimer();
 
           try {
-            const token = await getAccessToken();
+            let token = await getAccessToken();
+
+            // ✅ If access token expired, try refreshing before giving up
+            if (!token) {
+              try {
+                const rt = await getRefreshToken();
+                if (rt) {
+                  const refreshed = await refreshAccessTokenApi(rt);
+                  token = refreshed.accessToken;
+                }
+              } catch {}
+            }
+
             if (!token) {
               stopPinTimeout();
               await setLoggedIn(false);
@@ -526,6 +540,10 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
             }
 
             await verifyPinApi({ accessToken: token, pin });
+
+            // ✅ SECURITY: Reset brute-force counter only after successful verification
+            const email = (auth?.user?.email || "").trim().toLowerCase();
+            if (email) await resetPinAttempts(email);
 
             stopPinTimeout();
             setPinUnlockedThisRun(true);

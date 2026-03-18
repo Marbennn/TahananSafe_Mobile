@@ -45,16 +45,16 @@ export async function setPinApi(params: { accessToken: string; pin: string }): P
 /**
  * ✅ POST /verify-pin
  * Same signature as before: { accessToken, pin }
+ * NOTE: auth is false — a 401 here means "wrong PIN", NOT "expired token".
+ * We don't want the HTTP layer to call clearSession() on wrong PIN attempts.
  */
 export async function verifyPinApi(params: { accessToken: string; pin: string }): Promise<VerifyPinResponse> {
   return requestJson<VerifyPinResponse>({
     method: "POST",
     path: "/api/mobile/v1/verify-pin",
     body: { pin: params.pin },
-    auth: true,
-    headers: params.accessToken
-      ? { Authorization: `Bearer ${params.accessToken}` }
-      : undefined,
+    auth: false,
+    headers: { Authorization: `Bearer ${params.accessToken}` },
   });
 }
 

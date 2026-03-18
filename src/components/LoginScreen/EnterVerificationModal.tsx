@@ -218,9 +218,9 @@ export default function EnterVerificationModal({
         const key = refreshKeyForEmail(e);
         try {
           await SecureStore.setItemAsync(key, data.refreshToken);
-          console.log(`${TAG} refreshToken saved to SecureStore`, { key });
+          // ✅ SECURITY: token saved (no key logged)
         } catch (err: any) {
-          console.log(`${TAG} SecureStore save refreshToken failed:`, err?.message);
+          // SecureStore save failed silently
         }
       }
 
@@ -231,16 +231,13 @@ export default function EnterVerificationModal({
       try {
         const me = await getMeApi({ accessToken: data.accessToken });
         await setHasPin(!!me.user.hasPin);
-        console.log(`${TAG} hasPin set:`, !!me.user.hasPin);
+        // hasPin set
       } catch (err: any) {
         await setHasPin(false);
-        console.log(`${TAG} getMe failed, default hasPin=false`, err?.message);
+        // getMe failed, default hasPin=false
       }
 
-      console.log(`${TAG} tokens saved?`, {
-        access: Boolean(data?.accessToken),
-        refresh: Boolean(data?.refreshToken),
-      });
+      // ✅ SECURITY: No token values logged
 
       // 5) close + notify parent
       closeWithAnim();

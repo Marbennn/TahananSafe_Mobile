@@ -137,7 +137,13 @@ function buildLeafletHtml(
     zoom = 16;
   }
 
-  const esc = (s: string) => s.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+  // ✅ SECURITY FIX: Proper HTML entity encoding to prevent XSS
+  const esc = (s: string) =>
+    s.replace(/&/g, "&amp;")
+     .replace(/</g, "&lt;")
+     .replace(/>/g, "&gt;")
+     .replace(/"/g, "&quot;")
+     .replace(/'/g, "&#39;");
 
   return `<!DOCTYPE html>
 <html>
@@ -1213,7 +1219,7 @@ const AdminHomeScreen: React.FC<Props> = ({
             <View style={{ flex: 1 }}>
               <WebView
                 style={{ flex: 1 }}
-                originWhitelist={["*"]}
+                originWhitelist={["https://*"]}
                 javaScriptEnabled
                 source={{ html: buildLeafletHtml(
                   selectedAlert?.latitude ?? null,

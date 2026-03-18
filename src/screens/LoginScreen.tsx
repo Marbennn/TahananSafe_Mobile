@@ -49,6 +49,7 @@ import SignupErrorModal from "../components/SignupScreen/SignupErrorModal";
 // ✅ Session storage
 import { saveTokens, setLoggedIn } from "../auth/session";
 import { setupPushNotifications } from "../utils/pushNotifications";
+import { devLog, maskEmail } from "../utils/safeLog";
 
 type Props = {
   onGoSignup: () => void;
@@ -228,17 +229,15 @@ async function postJson(url: string, body: any) {
  */
 async function loginCheckRequest(email: string, password: string) {
   const url = `${API_URL}${LOGIN_PATH}`;
-  console.log(`${TAG} loginCheck URL:`, url);
-  console.log(`${TAG} loginCheck email:`, email);
+  devLog(`${TAG} loginCheck`, maskEmail(email));
 
-  const { res, raw, data } = await postJson(url, {
+  const { res, data } = await postJson(url, {
     email,
     password,
     purpose: "check",
   });
 
-  console.log(`${TAG} loginCheck status:`, res.status);
-  console.log(`${TAG} loginCheck raw:`, raw);
+  devLog(`${TAG} loginCheck status:`, res.status);
 
   if (!res.ok) {
     const msg =
@@ -257,17 +256,15 @@ async function loginCheckRequest(email: string, password: string) {
  */
 async function loginSendOtpRequest(email: string, password: string) {
   const url = `${API_URL}${LOGIN_PATH}`;
-  console.log(`${TAG} loginSendOtp URL:`, url);
-  console.log(`${TAG} loginSendOtp email:`, email);
+  devLog(`${TAG} loginSendOtp`, maskEmail(email));
 
-  const { res, raw, data } = await postJson(url, {
+  const { res, data } = await postJson(url, {
     email,
     password,
     purpose: "otp",
   });
 
-  console.log(`${TAG} loginSendOtp status:`, res.status);
-  console.log(`${TAG} loginSendOtp raw:`, raw);
+  devLog(`${TAG} loginSendOtp status:`, res.status);
 
   if (!res.ok) {
     const msg =
@@ -291,12 +288,11 @@ class HttpError extends Error {
 
 async function refreshAccessToken(refreshToken: string) {
   const url = `${API_URL}${REFRESH_PATH}`;
-  console.log(`${TAG} refresh URL:`, url);
+  devLog(`${TAG} refresh URL:`, url);
 
-  const { res, raw, data } = await postJson(url, { refreshToken });
+  const { res, data } = await postJson(url, { refreshToken });
 
-  console.log(`${TAG} refresh status:`, res.status);
-  console.log(`${TAG} refresh raw:`, raw);
+  devLog(`${TAG} refresh status:`, res.status);
 
   if (!res.ok) {
     const msg = data?.message || `Refresh failed (HTTP ${res.status})`;
@@ -408,10 +404,10 @@ async function getRefreshTokenForEmail(email: string): Promise<string | null> {
   const key = refreshKeyForEmail(email);
   try {
     const v = await SecureStore.getItemAsync(key);
-    console.log(`${TAG} SecureStore refresh lookup`, { key, found: !!v });
+    devLog(`${TAG} SecureStore refresh lookup`, { key, found: !!v });
     return v ?? null;
   } catch (e: any) {
-    console.log(`${TAG} SecureStore get refresh failed:`, e?.message);
+    devLog(`${TAG} SecureStore get refresh failed:`, e?.message);
     return null;
   }
 }
@@ -420,9 +416,9 @@ async function deleteRefreshTokenForEmail(email: string) {
   const key = refreshKeyForEmail(email);
   try {
     await SecureStore.deleteItemAsync(key);
-    console.log(`${TAG} SecureStore refresh deleted`, { key });
+    devLog(`${TAG} SecureStore refresh deleted`, { key });
   } catch (e: any) {
-    console.log(`${TAG} SecureStore delete refresh failed:`, e?.message);
+    devLog(`${TAG} SecureStore delete refresh failed:`, e?.message);
   }
 }
 
@@ -441,7 +437,7 @@ async function runBiometricsGate(): Promise<{
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     const enrolled = await LocalAuthentication.isEnrolledAsync();
 
-    console.log(`${TAG} biometrics hw/enrolled:`, { hasHardware, enrolled });
+    devLog(`${TAG} biometrics hw/enrolled:`, { hasHardware, enrolled });
 
     if (!hasHardware) return { ok: false, reason: "not_available" };
     if (!enrolled) return { ok: false, reason: "not_enrolled" };
@@ -455,7 +451,7 @@ async function runBiometricsGate(): Promise<{
       disableDeviceFallback: true,
     });
 
-    console.log(`${TAG} biometrics result:`, result);
+    devLog(`${TAG} biometrics result:`, result);
 
     if (result.success) return { ok: true, reason: "success" };
 
@@ -475,7 +471,7 @@ async function runBiometricsGate(): Promise<{
 
     return { ok: false, reason: "failed" };
   } catch (e: any) {
-    console.log(`${TAG} biometrics exception:`, e?.message || e);
+    devLog(`${TAG} biometrics exception:`, e?.message || e);
     return { ok: false, reason: "unknown" };
   }
 }
@@ -526,7 +522,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
 
   const goAfterLoginByRole = (role?: string) => {
     // Register push token for whichever user just logged in
-    setupPushNotifications().catch((e) => console.error("[Push] login registration error:", e));
+    setupPushNotifications().catch((e) => devLog("[Push] login registration error:", e));
 
     if (isBarangayOfficial(role)) {
       navigation.reset({
@@ -578,7 +574,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     setVerifyEmail(emailNorm);
     setVerifyPassword(password);
     setVerifyOpen(true);
-    console.log(`${TAG} OTP modal opened`);
+    devLog(`${TAG} OTP modal opened`);
   };
 
   const maybeAskBiometricsOptIn = async (
@@ -679,7 +675,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
 
     try {
       setSendingOtp(true);
-      console.log(`${TAG} handleLoginPressed START`, { email: emailNorm });
+      devLog(`${TAG} handleLoginPressed START`, { email: maskEmail(emailNorm) });
 
       // ✅ STEP 1: validate credentials FIRST
       const checkData = await loginCheckRequest(emailNorm, passwordNorm);
@@ -695,7 +691,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         const bio = await runBiometricsGate();
 
         if (bio.ok) {
-          console.log(`${TAG} biometrics SUCCESS -> refresh token login`);
+          devLog(`${TAG} biometrics SUCCESS -> refresh token login`);
 
           try {
             const newAccess = await refreshAccessToken(storedRefresh);
@@ -703,16 +699,13 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
             await saveTokens({ accessToken: newAccess });
             await setLoggedIn(true);
 
-            console.log(`${TAG} refreshed access token saved -> route by role`);
+            devLog(`${TAG} refreshed access token saved -> route by role`);
             goAfterLoginByRole(roleFromBackend);
             return;
           } catch (e: any) {
             const status = e?.status;
 
-            console.log(`${TAG} refresh failed -> fallback to OTP`, {
-              status,
-              message: e?.message,
-            });
+            devLog(`${TAG} refresh failed -> fallback to OTP`, { status });
 
             if (status === 401) {
               await deleteRefreshTokenForEmail(emailNorm);
@@ -723,7 +716,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
             }
           }
         } else {
-          console.log(
+          devLog(
             `${TAG} biometrics not ok (${bio.reason}) -> send OTP fallback`
           );
         }
@@ -755,11 +748,11 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       await loginSendOtpRequest(emailNorm, passwordNorm);
       openOtpModal(emailNorm, passwordNorm);
     } catch (err: any) {
-      console.log(`${TAG} handleLoginPressed ERROR:`, err?.message || err);
+      devLog(`${TAG} handleLoginPressed ERROR:`, err?.message || err);
       setCredErrorVisible(true);
     } finally {
       setSendingOtp(false);
-      console.log(`${TAG} handleLoginPressed END`);
+      devLog(`${TAG} handleLoginPressed END`);
     }
   };
 
@@ -794,15 +787,15 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     }
 
     try {
-      console.log(`${TAG} resend START`, { verifyEmail });
+      devLog(`${TAG} resend START`);
       await loginSendOtpRequest(verifyEmail, verifyPassword);
 
       await markResendNow();
 
       Alert.alert("Resent", "Verification code resent to your email.");
-      console.log(`${TAG} resend END`);
+      devLog(`${TAG} resend END`);
     } catch (err: any) {
-      console.log(`${TAG} resend ERROR:`, err?.message || err);
+      devLog(`${TAG} resend ERROR:`, err?.message || err);
       setCredErrorVisible(true);
     }
   };

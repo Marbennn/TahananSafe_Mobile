@@ -27,6 +27,18 @@ export type IncidentPreviewData = {
   photoCount?: number;
   photos?: string[];
   mode?: "complain" | "emergency";
+
+  // AI analysis fields
+  aiResult?: {
+    confidence_score?: number;
+    incident_tip?: string;
+    submission_decision?: string; // "ALLOW" | "BLOCKED"
+    allow_submission?: boolean;
+    validation_reason?: string;
+    risk_level?: string;
+    risk_percentage?: number;
+    [key: string]: any;
+  } | null;
 };
 
 type Props = { data: IncidentPreviewData };

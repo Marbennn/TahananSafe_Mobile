@@ -1,14 +1,22 @@
 // src/auth/session.ts
+// ✅ SECURITY FIX: Tokens stored in SecureStore (encrypted) instead of AsyncStorage
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 
 const KEYS = {
   loggedIn: "@tahanansafe_logged_in",
-  accessToken: "@tahanansafe_access_token",
-  refreshToken: "@tahanansafe_refresh_token",
+  accessToken: "tahanansafe_access_token",   // SecureStore
+  refreshToken: "tahanansafe_refresh_token", // SecureStore
   hasPin: "@tahanansafe_has_pin",
   user: "@tahanansafe_user",
   onboardingSeen: "@tahanansafe_onboarding_seen",
   pinSkipped: "@tahanansafe_pin_skipped",
+} as const;
+
+// Legacy AsyncStorage keys for migration
+const LEGACY_KEYS = {
+  accessToken: "@tahanansafe_access_token",
+  refreshToken: "@tahanansafe_refresh_token",
 } as const;
 
 /**
@@ -77,12 +85,13 @@ export async function setLoggedIn(value: boolean) {
   } else {
     pinUnlockedThisRun = false;
 
-    await AsyncStorage.multiRemove([
-      KEYS.loggedIn,
-      KEYS.accessToken,
-      KEYS.refreshToken,
-      KEYS.hasPin,
-      KEYS.user,
+    await Promise.all([
+      AsyncStorage.multiRemove([KEYS.loggedIn, KEYS.hasPin, KEYS.user]),
+      SecureStore.deleteItemAsync(KEYS.accessToken).catch(() => {}),
+      SecureStore.deleteItemAsync(KEYS.refreshToken).catch(() => {}),
+      // Clean legacy keys
+      AsyncStorage.removeItem(LEGACY_KEYS.accessToken).catch(() => {}),
+      AsyncStorage.removeItem(LEGACY_KEYS.refreshToken).catch(() => {}),
     ]);
   }
 }
@@ -96,27 +105,58 @@ export async function saveTokens(params: {
   accessToken: string;
   refreshToken?: string;
 }) {
-  await AsyncStorage.setItem(KEYS.accessToken, params.accessToken);
+  // ✅ Tokens stored in SecureStore (encrypted)
+  await SecureStore.setItemAsync(KEYS.accessToken, params.accessToken);
 
   if (params.refreshToken) {
-    await AsyncStorage.setItem(KEYS.refreshToken, params.refreshToken);
+    await SecureStore.setItemAsync(KEYS.refreshToken, params.refreshToken);
   }
+
+  // Clean legacy plaintext copies
+  await AsyncStorage.multiRemove([LEGACY_KEYS.accessToken, LEGACY_KEYS.refreshToken]).catch(() => {});
 }
 
 export async function setAccessToken(accessToken: string) {
-  await AsyncStorage.setItem(KEYS.accessToken, accessToken);
+  await SecureStore.setItemAsync(KEYS.accessToken, accessToken);
+  await AsyncStorage.removeItem(LEGACY_KEYS.accessToken).catch(() => {});
 }
 
 export async function setRefreshToken(refreshToken: string) {
-  await AsyncStorage.setItem(KEYS.refreshToken, refreshToken);
+  await SecureStore.setItemAsync(KEYS.refreshToken, refreshToken);
+  await AsyncStorage.removeItem(LEGACY_KEYS.refreshToken).catch(() => {});
 }
 
 export async function getAccessToken(): Promise<string | null> {
-  return (await AsyncStorage.getItem(KEYS.accessToken)) ?? null;
+  try {
+    const token = await SecureStore.getItemAsync(KEYS.accessToken);
+    if (token) return token;
+  } catch {}
+
+  // One-time migration from legacy AsyncStorage
+  const legacy = await AsyncStorage.getItem(LEGACY_KEYS.accessToken);
+  if (legacy) {
+    await SecureStore.setItemAsync(KEYS.accessToken, legacy);
+    await AsyncStorage.removeItem(LEGACY_KEYS.accessToken);
+    return legacy;
+  }
+
+  return null;
 }
 
 export async function getRefreshToken(): Promise<string | null> {
-  return (await AsyncStorage.getItem(KEYS.refreshToken)) ?? null;
+  try {
+    const token = await SecureStore.getItemAsync(KEYS.refreshToken);
+    if (token) return token;
+  } catch {}
+
+  const legacy = await AsyncStorage.getItem(LEGACY_KEYS.refreshToken);
+  if (legacy) {
+    await SecureStore.setItemAsync(KEYS.refreshToken, legacy);
+    await AsyncStorage.removeItem(LEGACY_KEYS.refreshToken);
+    return legacy;
+  }
+
+  return null;
 }
 
 export async function setHasPin(value: boolean) {
@@ -131,11 +171,11 @@ export async function getHasPin(): Promise<boolean> {
 export async function clearSession() {
   pinUnlockedThisRun = false;
 
-  await AsyncStorage.multiRemove([
-    KEYS.loggedIn,
-    KEYS.accessToken,
-    KEYS.refreshToken,
-    KEYS.hasPin,
-    KEYS.user,
+  await Promise.all([
+    AsyncStorage.multiRemove([KEYS.loggedIn, KEYS.hasPin, KEYS.user]),
+    SecureStore.deleteItemAsync(KEYS.accessToken).catch(() => {}),
+    SecureStore.deleteItemAsync(KEYS.refreshToken).catch(() => {}),
+    AsyncStorage.removeItem(LEGACY_KEYS.accessToken).catch(() => {}),
+    AsyncStorage.removeItem(LEGACY_KEYS.refreshToken).catch(() => {}),
   ]);
 }

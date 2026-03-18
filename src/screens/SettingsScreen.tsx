@@ -126,13 +126,13 @@ async function setPinEnabledForEmail(email: string, enabled: boolean) {
 }
 
 /**
- * NOTE:
- * For security, it's better NOT to store the raw PIN on-device.
- * But keeping your current behavior since your UI uses it as "exists" check.
+ * ✅ SECURITY FIX: Store only a flag that PIN exists, NOT the raw PIN value.
+ * PIN verification happens server-side via /api/mobile/v1/verify-pin.
  */
-async function savePinForEmail(email: string, pin: string) {
+async function savePinForEmail(email: string, _pin: string) {
   try {
-    await SecureStore.setItemAsync(pinValueKeyForEmail(email), pin);
+    // Store "1" as a flag that PIN is set, never store the actual PIN value
+    await SecureStore.setItemAsync(pinValueKeyForEmail(email), "1");
   } catch {
     // ignore
   }

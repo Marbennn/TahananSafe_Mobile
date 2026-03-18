@@ -16,6 +16,10 @@ export type AiAnalyzeResponse = {
   confidence_score?: number;
   explanation?: string;
   summary?: string;
+  incident_tip?: string;
+  submission_decision?: string; // "ALLOW" | "BLOCKED"
+  allow_submission?: boolean;
+  validation_reason?: string;
   [key: string]: any;
 };
 
@@ -52,7 +56,7 @@ export async function analyzeIncident(incidentDescription: string) {
     incident_description: incidentDescription,
   };
 
-  const { controller, id } = withTimeout(20000);
+  const { controller, id } = withTimeout(60000);
 
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
