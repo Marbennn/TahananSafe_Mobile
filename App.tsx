@@ -1,7 +1,7 @@
 // App.tsx
 import "react-native-gesture-handler";
 import React, { useEffect, useState } from "react";
-import { Alert, StyleSheet } from "react-native";
+import { Alert, BackHandler, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { enableScreens } from "react-native-screens";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -26,7 +26,7 @@ import AuthFlowShell from "./src/screens/AuthFlowShell";
 import OnboardingPagerScreen from "./src/screens/OnboardingPagerScreen";
 import PinScreen, { resetPinAttempts } from "./src/screens/PinScreen";
 import CreatePinScreen from "./src/screens/CreatePinScreen";
-import InvalidPinModal from "./src/components/PinScreen/InvalidPinModal";
+
 
 import HomeScreen from "./src/screens/HomeScreen";
 import InboxScreen from "./src/screens/HotlinesScreen";
@@ -135,7 +135,6 @@ function getHomeRouteNameByRole(
   return isBarangayOfficial(role) ? "AdminHomeScreen" : "Main";
 }
 
-const PIN_ENTRY_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 /* ===================== ✅ LOCAL PIN ENABLE FLAG (DEVICE-LEVEL) ===================== */
 /** SecureStore keys must only contain: A-Z a-z 0-9 . - _ */
@@ -374,8 +373,14 @@ function MainScreenWrapper({ navigation, route }: { navigation: any; route: any 
     navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
   };
 
+  // Idle timeout → close app; on reopen the splash flow sees PIN not unlocked → PinScreen
+  const handleIdleLock = () => {
+    resetPinUnlockedThisRun();
+    BackHandler.exitApp();
+  };
+
   return (
-    <IdleTimerWrapper onTimeout={handleLogout}>
+    <IdleTimerWrapper onTimeout={handleIdleLock}>
       <MainShell
         onLogout={handleLogout}
         onOpenNotifications={() => navigation.navigate("Notifications")}
@@ -401,8 +406,14 @@ function AdminHomeWrapper({ navigation }: { navigation: any }) {
     navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
   };
 
+  // Idle timeout → close app; on reopen the splash flow sees PIN not unlocked → PinScreen
+  const handleIdleLock = () => {
+    resetPinUnlockedThisRun();
+    BackHandler.exitApp();
+  };
+
   return (
-    <IdleTimerWrapper onTimeout={handleLogout}>
+    <IdleTimerWrapper onTimeout={handleIdleLock}>
       <AdminShell
         onOpenNotifications={() => navigation.navigate("Notifications")}
         onLogout={handleLogout}
@@ -428,146 +439,89 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
   const targetHome = getHomeRouteNameByRole(auth?.user?.role);
   const [pinErrVisible, setPinErrVisible] = React.useState(false);
   const [pinErrMsg, setPinErrMsg] = React.useState("");
-  const [pinTimeoutVisible, setPinTimeoutVisible] = React.useState(false);
-  const pinTimeoutTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pinTimeoutHandledRef = React.useRef(false);
+  const failCountRef = React.useRef(0);
 
-  const clearPinTimeoutTimer = React.useCallback(() => {
-    if (pinTimeoutTimerRef.current) {
-      clearTimeout(pinTimeoutTimerRef.current);
-      pinTimeoutTimerRef.current = null;
-    }
-  }, []);
+  const MAX_PIN_ATTEMPTS = 3;
 
-  const stopPinTimeout = React.useCallback(() => {
-    pinTimeoutHandledRef.current = true;
-    clearPinTimeoutTimer();
-  }, [clearPinTimeoutTimer]);
-
-  const handlePinTimeout = React.useCallback(async () => {
-    if (pinTimeoutHandledRef.current) return;
-    pinTimeoutHandledRef.current = true;
-    clearPinTimeoutTimer();
-    setPinErrVisible(false);
-    setPinErrMsg("");
-
+  const forceLogout = React.useCallback(async () => {
     resetPinUnlockedThisRun();
-    try {
-      await auth.logout();
-    } catch {
-      // ignore
-    }
+    try { await auth.logout(); } catch {}
     await setLoggedIn(false);
     await setHasPin(false);
-    setPinTimeoutVisible(true);
-  }, [auth, clearPinTimeoutTimer]);
-
-  const resetPinTimeout = React.useCallback(() => {
-    if (pinTimeoutHandledRef.current) return;
-    clearPinTimeoutTimer();
-    pinTimeoutTimerRef.current = setTimeout(() => {
-      void handlePinTimeout();
-    }, PIN_ENTRY_IDLE_TIMEOUT_MS);
-  }, [clearPinTimeoutTimer, handlePinTimeout]);
-
-  React.useEffect(() => {
-    pinTimeoutHandledRef.current = false;
-    resetPinTimeout();
-
-    return () => {
-      stopPinTimeout();
-    };
-  }, [resetPinTimeout, stopPinTimeout]);
+    Alert.alert(
+      "Logged Out",
+      "Too many incorrect PIN attempts. Please log in again.",
+      [{ text: "OK", onPress: () => navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] }) }],
+    );
+  }, [auth, navigation]);
 
   const handleBack = async () => {
-    stopPinTimeout();
     resetPinUnlockedThisRun();
-
-    try {
-      await auth.logout();
-    } catch {
-      // ignore
-    }
-
+    try { await auth.logout(); } catch {}
     await setLoggedIn(false);
     await setHasPin(false);
-
     navigation.reset({ index: 0, routes: [{ name: "Login" }] });
   };
 
   return (
-    <>
-      <PinScreen
-        onBack={handleBack}
-        onUserActivity={resetPinTimeout}
-        onForgotPin={() => {
-          Alert.alert("Forgot PIN", "Recovery coming soon.");
-        }}
-        onBypass={() => {
-          stopPinTimeout();
+    <PinScreen
+      onBack={handleBack}
+      onForgotPin={() => {
+        Alert.alert("Forgot PIN", "Recovery coming soon.");
+      }}
+      onBypass={() => {
+        setPinUnlockedThisRun(true);
+        navigation.reset({ index: 0, routes: [{ name: targetHome }] });
+      }}
+      invalidPinVisible={pinErrVisible}
+      invalidPinMsg={pinErrMsg}
+      onInvalidPinDismiss={() => setPinErrVisible(false)}
+      onVerified={async (pin) => {
+        try {
+          let token = await getAccessToken();
+
+          // If access token expired, try refreshing before giving up
+          if (!token) {
+            try {
+              const rt = await getRefreshToken();
+              if (rt) {
+                const refreshed = await refreshAccessTokenApi(rt);
+                token = refreshed.accessToken;
+              }
+            } catch {}
+          }
+
+          if (!token) {
+            await setLoggedIn(false);
+            resetPinUnlockedThisRun();
+            try { await auth.logout(); } catch {}
+            navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
+            return;
+          }
+
+          await verifyPinApi({ accessToken: token, pin });
+
+          // Reset brute-force counter only after successful verification
+          failCountRef.current = 0;
+          const email = (auth?.user?.email || "").trim().toLowerCase();
+          if (email) await resetPinAttempts(email);
+
           setPinUnlockedThisRun(true);
           navigation.reset({ index: 0, routes: [{ name: targetHome }] });
-        }}
-        invalidPinVisible={pinErrVisible}
-        invalidPinMsg={pinErrMsg}
-        onInvalidPinDismiss={() => setPinErrVisible(false)}
-        onVerified={async (pin) => {
-          clearPinTimeoutTimer();
+        } catch (e: any) {
+          failCountRef.current += 1;
 
-          try {
-            let token = await getAccessToken();
-
-            // ✅ If access token expired, try refreshing before giving up
-            if (!token) {
-              try {
-                const rt = await getRefreshToken();
-                if (rt) {
-                  const refreshed = await refreshAccessTokenApi(rt);
-                  token = refreshed.accessToken;
-                }
-              } catch {}
-            }
-
-            if (!token) {
-              stopPinTimeout();
-              await setLoggedIn(false);
-              resetPinUnlockedThisRun();
-              try {
-                await auth.logout();
-              } catch {}
-              navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
-              return;
-            }
-
-            await verifyPinApi({ accessToken: token, pin });
-
-            // ✅ SECURITY: Reset brute-force counter only after successful verification
-            const email = (auth?.user?.email || "").trim().toLowerCase();
-            if (email) await resetPinAttempts(email);
-
-            stopPinTimeout();
-            setPinUnlockedThisRun(true);
-            navigation.reset({ index: 0, routes: [{ name: targetHome }] });
-          } catch (e: any) {
-            if (pinTimeoutHandledRef.current) return;
-            setPinErrMsg(e?.message || "The PIN you entered is incorrect. Please try again.");
-            setPinErrVisible(true);
-            resetPinTimeout();
+          if (failCountRef.current >= MAX_PIN_ATTEMPTS) {
+            forceLogout();
+            return;
           }
-        }}
-      />
 
-      <InvalidPinModal
-        visible={pinTimeoutVisible}
-        title="Logged Out"
-        message="You were logged out for not entering your PIN for too long."
-        buttonText="OK"
-        onClose={() => {
-          setPinTimeoutVisible(false);
-          navigation.reset({ index: 0, routes: [{ name: "Login" }] });
-        }}
-      />
-    </>
+          const remaining = MAX_PIN_ATTEMPTS - failCountRef.current;
+          setPinErrMsg(`Incorrect PIN. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`);
+          setPinErrVisible(true);
+        }
+      }}
+    />
   );
 }
 
