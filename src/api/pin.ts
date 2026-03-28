@@ -24,51 +24,42 @@ type GetMeResponse = {
 
 /**
  * ✅ PUT /set-pin
- * Same signature as before: { accessToken, pin }
- * Now auto-refreshes token on 401.
- * If an explicit accessToken is passed (e.g. right after login), it's used directly.
- * Otherwise requestJson reads from AsyncStorage automatically.
+ * auth: true — lets the HTTP interceptor auto-attach the stored token
+ * and auto-refresh on 401.
  */
-export async function setPinApi(params: { accessToken: string; pin: string }): Promise<SetPinResponse> {
+export async function setPinApi(params: { pin: string }): Promise<SetPinResponse> {
   return requestJson<SetPinResponse>({
     method: "PUT",
     path: "/api/mobile/v1/set-pin",
     body: { pin: params.pin },
     auth: true,
-    // Use the explicit token if provided (keeps backward compatibility)
-    headers: params.accessToken
-      ? { Authorization: `Bearer ${params.accessToken}` }
-      : undefined,
   });
 }
 
 /**
  * ✅ POST /verify-pin
- * Same signature as before: { accessToken, pin }
- * NOTE: auth is false — a 401 here means "wrong PIN", NOT "expired token".
- * We don't want the HTTP layer to call clearSession() on wrong PIN attempts.
+ * auth: true — lets the HTTP interceptor auto-refresh an expired access token
+ * before retrying. A wrong PIN still returns 401 on the retry, which is then
+ * thrown as an ApiError for the caller to handle.
  */
-export async function verifyPinApi(params: { accessToken: string; pin: string }): Promise<VerifyPinResponse> {
+export async function verifyPinApi(params: { pin: string }): Promise<VerifyPinResponse> {
   return requestJson<VerifyPinResponse>({
     method: "POST",
     path: "/api/mobile/v1/verify-pin",
     body: { pin: params.pin },
-    auth: false,
-    headers: { Authorization: `Bearer ${params.accessToken}` },
+    auth: true,
   });
 }
 
 /**
  * ✅ GET /me
- * Same signature as before: { accessToken }
+ * auth: true — lets the HTTP interceptor auto-attach the stored token
+ * and auto-refresh on 401.
  */
-export async function getMeApi(params: { accessToken: string }): Promise<GetMeResponse> {
+export async function getMeApi(): Promise<GetMeResponse> {
   return requestJson<GetMeResponse>({
     method: "GET",
     path: "/api/mobile/v1/me",
     auth: true,
-    headers: params.accessToken
-      ? { Authorization: `Bearer ${params.accessToken}` }
-      : undefined,
   });
 }

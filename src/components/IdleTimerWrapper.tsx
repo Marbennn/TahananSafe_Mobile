@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useCallback } from "react";
 import { AppState, AppStateStatus, View } from "react-native";
 
-const IDLE_MS = 1 * 60 * 1000; // 15 minutes
+const IDLE_MS = 10 * 60 * 1000; // 15 minutes
 
 interface Props {
-  onTimeout: () => void;
+  onTimeout: () => void | Promise<void>;
   children: React.ReactNode;
 }
 
@@ -18,8 +18,20 @@ interface Props {
 export default function IdleTimerWrapper({ onTimeout, children }: Props) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backgroundAtRef = useRef<number | null>(null);
+  const timeoutInFlightRef = useRef(false);
   const onTimeoutRef = useRef(onTimeout);
   onTimeoutRef.current = onTimeout;
+
+  const triggerTimeout = useCallback(() => {
+    if (timeoutInFlightRef.current) return;
+    timeoutInFlightRef.current = true;
+
+    Promise.resolve()
+      .then(() => onTimeoutRef.current())
+      .finally(() => {
+        timeoutInFlightRef.current = false;
+      });
+  }, []);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -31,9 +43,9 @@ export default function IdleTimerWrapper({ onTimeout, children }: Props) {
   const resetTimer = useCallback(() => {
     clearTimer();
     timerRef.current = setTimeout(() => {
-      onTimeoutRef.current();
+      triggerTimeout();
     }, IDLE_MS);
-  }, [clearTimer]);
+  }, [clearTimer, triggerTimeout]);
 
   useEffect(() => {
     resetTimer();
@@ -48,7 +60,7 @@ export default function IdleTimerWrapper({ onTimeout, children }: Props) {
           if (elapsed >= IDLE_MS) {
             // Backgrounded for 15+ minutes → lock immediately
             clearTimer();
-            onTimeoutRef.current();
+            triggerTimeout();
             return;
           }
         }
@@ -65,7 +77,7 @@ export default function IdleTimerWrapper({ onTimeout, children }: Props) {
       clearTimer();
       sub.remove();
     };
-  }, [resetTimer, clearTimer]);
+  }, [resetTimer, clearTimer, triggerTimeout]);
 
   return (
     <View

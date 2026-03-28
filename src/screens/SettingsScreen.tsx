@@ -326,7 +326,7 @@ export default function SettingsScreen({
       try {
         const token = await getAccessToken();
         if (token) {
-          const me = await getMeApi({ accessToken: token });
+          const me = await getMeApi();
           if (me?.user?.hasPin) {
             await setPinEnabledForEmail(userEmail, true);
             setPinEnabled(true);
@@ -383,11 +383,11 @@ export default function SettingsScreen({
       const accessToken = await getAccessToken();
       if (!accessToken) throw new Error("Session missing. Please login again.");
 
-      await setPinApi({ accessToken, pin: pinDraft.trim() });
+      await setPinApi({ pin: pinDraft.trim() });
       await setHasPin(true);
 
       try {
-        const me = await getMeApi({ accessToken });
+        const me = await getMeApi();
         const userId = String(me.user._id);
         await setPinSkippedForUser(userId, false);
       } catch {

@@ -276,7 +276,7 @@ export default function HomeScreen({
     lastMeSyncAtRef.current = nowMs;
 
     try {
-      const me = await getMeApi({ accessToken: t });
+      const me = await getMeApi();
       const apiUser: any = me?.user ?? me;
 
       const nextFirst = (typeof apiUser?.firstName === "string" && apiUser.firstName.trim()) || "";

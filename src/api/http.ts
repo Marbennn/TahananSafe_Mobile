@@ -5,7 +5,6 @@ import {
   getAccessToken,
   getRefreshToken,
   saveTokens,
-  clearSession,
 } from "../auth/session";
 
 export type ApiErrorPayload = {
@@ -127,8 +126,11 @@ export async function requestJson<T>(opts: RequestOptions): Promise<T> {
       ...headers,
     };
 
-    if (auth && !h["Authorization"]) {
-      const token = tokenOverride || (await getAccessToken());
+    if (auth && tokenOverride) {
+      // On retry after token refresh, always use the fresh token
+      h["Authorization"] = `Bearer ${tokenOverride}`;
+    } else if (auth && !h["Authorization"]) {
+      const token = await getAccessToken();
       if (token) {
         h["Authorization"] = `Bearer ${token}`;
       }
@@ -157,8 +159,7 @@ export async function requestJson<T>(opts: RequestOptions): Promise<T> {
       // Retry the original request with the fresh token
       res = await doFetch(newToken);
     } else {
-      // Refresh also failed → session is truly expired
-      await clearSession();
+      // Refresh failed — don't clear session so PinScreen can still show
       const { message, payload } = await readErrorMessage(res);
       throw new ApiError(
         message || "Session expired. Please log in again.",

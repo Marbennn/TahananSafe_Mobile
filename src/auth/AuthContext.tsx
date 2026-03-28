@@ -147,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!token) return;
 
     try {
-      const me = await getMeApi({ accessToken: token });
+      const me = await getMeApi();
       const normalized = normalizeUser(me);
       if (normalized) {
         setUser(normalized);
@@ -173,7 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const currentRefreshToken = refreshToken || (await getRefreshToken());
 
     if (!currentRefreshToken) {
-      await logout();
+      // Don't logout — preserve session so PinScreen can still show
       return null;
     }
 
@@ -199,7 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         try {
-          const me = await getMeApi({ accessToken: nextAccessToken });
+          const me = await getMeApi();
           const normalized = normalizeUser(me);
           if (normalized) setUser(normalized);
         } catch {
@@ -209,7 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return nextAccessToken;
     } catch {
-      await logout();
+      // Don't logout here — preserve session so PinScreen can still show
       return null;
     }
   };
@@ -253,7 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const validToken = await ensureValidAccessToken();
           if (validToken) {
             try {
-              const me = await getMeApi({ accessToken: validToken });
+              const me = await getMeApi();
               const normalized = normalizeUser(me);
               if (normalized && mounted) setUser(normalized);
             } catch {
@@ -318,7 +318,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(normalized);
     } else {
       try {
-        const me = await getMeApi({ accessToken: payload.accessToken });
+        const me = await getMeApi();
         const normalizedMe = normalizeUser(me);
         if (normalizedMe) setUser(normalizedMe);
       } catch {

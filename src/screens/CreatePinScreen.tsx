@@ -89,13 +89,13 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
       console.log(`${TAG} accessToken exists?`, Boolean(accessToken));
       if (!accessToken) throw new Error("Session missing. Please login again.");
 
-      await setPinApi({ accessToken, pin: String(pin) });
+      await setPinApi({ pin: String(pin) });
       console.log(`${TAG} setPinApi success`);
 
       await setHasPin(true);
 
       try {
-        const me = await getMeApi({ accessToken });
+        const me = await getMeApi();
         const userId = String(me.user._id);
         await setPinSkippedForUser(userId, false);
       } catch {
@@ -126,7 +126,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
 
       await setHasPin(false);
 
-      const me = await getMeApi({ accessToken });
+      const me = await getMeApi();
       const userId = String(me.user._id);
       await setPinSkippedForUser(userId, true);
 

@@ -229,7 +229,7 @@ export default function EnterVerificationModal({
 
       // 4) ask /me if user has pin -> store hasPin
       try {
-        const me = await getMeApi({ accessToken: data.accessToken });
+        const me = await getMeApi();
         await setHasPin(!!me.user.hasPin);
         // hasPin set
       } catch (err: any) {

@@ -47,8 +47,8 @@ import {
   isLoggedIn,
   setLoggedIn,
   getAccessToken,
-  getRefreshToken,
   setHasPin,
+  getHasPin,
   isPinUnlockedThisRun,
   setPinUnlockedThisRun,
   resetPinUnlockedThisRun,
@@ -58,7 +58,6 @@ import {
 
 // APIs for PIN & profile
 import { getMeApi, verifyPinApi } from "./src/api/pin";
-import { refreshAccessTokenApi } from "./src/api/auth";
 
 // Push notifications
 import * as Notifications from "expo-notifications";
@@ -116,6 +115,54 @@ function formatDateLine(createdAt?: string) {
     return d.toLocaleString();
   } catch {
     return new Date().toLocaleString();
+  }
+}
+
+const SESSION_EXPIRED_TITLE = "Session Expired";
+const SESSION_EXPIRED_MESSAGE = "Your session expired. Please log in again.";
+
+function getErrorMessage(error: any): string {
+  return String(error?.message || error?.payload?.message || "");
+}
+
+function isInvalidPinError(error: any): boolean {
+  return getErrorMessage(error).toLowerCase().includes("invalid pin");
+}
+
+function isSessionAuthError(error: any): boolean {
+  if (isInvalidPinError(error)) return false;
+
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    error?.status === 401 ||
+    message.includes("session expired") ||
+    message.includes("invalid or expired access token") ||
+    message.includes("invalid refresh token") ||
+    message.includes("expired refresh token") ||
+    message.includes("access token required")
+  );
+}
+
+async function clearInvalidSession(auth: any) {
+  resetPinUnlockedThisRun();
+  try {
+    await auth?.logout?.();
+  } catch {}
+  await setLoggedIn(false).catch(() => {});
+  await setHasPin(false).catch(() => {});
+  try {
+    auth?.setUser?.(null);
+  } catch {}
+}
+
+async function refreshSessionBeforeIdleExit(auth: any) {
+  try {
+    await Promise.race([
+      Promise.resolve(auth?.ensureValidAccessToken?.()),
+      new Promise((resolve) => setTimeout(resolve, 4000, null)),
+    ]);
+  } catch {
+    // Ignore refresh failures here; PIN flow on reopen will handle them.
   }
 }
 
@@ -311,7 +358,7 @@ async function bootstrapAfterLogin({
   try {
     const token = await getAccessToken();
     if (token) {
-      const me = await getMeApi({ accessToken: token });
+      const me = await getMeApi();
 
       try {
         auth?.setUser?.(me.user);
@@ -361,20 +408,21 @@ async function bootstrapAfterLogin({
 /* ===================== MAIN SCREEN WRAPPER ===================== */
 
 function MainScreenWrapper({ navigation, route }: { navigation: any; route: any }) {
-  const { logout: authLogout } = useAuth() as any;
+  const auth = useAuth() as any;
 
   const incomingReport: ReportItem | null = route?.params?.openReport ?? null;
 
   const handleLogout = async () => {
     resetPinUnlockedThisRun();
-    try { await authLogout(); } catch { /* ignore */ }
+    try { await auth.logout(); } catch { /* ignore */ }
     await setLoggedIn(false);
     await setHasPin(false);
     navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
   };
 
   // Idle timeout → close app; on reopen the splash flow sees PIN not unlocked → PinScreen
-  const handleIdleLock = () => {
+  const handleIdleLock = async () => {
+    await refreshSessionBeforeIdleExit(auth);
     resetPinUnlockedThisRun();
     BackHandler.exitApp();
   };
@@ -396,18 +444,19 @@ function MainScreenWrapper({ navigation, route }: { navigation: any; route: any 
 /* ===================== ADMIN HOME WRAPPER ===================== */
 
 function AdminHomeWrapper({ navigation }: { navigation: any }) {
-  const { logout: authLogout } = useAuth() as any;
+  const auth = useAuth() as any;
 
   const handleLogout = async () => {
     resetPinUnlockedThisRun();
-    try { await authLogout(); } catch { /* ignore */ }
+    try { await auth.logout(); } catch { /* ignore */ }
     await setLoggedIn(false);
     await setHasPin(false);
     navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
   };
 
   // Idle timeout → close app; on reopen the splash flow sees PIN not unlocked → PinScreen
-  const handleIdleLock = () => {
+  const handleIdleLock = async () => {
+    await refreshSessionBeforeIdleExit(auth);
     resetPinUnlockedThisRun();
     BackHandler.exitApp();
   };
@@ -442,6 +491,25 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
   const failCountRef = React.useRef(0);
 
   const MAX_PIN_ATTEMPTS = 3;
+
+  const redirectToAuthFlow = React.useCallback(
+    async (message?: string) => {
+      await clearInvalidSession(auth);
+
+      if (message) {
+        Alert.alert(SESSION_EXPIRED_TITLE, message, [
+          {
+            text: "OK",
+            onPress: () => navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] }),
+          },
+        ]);
+        return;
+      }
+
+      navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
+    },
+    [auth, navigation]
+  );
 
   const forceLogout = React.useCallback(async () => {
     resetPinUnlockedThisRun();
@@ -478,28 +546,9 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
       onInvalidPinDismiss={() => setPinErrVisible(false)}
       onVerified={async (pin) => {
         try {
-          let token = await getAccessToken();
-
-          // If access token expired, try refreshing before giving up
-          if (!token) {
-            try {
-              const rt = await getRefreshToken();
-              if (rt) {
-                const refreshed = await refreshAccessTokenApi(rt);
-                token = refreshed.accessToken;
-              }
-            } catch {}
-          }
-
-          if (!token) {
-            await setLoggedIn(false);
-            resetPinUnlockedThisRun();
-            try { await auth.logout(); } catch {}
-            navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
-            return;
-          }
-
-          await verifyPinApi({ accessToken: token, pin });
+          // verifyPinApi uses auth:true — the HTTP interceptor attaches
+          // the stored token and auto-refreshes on 401, so no pre-check needed.
+          await verifyPinApi({ pin });
 
           // Reset brute-force counter only after successful verification
           failCountRef.current = 0;
@@ -509,15 +558,27 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
           setPinUnlockedThisRun(true);
           navigation.reset({ index: 0, routes: [{ name: targetHome }] });
         } catch (e: any) {
-          failCountRef.current += 1;
-
-          if (failCountRef.current >= MAX_PIN_ATTEMPTS) {
-            forceLogout();
+          if (isSessionAuthError(e)) {
+            await redirectToAuthFlow(SESSION_EXPIRED_MESSAGE);
             return;
           }
 
-          const remaining = MAX_PIN_ATTEMPTS - failCountRef.current;
-          setPinErrMsg(`Incorrect PIN. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`);
+          const errMsg = String(e?.message || e?.payload?.message || "").toLowerCase();
+          const isPinError = isInvalidPinError(e) || errMsg.includes("invalid pin");
+
+          if (isPinError) {
+            // Actual wrong PIN — count attempt
+            failCountRef.current += 1;
+            if (failCountRef.current >= MAX_PIN_ATTEMPTS) {
+              forceLogout();
+              return;
+            }
+            const remaining = MAX_PIN_ATTEMPTS - failCountRef.current;
+            setPinErrMsg(`Incorrect PIN. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`);
+          } else {
+            // Token/network error — show actual error for debugging
+            setPinErrMsg(getErrorMessage(e) || "Connection error. Please try again.");
+          }
           setPinErrVisible(true);
         }
       }}
@@ -616,18 +677,23 @@ function AppSplashScreenWrapper({
           return;
         }
 
-        const token = await getAccessToken();
+        const token = await auth.ensureValidAccessToken();
         if (!token) {
-          try {
-            auth?.setUser?.(null);
-          } catch {}
+          // If user was previously logged in with a PIN, go to PinScreen
+          // instead of wiping session — PinScreenWrapper handles re-auth
+          const hadPin = await getHasPin();
+          if (logged && hadPin && !isPinUnlockedThisRun()) {
+            onGoPin();
+            return;
+          }
 
+          await clearInvalidSession(auth);
           if (!seenOnboarding) onGoOnboarding();
           else onGoAuthFlow();
           return;
         }
 
-        const me = await getMeApi({ accessToken: token });
+        const me = await getMeApi();
 
         try {
           auth?.setUser?.(me.user);
@@ -669,10 +735,36 @@ function AppSplashScreenWrapper({
         }
 
         onGoCreatePin();
-      } catch {
+      } catch (error) {
         if (!mounted) return;
 
         try {
+          if (isSessionAuthError(error)) {
+            // If user had a PIN, show PinScreen instead of wiping session
+            const wasLoggedInAuth = await isLoggedIn();
+            const hadPinAuth = await getHasPin();
+            if (wasLoggedInAuth && hadPinAuth && !isPinUnlockedThisRun()) {
+              onGoPin();
+              return;
+            }
+
+            await clearInvalidSession(auth);
+            const seenOnboarding = await isOnboardingSeen();
+            if (!seenOnboarding) onGoOnboarding();
+            else onGoAuthFlow();
+            return;
+          }
+
+          // If user was previously logged in with a PIN, go to PinScreen
+          // instead of auth flow — PinScreenWrapper will handle token refresh
+          const wasLoggedIn = await isLoggedIn();
+          const hadPin = await getHasPin();
+
+          if (wasLoggedIn && hadPin && !isPinUnlockedThisRun()) {
+            onGoPin();
+            return;
+          }
+
           try {
             auth?.setUser?.(null);
           } catch {}
