@@ -188,13 +188,10 @@ export default function SettingsScreen({
 
   // ✅ MATCH Hotlines/Reports sizing
   const NAV_BASE_HEIGHT = 78;
-  const FAB_SIZE = 62;
-
   const bottomPad = Math.max(insets.bottom, 10);
   const navHeight = NAV_BASE_HEIGHT + bottomPad;
 
   const chevronBottom = navHeight + 90;
-  const fabBottom = navHeight - FAB_SIZE / 2 - 10;
 
   // ✅ More scrollable (extra breathing room at bottom)
   const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + vscale(40);
@@ -1207,11 +1204,11 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: BG },
     page: { flex: 1, backgroundColor: BG },
-
     headerWrap: {
       paddingHorizontal: scale(16),
       paddingTop: vscale(6),
       paddingBottom: vscale(8),
+      zIndex: 30,
     },
     headerTopRow: {
       flexDirection: "row",
@@ -1219,7 +1216,6 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       justifyContent: "space-between",
       gap: scale(12),
     },
-
     // ✅ CHANGED: from scale(30) -> scale(28) to match Hotlines + Reports
     title: { fontSize: scale(28), fontWeight: "900" },
 

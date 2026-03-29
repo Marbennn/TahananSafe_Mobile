@@ -1,4 +1,4 @@
-// src/screens/HomeScreen.tsx
+﻿// src/screens/HomeScreen.tsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   View,
@@ -11,8 +11,6 @@ import {
   ActivityIndicator,
   Platform,
   Animated,
-  PanResponder,
-  Modal,
   AppState,
   AppStateStatus,
   DeviceEventEmitter,
@@ -26,7 +24,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// ✅ NEW: refresh when Home regains focus
+// âœ… NEW: refresh when Home regains focus
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 
 import { Colors, useColors } from "../theme/colors";
@@ -37,36 +35,36 @@ import RecentLogCard, { LogItem } from "../components/HomeScreen/RecentLogCard";
 
 import HomeScreenLogo from "../../assets/HomeScreen/NewLogo.svg";
 
-// ✅ Tutorial overlay
+// âœ… Tutorial overlay
 import FabTutorialOverlay from "../components/Tutorial/FabTutorialOverlay";
 import ReportTutorialModal from "../components/Tutorial/ReportTutorialModal";
 
-// ✅ Auth context
+// âœ… Auth context
 import { useAuth } from "../auth/AuthContext";
 
-// ✅ session token fallback
+// âœ… session token fallback
 import { getAccessToken } from "../auth/session";
 
-// ✅ /me API
+// âœ… /me API
 import { getMeApi } from "../api/pin";
 
-// ✅ Use ReportItem type
+// âœ… Use ReportItem type
 import type { ReportItem } from "./ReportScreen";
 
-// ✅ HIDE APP helper
+// âœ… HIDE APP helper
 import { closeAndRemoveFromRecents } from "../utils/hideApp";
 
-// ✅ NEW: Use same API as NotificationsScreen (source of truth)
+// âœ… NEW: Use same API as NotificationsScreen (source of truth)
 import {
   fetchMyNotificationsCombined,
   sendSosAlert,
   syncLocalReportStatusNotifications,
 } from "../api/notifications";
 
-// ✅ FIX: Use requestJson with auth for auto token refresh
+// âœ… FIX: Use requestJson with auth for auto token refresh
 import { requestJson } from "../api/http";
 
-// ✅ Location for SOS
+// âœ… Location for SOS
 import * as Location from "expo-location";
 
 type Props = {
@@ -82,20 +80,20 @@ type Props = {
 const BG = "#F5FAFE";
 const TEXT_DARK = "#0B2B45";
 
-// ✅ once-only tutorial key
+// âœ… once-only tutorial key
 const FAB_TUTORIAL_SEEN_KEY = "tahanansafe_fab_tutorial_seen_v1";
 
-// ✅ local "seen notifications" marker (kept, not removed)
+// âœ… local "seen notifications" marker (kept, not removed)
 const NOTIF_LAST_SEEN_KEY = "tahanansafe_notif_last_seen_v1";
 
-// ✅ ADDED: must match NotificationsScreen.tsx emit name
+// âœ… ADDED: must match NotificationsScreen.tsx emit name
 const NOTIF_CHANGED_EVENT = "tahanan:notifChanged";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-// ✅ more stable scale for small phones
+// âœ… more stable scale for small phones
 function makeScale(width: number, height: number) {
   const baseW = 375;
   const baseH = 812;
@@ -221,12 +219,12 @@ export default function HomeScreen({
 
   const { s, fs } = useMemo(() => makeScale(width, height), [width, height]);
 
-  // ✅ AuthContext
+  // âœ… AuthContext
   const { user, setUser, accessToken, refreshMe, logout } = useAuth() as any;
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // ✅ Tutorial
+  // âœ… Tutorial
   const [showFabTutorial, setShowFabTutorial] = useState(false);
   const [showReportTutorial, setShowReportTutorial] = useState(false);
   const tutorialBootRef = useRef(false);
@@ -251,7 +249,7 @@ export default function HomeScreen({
   }, [showFabTutorialOnce]);
 
   // =========================
-  // ✅ FIXED: /me spam loop guard
+  // âœ… FIXED: /me spam loop guard
   // =========================
   const userRef = useRef<any>(null);
   useEffect(() => {
@@ -296,7 +294,7 @@ export default function HomeScreen({
       const missingNameInContext = !curFirst;
       const haveNameFromApi = !!nextFirst;
 
-      // ✅ Only setUser if needed (prevents render loop)
+      // âœ… Only setUser if needed (prevents render loop)
       if (accountChanged || (missingNameInContext && haveNameFromApi)) {
         const nextUser = {
           _id: nextId,
@@ -320,13 +318,13 @@ export default function HomeScreen({
     }
   }, [accessToken, setUser]);
 
-  // ✅ Run sync when token changes / first mount only
+  // âœ… Run sync when token changes / first mount only
   useEffect(() => {
     syncProfile();
     refreshMe?.().catch?.(() => {});
   }, [syncProfile, refreshMe, accessToken]);
 
-  // ✅ LIVE CLOCK
+  // âœ… LIVE CLOCK
   const [now, setNow] = useState<Date>(() => new Date());
   useEffect(() => {
     setNow(new Date());
@@ -357,16 +355,16 @@ export default function HomeScreen({
     return navHeight + fabOverlapPad + 16;
   }, [navHeight]);
 
-  const handleTab = (key: TabKey) => {
-    setActiveTab(key);
-    onTabChange?.(key);
-  };
-
-  const pressFab = () => handleTab("Incident");
-  const longPressFab = () => onQuickExit?.();
+  const navigateToTab = useCallback(
+    (key: TabKey) => {
+      setActiveTab(key);
+      onTabChange?.(key);
+    },
+    [onTabChange]
+  );
 
   // =========================
-  // ✅ Emergency Call Buttons (911 / 117)
+  // âœ… Emergency Call Buttons (911 / 117)
   // =========================
   const callEmergency = useCallback(async (num: "911" | "117") => {
     try {
@@ -382,7 +380,7 @@ export default function HomeScreen({
     }
   }, []);
 
-  // ✅ Emergency button animations (press bounce)
+  // âœ… Emergency button animations (press bounce)
   const em911Scale = useRef(new Animated.Value(1)).current;
   const em117Scale = useRef(new Animated.Value(1)).current;
 
@@ -407,7 +405,7 @@ export default function HomeScreen({
   }, []);
 
   // =========================
-  // ✅ Notifications badge logic (UPDATED to auto-refresh)
+  // âœ… Notifications badge logic (UPDATED to auto-refresh)
   // =========================
   const [notifCount, setNotifCount] = useState<number>(0);
   const notifFetchInFlightRef = useRef(false);
@@ -524,13 +522,13 @@ export default function HomeScreen({
     }
   }, [onOpenNotifications]);
 
-  // ✅ Recent reports
+  // âœ… Recent reports
   const [recentReports, setRecentReports] = useState<ReportItem[]>([]);
   const [loadingReports, setLoadingReports] = useState(false);
   const reportsFetchInFlightRef = useRef(false);
   const lastReportsFetchAtRef = useRef(0);
 
-  // ✅ FIX: Use requestJson with auth:true for auto token refresh
+  // âœ… FIX: Use requestJson with auth:true for auto token refresh
   const fetchRecentReports = useCallback(async (opts?: { force?: boolean }) => {
     const force = !!opts?.force;
     const now = Date.now();
@@ -542,7 +540,7 @@ export default function HomeScreen({
     try {
       setLoadingReports(true);
 
-      // ✅ FIX: This auto-attaches the access token AND auto-refreshes on 401
+      // âœ… FIX: This auto-attaches the access token AND auto-refreshes on 401
       const json: any = await requestJson({
         method: "GET",
         path: "/api/mobile/v1/reports/my",
@@ -572,11 +570,11 @@ export default function HomeScreen({
 
         const dateObj = parseDateSmart(dateStr) ?? parseDateSmart(createdAtIso) ?? null;
 
-        const leftDate = dateObj ? formatFullDate(dateObj) : dateStr || "—";
-        const leftTime = timeStr || "—";
+        const leftDate = dateObj ? formatFullDate(dateObj) : dateStr || "â€”";
+        const leftTime = timeStr || "â€”";
 
         const rightObj = parseDateSmart(updatedAtIso) ?? parseDateSmart(createdAtIso) ?? dateObj;
-        const rightDate = rightObj ? formatFullDate(rightObj) : "—";
+        const rightDate = rightObj ? formatFullDate(rightObj) : "â€”";
         const rightTime =
           rightObj && !Number.isNaN(rightObj.getTime())
             ? `${(() => {
@@ -586,14 +584,14 @@ export default function HomeScreen({
                 const hh = h % 12 === 0 ? 12 : h % 12;
                 return `${hh}:${pad2(m)} ${ampm}`;
               })()}`
-            : "—";
+            : "â€”";
 
         const detailLine =
-          leftDate && leftTime && leftDate !== "—" && leftTime !== "—"
+          leftDate && leftTime && leftDate !== "â€”" && leftTime !== "â€”"
             ? `On ${leftDate}, at approximately ${leftTime},`
             : details
             ? details
-            : "—";
+            : "â€”";
 
         const statusNorm = normalizeStatus(doc?.status);
 
@@ -626,19 +624,19 @@ export default function HomeScreen({
       setRecentReports(mapped);
       lastReportsFetchAtRef.current = Date.now();
     } catch {
-      // ✅ On error (including session expired), just clear reports silently
+      // âœ… On error (including session expired), just clear reports silently
       setRecentReports([]);
     } finally {
       setLoadingReports(false);
       reportsFetchInFlightRef.current = false;
     }
-  }, []); // ✅ FIX: No more [accessToken] dependency — requestJson handles token internally
+  }, []); // âœ… FIX: No more [accessToken] dependency â€” requestJson handles token internally
 
   useEffect(() => {
     fetchRecentReports({ force: true });
   }, [fetchRecentReports]);
 
-  // ✅ Also refresh reports when Home screen regains focus
+  // âœ… Also refresh reports when Home screen regains focus
   useFocusEffect(
     useCallback(() => {
       const task = InteractionManager.runAfterInteractions(() => {
@@ -674,241 +672,139 @@ export default function HomeScreen({
   const HEADER_TOP_PAD = useMemo(() => clamp(Math.round(6 * s), 2, 10), [s]);
   const ACTION_GAP = useMemo(() => clamp(Math.round(14 * s), 10, 16), [s]);
 
-  // =========================
-  // ✅ Swipe-up Quick Actions Sheet
-  // =========================
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const sheetOpenRef = useRef(false);
-
-  const SHEET_HEIGHT = useMemo(() => clamp(Math.round(height * 0.34), 250, 340), [height]);
-  const sheetY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
-  const sheetAnimatingRef = useRef(false);
-
-  const chevronOpen = useRef(new Animated.Value(0)).current;
-
-  // ✅ Backdrop opacity animation
-  const backdropOpacity = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
     isFocusedRef.current = isFocused;
   }, [isFocused]);
 
-  useEffect(() => {
-    sheetOpenRef.current = sheetOpen;
-  }, [sheetOpen]);
+  const fabMenuAnim = useRef(new Animated.Value(0)).current;
+  const [fabMenuOpen, setFabMenuOpen] = useState(false);
 
-  useEffect(() => {
-    if (!isFocused) {
-      sheetAnimatingRef.current = false;
-      sheetOpenRef.current = false;
-      sheetY.stopAnimation();
-      chevronOpen.stopAnimation();
-      backdropOpacity.stopAnimation();
-      sheetY.setValue(SHEET_HEIGHT);
-      chevronOpen.setValue(0);
-      backdropOpacity.setValue(0);
-      if (sheetOpen) setSheetOpen(false);
+  const openFabMenu = useCallback(() => {
+    if (!isFocusedRef.current || fabMenuOpen) return;
+
+    fabMenuAnim.stopAnimation();
+    setFabMenuOpen(true);
+    Animated.spring(fabMenuAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 160,
+    }).start();
+  }, [fabMenuAnim, fabMenuOpen]);
+
+  const closeFabMenu = useCallback(() => {
+    if (!fabMenuOpen) return;
+
+    fabMenuAnim.stopAnimation();
+    Animated.timing(fabMenuAnim, {
+      toValue: 0,
+      duration: 180,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start(() => setFabMenuOpen(false));
+  }, [fabMenuAnim, fabMenuOpen]);
+
+  const toggleFabMenu = useCallback(() => {
+    if (fabMenuOpen) {
+      closeFabMenu();
       return;
     }
-  }, [
-    isFocused,
-    sheetOpen,
-    sheetY,
-    chevronOpen,
-    backdropOpacity,
-    SHEET_HEIGHT,
-  ]);
 
-  const openSheet = useCallback(() => {
-    if (!isFocusedRef.current) return;
-    if (sheetOpenRef.current) return;
-    if (sheetAnimatingRef.current) return;
-    sheetAnimatingRef.current = true;
+    openFabMenu();
+  }, [closeFabMenu, fabMenuOpen, openFabMenu]);
 
-    sheetY.stopAnimation();
-    chevronOpen.stopAnimation();
-    backdropOpacity.stopAnimation();
+  const handleAlertAction = useCallback(() => {
+    Alert.alert(
+      "Send SOS Alert",
+      "This will notify all Barangay Officials with your current location. Are you sure?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Send Alert",
+          style: "destructive",
+          onPress: async () => {
+            closeFabMenu();
+            let address: string | undefined;
+            let latitude: number | undefined;
+            let longitude: number | undefined;
+            try {
+              const { status } = await Location.requestForegroundPermissionsAsync();
+              if (status === "granted") {
+                const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                latitude = loc.coords.latitude;
+                longitude = loc.coords.longitude;
+                const [place] = await Location.reverseGeocodeAsync({
+                  latitude,
+                  longitude,
+                });
+                if (place) {
+                  const parts = [place.street, place.district, place.city, place.region].filter(Boolean);
+                  address = parts.join(", ") || undefined;
+                }
+              }
+            } catch {
+              // location failed — send without address
+            }
+            try {
+              const result = await sendSosAlert({ address, latitude, longitude });
+              Alert.alert("Alert Sent", result.message);
+            } catch (e: any) {
+              Alert.alert("Failed", e?.message ?? "Could not send alert. Please try again.");
+            }
+          },
+        },
+      ]
+    );
+  }, [closeFabMenu]);
 
-    sheetY.setValue(SHEET_HEIGHT);
-    chevronOpen.setValue(0);
-    backdropOpacity.setValue(0);
+  const handleFabHideApp = useCallback(() => {
+    closeFabMenu();
+    closeAndRemoveFromRecents();
+  }, [closeFabMenu]);
 
-    sheetOpenRef.current = true;
-    setSheetOpen(true);
+  const handleFabIncidentLog = useCallback(() => {
+    closeFabMenu();
+    navigateToTab("Incident");
+  }, [closeFabMenu, navigateToTab]);
 
-    Animated.parallel([
-      Animated.timing(backdropOpacity, {
-        toValue: 1,
-        duration: 140,
-        easing: Easing.out(Easing.quad),
-        isInteraction: false,
-        useNativeDriver: true,
-      }),
-      Animated.spring(sheetY, {
-        toValue: 0,
-        isInteraction: false,
-        useNativeDriver: true,
-        damping: 18,
-        stiffness: 220,
-        mass: 0.9,
-      }),
-      Animated.timing(chevronOpen, {
-        toValue: 1,
-        duration: 220,
-        easing: Easing.out(Easing.quad),
-        isInteraction: false,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      sheetAnimatingRef.current = false;
-    });
-  }, [sheetY, chevronOpen, backdropOpacity, SHEET_HEIGHT]);
-
-  const closeSheet = useCallback(() => {
-    if (!sheetOpenRef.current && !sheetAnimatingRef.current) return;
-    if (sheetAnimatingRef.current) return;
-    sheetAnimatingRef.current = true;
-
-    sheetY.stopAnimation();
-    chevronOpen.stopAnimation();
-    backdropOpacity.stopAnimation();
-
-    Animated.parallel([
-      Animated.timing(backdropOpacity, {
-        toValue: 0,
-        duration: 120,
-        easing: Easing.in(Easing.quad),
-        isInteraction: false,
-        useNativeDriver: true,
-      }),
-      Animated.timing(sheetY, {
-        toValue: SHEET_HEIGHT,
-        duration: 220,
-        easing: Easing.out(Easing.cubic),
-        isInteraction: false,
-        useNativeDriver: true,
-      }),
-      Animated.timing(chevronOpen, {
-        toValue: 0,
-        duration: 160,
-        easing: Easing.inOut(Easing.quad),
-        isInteraction: false,
-        useNativeDriver: true,
-      }),
-    ]).start(({ finished }) => {
-      sheetAnimatingRef.current = false;
-      if (finished) {
-        sheetOpenRef.current = false;
-        sheetY.setValue(SHEET_HEIGHT);
-        chevronOpen.setValue(0);
-        backdropOpacity.setValue(0);
-        setSheetOpen(false);
+  const handleSharedSignOut = useCallback(
+    async () => {
+      try {
+        await logout();
+        onQuickExit?.();
+      } catch {
+        onQuickExit?.();
       }
-    });
-  }, [sheetY, SHEET_HEIGHT, chevronOpen, backdropOpacity]);
-
-  const handlePan = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6 && Math.abs(g.dx) < 20,
-      onPanResponderMove: (_, g) => {
-        const next = clamp(g.dy, 0, SHEET_HEIGHT);
-        sheetY.setValue(next);
-        const t = clamp(next / SHEET_HEIGHT, 0, 1);
-        chevronOpen.setValue(1 - t);
-        backdropOpacity.setValue(1 - t);
-      },
-      onPanResponderRelease: (_, g) => {
-        const shouldClose = g.dy > 60 || g.vy > 0.9;
-        if (shouldClose) closeSheet();
-        else {
-          Animated.parallel([
-            Animated.timing(backdropOpacity, {
-              toValue: 1,
-              duration: 120,
-              easing: Easing.out(Easing.quad),
-              isInteraction: false,
-              useNativeDriver: true,
-            }),
-            Animated.spring(sheetY, {
-              toValue: 0,
-              isInteraction: false,
-              useNativeDriver: true,
-              damping: 18,
-              stiffness: 220,
-              mass: 0.9,
-            }),
-            Animated.timing(chevronOpen, {
-              toValue: 1,
-              duration: 190,
-              easing: Easing.out(Easing.quad),
-              isInteraction: false,
-              useNativeDriver: true,
-            }),
-          ]).start();
-        }
-      },
-    })
-  ).current;
-
-  const handleHandlePan = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6 && Math.abs(g.dx) < 20,
-      onPanResponderRelease: (_, g) => {
-        if (g.dy < -30 || g.vy < -0.9) openSheet();
-      },
-    })
-  ).current;
-
-  const CHEVRON_LIFT = useMemo(() => clamp(Math.round(24 * s), 18, 34), [s]);
-  const chevronHandleBottom = useMemo(
-    () => navHeight + FAB_SIZE * 0.55 + CHEVRON_LIFT,
-    [navHeight, FAB_SIZE, CHEVRON_LIFT]
+    },
+    [logout, onQuickExit]
   );
 
-  const SHEET_TOTAL_HEIGHT = useMemo(() => SHEET_HEIGHT + bottomPad, [SHEET_HEIGHT, bottomPad]);
+  const handleFabSignOut = useCallback(() => {
+    closeFabMenu();
+    void handleSharedSignOut();
+  }, [closeFabMenu, handleSharedSignOut]);
 
-  const CHEVRON_ABOVE_SHEET_GAP = useMemo(() => clamp(Math.round(10 * s), 8, 14), [s]);
-  const openBottom = useMemo(
-    () => SHEET_TOTAL_HEIGHT + CHEVRON_ABOVE_SHEET_GAP,
-    [SHEET_TOTAL_HEIGHT, CHEVRON_ABOVE_SHEET_GAP]
-  );
+  const fabRotate = fabMenuAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "135deg"],
+  });
+  const fabActionsOpacity = fabMenuAnim;
+  const fabActionsTranslateY = fabMenuAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [10, 0],
+  });
+  const fabActionsScale = fabMenuAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.96, 1],
+  });
 
-  const deltaToOpen = useMemo(() => openBottom - chevronHandleBottom, [openBottom, chevronHandleBottom]);
-
-  const chevronLiftToOpen = useMemo(
-    () =>
-      chevronOpen.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0, -deltaToOpen],
-        extrapolate: "clamp",
-      }),
-    [chevronOpen, deltaToOpen]
-  );
-
-  const modalChevronTranslateY = useMemo(() => Animated.add(sheetY, chevronLiftToOpen), [sheetY, chevronLiftToOpen]);
-
-  const chevronRotate = chevronOpen.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] });
-  const chevronScale = chevronOpen.interpolate({ inputRange: [0, 1], outputRange: [1, 0.98] });
-
-  // Gentle looping bounce while sheet is closed
-  const bounceAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    let loop: Animated.CompositeAnimation;
-    if (!sheetOpen) {
-      loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(bounceAnim, { toValue: -5, duration: 500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(bounceAnim, { toValue:  0, duration: 500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ])
-      );
-      loop.start();
-    } else {
-      bounceAnim.stopAnimation();
-      bounceAnim.setValue(0);
-    }
-    return () => { if (loop) loop.stop(); };
-  }, [sheetOpen, bounceAnim]);
-  const bounceY = bounceAnim;
+    if (isFocused) return;
+
+    fabMenuAnim.stopAnimation();
+    fabMenuAnim.setValue(0);
+    setFabMenuOpen(false);
+  }, [fabMenuAnim, isFocused]);
 
   const styles = useMemo(
     () =>
@@ -1142,94 +1038,49 @@ export default function HomeScreen({
           color: "#64748B",
           textAlign: "center",
         },
-
-        chevronHandleWrap: {
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: chevronHandleBottom,
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 60,
+        fabBackdrop: {
+          ...StyleSheet.absoluteFillObject,
+          backgroundColor: "rgba(11, 43, 69, 0.12)",
+          zIndex: 18,
         },
-
-        chevronModalWrap: {
+        fabActionList: {
           position: "absolute",
-          left: 0,
           right: 0,
-          bottom: chevronHandleBottom,
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 999,
-          elevation: 999,
+          bottom: FAB_SIZE + clamp(Math.round(14 * s), 12, 18),
+          gap: clamp(Math.round(10 * s), 8, 12),
+          alignItems: "flex-end",
         },
-
-        chevronHandle: {
-          width: clamp(Math.round(54 * s), 46, 64),
-          height: clamp(Math.round(26 * s), 22, 30),
+        fabActionBtn: {
+          minWidth: clamp(Math.round(182 * s), 168, 196),
           borderRadius: 999,
-          backgroundColor: "#F0F6FF",
           borderWidth: 1,
-          borderColor: "#E7EEF7",
-          alignItems: "center",
-          justifyContent: "center",
-          shadowColor: "#000",
-          shadowOpacity: 0.12,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: 4 },
-          elevation: 6,
-        },
-
-        backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.18)" },
-
-        sheetOuter: {
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: SHEET_TOTAL_HEIGHT,
-          justifyContent: "flex-end",
-        },
-
-        sheetCard: {
-          height: SHEET_TOTAL_HEIGHT,
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-          backgroundColor: "#FFFFFF",
-          paddingTop: clamp(Math.round(12 * s), 10, 14),
-          paddingBottom: bottomPad + clamp(Math.round(14 * s), 12, 16),
-          paddingHorizontal: clamp(Math.round(18 * s), 16, 22),
-          shadowColor: "#000",
-          shadowOpacity: 0.14,
-          shadowRadius: 18,
-          shadowOffset: { width: 0, height: -6 },
-          elevation: 12,
-        },
-
-        sheetGrabber: {
-          alignSelf: "center",
-          width: clamp(Math.round(64 * s), 56, 72),
-          height: 6,
-          borderRadius: 999,
-          backgroundColor: "#D7E3F2",
-          marginBottom: clamp(Math.round(14 * s), 12, 16),
-        },
-
-        actionBtn: {
-          width: "100%",
-          borderRadius: 18,
-          backgroundColor: "#083B67",
-          paddingVertical: clamp(Math.round(16 * s), 14, 18),
-          paddingHorizontal: clamp(Math.round(14 * s), 12, 16),
+          paddingVertical: clamp(Math.round(10 * s), 9, 12),
+          paddingHorizontal: clamp(Math.round(12 * s), 10, 14),
           flexDirection: "row",
           alignItems: "center",
-          justifyContent: "center",
-          marginBottom: clamp(Math.round(12 * s), 10, 12),
+          justifyContent: "flex-start",
+          ...Platform.select({
+            ios: {
+              shadowColor: "#0F172A",
+              shadowOpacity: 0.14,
+              shadowRadius: 10,
+              shadowOffset: { width: 0, height: 6 },
+            },
+            android: { elevation: 6 },
+          }),
         },
-
-        actionText: { fontSize: clamp(Math.round(16 * fs), 14, 18), fontWeight: "900", color: "#FFFFFF" },
-        actionIcon: { marginTop: 1, marginRight: 10 },
-        dangerBtn: { backgroundColor: "#0B2B45" },
+        fabActionIconWrap: {
+          width: clamp(Math.round(34 * s), 30, 36),
+          height: clamp(Math.round(34 * s), 30, 36),
+          borderRadius: 999,
+          alignItems: "center",
+          justifyContent: "center",
+          marginRight: clamp(Math.round(10 * s), 8, 12),
+        },
+        fabActionText: {
+          fontSize: clamp(Math.round(13 * fs), 12, 14),
+          fontWeight: "800",
+        },
       }),
     [
       PAD,
@@ -1241,9 +1092,6 @@ export default function HomeScreen({
       iconBtnSize,
       HEADER_TOP_PAD,
       ACTION_GAP,
-      chevronHandleBottom,
-      SHEET_TOTAL_HEIGHT,
-      bottomPad,
       CONTENT_BOTTOM_PAD,
     ]
   );
@@ -1261,7 +1109,10 @@ export default function HomeScreen({
 
           <View style={styles.rightActions}>
             <Pressable
-              onPress={handleOpenNotifications}
+              onPress={() => {
+                if (fabMenuOpen) closeFabMenu();
+                handleOpenNotifications();
+              }}
               hitSlop={12}
               style={({ pressed }) => [styles.iconBtn, { backgroundColor: TC.chipBg, borderColor: TC.divider }, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
             >
@@ -1280,7 +1131,7 @@ export default function HomeScreen({
 
             <Pressable
               onPress={() => {
-                if (sheetOpen) closeSheet();
+                if (fabMenuOpen) closeFabMenu();
                 setShowReportTutorial(true);
               }}
               hitSlop={12}
@@ -1413,42 +1264,22 @@ export default function HomeScreen({
           </View>
         </ScrollView>
 
-        {/* ✅ Chevron handle (ONLY when sheet is CLOSED) */}
-        {!sheetOpen ? (
-          <View style={styles.chevronHandleWrap} {...handleHandlePan.panHandlers}>
-            <Pressable
-              onPress={() => {
-                if (sheetOpen) closeSheet();
-                else openSheet();
-              }}
-              hitSlop={14}
-              style={({ pressed }) => [styles.chevronHandle, { backgroundColor: TC.chipBg, borderColor: TC.divider }, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
-            >
-              <Animated.View
-                renderToHardwareTextureAndroid
-                shouldRasterizeIOS
-                style={{ transform: [{ translateY: bounceY }, { rotate: chevronRotate }, { scale: chevronScale }] }}
-              >
-                <Ionicons name="chevron-up" size={22} color={TC.textDark} />
-              </Animated.View>
-            </Pressable>
-          </View>
+        {fabMenuOpen ? (
+          <Animated.View style={[styles.fabBackdrop, { opacity: fabActionsOpacity }]}>
+            <Pressable style={StyleSheet.absoluteFillObject} onPress={closeFabMenu} />
+          </Animated.View>
         ) : null}
 
-        {/* ✅ Bottom Nav */}
         <BottomNavBar
           activeTab={activeTab}
-          onTabPress={(key) => {
-            setActiveTab(key);
-            onTabChange?.(key);
-          }}
+          onTabPress={navigateToTab}
           navHeight={navHeight}
           paddingBottom={bottomPad}
           chevronBottom={chevronBottom}
           centerLabel="Community"
         />
 
-        {/* ✅ Floating FAB — bottom-right, above Settings tab */}
+        {/* âœ… Floating FAB â€” bottom-right, above Settings tab */}
         <View
           pointerEvents="box-none"
           style={{
@@ -1458,10 +1289,96 @@ export default function HomeScreen({
             zIndex: 20,
           }}
         >
+          {fabMenuOpen ? (
+            <Animated.View
+              style={[
+                styles.fabActionList,
+                {
+                  opacity: fabActionsOpacity,
+                  transform: [{ translateY: fabActionsTranslateY }, { scale: fabActionsScale }],
+                },
+              ]}
+            >
+              <Pressable
+                onPress={handleFabIncidentLog}
+                style={({ pressed }) => [
+                  styles.fabActionBtn,
+                  {
+                    backgroundColor: TC.surface,
+                    borderColor: TC.divider,
+                  },
+                  pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
+                ]}
+              >
+                <View style={[styles.fabActionIconWrap, { backgroundColor: TC.chipBg }]}>
+                  <Ionicons name="document-text-outline" size={18} color={TC.primary} />
+                </View>
+                <Text style={[styles.fabActionText, { color: TC.textDark }]} allowFontScaling={false}>
+                  Incident Log
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleAlertAction}
+                style={({ pressed }) => [
+                  styles.fabActionBtn,
+                  {
+                    backgroundColor: TC.surface,
+                    borderColor: TC.divider,
+                  },
+                  pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
+                ]}
+              >
+                <View style={[styles.fabActionIconWrap, { backgroundColor: TC.chipBg }]}>
+                  <Ionicons name="warning-outline" size={18} color={TC.primary} />
+                </View>
+                <Text style={[styles.fabActionText, { color: TC.textDark }]} allowFontScaling={false}>
+                  Alert
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleFabHideApp}
+                style={({ pressed }) => [
+                  styles.fabActionBtn,
+                  {
+                    backgroundColor: TC.surface,
+                    borderColor: TC.divider,
+                  },
+                  pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
+                ]}
+              >
+                <View style={[styles.fabActionIconWrap, { backgroundColor: TC.chipBg }]}>
+                  <Ionicons name="eye-off-outline" size={18} color={TC.primary} />
+                </View>
+                <Text style={[styles.fabActionText, { color: TC.textDark }]} allowFontScaling={false}>
+                  Hide App
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleFabSignOut}
+                style={({ pressed }) => [
+                  styles.fabActionBtn,
+                  {
+                    backgroundColor: TC.surface,
+                    borderColor: TC.divider,
+                  },
+                  pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
+                ]}
+              >
+                <View style={[styles.fabActionIconWrap, { backgroundColor: TC.chipBg }]}>
+                  <Ionicons name="log-out-outline" size={18} color={TC.primary} />
+                </View>
+                <Text style={[styles.fabActionText, { color: TC.textDark }]} allowFontScaling={false}>
+                  Sign Out
+                </Text>
+              </Pressable>
+            </Animated.View>
+          ) : null}
+
           <Pressable
-            onPress={pressFab}
-            onLongPress={longPressFab}
-            delayLongPress={350}
+            onPress={toggleFabMenu}
             style={({ pressed }) => ({
               width: FAB_SIZE,
               height: FAB_SIZE,
@@ -1487,11 +1404,13 @@ export default function HomeScreen({
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFillObject}
             />
-            <Ionicons name="add" size={30} color="#FFFFFF" />
+            <Animated.View style={{ transform: [{ rotate: fabRotate }] }}>
+              <Ionicons name="add" size={30} color="#FFFFFF" />
+            </Animated.View>
           </Pressable>
         </View>
 
-        {/* ✅ Fab tutorial overlay */}
+        {/* âœ… Fab tutorial overlay */}
         <FabTutorialOverlay
           visible={showFabTutorial}
           onClose={() => setShowFabTutorial(false)}
@@ -1500,148 +1419,15 @@ export default function HomeScreen({
           fabSize={FAB_SIZE}
           fabBottom={fabBottom}
           navHeight={navHeight}
-          title="Create an Incident Log"
-          message="Tap the + button to add a new report."
+          title="Open Quick Actions"
+          message="Tap the + button to open Incident Log, Alert, Hide App, and Sign Out shortcuts."
         />
 
-        {/* ✅ Report submission tutorial modal */}
+        {/* âœ… Report submission tutorial modal */}
         <ReportTutorialModal
           visible={showReportTutorial}
           onClose={() => setShowReportTutorial(false)}
         />
-
-        {/* ✅ Swipe-up Sheet Modal */}
-        <Modal
-          visible={sheetOpen}
-          transparent
-          animationType="none"
-          onRequestClose={closeSheet}
-          statusBarTranslucent
-          hardwareAccelerated
-        >
-          <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
-            <Pressable style={{ flex: 1 }} onPress={closeSheet} />
-          </Animated.View>
-
-          <Animated.View
-            renderToHardwareTextureAndroid
-            shouldRasterizeIOS
-            style={[
-              styles.chevronModalWrap,
-              {
-                transform: [{ translateY: modalChevronTranslateY }],
-              },
-            ]}
-            {...handlePan.panHandlers}
-          >
-            <Pressable
-              onPress={() => closeSheet()}
-              hitSlop={14}
-              style={({ pressed }) => [styles.chevronHandle, { backgroundColor: TC.chipBg, borderColor: TC.divider }, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
-            >
-              <Animated.View
-                renderToHardwareTextureAndroid
-                shouldRasterizeIOS
-                style={{ transform: [{ rotate: chevronRotate }, { scale: chevronScale }] }}
-              >
-                <Ionicons name="chevron-up" size={22} color={TC.textDark} />
-              </Animated.View>
-            </Pressable>
-          </Animated.View>
-
-          <Animated.View
-            renderToHardwareTextureAndroid
-            shouldRasterizeIOS
-            style={[styles.sheetOuter, { transform: [{ translateY: sheetY }] }]}
-          >
-            <View style={[styles.sheetCard, { backgroundColor: TC.surface }]} {...handlePan.panHandlers}>
-              <View style={styles.sheetGrabber} />
-
-              <Pressable
-                onPress={() => {
-                  Alert.alert(
-                    "Send SOS Alert",
-                    "This will notify all Barangay Officials with your current location. Are you sure?",
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      {
-                        text: "Send Alert",
-                        style: "destructive",
-                        onPress: async () => {
-                          closeSheet();
-                          let address: string | undefined;
-                          let latitude: number | undefined;
-                          let longitude: number | undefined;
-                          try {
-                            const { status } = await Location.requestForegroundPermissionsAsync();
-                            if (status === "granted") {
-                              const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-                              latitude = loc.coords.latitude;
-                              longitude = loc.coords.longitude;
-                              const [place] = await Location.reverseGeocodeAsync({
-                                latitude,
-                                longitude,
-                              });
-                              if (place) {
-                                const parts = [place.street, place.district, place.city, place.region].filter(Boolean);
-                                address = parts.join(", ") || undefined;
-                              }
-                            }
-                          } catch {
-                            // location failed — send without address
-                          }
-                          try {
-                            const result = await sendSosAlert({ address, latitude, longitude });
-                            Alert.alert("Alert Sent", result.message);
-                          } catch (e: any) {
-                            Alert.alert("Failed", e?.message ?? "Could not send alert. Please try again.");
-                          }
-                        },
-                      },
-                    ]
-                  );
-                }}
-                style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
-              >
-                <Ionicons name="warning-outline" size={20} color="#fff" style={styles.actionIcon} />
-                <Text style={styles.actionText} allowFontScaling={false}>
-                  Alert
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => {
-                  closeSheet();
-                  closeAndRemoveFromRecents();
-                }}
-                style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
-              >
-                <Ionicons name="eye-off-outline" size={20} color="#fff" style={styles.actionIcon} />
-                <Text style={styles.actionText} allowFontScaling={false}>
-                  Hide App
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={async () => {
-                  closeSheet();
-                  try {
-                    await logout();
-                    onQuickExit?.();
-                  } catch {
-                    onQuickExit?.();
-                  }
-                }}
-                style={({ pressed }) => [styles.actionBtn, styles.dangerBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.995 }] }]}
-              >
-                <Ionicons name="log-out-outline" size={20} color="#fff" style={styles.actionIcon} />
-                <Text style={styles.actionText} allowFontScaling={false}>
-                  Sign Out
-                </Text>
-              </Pressable>
-            </View>
-          </Animated.View>
-        </Modal>
       </View>
     </SafeAreaView>
   );
