@@ -16,15 +16,28 @@ type Props = {
   visible: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  title?: string;
+  message?: string;
+  confirmLabel?: string;
+  confirmColor?: string;
 };
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-export default function LogoutModal({ visible, onConfirm, onCancel }: Props) {
+export default function LogoutModal({
+  visible,
+  onConfirm,
+  onCancel,
+  title = "Log Out",
+  message = "Are you sure you want to log out?",
+  confirmLabel = "Log Out",
+  confirmColor,
+}: Props) {
   const TC = useColors();
   const { width, height } = useWindowDimensions();
+  const hasMessage = message.trim().length > 0;
 
   const s = clamp(width / 375, 0.95, 1.45);
   const vs = clamp(height / 812, 0.95, 1.25);
@@ -70,11 +83,13 @@ export default function LogoutModal({ visible, onConfirm, onCancel }: Props) {
         <Animated.View
           style={[styles.card, { opacity: fade, transform: [{ scale: pop }], backgroundColor: TC.surface }]}
         >
-          <Text style={[styles.title, { color: TC.textDark }]}>Log Out</Text>
+          <Text style={[styles.title, !hasMessage && styles.titleOnly, { color: TC.textDark }]}>{title}</Text>
 
-          <Text style={[styles.sub, { color: TC.muted }]}>
-            Are you sure you want to log out?
-          </Text>
+          {hasMessage ? (
+            <Text style={[styles.sub, { color: TC.muted }]}>
+              {message}
+            </Text>
+          ) : null}
 
           {/* Buttons */}
           <View style={styles.btnRow}>
@@ -96,11 +111,11 @@ export default function LogoutModal({ visible, onConfirm, onCancel }: Props) {
               hitSlop={8}
               style={({ pressed }) => [
                 styles.btnConfirm,
-                { backgroundColor: TC.primary },
+                { backgroundColor: confirmColor || TC.primary },
                 pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
               ]}
             >
-              <Text style={styles.btnConfirmText}>Log Out</Text>
+              <Text style={styles.btnConfirmText}>{confirmLabel}</Text>
             </Pressable>
           </View>
         </Animated.View>
@@ -147,6 +162,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       fontWeight: "900",
       color: "#111827",
       marginBottom: scale(10),
+    },
+    titleOnly: {
+      marginBottom: scale(24),
     },
     sub: {
       textAlign: "center",

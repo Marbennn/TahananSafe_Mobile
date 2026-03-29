@@ -23,12 +23,16 @@ import * as ImagePicker from "expo-image-picker";
 import { useColors } from "../theme/colors";
 import { useAuth } from "../auth/AuthContext";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
+import LogoutModal from "../components/LogoutModal";
 import {
   fetchPosts,
   createPost,
   toggleLike,
   addComment,
+  reactToComment,
   deletePost,
+  type Comment as CommunityComment,
+  type CommentReply,
   type CommunityPost,
 } from "../api/community";
 
@@ -153,6 +157,15 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 ];
 
 const MAX_POST_IMAGES = 5;
+const COMMENT_REACTIONS = [
+  { key: "like", emoji: "👍" },
+  { key: "love", emoji: "❤️" },
+  { key: "care", emoji: "🥰" },
+  { key: "haha", emoji: "😄" },
+  { key: "wow", emoji: "😮" },
+  { key: "sad", emoji: "😢" },
+  { key: "angry", emoji: "😡" },
+];
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -173,6 +186,48 @@ function timeAgo(dateStr: string): string {
 
 function userDisplayName(u: { firstName?: string; lastName?: string }): string {
   return [u.firstName, u.lastName].filter(Boolean).join(" ") || "User";
+}
+
+function countThreadComments(comments: CommunityComment[]): number {
+  return comments.reduce(
+    (total, comment) => total + 1 + (Array.isArray(comment.replies) ? comment.replies.length : 0),
+    0
+  );
+}
+
+function buildCommentPreviewItems(comments: CommunityComment[]) {
+  return comments.flatMap((comment) => [
+    {
+      _id: comment._id,
+      user: comment.user,
+      text: comment.text,
+      parentUser: null as null | string,
+    },
+    ...(Array.isArray(comment.replies)
+      ? comment.replies.map((reply) => ({
+          _id: reply._id,
+          user: reply.user,
+          text: reply.text,
+          parentUser: userDisplayName(comment.user),
+        }))
+      : []),
+  ]);
+}
+
+function buildReactionSummary(comment: CommunityComment) {
+  const entries = Object.entries(comment.reactions || {})
+    .filter(([, count]) => Number(count) > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1]));
+
+  const emojis = entries
+    .slice(0, 3)
+    .map(([type]) => COMMENT_REACTIONS.find((reaction) => reaction.key === type)?.emoji)
+    .filter(Boolean) as string[];
+
+  return {
+    emojis,
+    count: typeof comment.reactionsCount === "number" ? comment.reactionsCount : 0,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -238,25 +293,14 @@ function PostCard({
   const likeCount =
     typeof post.likesCount === "number" ? post.likesCount : post.likes.length;
   const isOwner = post.user._id === currentUserId;
+  const commentCount = countThreadComments(post.comments);
+  const previewItems = buildCommentPreviewItems(post.comments).slice(-2);
   const imageUrls =
     post.imageUrls?.length
       ? post.imageUrls
       : post.imageUrl
         ? [post.imageUrl]
         : [];
-
-  const handleMenu = () => {
-    if (isOwner) {
-      Alert.alert("Post Options", "", [
-        {
-          text: "Delete Post",
-          style: "destructive",
-          onPress: () => onDelete(post._id),
-        },
-        { text: "Cancel", style: "cancel" },
-      ]);
-    }
-  };
 
   return (
     <View
@@ -289,7 +333,7 @@ function PostCard({
           {timeAgo(post.createdAt)}
         </Text>
         {isOwner && (
-          <Pressable hitSlop={8} style={styles.postMenu} onPress={handleMenu}>
+          <Pressable hitSlop={8} style={styles.postMenu} onPress={() => onDelete(post._id)}>
             <Ionicons name="ellipsis-horizontal" size={18} color={colors.muted} />
           </Pressable>
         )}
@@ -318,12 +362,6 @@ function PostCard({
         </Pressable>
       ) : imageUrls.length > 1 ? (
         <View style={styles.postGalleryWrap}>
-          <View style={styles.postGalleryHeader}>
-            <Ionicons name="images-outline" size={16} color={colors.muted} />
-            <Text style={[styles.postGalleryCount, { color: colors.muted }]}>
-              {imageUrls.length} photos
-            </Text>
-          </View>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -377,28 +415,28 @@ function PostCard({
         >
           <Ionicons name="chatbubble-outline" size={19} color={colors.muted} />
           <Text style={[styles.actionText, { color: colors.muted }]}>
-            {post.comments.length}
+            {commentCount}
           </Text>
         </Pressable>
       </View>
 
       {/* Show last 2 comments preview */}
-      {post.comments.length > 0 && (
+      {previewItems.length > 0 && (
         <View style={[styles.commentsPreview, { borderTopColor: colors.divider }]}>
-          {post.comments.slice(-2).map((c) => (
-            <View key={c._id} style={styles.commentRow}>
+          {previewItems.map((item) => (
+            <View key={item._id} style={styles.commentRow}>
               <Text style={[styles.commentUser, { color: colors.text }]}>
-                {userDisplayName(c.user)}
+                {userDisplayName(item.user)}
               </Text>
               <Text style={[styles.commentText, { color: colors.body }]}>
-                {c.text}
+                {item.parentUser ? `Reply to ${item.parentUser}: ${item.text}` : item.text}
               </Text>
             </View>
           ))}
-          {post.comments.length > 2 && (
+          {commentCount > 2 && (
             <Pressable onPress={() => onComment(post._id)}>
               <Text style={[styles.viewAllComments, { color: colors.muted }]}>
-                View all {post.comments.length} comments
+                View all {commentCount} comments
               </Text>
             </Pressable>
           )}
@@ -450,7 +488,17 @@ function CreatePostModal({
       selectionLimit: remaining,
     });
     if (!result.canceled) {
-      const newUris = (result.assets ?? []).map((asset) => asset.uri).filter(Boolean);
+      const newUris = Array.from(
+        new Set((result.assets ?? []).map((asset) => asset.uri).filter(Boolean))
+      );
+
+      if (newUris.length > remaining) {
+        Alert.alert(
+          "Limit reached",
+          `You can only select ${remaining} more image${remaining === 1 ? "" : "s"}.`
+        );
+      }
+
       setPhotoUris((prev) =>
         Array.from(new Set([...prev, ...newUris])).slice(0, MAX_POST_IMAGES)
       );
@@ -507,7 +555,7 @@ function CreatePostModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
@@ -554,7 +602,7 @@ function CreatePostModal({
               seed={userName}
             />
             <TextInput
-              placeholder="What's on your mind?"
+              placeholder="What's happening in your area?"
               placeholderTextColor={colors.placeholder}
               style={[
                 styles.composeInput,
@@ -601,7 +649,7 @@ function CreatePostModal({
           )}
 
           {/* Actions */}
-          <View style={[styles.composeActions, { borderTopColor: colors.divider }]}>
+          <View style={styles.composeActions}>
             <Pressable style={styles.composeActionBtn} onPress={pickImage}>
               <Ionicons name="image-outline" size={24} color={colors.primary} />
               <Text style={[styles.composeActionLabel, { color: colors.body }]}>
@@ -623,30 +671,162 @@ function CreatePostModal({
 
 /* ---- Comments Modal ---- */
 
+function CommentThread({
+  comment,
+  colors,
+  onReplyPress,
+  onReactPress,
+  isReactionPickerOpen,
+}: {
+  comment: CommunityComment;
+  colors: ReturnType<typeof useColors>;
+  onReplyPress: (comment: CommunityComment) => void;
+  onReactPress: (commentId: string, reaction: string) => void;
+  isReactionPickerOpen: boolean;
+}) {
+  const commentUserName = userDisplayName(comment.user);
+  const reactionSummary = buildReactionSummary(comment);
+  const longPressTriggeredRef = useRef(false);
+
+  return (
+    <View style={styles.commentThread}>
+      <View style={styles.commentItem}>
+        <AvatarImage
+          uri={comment.user.profileImage}
+          size={32}
+          style={{ marginRight: 8 }}
+          name={commentUserName}
+          seed={comment.user._id}
+        />
+        <View style={[styles.commentBubble, { backgroundColor: colors.inputBg }]}>
+          <Text style={[styles.commentBubbleName, { color: colors.text }]}>
+            {commentUserName}
+          </Text>
+          <Text style={[styles.commentBubbleText, { color: colors.body }]}>
+            {comment.text}
+          </Text>
+          <Text style={[styles.commentTime, { color: colors.muted }]}>
+            {timeAgo(comment.createdAt)}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.commentActionsRow}>
+        <Pressable
+          onPress={() => {
+            if (longPressTriggeredRef.current) {
+              longPressTriggeredRef.current = false;
+              return;
+            }
+            onReplyPress(comment);
+          }}
+          onLongPress={() => {
+            longPressTriggeredRef.current = true;
+            onReactPress(comment._id, "__open__");
+          }}
+          delayLongPress={220}
+          hitSlop={8}
+        >
+          <Text style={[styles.replyBtnText, { color: colors.primary }]}>Reply</Text>
+        </Pressable>
+
+        {reactionSummary.count > 0 ? (
+          <View style={[styles.commentReactionSummary, { backgroundColor: colors.chipBg }]}>
+            <Text style={styles.commentReactionEmojis}>{reactionSummary.emojis.join(" ")}</Text>
+            <Text style={[styles.commentReactionCount, { color: colors.primary }]}>
+              {reactionSummary.count}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      {isReactionPickerOpen ? (
+        <View style={[styles.reactionPickerWrap, { backgroundColor: "#2F3136" }]}>
+          {COMMENT_REACTIONS.map((reaction) => (
+            <Pressable
+              key={reaction.key}
+              onPress={() => onReactPress(comment._id, reaction.key)}
+              style={[
+                styles.reactionPickerItem,
+                comment.myReaction === reaction.key && styles.reactionPickerItemActive,
+              ]}
+            >
+              <Text style={styles.reactionPickerEmoji}>{reaction.emoji}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
+      {comment.replies.length > 0 ? (
+        <View style={styles.replyList}>
+          {comment.replies.map((reply: CommentReply) => (
+            <View key={reply._id} style={styles.replyItem}>
+              <AvatarImage
+                uri={reply.user.profileImage}
+                size={28}
+                style={{ marginRight: 8 }}
+                name={userDisplayName(reply.user)}
+                seed={reply.user._id}
+              />
+              <View style={[styles.replyBubble, { backgroundColor: colors.inputBg }]}>
+                <Text style={[styles.commentBubbleName, { color: colors.text }]}>
+                  {userDisplayName(reply.user)}
+                </Text>
+                <Text style={[styles.commentBubbleText, { color: colors.body }]}>
+                  {reply.text}
+                </Text>
+                <Text style={[styles.commentTime, { color: colors.muted }]}>
+                  {timeAgo(reply.createdAt)}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function CommentsModal({
   visible,
   onClose,
   post,
   onAddComment,
+  onReactToComment,
   colors,
 }: {
   visible: boolean;
   onClose: () => void;
   post: CommunityPost | null;
-  onAddComment: (postId: string, text: string) => Promise<void>;
+  onAddComment: (postId: string, text: string, parentCommentId?: string) => Promise<void>;
+  onReactToComment: (postId: string, commentId: string, reaction: string) => Promise<void>;
   colors: ReturnType<typeof useColors>;
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [replyTarget, setReplyTarget] = useState<{
+    commentId: string;
+    userName: string;
+  } | null>(null);
+  const [reactionPickerCommentId, setReactionPickerCommentId] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    if (!visible) {
+      setText("");
+      setReplyTarget(null);
+      setReactionPickerCommentId(null);
+    }
+  }, [visible]);
 
   const handleSend = async () => {
     const trimmed = text.trim();
     if (!trimmed || !post) return;
     setSending(true);
     try {
-      await onAddComment(post._id, trimmed);
+      await onAddComment(post._id, trimmed, replyTarget?.commentId);
       setText("");
+      setReplyTarget(null);
     } catch (err: any) {
       Alert.alert("Error", err.message || "Failed to add comment.");
     } finally {
@@ -654,7 +834,44 @@ function CommentsModal({
     }
   };
 
+  const handleReplyPress = useCallback((comment: CommunityComment) => {
+    setReactionPickerCommentId(null);
+    setReplyTarget({
+      commentId: comment._id,
+      userName: userDisplayName(comment.user),
+    });
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
+
+  const handleReactPress = useCallback(
+    async (commentId: string, reaction: string) => {
+      if (!post) return;
+
+      if (reaction === "__open__") {
+        setReactionPickerCommentId((prev) => (prev === commentId ? null : commentId));
+        return;
+      }
+
+      setReactionPickerCommentId(null);
+      try {
+        await onReactToComment(post._id, commentId, reaction);
+      } catch (err: any) {
+        Alert.alert("Error", err.message || "Failed to react to comment.");
+      }
+    },
+    [onReactToComment, post]
+  );
+
+  const handleClose = useCallback(() => {
+    setText("");
+    setReplyTarget(null);
+    setReactionPickerCommentId(null);
+    onClose();
+  }, [onClose]);
+
   if (!post) return null;
+
+  const totalComments = countThreadComments(post.comments);
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
@@ -662,6 +879,7 @@ function CommentsModal({
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
       >
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => setReactionPickerCommentId(null)} />
         <View
           style={[
             styles.commentsModalContent,
@@ -671,9 +889,9 @@ function CommentsModal({
           {/* Header */}
           <View style={[styles.modalHeader, { borderBottomColor: colors.divider }]}>
             <Text style={[styles.modalTitle, { color: colors.text, flex: 1 }]}>
-              Comments ({post.comments.length})
+              Comments ({totalComments})
             </Text>
-            <Pressable onPress={onClose}>
+            <Pressable onPress={handleClose}>
               <Ionicons name="close" size={24} color={colors.muted} />
             </Pressable>
           </View>
@@ -684,26 +902,13 @@ function CommentsModal({
             keyExtractor={(c) => c._id}
             contentContainerStyle={{ padding: 14 }}
             renderItem={({ item: c }) => (
-              <View style={styles.commentItem}>
-                <AvatarImage
-                  uri={c.user.profileImage}
-                  size={32}
-                  style={{ marginRight: 8 }}
-                  name={userDisplayName(c.user)}
-                  seed={c.user._id}
-                />
-                <View style={[styles.commentBubble, { backgroundColor: colors.inputBg }]}>
-                  <Text style={[styles.commentBubbleName, { color: colors.text }]}>
-                    {userDisplayName(c.user)}
-                  </Text>
-                  <Text style={[styles.commentBubbleText, { color: colors.body }]}>
-                    {c.text}
-                  </Text>
-                  <Text style={[styles.commentTime, { color: colors.muted }]}>
-                    {timeAgo(c.createdAt)}
-                  </Text>
-                </View>
-              </View>
+              <CommentThread
+                comment={c}
+                colors={colors}
+                onReplyPress={handleReplyPress}
+                onReactPress={handleReactPress}
+                isReactionPickerOpen={reactionPickerCommentId === c._id}
+              />
             )}
             ListEmptyComponent={
               <Text style={[styles.emptyText, { color: colors.muted }]}>
@@ -714,37 +919,49 @@ function CommentsModal({
 
           {/* Input */}
           <View style={[styles.commentInputRow, { borderTopColor: colors.divider, backgroundColor: colors.surface }]}>
-            <TextInput
-              ref={inputRef}
-              placeholder="Write a comment..."
-              placeholderTextColor={colors.placeholder}
-              style={[
-                styles.commentInput,
-                {
-                  color: colors.textDark,
-                  backgroundColor: colors.inputBg,
-                  borderColor: colors.divider,
-                },
-              ]}
-              value={text}
-              onChangeText={setText}
-              multiline
-            />
-            <Pressable
-              onPress={handleSend}
-              disabled={!text.trim() || sending}
-              style={styles.sendBtn}
-            >
-              {sending ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Ionicons
-                  name="send"
-                  size={22}
-                  color={text.trim() ? colors.primary : colors.muted}
-                />
-              )}
-            </Pressable>
+            {replyTarget ? (
+              <View style={[styles.replyTargetBar, { backgroundColor: colors.chipBg }]}>
+                <Text style={[styles.replyTargetText, { color: colors.primary }]}>
+                  Replying to {replyTarget.userName}
+                </Text>
+                <Pressable onPress={() => setReplyTarget(null)} hitSlop={8}>
+                  <Ionicons name="close" size={16} color={colors.primary} />
+                </Pressable>
+              </View>
+            ) : null}
+            <View style={styles.commentComposerRow}>
+              <TextInput
+                ref={inputRef}
+                placeholder={replyTarget ? `Reply to ${replyTarget.userName}...` : "Write a comment..."}
+                placeholderTextColor={colors.placeholder}
+                style={[
+                  styles.commentInput,
+                  {
+                    color: colors.textDark,
+                    backgroundColor: colors.inputBg,
+                    borderColor: colors.divider,
+                  },
+                ]}
+                value={text}
+                onChangeText={setText}
+                multiline
+              />
+              <Pressable
+                onPress={handleSend}
+                disabled={!text.trim() || sending}
+                style={styles.sendBtn}
+              >
+                {sending ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Ionicons
+                    name="send"
+                    size={22}
+                    color={text.trim() ? colors.primary : colors.muted}
+                  />
+                )}
+              </Pressable>
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -904,6 +1121,7 @@ export default function CommunityScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [commentPostId, setCommentPostId] = useState<string | null>(null);
+  const [postOptionsPostId, setPostOptionsPostId] = useState<string | null>(null);
   const [expandedImageViewer, setExpandedImageViewer] = useState<{
     imageUris: string[];
     initialIndex: number;
@@ -1001,12 +1219,26 @@ export default function CommunityScreen({
   );
 
   const handleAddComment = useCallback(
-    async (postId: string, text: string) => {
-      const comment = await addComment(postId, text);
+    async (postId: string, text: string, parentCommentId?: string) => {
+      const updatedPost = await addComment(postId, text, parentCommentId);
       setPosts((prev) =>
         prev.map((p) =>
           p._id === postId
-            ? { ...p, comments: [...p.comments, comment] }
+            ? updatedPost
+            : p
+        )
+      );
+    },
+    []
+  );
+
+  const handleReactToComment = useCallback(
+    async (postId: string, commentId: string, reaction: string) => {
+      const updatedPost = await reactToComment(postId, commentId, reaction);
+      setPosts((prev) =>
+        prev.map((p) =>
+          p._id === postId
+            ? updatedPost
             : p
         )
       );
@@ -1016,21 +1248,12 @@ export default function CommunityScreen({
 
   const handleDeletePost = useCallback(
     async (postId: string) => {
-      Alert.alert("Delete Post", "Are you sure you want to delete this post?", [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deletePost(postId);
-              setPosts((prev) => prev.filter((p) => p._id !== postId));
-            } catch (err: any) {
-              Alert.alert("Error", err.message || "Failed to delete post.");
-            }
-          },
-        },
-      ]);
+      try {
+        await deletePost(postId);
+        setPosts((prev) => prev.filter((p) => p._id !== postId));
+      } catch (err: any) {
+        Alert.alert("Error", err.message || "Failed to delete post.");
+      }
     },
     []
   );
@@ -1064,14 +1287,14 @@ export default function CommunityScreen({
         currentUserId={currentUserId}
         onLike={handleLike}
         onComment={(id) => setCommentPostId(id)}
-        onDelete={handleDeletePost}
+        onDelete={(id) => setPostOptionsPostId(id)}
         onImagePress={(imageUris, initialIndex) =>
           setExpandedImageViewer({ imageUris, initialIndex })
         }
         colors={colors}
       />
     ),
-    [handleLike, handleDeletePost, currentUserId, colors]
+    [handleLike, currentUserId, colors]
   );
 
   return (
@@ -1124,11 +1347,11 @@ export default function CommunityScreen({
                   ]}
                 >
                   <View style={styles.createBarLeft}>
-                    <AvatarImage uri={userAvatar} size={34} name={currentUserName} seed={currentUserId} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.createPromptTitle, { color: colors.textDark }]}>
-                        Start a post
-                      </Text>
+                    <Text style={[styles.createPromptTitle, { color: colors.textDark }]}>
+                      Start a post
+                    </Text>
+                    <View style={styles.createPromptRow}>
+                      <AvatarImage uri={userAvatar} size={34} name={currentUserName} seed={currentUserId} />
                       <View
                         style={[
                           styles.createInputPlaceholder,
@@ -1140,14 +1363,6 @@ export default function CommunityScreen({
                         </Text>
                       </View>
                     </View>
-                  </View>
-                  <View
-                    style={[
-                      styles.cameraBtn,
-                      { backgroundColor: colors.chipBg, borderColor: colors.divider },
-                    ]}
-                  >
-                    <Ionicons name="camera-outline" size={20} color={colors.primary} />
                   </View>
                 </Pressable>
 
@@ -1218,7 +1433,24 @@ export default function CommunityScreen({
         onClose={() => setCommentPostId(null)}
         post={commentPost}
         onAddComment={handleAddComment}
+        onReactToComment={handleReactToComment}
         colors={colors}
+      />
+
+      <LogoutModal
+        visible={!!postOptionsPostId}
+        onCancel={() => setPostOptionsPostId(null)}
+        onConfirm={() => {
+          const postId = postOptionsPostId;
+          setPostOptionsPostId(null);
+          if (postId) {
+            void handleDeletePost(postId);
+          }
+        }}
+        title="Post Options"
+        message=""
+        confirmLabel="Delete Post"
+        confirmColor="#DC2626"
       />
 
       <ExpandedImageModal
@@ -1260,31 +1492,21 @@ const styles = StyleSheet.create({
 
   /* Create bar */
   createBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 12,
     borderWidth: 1,
   },
-  createBarLeft: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
-  createPromptTitle: { fontSize: 14, fontWeight: "700", marginBottom: 6 },
+  createBarLeft: { flex: 1 },
+  createPromptRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  createPromptTitle: { fontSize: 14, fontWeight: "700", marginBottom: 8, marginLeft: 44 },
   createPromptText: { fontSize: 13, fontWeight: "500" },
   createInputPlaceholder: {
+    flex: 1,
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 10,
-  },
-  cameraBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
   },
 
   /* Filters */
@@ -1318,14 +1540,6 @@ const styles = StyleSheet.create({
   postGalleryWrap: {
     paddingBottom: 4,
   },
-  postGalleryHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-  },
-  postGalleryCount: { fontSize: 12, fontWeight: "700" },
   postGalleryRow: {
     paddingHorizontal: 14,
     paddingBottom: 8,
@@ -1430,7 +1644,10 @@ const styles = StyleSheet.create({
   postBtnText: { color: "#FFF", fontWeight: "700", fontSize: 13 },
   composeArea: {
     flexDirection: "row",
-    padding: 14,
+    paddingTop: 14,
+    paddingLeft: 14,
+    paddingRight: 14,
+    paddingBottom: 8,
     alignItems: "flex-start",
   },
   composeAvatar: { marginRight: 10 },
@@ -1452,9 +1669,10 @@ const styles = StyleSheet.create({
   removePhoto: { position: "absolute", top: 6, right: 6 },
   composeActions: {
     flexDirection: "row",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingTop: 6,
+    paddingBottom: 12,
+    paddingLeft: 60,
+    paddingRight: 14,
     gap: 20,
   },
   composeActionBtn: { flexDirection: "row", alignItems: "center", gap: 6 },
@@ -1468,9 +1686,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: "hidden",
   },
+  commentThread: {
+    marginBottom: 12,
+  },
   commentItem: {
     flexDirection: "row",
-    marginBottom: 12,
     alignItems: "flex-start",
   },
   commentAvatar: { marginRight: 8 },
@@ -1482,11 +1702,90 @@ const styles = StyleSheet.create({
   commentBubbleName: { fontSize: 12, fontWeight: "700", marginBottom: 2 },
   commentBubbleText: { fontSize: 13, lineHeight: 18 },
   commentTime: { fontSize: 10, marginTop: 4 },
-  commentInputRow: {
+  commentActionsRow: {
+    marginTop: 4,
+    marginLeft: 40,
     flexDirection: "row",
     alignItems: "center",
+    gap: 10,
+  },
+  replyBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  commentReactionSummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  commentReactionEmojis: {
+    fontSize: 12,
+  },
+  commentReactionCount: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  reactionPickerWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    marginTop: 8,
+    marginLeft: 40,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 999,
+    gap: 6,
+  },
+  reactionPickerItem: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reactionPickerItemActive: {
+    backgroundColor: "rgba(255,255,255,0.16)",
+  },
+  reactionPickerEmoji: {
+    fontSize: 24,
+  },
+  replyList: {
+    marginTop: 8,
+    marginLeft: 40,
+    gap: 8,
+  },
+  replyItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  replyBubble: {
+    flex: 1,
+    borderRadius: 14,
     padding: 10,
+  },
+  commentInputRow: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  replyTargetBar: {
+    flexDirection: "row",
+    padding: 10,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  replyTargetText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  commentComposerRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   commentInput: {
     flex: 1,

@@ -15,6 +15,17 @@ export interface Comment {
   _id: string;
   user: CommunityUser;
   text: string;
+  reactions: Record<string, number>;
+  reactionsCount: number;
+  myReaction?: string;
+  replies: CommentReply[];
+  createdAt: string;
+}
+
+export interface CommentReply {
+  _id: string;
+  user: CommunityUser;
+  text: string;
   createdAt: string;
 }
 
@@ -157,10 +168,35 @@ function normalizeLikeIds(rawLikes: any): string[] {
 }
 
 function normalizeComment(raw: any): Comment {
+  const reactionCountsRaw = raw?.reactions && typeof raw.reactions === "object"
+    ? raw.reactions
+    : raw?.reactionCounts && typeof raw.reactionCounts === "object"
+      ? raw.reactionCounts
+      : {};
+  const reactions: Record<string, number> = Object.fromEntries(
+    Object.entries(reactionCountsRaw)
+      .map(([type, count]) => [String(type), Number(count) || 0])
+      .filter(([, count]) => Number(count) > 0)
+  ) as Record<string, number>;
+
   return {
     _id: String(raw?._id || raw?.id || raw?.commentId || `${Date.now()}`),
     user: normalizeUser(raw?.user || raw?.author || raw?.createdBy || {}),
     text: String(raw?.text || raw?.content || raw?.body || ""),
+    reactions,
+    reactionsCount:
+      typeof raw?.reactionsCount === "number"
+        ? raw.reactionsCount
+        : Object.values(reactions).reduce((sum, count) => sum + Number(count || 0), 0),
+    myReaction: raw?.myReaction ? String(raw.myReaction) : undefined,
+    replies: Array.isArray(raw?.replies)
+      ? raw.replies.map((reply: any) => ({
+          _id: String(reply?._id || reply?.id || `${Date.now()}-${Math.random()}`),
+          user: normalizeUser(reply?.user || reply?.author || reply?.createdBy || {}),
+          text: String(reply?.text || reply?.content || reply?.body || ""),
+          createdAt: String(reply?.createdAt || reply?.updatedAt || new Date().toISOString()),
+        }))
+      : [],
     createdAt: String(raw?.createdAt || raw?.updatedAt || new Date().toISOString()),
   };
 }
@@ -318,15 +354,31 @@ export async function toggleLike(
 export async function addComment(
   postId: string,
   text: string,
-): Promise<Comment> {
+  parentCommentId?: string,
+): Promise<CommunityPost> {
   const data = await requestJson<any>({
     method: "POST",
     path: `/api/mobile/v1/community/posts/${postId}/comments`,
-    body: { text },
+    body: parentCommentId ? { text, parentCommentId } : { text },
     auth: true,
   });
 
-  return normalizeComment(unwrapPayload(data, ["comment", "item"]));
+  return normalizePost(unwrapPayload(data, ["post", "item"]));
+}
+
+export async function reactToComment(
+  postId: string,
+  commentId: string,
+  reaction: string,
+): Promise<CommunityPost> {
+  const data = await requestJson<any>({
+    method: "POST",
+    path: `/api/mobile/v1/community/posts/${postId}/comments/${commentId}/reactions`,
+    body: { reaction },
+    auth: true,
+  });
+
+  return normalizePost(unwrapPayload(data, ["post", "item"]));
 }
 
 export async function deletePost(postId: string): Promise<void> {
