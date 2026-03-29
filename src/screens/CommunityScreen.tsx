@@ -849,7 +849,6 @@ export default function CommunityScreen({
               Share updates, photos, and neighborhood conversations
             </Text>
           </View>
-          <AvatarImage uri={userAvatar} size={38} name={currentUserName} seed={currentUserId} />
         </View>
 
         {loading ? (

@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { AppState, AppStateStatus, View } from "react-native";
 
-const IDLE_MS = 10 * 60 * 1000; // 15 minutes
+const IDLE_MS = 15 * 60 * 1000;
 
 interface Props {
   onTimeout: () => void | Promise<void>;
@@ -9,11 +9,8 @@ interface Props {
 }
 
 /**
- * Wraps authenticated screens.
- * Any touch resets the 15-minute idle timer.
- * When the timer fires, `onTimeout` is called (should lock to PIN screen).
- * Also tracks background duration — if the app was backgrounded for 15+ minutes,
- * `onTimeout` fires immediately when the user returns.
+ * Wraps authenticated screens and locks them after 15 minutes without touch input.
+ * If the app stays in the background for 15+ minutes, it locks as soon as it returns.
  */
 export default function IdleTimerWrapper({ onTimeout, children }: Props) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -52,39 +49,37 @@ export default function IdleTimerWrapper({ onTimeout, children }: Props) {
 
     const sub = AppState.addEventListener("change", (state: AppStateStatus) => {
       if (state === "active") {
-        // Check how long the app was in the background
         if (backgroundAtRef.current) {
           const elapsed = Date.now() - backgroundAtRef.current;
           backgroundAtRef.current = null;
 
           if (elapsed >= IDLE_MS) {
-            // Backgrounded for 15+ minutes → lock immediately
             clearTimer();
             triggerTimeout();
             return;
           }
         }
-        // Otherwise resume the idle timer
+
         resetTimer();
-      } else {
-        // App going to background — record timestamp and pause timer
-        backgroundAtRef.current = Date.now();
-        clearTimer();
+        return;
       }
+
+      backgroundAtRef.current = Date.now();
+      clearTimer();
     });
 
     return () => {
       clearTimer();
       sub.remove();
     };
-  }, [resetTimer, clearTimer, triggerTimeout]);
+  }, [clearTimer, resetTimer, triggerTimeout]);
 
   return (
     <View
       style={{ flex: 1 }}
       onStartShouldSetResponderCapture={() => {
         resetTimer();
-        return false; // don't consume the event
+        return false;
       }}
       onMoveShouldSetResponderCapture={() => {
         resetTimer();

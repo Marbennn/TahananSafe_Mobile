@@ -1,7 +1,7 @@
 // App.tsx
 import "react-native-gesture-handler";
 import React, { useEffect, useState } from "react";
-import { Alert, BackHandler, StyleSheet } from "react-native";
+import { Alert, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { enableScreens } from "react-native-screens";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -50,6 +50,10 @@ import {
   getAccessToken,
   setHasPin,
   getHasPin,
+  setStoredUser,
+  getStoredUser,
+  setAppLockRequired,
+  isAppLockRequired,
   isPinUnlockedThisRun,
   setPinUnlockedThisRun,
   resetPinUnlockedThisRun,
@@ -58,7 +62,7 @@ import {
 } from "./src/auth/session";
 
 // APIs for PIN & profile
-import { getMeApi, verifyPinApi } from "./src/api/pin";
+import { getMeApi, unlockWithPinApi } from "./src/api/pin";
 
 // Push notifications
 import * as Notifications from "expo-notifications";
@@ -165,6 +169,19 @@ async function refreshSessionBeforeIdleExit(auth: any) {
   } catch {
     // Ignore refresh failures here; PIN flow on reopen will handle them.
   }
+}
+
+async function lockToPinScreen({
+  auth,
+  navigation,
+}: {
+  auth: any;
+  navigation: any;
+}) {
+  await refreshSessionBeforeIdleExit(auth);
+  resetPinUnlockedThisRun();
+  await setAppLockRequired(true).catch(() => {});
+  navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
 }
 
 /* ===================== ROLE HELPERS ===================== */
@@ -381,20 +398,24 @@ async function bootstrapAfterLogin({
       const targetHome = getHomeRouteNameByRole(role);
 
       await setHasPin(hasPin);
+      await setStoredUser({ ...me.user, hasPin });
 
       const email = String(me?.user?.email || "").trim().toLowerCase();
       const pinLocalEnabled = email ? await isPinEnabledLocally(email) : true;
 
       if (hasPin && pinLocalEnabled) {
         if (isPinUnlockedThisRun()) {
+          await setAppLockRequired(false).catch(() => {});
           navigation.reset({ index: 0, routes: [{ name: targetHome }] });
           return;
         }
+        await setAppLockRequired(true).catch(() => {});
         navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
         return;
       }
 
       if (hasPin && !pinLocalEnabled) {
+        await setAppLockRequired(false).catch(() => {});
         setPinUnlockedThisRun(true);
         navigation.reset({ index: 0, routes: [{ name: targetHome }] });
         return;
@@ -403,15 +424,25 @@ async function bootstrapAfterLogin({
       const userId = String(me.user._id);
       const skipped = await isPinSkippedForUser(userId);
       if (skipped) {
+        await setAppLockRequired(false).catch(() => {});
         navigation.reset({ index: 0, routes: [{ name: targetHome }] });
         return;
       }
 
+      await setAppLockRequired(false).catch(() => {});
       navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] });
       return;
     }
   } catch {}
 
+  const hasPin = await getHasPin().catch(() => false);
+  if (hasPin) {
+    await setAppLockRequired(true).catch(() => {});
+    navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
+    return;
+  }
+
+  await setAppLockRequired(false).catch(() => {});
   navigation.reset({ index: 0, routes: [{ name: "Main" }] });
 }
 
@@ -432,9 +463,7 @@ function MainScreenWrapper({ navigation, route }: { navigation: any; route: any 
 
   // Idle timeout → close app; on reopen the splash flow sees PIN not unlocked → PinScreen
   const handleIdleLock = async () => {
-    await refreshSessionBeforeIdleExit(auth);
-    resetPinUnlockedThisRun();
-    BackHandler.exitApp();
+    await lockToPinScreen({ auth, navigation });
   };
 
   return (
@@ -466,9 +495,7 @@ function AdminHomeWrapper({ navigation }: { navigation: any }) {
 
   // Idle timeout → close app; on reopen the splash flow sees PIN not unlocked → PinScreen
   const handleIdleLock = async () => {
-    await refreshSessionBeforeIdleExit(auth);
-    resetPinUnlockedThisRun();
-    BackHandler.exitApp();
+    await lockToPinScreen({ auth, navigation });
   };
 
   return (
@@ -483,24 +510,54 @@ function AdminHomeWrapper({ navigation }: { navigation: any }) {
 
 function NotificationsWrapper({ navigation }: { navigation: any }) {
   const auth = useAuth() as any;
+  const handleIdleLock = async () => {
+    await lockToPinScreen({ auth, navigation });
+  };
 
   if (isBarangayOfficial(auth?.user?.role)) {
-    return <AdminNotificationsScreen onBack={() => navigation.goBack()} />;
+    return (
+      <IdleTimerWrapper onTimeout={handleIdleLock}>
+        <AdminNotificationsScreen onBack={() => navigation.goBack()} />
+      </IdleTimerWrapper>
+    );
   }
 
-  return <NotificationsScreen onBack={() => navigation.goBack()} />;
+  return (
+    <IdleTimerWrapper onTimeout={handleIdleLock}>
+      <NotificationsScreen onBack={() => navigation.goBack()} />
+    </IdleTimerWrapper>
+  );
 }
 
 /* ===================== ✅ PIN SCREEN WRAPPER ===================== */
 
 function PinScreenWrapper({ navigation }: { navigation: any }) {
   const auth = useAuth() as any;
-  const targetHome = getHomeRouteNameByRole(auth?.user?.role);
+  const [storedUser, setStoredUserState] = React.useState<any>(null);
+  const resolvedUser = auth?.user || storedUser;
+  const accountEmail = String(resolvedUser?.email || "").trim().toLowerCase();
+  const targetHome = getHomeRouteNameByRole(resolvedUser?.role);
   const [pinErrVisible, setPinErrVisible] = React.useState(false);
   const [pinErrMsg, setPinErrMsg] = React.useState("");
   const failCountRef = React.useRef(0);
 
   const MAX_PIN_ATTEMPTS = 3;
+
+  React.useEffect(() => {
+    let mounted = true;
+
+    getStoredUser()
+      .then((user) => {
+        if (mounted) setStoredUserState(user);
+      })
+      .catch(() => {
+        if (mounted) setStoredUserState(null);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const redirectToAuthFlow = React.useCallback(
     async (message?: string) => {
@@ -543,11 +600,13 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
 
   return (
     <PinScreen
+      accountEmail={accountEmail}
       onBack={handleBack}
       onForgotPin={() => {
         Alert.alert("Forgot PIN", "Recovery coming soon.");
       }}
       onBypass={() => {
+        setAppLockRequired(false).catch(() => {});
         setPinUnlockedThisRun(true);
         navigation.reset({ index: 0, routes: [{ name: targetHome }] });
       }}
@@ -556,15 +615,28 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
       onInvalidPinDismiss={() => setPinErrVisible(false)}
       onVerified={async (pin) => {
         try {
-          // verifyPinApi uses auth:true — the HTTP interceptor attaches
-          // the stored token and auto-refreshes on 401, so no pre-check needed.
-          await verifyPinApi({ pin });
+          // Unlock by account email + PIN so the app can recover even when
+          // the previously stored access token has already expired.
+          if (!accountEmail) {
+            setPinErrMsg("Unable to determine which account to unlock. Please log in again.");
+            setPinErrVisible(true);
+            return;
+          }
+
+          const unlocked = await unlockWithPinApi({ email: accountEmail, pin });
+          await auth.login({
+            accessToken: unlocked.accessToken,
+            refreshToken: unlocked.refreshToken,
+            user: unlocked.user,
+          });
+          await setHasPin(!!unlocked.user?.hasPin);
+          await setStoredUser(unlocked.user);
 
           // Reset brute-force counter only after successful verification
           failCountRef.current = 0;
-          const email = (auth?.user?.email || "").trim().toLowerCase();
-          if (email) await resetPinAttempts(email);
+          if (accountEmail) await resetPinAttempts(accountEmail);
 
+          await setAppLockRequired(false).catch(() => {});
           setPinUnlockedThisRun(true);
           navigation.reset({ index: 0, routes: [{ name: targetHome }] });
         } catch (e: any) {
@@ -605,10 +677,12 @@ function CreatePinWrapper({ navigation }: { navigation: any }) {
   return (
     <CreatePinScreen
       onContinue={() => {
+        setAppLockRequired(false).catch(() => {});
         setPinUnlockedThisRun(true);
         navigation.reset({ index: 0, routes: [{ name: targetHome }] });
       }}
       onSkip={() => {
+        setAppLockRequired(false).catch(() => {});
         setPinUnlockedThisRun(true);
         navigation.reset({ index: 0, routes: [{ name: targetHome }] });
       }}
@@ -671,6 +745,7 @@ function AppSplashScreenWrapper({
 
     const t = setTimeout(async () => {
       try {
+        const appLockRequired = await isAppLockRequired();
         const seenOnboarding = await isOnboardingSeen();
         if (!mounted) return;
 
@@ -692,7 +767,7 @@ function AppSplashScreenWrapper({
           // If user was previously logged in with a PIN, go to PinScreen
           // instead of wiping session — PinScreenWrapper handles re-auth
           const hadPin = await getHasPin();
-          if (logged && hadPin && !isPinUnlockedThisRun()) {
+          if (logged && hadPin && (appLockRequired || !isPinUnlockedThisRun())) {
             onGoPin();
             return;
           }
@@ -714,22 +789,24 @@ function AppSplashScreenWrapper({
         const isAdmin = isBarangayOfficial(role);
 
         await setHasPin(hasPin);
+        await setStoredUser({ ...me.user, hasPin });
         if (!mounted) return;
 
         const email = String(me?.user?.email || "").trim().toLowerCase();
         const pinLocalEnabled = email ? await isPinEnabledLocally(email) : true;
 
         if (hasPin && pinLocalEnabled) {
-          if (isPinUnlockedThisRun()) {
+          if (appLockRequired || !isPinUnlockedThisRun()) {
+            onGoPin();
+          } else {
             if (isAdmin) onGoAdminHome();
             else onGoMain();
-          } else {
-            onGoPin();
           }
           return;
         }
 
         if (hasPin && !pinLocalEnabled) {
+          await setAppLockRequired(false).catch(() => {});
           setPinUnlockedThisRun(true);
           if (isAdmin) onGoAdminHome();
           else onGoMain();
@@ -739,11 +816,13 @@ function AppSplashScreenWrapper({
         const userId = String(me.user._id);
         const skipped = await isPinSkippedForUser(userId);
         if (skipped) {
+          await setAppLockRequired(false).catch(() => {});
           if (isAdmin) onGoAdminHome();
           else onGoMain();
           return;
         }
 
+        await setAppLockRequired(false).catch(() => {});
         onGoCreatePin();
       } catch (error) {
         if (!mounted) return;
@@ -753,7 +832,8 @@ function AppSplashScreenWrapper({
             // If user had a PIN, show PinScreen instead of wiping session
             const wasLoggedInAuth = await isLoggedIn();
             const hadPinAuth = await getHasPin();
-            if (wasLoggedInAuth && hadPinAuth && !isPinUnlockedThisRun()) {
+            const appLockRequired = await isAppLockRequired();
+            if (wasLoggedInAuth && hadPinAuth && (appLockRequired || !isPinUnlockedThisRun())) {
               onGoPin();
               return;
             }
@@ -769,8 +849,9 @@ function AppSplashScreenWrapper({
           // instead of auth flow — PinScreenWrapper will handle token refresh
           const wasLoggedIn = await isLoggedIn();
           const hadPin = await getHasPin();
+          const appLockRequired = await isAppLockRequired();
 
-          if (wasLoggedIn && hadPin && !isPinUnlockedThisRun()) {
+          if (wasLoggedIn && hadPin && (appLockRequired || !isPinUnlockedThisRun())) {
             onGoPin();
             return;
           }

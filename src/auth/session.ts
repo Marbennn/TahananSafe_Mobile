@@ -8,6 +8,7 @@ const KEYS = {
   accessToken: "tahanansafe_access_token",   // SecureStore
   refreshToken: "tahanansafe_refresh_token", // SecureStore
   hasPin: "@tahanansafe_has_pin",
+  appLockRequired: "@tahanansafe_app_lock_required",
   user: "@tahanansafe_user",
   onboardingSeen: "@tahanansafe_onboarding_seen",
   pinSkipped: "@tahanansafe_pin_skipped",
@@ -26,6 +27,17 @@ const LEGACY_KEYS = {
  */
 let pinUnlockedThisRun = false;
 
+export type StoredUser = {
+  _id?: string;
+  id?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  profileImage?: string;
+  hasPin?: boolean;
+  role?: string;
+};
+
 export function setPinUnlockedThisRun(value: boolean) {
   pinUnlockedThisRun = value;
 }
@@ -36,6 +48,19 @@ export function isPinUnlockedThisRun(): boolean {
 
 export function resetPinUnlockedThisRun() {
   pinUnlockedThisRun = false;
+}
+
+function sanitizeStoredUser(user: StoredUser): StoredUser {
+  return {
+    _id: user?._id ? String(user._id) : undefined,
+    id: user?.id ? String(user.id) : undefined,
+    email: user?.email ? String(user.email).trim().toLowerCase() : undefined,
+    firstName: user?.firstName ? String(user.firstName) : undefined,
+    lastName: user?.lastName ? String(user.lastName) : undefined,
+    profileImage: user?.profileImage ? String(user.profileImage) : undefined,
+    hasPin: typeof user?.hasPin === "boolean" ? user.hasPin : undefined,
+    role: user?.role ? String(user.role) : undefined,
+  };
 }
 
 /* ===================== ONBOARDING FLAG ===================== */
@@ -86,7 +111,7 @@ export async function setLoggedIn(value: boolean) {
     pinUnlockedThisRun = false;
 
     await Promise.all([
-      AsyncStorage.multiRemove([KEYS.loggedIn, KEYS.hasPin, KEYS.user]),
+      AsyncStorage.multiRemove([KEYS.loggedIn, KEYS.hasPin, KEYS.appLockRequired, KEYS.user]),
       SecureStore.deleteItemAsync(KEYS.accessToken).catch(() => {}),
       SecureStore.deleteItemAsync(KEYS.refreshToken).catch(() => {}),
       // Clean legacy keys
@@ -168,11 +193,46 @@ export async function getHasPin(): Promise<boolean> {
   return v === "1";
 }
 
+export async function setStoredUser(user: StoredUser | null) {
+  if (!user) {
+    await AsyncStorage.removeItem(KEYS.user);
+    return;
+  }
+
+  await AsyncStorage.setItem(KEYS.user, JSON.stringify(sanitizeStoredUser(user)));
+}
+
+export async function getStoredUser(): Promise<StoredUser | null> {
+  const raw = await AsyncStorage.getItem(KEYS.user);
+  if (!raw) return null;
+
+  try {
+    return sanitizeStoredUser(JSON.parse(raw));
+  } catch {
+    await AsyncStorage.removeItem(KEYS.user).catch(() => {});
+    return null;
+  }
+}
+
+export async function setAppLockRequired(value: boolean) {
+  if (value) {
+    await AsyncStorage.setItem(KEYS.appLockRequired, "1");
+    return;
+  }
+
+  await AsyncStorage.removeItem(KEYS.appLockRequired);
+}
+
+export async function isAppLockRequired(): Promise<boolean> {
+  const v = await AsyncStorage.getItem(KEYS.appLockRequired);
+  return v === "1";
+}
+
 export async function clearSession() {
   pinUnlockedThisRun = false;
 
   await Promise.all([
-    AsyncStorage.multiRemove([KEYS.loggedIn, KEYS.hasPin, KEYS.user]),
+    AsyncStorage.multiRemove([KEYS.loggedIn, KEYS.hasPin, KEYS.appLockRequired, KEYS.user]),
     SecureStore.deleteItemAsync(KEYS.accessToken).catch(() => {}),
     SecureStore.deleteItemAsync(KEYS.refreshToken).catch(() => {}),
     AsyncStorage.removeItem(LEGACY_KEYS.accessToken).catch(() => {}),

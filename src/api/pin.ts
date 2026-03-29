@@ -5,6 +5,12 @@ import { requestJson } from "./http";
 
 type SetPinResponse = { message: string };
 type VerifyPinResponse = { message: string };
+type UnlockWithPinResponse = {
+  message: string;
+  accessToken: string;
+  refreshToken: string;
+  user: GetMeResponse["user"];
+};
 
 type GetMeResponse = {
   user: {
@@ -48,6 +54,17 @@ export async function verifyPinApi(params: { pin: string }): Promise<VerifyPinRe
     path: "/api/mobile/v1/verify-pin",
     body: { pin: params.pin },
     auth: true,
+  });
+}
+
+export async function unlockWithPinApi(params: {
+  email: string;
+  pin: string;
+}): Promise<UnlockWithPinResponse> {
+  return requestJson<UnlockWithPinResponse>({
+    method: "POST",
+    path: "/api/mobile/v1/unlock-with-pin",
+    body: params,
   });
 }
 

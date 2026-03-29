@@ -19,9 +19,6 @@ import { Colors, useColors } from "../theme/colors";
 
 import NewLogo from "../../assets/NewLogo.svg";
 
-// ✅ Auth (to know which account is logged-in)
-import { useAuth } from "../auth/AuthContext";
-
 // ✅ SecureStore (to read the local PIN toggle)
 import * as SecureStore from "expo-secure-store";
 
@@ -31,6 +28,7 @@ type Props = {
   onBack?: () => void;
   onBypass?: () => void;
   onUserActivity?: () => void;
+  accountEmail?: string;
 
   invalidPinVisible?: boolean;
   invalidPinMsg?: string;
@@ -105,6 +103,7 @@ export default function PinScreen({
   onBack,
   onBypass,
   onUserActivity,
+  accountEmail,
   invalidPinVisible = false,
   invalidPinMsg,
   onInvalidPinDismiss,
@@ -155,8 +154,7 @@ export default function PinScreen({
   }, [invalidPinVisible]);
 
   // ✅ Check if PIN is disabled (device-level) then bypass this screen
-  const { user } = useAuth() as any;
-  const userEmail: string = (user?.email ? String(user.email) : "").trim().toLowerCase();
+  const userEmail: string = String(accountEmail || "").trim().toLowerCase();
   const [checkingLocal, setCheckingLocal] = useState(true);
 
   // ✅ SECURITY: Check lockout status on mount
