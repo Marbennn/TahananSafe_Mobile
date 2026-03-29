@@ -1,5 +1,5 @@
 // src/components/SavedModal.tsx
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -18,6 +18,8 @@ type Props = {
   message?: string;
   buttonLabel?: string;
   onClose: () => void;
+  hideButton?: boolean;
+  autoCloseMs?: number;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -30,9 +32,12 @@ export default function SavedModal({
   message = "Your changes have been saved successfully.",
   buttonLabel = "OK",
   onClose,
+  hideButton = false,
+  autoCloseMs,
 }: Props) {
   const TC = useColors();
   const { width, height } = useWindowDimensions();
+  const hasMessage = message.trim().length > 0;
 
   const s = clamp(width / 375, 0.95, 1.45);
   const vs = clamp(height / 812, 0.95, 1.25);
@@ -44,14 +49,14 @@ export default function SavedModal({
   const fade = useRef(new Animated.Value(0)).current;
   const pop = useRef(new Animated.Value(0.96)).current;
 
-  const closeWithAnim = () => {
+  const closeWithAnim = useCallback(() => {
     Animated.parallel([
       Animated.timing(fade, { toValue: 0, duration: 120, useNativeDriver: true }),
       Animated.timing(pop, { toValue: 0.98, duration: 120, useNativeDriver: true }),
     ]).start(({ finished }) => {
       if (finished) onClose();
     });
-  };
+  }, [fade, onClose, pop]);
 
   useEffect(() => {
     if (!visible) return;
@@ -70,30 +75,56 @@ export default function SavedModal({
     ]).start();
   }, [visible, fade, pop]);
 
+  useEffect(() => {
+    if (!visible || !autoCloseMs) return;
+
+    const timer = setTimeout(() => {
+      closeWithAnim();
+    }, autoCloseMs);
+
+    return () => clearTimeout(timer);
+  }, [autoCloseMs, closeWithAnim, visible]);
+
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={closeWithAnim}>
       <View style={styles.modalRoot}>
         <Animated.View style={[styles.backdrop, { opacity: fade, backgroundColor: TC.overlay }]} />
 
         <Animated.View
-          style={[styles.card, { opacity: fade, transform: [{ scale: pop }], backgroundColor: TC.surface }]}
+          style={[
+            styles.card,
+            !hasMessage && hideButton ? styles.cardCompact : null,
+            { opacity: fade, transform: [{ scale: pop }], backgroundColor: TC.surface },
+          ]}
         >
-          <Text style={[styles.title, { color: TC.textDark }]}>{title}</Text>
-
-          <Text style={[styles.sub, { color: TC.muted }]}>{message}</Text>
-
-          <Pressable
-            onPress={closeWithAnim}
-            hitSlop={8}
-            style={({ pressed }) => [
-              styles.btnOuter,
-              pressed ? { opacity: 0.85, transform: [{ scale: 0.99 }] } : null,
+          <Text
+            style={[
+              styles.title,
+              !hasMessage && hideButton ? styles.titleStandalone : !hasMessage ? styles.titleOnly : null,
+              { color: TC.textDark },
             ]}
           >
-            <View style={[styles.btnInner, { backgroundColor: TC.primary }]}>
-              <Text style={styles.btnText}>{buttonLabel}</Text>
-            </View>
-          </Pressable>
+            {title}
+          </Text>
+
+          {hasMessage ? (
+            <Text style={[styles.sub, { color: TC.muted }]}>{message}</Text>
+          ) : null}
+
+          {!hideButton ? (
+            <Pressable
+              onPress={closeWithAnim}
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.btnOuter,
+                pressed ? { opacity: 0.85, transform: [{ scale: 0.99 }] } : null,
+              ]}
+            >
+              <View style={[styles.btnInner, { backgroundColor: TC.primary }]}>
+                <Text style={styles.btnText}>{buttonLabel}</Text>
+              </View>
+            </Pressable>
+          ) : null}
         </Animated.View>
       </View>
     </Modal>
@@ -131,6 +162,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
         android: { elevation: 10 },
       }),
     },
+    cardCompact: {
+      maxWidth: scale(276),
+      paddingHorizontal: scale(20),
+      paddingTop: scale(22),
+      paddingBottom: scale(22),
+    },
 
     title: {
       textAlign: "center",
@@ -138,6 +175,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       fontWeight: "900",
       color: Colors.text,
       marginBottom: scale(10),
+    },
+    titleOnly: {
+      marginBottom: scale(22),
+    },
+    titleStandalone: {
+      marginBottom: 0,
     },
     sub: {
       textAlign: "center",

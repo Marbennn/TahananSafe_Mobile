@@ -828,12 +828,9 @@ export default function HomeScreen({
         iconBtn: {
           width: iconBtnSize,
           height: iconBtnSize,
-          borderRadius: 999,
-          backgroundColor: "#F0F6FF",
           alignItems: "center",
           justifyContent: "center",
-          borderWidth: 1,
-          borderColor: "#E7EEF7",
+          position: "relative",
         },
 
         badge: {
@@ -1113,7 +1110,7 @@ export default function HomeScreen({
                 handleOpenNotifications();
               }}
               hitSlop={12}
-              style={({ pressed }) => [styles.iconBtn, { backgroundColor: TC.chipBg, borderColor: TC.divider }, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
+              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
             >
               <Ionicons name="notifications-outline" size={notifIconSize} color={TC.textDark} />
 
@@ -1134,7 +1131,7 @@ export default function HomeScreen({
                 setShowReportTutorial(true);
               }}
               hitSlop={12}
-              style={({ pressed }) => [styles.iconBtn, { backgroundColor: TC.chipBg, borderColor: TC.divider }, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
+              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
             >
               <Ionicons name="help-circle-outline" size={helpIconSize} color={TC.textDark} />
             </Pressable>

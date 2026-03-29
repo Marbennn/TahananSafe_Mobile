@@ -24,10 +24,13 @@ import { useColors } from "../theme/colors";
 import { useAuth } from "../auth/AuthContext";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import LogoutModal from "../components/LogoutModal";
+import SavedModal from "../components/SavedModal";
 import {
   fetchPosts,
   createPost,
   toggleLike,
+  toggleSavePost,
+  updatePost,
   addComment,
   reactToComment,
   deletePost,
@@ -136,7 +139,7 @@ function AvatarImage({
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type FilterKey = "all" | "popular" | "recent";
+type FilterKey = "all" | "popular" | "recent" | "saved";
 
 type Props = {
   initialTab?: TabKey;
@@ -154,6 +157,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "All Posts" },
   { key: "popular", label: "Popular" },
   { key: "recent", label: "Recent" },
+  { key: "saved", label: "Saved" },
 ];
 
 const MAX_POST_IMAGES = 5;
@@ -274,7 +278,7 @@ function PostCard({
   currentUserId,
   onLike,
   onComment,
-  onDelete,
+  onOpenOptions,
   onImagePress,
   colors,
 }: {
@@ -282,7 +286,7 @@ function PostCard({
   currentUserId: string;
   onLike: (id: string) => void;
   onComment: (id: string) => void;
-  onDelete: (id: string) => void;
+  onOpenOptions: (id: string) => void;
   onImagePress: (imageUris: string[], index: number) => void;
   colors: ReturnType<typeof useColors>;
 }) {
@@ -292,7 +296,6 @@ function PostCard({
       : post.likes.includes(currentUserId);
   const likeCount =
     typeof post.likesCount === "number" ? post.likesCount : post.likes.length;
-  const isOwner = post.user._id === currentUserId;
   const commentCount = countThreadComments(post.comments);
   const previewItems = buildCommentPreviewItems(post.comments).slice(-2);
   const imageUrls =
@@ -332,11 +335,9 @@ function PostCard({
         <Text style={[styles.postTime, { color: colors.muted }]}>
           {timeAgo(post.createdAt)}
         </Text>
-        {isOwner && (
-          <Pressable hitSlop={8} style={styles.postMenu} onPress={() => onDelete(post._id)}>
-            <Ionicons name="ellipsis-horizontal" size={18} color={colors.muted} />
-          </Pressable>
-        )}
+        <Pressable hitSlop={8} style={styles.postMenu} onPress={() => onOpenOptions(post._id)}>
+          <Ionicons name="ellipsis-horizontal" size={18} color={colors.muted} />
+        </Pressable>
       </View>
 
       {/* Content */}
@@ -665,6 +666,210 @@ function CreatePostModal({
           </View>
         </View>
       </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+/* ---- Edit Post Modal ---- */
+
+function EditPostModal({
+  visible,
+  initialContent,
+  onClose,
+  onSubmit,
+  colors,
+}: {
+  visible: boolean;
+  initialContent: string;
+  onClose: () => void;
+  onSubmit: (content: string) => Promise<void>;
+  colors: ReturnType<typeof useColors>;
+}) {
+  const [content, setContent] = useState(initialContent);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setContent(initialContent);
+    }
+  }, [initialContent, visible]);
+
+  const trimmedCurrent = content.trim();
+  const trimmedInitial = initialContent.trim();
+  const canSave = !!trimmedCurrent && trimmedCurrent !== trimmedInitial && !saving;
+
+  const handleClose = () => {
+    if (saving) return;
+    setContent(initialContent);
+    onClose();
+  };
+
+  const handleSave = async () => {
+    if (!canSave) return;
+
+    setSaving(true);
+    try {
+      await onSubmit(trimmedCurrent);
+      onClose();
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to update post.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
+      >
+        <View
+          style={[
+            styles.modalContent,
+            { backgroundColor: colors.surface, borderColor: colors.divider },
+          ]}
+        >
+          <View style={[styles.modalHeader, { borderBottomColor: colors.divider }]}>
+            <Pressable onPress={handleClose} disabled={saving}>
+              <Text style={{ color: colors.muted, fontSize: 16 }}>Cancel</Text>
+            </Pressable>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Edit Post
+            </Text>
+            <Pressable
+              onPress={handleSave}
+              disabled={!canSave}
+              style={[
+                styles.postBtn,
+                {
+                  backgroundColor: canSave ? colors.primary : colors.border,
+                },
+              ]}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Text style={styles.postBtnText}>Save</Text>
+              )}
+            </Pressable>
+          </View>
+
+          <View style={styles.editPostBody}>
+            <TextInput
+              placeholder="What's happening in your area?"
+              placeholderTextColor={colors.placeholder}
+              style={[
+                styles.editPostInput,
+                {
+                  color: colors.textDark,
+                  backgroundColor: colors.inputBg,
+                  borderColor: colors.divider,
+                },
+              ]}
+              multiline
+              autoFocus
+              value={content}
+              onChangeText={setContent}
+            />
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+/* ---- Post Options Modal ---- */
+
+function PostOptionsModal({
+  visible,
+  canEdit,
+  canDelete,
+  isSaved,
+  onClose,
+  onEdit,
+  onToggleSave,
+  onDelete,
+  colors,
+}: {
+  visible: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  isSaved: boolean;
+  onClose: () => void;
+  onEdit: () => void;
+  onToggleSave: () => void;
+  onDelete: () => void;
+  colors: ReturnType<typeof useColors>;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.centerModalRoot}>
+        <Pressable
+          style={[styles.centerModalBackdrop, { backgroundColor: colors.overlay }]}
+          onPress={onClose}
+        />
+
+        <View
+          style={[
+            styles.postOptionsCard,
+            { backgroundColor: colors.surface, borderColor: colors.divider },
+          ]}
+        >
+          <Text style={[styles.postOptionsTitle, { color: colors.textDark }]}>
+            Post Options
+          </Text>
+
+          <View style={styles.postOptionsActions}>
+            {canEdit ? (
+              <Pressable
+                onPress={onEdit}
+                style={[styles.postOptionBtn, { backgroundColor: colors.inputBg }]}
+              >
+                <Ionicons name="create-outline" size={18} color={colors.primary} />
+                <Text style={[styles.postOptionLabel, { color: colors.textDark }]}>
+                  Edit Post
+                </Text>
+              </Pressable>
+            ) : null}
+
+            <Pressable
+              onPress={onToggleSave}
+              style={[styles.postOptionBtn, { backgroundColor: colors.inputBg }]}
+            >
+              <Ionicons
+                name={isSaved ? "bookmark" : "bookmark-outline"}
+                size={18}
+                color={colors.primary}
+              />
+              <Text style={[styles.postOptionLabel, { color: colors.textDark }]}>
+                {isSaved ? "Unsave Post" : "Save Post"}
+              </Text>
+            </Pressable>
+
+            {canDelete ? (
+              <Pressable
+                onPress={onDelete}
+                style={[styles.postOptionBtn, styles.postOptionBtnDanger]}
+              >
+                <Ionicons name="trash-outline" size={18} color="#DC2626" />
+                <Text style={styles.postOptionDangerLabel}>
+                  Delete Post
+                </Text>
+              </Pressable>
+            ) : null}
+
+            <Pressable
+              onPress={onClose}
+              style={[styles.postOptionBtn, { backgroundColor: colors.inputBg }]}
+            >
+              <Text style={[styles.postOptionLabel, { color: colors.textDark }]}>
+                Cancel
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -1122,6 +1327,9 @@ export default function CommunityScreen({
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [commentPostId, setCommentPostId] = useState<string | null>(null);
   const [postOptionsPostId, setPostOptionsPostId] = useState<string | null>(null);
+  const [deletePostConfirmId, setDeletePostConfirmId] = useState<string | null>(null);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [postDeletedModalVisible, setPostDeletedModalVisible] = useState(false);
   const [expandedImageViewer, setExpandedImageViewer] = useState<{
     imageUris: string[];
     initialIndex: number;
@@ -1246,11 +1454,44 @@ export default function CommunityScreen({
     []
   );
 
+  const handleToggleSave = useCallback(
+    async (postId: string) => {
+      try {
+        const updatedPost = await toggleSavePost(postId);
+        setPosts((prev) =>
+          prev.map((p) =>
+            p._id === postId
+              ? updatedPost
+              : p
+          )
+        );
+      } catch (err: any) {
+        Alert.alert("Error", err.message || "Failed to update saved post.");
+      }
+    },
+    []
+  );
+
+  const handleUpdatePost = useCallback(
+    async (postId: string, content: string) => {
+      const updatedPost = await updatePost(postId, content);
+      setPosts((prev) =>
+        prev.map((p) =>
+          p._id === postId
+            ? updatedPost
+            : p
+        )
+      );
+    },
+    []
+  );
+
   const handleDeletePost = useCallback(
     async (postId: string) => {
       try {
         await deletePost(postId);
         setPosts((prev) => prev.filter((p) => p._id !== postId));
+        setPostDeletedModalVisible(true);
       } catch (err: any) {
         Alert.alert("Error", err.message || "Failed to delete post.");
       }
@@ -1271,6 +1512,8 @@ export default function CommunityScreen({
           (a, b) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
+      case "saved":
+        return posts.filter((post) => Boolean(post.savedByMe));
       default:
         return posts;
     }
@@ -1279,6 +1522,24 @@ export default function CommunityScreen({
   const commentPost = commentPostId
     ? posts.find((p) => p._id === commentPostId) ?? null
     : null;
+  const optionsPost = postOptionsPostId
+    ? posts.find((p) => p._id === postOptionsPostId) ?? null
+    : null;
+  const deleteConfirmPost = deletePostConfirmId
+    ? posts.find((p) => p._id === deletePostConfirmId) ?? null
+    : null;
+  const editingPost = editingPostId
+    ? posts.find((p) => p._id === editingPostId) ?? null
+    : null;
+  const emptyState = activeFilter === "saved"
+    ? {
+        title: "No saved posts yet",
+        text: "Save a post from the options menu to see it here.",
+      }
+    : {
+        title: "No posts yet",
+        text: "Be the first to share a photo, update, or helpful message.",
+      };
 
   const renderPost = useCallback(
     ({ item }: { item: CommunityPost }) => (
@@ -1287,7 +1548,7 @@ export default function CommunityScreen({
         currentUserId={currentUserId}
         onLike={handleLike}
         onComment={(id) => setCommentPostId(id)}
-        onDelete={(id) => setPostOptionsPostId(id)}
+        onOpenOptions={(id) => setPostOptionsPostId(id)}
         onImagePress={(imageUris, initialIndex) =>
           setExpandedImageViewer({ imageUris, initialIndex })
         }
@@ -1386,10 +1647,10 @@ export default function CommunityScreen({
                   <Ionicons name="chatbubbles-outline" size={28} color={colors.primary} />
                 </View>
                 <Text style={[styles.emptyTitle, { color: colors.textDark }]}>
-                  No posts yet
+                  {emptyState.title}
                 </Text>
                 <Text style={[styles.emptyText, { color: colors.muted }]}>
-                  Be the first to share a photo, update, or helpful message.
+                  {emptyState.text}
                 </Text>
               </View>
             }
@@ -1437,20 +1698,65 @@ export default function CommunityScreen({
         colors={colors}
       />
 
-      <LogoutModal
-        visible={!!postOptionsPostId}
-        onCancel={() => setPostOptionsPostId(null)}
-        onConfirm={() => {
-          const postId = postOptionsPostId;
+      <EditPostModal
+        visible={!!editingPost}
+        initialContent={editingPost?.content ?? ""}
+        onClose={() => setEditingPostId(null)}
+        onSubmit={async (content) => {
+          if (!editingPost) return;
+          await handleUpdatePost(editingPost._id, content);
+        }}
+        colors={colors}
+      />
+
+      <PostOptionsModal
+        visible={!!optionsPost}
+        canEdit={optionsPost?.user._id === currentUserId}
+        canDelete={optionsPost?.user._id === currentUserId}
+        isSaved={Boolean(optionsPost?.savedByMe)}
+        onClose={() => setPostOptionsPostId(null)}
+        onEdit={() => {
+          if (!optionsPost) return;
           setPostOptionsPostId(null);
+          setEditingPostId(optionsPost._id);
+        }}
+        onToggleSave={() => {
+          if (!optionsPost) return;
+          const postId = optionsPost._id;
+          setPostOptionsPostId(null);
+          void handleToggleSave(postId);
+        }}
+        onDelete={() => {
+          if (!optionsPost) return;
+          setPostOptionsPostId(null);
+          setDeletePostConfirmId(optionsPost._id);
+        }}
+        colors={colors}
+      />
+
+      <LogoutModal
+        visible={!!deleteConfirmPost}
+        onCancel={() => setDeletePostConfirmId(null)}
+        onConfirm={() => {
+          const postId = deleteConfirmPost?._id;
+          setDeletePostConfirmId(null);
           if (postId) {
             void handleDeletePost(postId);
           }
         }}
-        title="Post Options"
-        message=""
+        title="Delete Post"
+        message="Are you sure you want to delete this post?"
         confirmLabel="Delete Post"
         confirmColor="#DC2626"
+      />
+
+      <SavedModal
+        visible={postDeletedModalVisible}
+        title="Post deleted"
+        message=""
+        hideButton
+        autoCloseMs={1400}
+        onClose={() => setPostDeletedModalVisible(false)}
       />
 
       <ExpandedImageModal
@@ -1677,6 +1983,75 @@ const styles = StyleSheet.create({
   },
   composeActionBtn: { flexDirection: "row", alignItems: "center", gap: 6 },
   composeActionLabel: { fontSize: 13, fontWeight: "600" },
+  editPostBody: {
+    padding: 14,
+  },
+  editPostInput: {
+    minHeight: 180,
+    fontSize: 15,
+    textAlignVertical: "top",
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  centerModalRoot: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  centerModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  postOptionsCard: {
+    width: "100%",
+    maxWidth: 320,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 18,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOpacity: 0.18,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 10 },
+      },
+      android: { elevation: 10 },
+    }),
+  },
+  postOptionsTitle: {
+    textAlign: "center",
+    fontSize: 16,
+    fontWeight: "900",
+    marginBottom: 18,
+  },
+  postOptionsActions: {
+    gap: 10,
+  },
+  postOptionBtn: {
+    minHeight: 48,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  postOptionBtnDanger: {
+    backgroundColor: "#FEF2F2",
+  },
+  postOptionLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  postOptionDangerLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#DC2626",
+  },
 
   /* Comments modal */
   commentsModalContent: {

@@ -38,6 +38,8 @@ export interface CommunityPost {
   likes: string[];
   likesCount?: number;
   likedByMe?: boolean;
+  savesCount?: number;
+  savedByMe?: boolean;
   comments: Comment[];
   createdAt: string;
   updatedAt: string;
@@ -205,6 +207,8 @@ function normalizePost(raw: any): CommunityPost {
   const likes = normalizeLikeIds(raw?.likes || raw?.likedBy || raw?.reactions);
   const likesCountRaw = raw?.likesCount ?? raw?.likeCount ?? raw?.stats?.likes;
   const likedByMeRaw = raw?.likedByMe ?? raw?.liked ?? raw?.isLiked;
+  const savesCountRaw = raw?.savesCount ?? raw?.saveCount ?? raw?.stats?.saves;
+  const savedByMeRaw = raw?.savedByMe ?? raw?.saved ?? raw?.isSaved;
   const imageUrls = normalizeImageUrls(
     raw?.imageUrls,
     raw?.photoUrls,
@@ -231,6 +235,10 @@ function normalizePost(raw: any): CommunityPost {
       typeof likesCountRaw === "number" ? likesCountRaw : likes.length,
     likedByMe:
       typeof likedByMeRaw === "boolean" ? likedByMeRaw : undefined,
+    savesCount:
+      typeof savesCountRaw === "number" ? savesCountRaw : 0,
+    savedByMe:
+      typeof savedByMeRaw === "boolean" ? savedByMeRaw : undefined,
     comments: Array.isArray(raw?.comments)
       ? raw.comments.map(normalizeComment)
       : [],
@@ -375,6 +383,30 @@ export async function reactToComment(
     method: "POST",
     path: `/api/mobile/v1/community/posts/${postId}/comments/${commentId}/reactions`,
     body: { reaction },
+    auth: true,
+  });
+
+  return normalizePost(unwrapPayload(data, ["post", "item"]));
+}
+
+export async function toggleSavePost(postId: string): Promise<CommunityPost> {
+  const data = await requestJson<any>({
+    method: "POST",
+    path: `/api/mobile/v1/community/posts/${postId}/save`,
+    auth: true,
+  });
+
+  return normalizePost(unwrapPayload(data, ["post", "item"]));
+}
+
+export async function updatePost(
+  postId: string,
+  content: string,
+): Promise<CommunityPost> {
+  const data = await requestJson<any>({
+    method: "PUT",
+    path: `/api/mobile/v1/community/posts/${postId}`,
+    body: { content },
     auth: true,
   });
 
