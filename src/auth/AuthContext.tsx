@@ -1,6 +1,7 @@
 // src/auth/AuthContext.tsx
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -99,6 +100,26 @@ function normalizeUser(input: any): StoredUser | null {
   };
 }
 
+function areUsersEquivalent(a: StoredUser | null, b: StoredUser | null) {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+
+  return (
+    String(a._id ?? a.id ?? "") === String(b._id ?? b.id ?? "") &&
+    String(a.email ?? "") === String(b.email ?? "") &&
+    String(a.firstName ?? "") === String(b.firstName ?? "") &&
+    String(a.lastName ?? "") === String(b.lastName ?? "") &&
+    String(a.name ?? "") === String(b.name ?? "") &&
+    !!a.hasPin === !!b.hasPin &&
+    String(a.profileImage ?? "") === String(b.profileImage ?? "") &&
+    String(a.phoneNumber ?? "") === String(b.phoneNumber ?? "") &&
+    String(a.dateOfBirth ?? "") === String(b.dateOfBirth ?? "") &&
+    String(a.gender ?? "") === String(b.gender ?? "") &&
+    Number(a.age ?? -1) === Number(b.age ?? -1) &&
+    String(a.role ?? "") === String(b.role ?? "")
+  );
+}
+
 function decodeJwtPayload(token: string): any | null {
   try {
     const parts = token.split(".");
@@ -138,11 +159,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isBooting, setIsBooting] = useState(true);
   const [accessToken, setAccessTokenState] = useState<string | null>(null);
   const [refreshToken, setRefreshTokenState] = useState<string | null>(null);
-  const [user, setUser] = useState<StoredUser | null>(null);
+  const [user, setUserState] = useState<StoredUser | null>(null);
 
   const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
 
-  const refreshMe = async () => {
+  const setUser = useCallback((nextUser: StoredUser | null) => {
+    setUserState((prevUser) => (areUsersEquivalent(prevUser, nextUser) ? prevUser : nextUser));
+  }, []);
+
+  const refreshMe = useCallback(async () => {
     const token = accessToken || (await getAccessToken());
     if (!token) return;
 
@@ -155,9 +180,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // ignore
     }
-  };
+  }, [accessToken, setUser]);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     // Remove push token from backend before clearing session
     await removePushTokenFromBackend().catch(() => {});
 
@@ -167,9 +192,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     await clearSession().catch(() => {});
     await setLoggedIn(false).catch(() => {});
-  };
+  }, [setUser]);
 
-  const performRefresh = async (): Promise<string | null> => {
+  const performRefresh = useCallback(async (): Promise<string | null> => {
     const currentRefreshToken = refreshToken || (await getRefreshToken());
 
     if (!currentRefreshToken) {
@@ -212,9 +237,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Don't logout here — preserve session so PinScreen can still show
       return null;
     }
-  };
+  }, [refreshToken, setUser]);
 
-  const ensureValidAccessToken = async (): Promise<string | null> => {
+  const ensureValidAccessToken = useCallback(async (): Promise<string | null> => {
     const token = accessToken || (await getAccessToken());
 
     if (token && !isTokenExpiringSoon(token)) {
@@ -232,7 +257,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       refreshInFlightRef.current = null;
     }
-  };
+  }, [accessToken, performRefresh]);
 
   useEffect(() => {
     let mounted = true;
@@ -287,7 +312,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       sub.remove();
     };
-  }, [accessToken, refreshToken]);
+  }, [ensureValidAccessToken]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -295,9 +320,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [accessToken, refreshToken]);
+  }, [ensureValidAccessToken]);
 
-  const login = async (payload: {
+  const login = useCallback(async (payload: {
     accessToken: string;
     refreshToken?: string;
     user?: StoredUser;
@@ -330,7 +355,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => {
       setupPushNotifications().catch((e) => console.error("[Push] login registration error:", e));
     }, 1500);
-  };
+  }, [setUser]);
 
   const value = useMemo<AuthContextType>(
     () => ({
@@ -345,7 +370,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshMe,
       ensureValidAccessToken,
     }),
-    [isBooting, accessToken, refreshToken, user]
+    [isBooting, accessToken, refreshToken, user, login, logout, setUser, refreshMe, ensureValidAccessToken]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

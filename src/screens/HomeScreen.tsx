@@ -220,7 +220,7 @@ export default function HomeScreen({
   const { s, fs } = useMemo(() => makeScale(width, height), [width, height]);
 
   // âœ… AuthContext
-  const { user, setUser, accessToken, refreshMe, logout } = useAuth() as any;
+  const { user, setUser, accessToken, logout } = useAuth() as any;
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
@@ -321,8 +321,7 @@ export default function HomeScreen({
   // âœ… Run sync when token changes / first mount only
   useEffect(() => {
     syncProfile();
-    refreshMe?.().catch?.(() => {});
-  }, [syncProfile, refreshMe, accessToken]);
+  }, [syncProfile, accessToken]);
 
   // âœ… LIVE CLOCK
   const [now, setNow] = useState<Date>(() => new Date());
