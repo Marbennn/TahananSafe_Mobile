@@ -1445,12 +1445,51 @@ export default function HomeScreen({
           navHeight={navHeight}
           paddingBottom={bottomPad}
           chevronBottom={chevronBottom}
-          fabBottom={fabBottom}
-          fabSize={FAB_SIZE}
-          onFabPress={pressFab}
-          onFabLongPress={longPressFab}
-          centerLabel="Incident Log"
+          centerLabel="Community"
         />
+
+        {/* ✅ Floating FAB — bottom-right, above Settings tab */}
+        <View
+          pointerEvents="box-none"
+          style={{
+            position: "absolute",
+            bottom: navHeight + 28,
+            right: 16,
+            zIndex: 20,
+          }}
+        >
+          <Pressable
+            onPress={pressFab}
+            onLongPress={longPressFab}
+            delayLongPress={350}
+            style={({ pressed }) => ({
+              width: FAB_SIZE,
+              height: FAB_SIZE,
+              borderRadius: FAB_SIZE / 2,
+              overflow: "hidden",
+              alignItems: "center",
+              justifyContent: "center",
+              ...(pressed ? { transform: [{ scale: 0.95 }] } : {}),
+              ...Platform.select({
+                ios: {
+                  shadowColor: "#000",
+                  shadowOpacity: 0.18,
+                  shadowRadius: 14,
+                  shadowOffset: { width: 0, height: 8 },
+                },
+                android: { elevation: 10 },
+              }),
+            })}
+          >
+            <LinearGradient
+              colors={TC.gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+            <Ionicons name="add" size={30} color="#FFFFFF" />
+          </Pressable>
+        </View>
 
         {/* ✅ Fab tutorial overlay */}
         <FabTutorialOverlay

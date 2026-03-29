@@ -38,6 +38,7 @@ import AdminNotificationsScreen from "./src/screens/admin_mobile/AdminNotificati
 
 import IncidentLogScreen from "./src/screens/IncidentLogScreen";
 import IncidentLogConfirmedScreen from "./src/screens/IncidentLogConfirmedScreen";
+import CommunityScreen from "./src/screens/CommunityScreen";
 
 // ✅ Admin
 import AdminShell from "./src/screens/admin_mobile/AdminShell";
@@ -312,6 +313,15 @@ function MainShell({
         onTabChange={handleTabChange}
         onQuickExit={handleQuickExit}
         onLogout={onLogout}
+      />
+    );
+  }
+
+  if (activeTab === "Community") {
+    return (
+      <CommunityScreen
+        initialTab="Community"
+        onTabChange={handleTabChange}
       />
     );
   }

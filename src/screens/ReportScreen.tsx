@@ -703,7 +703,7 @@ export default function ReportScreen({
           fabSize={FAB_SIZE}
           onFabPress={() => handleTab("Incident")}
           onFabLongPress={longPressFab}
-          centerLabel="Incident Log"
+          centerLabel="Community"
         />
       </View>
     </View>

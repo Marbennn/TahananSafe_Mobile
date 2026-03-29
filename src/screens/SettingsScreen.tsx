@@ -1140,10 +1140,7 @@ export default function SettingsScreen({
           navHeight={navHeight}
           paddingBottom={bottomPad}
           chevronBottom={chevronBottom}
-          fabBottom={fabBottom}
-          fabSize={FAB_SIZE}
-          onFabPress={onFabPress ?? (() => handleTab("Incident"))}
-          centerLabel="Incident Log"
+          centerLabel="Community"
         />
       </View>
 

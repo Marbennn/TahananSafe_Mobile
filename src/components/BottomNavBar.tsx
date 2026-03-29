@@ -7,18 +7,17 @@ import {
   Pressable,
   Platform,
   useWindowDimensions,
-  Alert,
   Animated,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
+
 import { Colors, useColors } from "../theme/colors";
 
 export type TabKey =
   | "Home"
   | "Inbox"
   | "Incident"
+  | "Community"
   | "Reports"
   | "Ledger"
   | "Settings";
@@ -34,11 +33,11 @@ type Props = {
 
   // compatibility (kept so other screens don't break)
   chevronBottom: number;
-  fabBottom: number;
+  fabBottom?: number;
 
   fabSize?: number;
 
-  onFabPress: () => void;
+  onFabPress?: () => void;
   onFabLongPress?: () => void;
 
   centerLabel?: string;
@@ -48,16 +47,6 @@ type Props = {
 
 const NAV_BG = "#FFFFFF";
 const INACTIVE = "#9AA4B2";
-
-/* ===================== RATE LIMIT (10 seconds) ===================== */
-const INCIDENT_SUBMIT_COOLDOWN_MS = 10_000;
-const INCIDENT_LAST_SUBMIT_KEY = "tahanansafe_last_incident_submit_at_v1";
-
-function formatSecondsCeil(ms: number) {
-  const s = Math.ceil(ms / 1000);
-  return s <= 0 ? 0 : s;
-}
-/* ============================================================ */
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -75,10 +64,7 @@ export default function BottomNavBar({
   navHeight,
   paddingBottom,
   chevronBottom,
-  fabSize: fabSizeProp = 62,
-  onFabPress,
-  onFabLongPress,
-  centerLabel = "Incident Log",
+  centerLabel = "Community",
   Chevron,
 }: Props) {
   const { width } = useWindowDimensions();
@@ -107,74 +93,17 @@ export default function BottomNavBar({
     [s]
   );
 
-  // FAB sizing
-  const fabSize = useMemo(() => {
-    const raw = fabSizeProp * s;
-    if (width < 360) return clamp(Math.round(raw), 52, 62);
-    if (width < 400) return clamp(Math.round(raw), 56, 68);
-    return clamp(Math.round(raw), 60, 76);
-  }, [fabSizeProp, s, width]);
-
-  const fabIconSize = useMemo(() => {
-    const raw = 30 * s;
-    if (width < 360) return clamp(Math.round(raw), 24, 28);
-    if (width < 400) return clamp(Math.round(raw), 26, 30);
-    return clamp(Math.round(raw), 28, 34);
-  }, [s, width]);
-
-  const cutoutSize = useMemo(
-    () => clamp(Math.round(fabSize * 1.42), fabSize + 22, fabSize + 40),
-    [fabSize]
-  );
-
-  // ✅ button position (ONLY button uses this)
-  const fabLift = useMemo(() => {
-    const base = clamp(Math.round(fabSize * 0.86), 30, 54);
-    if (width < 360) return clamp(Math.round(base * 0.93), 28, 50);
-    if (width < 400) return clamp(Math.round(base * 0.96), 29, 52);
-    return base;
-  }, [fabSize, width]);
-
   const effectiveNavHeight = useMemo(
     () => navHeight + EXTRA_BAR_HEIGHT,
     [navHeight, EXTRA_BAR_HEIGHT]
   );
 
-  const centerLabelBottom = useMemo(
-    () => clamp(Math.round(12 * s), 10, 16),
-    [s]
-  );
-
-  const cutoutVisibleHeight = useMemo(() => {
-    const h = cutoutSize * 0.55;
-    return clamp(
-      Math.round(h),
-      Math.round(cutoutSize * 0.5),
-      Math.round(cutoutSize * 0.65)
-    );
-  }, [cutoutSize]);
-
-  // ✅ halo internal upward shift (within the clip)
-  const haloUp = useMemo(() => {
-    const base = clamp(Math.round(fabSize * 0.18), 10, 20);
-    if (width < 360) return clamp(Math.round(base * 0.9), 9, 18);
-    return base;
-  }, [fabSize, width]);
-
-  const haloLiftExtra = useMemo(() => {
-    return clamp(Math.round(60 * s), 8, 80);
-  }, [s]);
-
-  // Base bottom anchor shared logic
-  const baseBottom =
-    paddingBottom + (effectiveNavHeight - paddingBottom) - fabLift;
-
   /* ===================== TAB CLICK ANIMATIONS ===================== */
-  // Per-tab Animated scale values so each button can "pop" when clicked
   const tabScalesRef = useRef<Record<TabKey, Animated.Value>>({
     Home: new Animated.Value(1),
     Inbox: new Animated.Value(1),
     Incident: new Animated.Value(1),
+    Community: new Animated.Value(1),
     Reports: new Animated.Value(1),
     Ledger: new Animated.Value(1),
     Settings: new Animated.Value(1),
@@ -188,7 +117,6 @@ export default function BottomNavBar({
     const v = tabScalesRef.current[tab];
     if (!v) return;
 
-    // stop any running animation so it feels snappy on rapid taps
     v.stopAnimation();
 
     Animated.sequence([
@@ -208,9 +136,7 @@ export default function BottomNavBar({
 
   const handleTabPress = useCallback(
     (tab: TabKey) => {
-      // bounce animation regardless if active/inactive
       animateTabPress(tab);
-      // navigate after triggering the animation
       onTabPress(tab);
     },
     [animateTabPress, onTabPress]
@@ -252,7 +178,6 @@ export default function BottomNavBar({
           minWidth: 0,
         },
 
-        // wrapper inside item for Animated transform
         itemInner: {
           alignItems: "center",
           justifyContent: "center",
@@ -269,100 +194,6 @@ export default function BottomNavBar({
           color: Colors.primary,
           fontWeight: "800",
         },
-
-        centerSlot: {
-          flex: 1,
-          minWidth: 0,
-          position: "relative",
-          alignItems: "center",
-          justifyContent: "center",
-          paddingBottom: itemPaddingBottom + EXTRA_BAR_HEIGHT * 0.35,
-        },
-
-        centerLabel: {
-          position: "absolute",
-          bottom: centerLabelBottom,
-          fontSize: labelFont,
-          color: INACTIVE,
-          fontWeight: "600",
-          includeFontPadding: false,
-        },
-
-        haloLayer: {
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: baseBottom + haloLiftExtra,
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 9,
-          pointerEvents: "none",
-        },
-
-        cutoutClip: {
-          position: "absolute",
-          top: -haloUp,
-          width: cutoutSize,
-          height: cutoutVisibleHeight,
-          overflow: "hidden",
-          alignItems: "center",
-          justifyContent: "flex-start",
-        },
-
-        /**
-         * ✅ HALO (white half circle) WITHOUT edge color:
-         * - NO shadow
-         * - NO elevation
-         * - NO border
-         */
-        cutout: {
-          width: cutoutSize,
-          height: cutoutSize,
-          borderRadius: cutoutSize / 2,
-          backgroundColor: NAV_BG,
-          borderWidth: 0,
-          ...(Platform.OS === "ios"
-            ? {
-                shadowColor: "transparent",
-                shadowOpacity: 0,
-                shadowRadius: 0,
-                shadowOffset: { width: 0, height: 0 },
-              }
-            : { elevation: 0 }),
-        },
-
-        fabLayer: {
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: baseBottom,
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 10,
-        },
-
-        fabPressable: {
-          width: fabSize,
-          height: fabSize,
-          borderRadius: fabSize / 2,
-          overflow: "hidden",
-          ...Platform.select({
-            ios: {
-              shadowColor: "#000",
-              shadowOpacity: 0.18,
-              shadowRadius: 14,
-              shadowOffset: { width: 0, height: 8 },
-            },
-            android: { elevation: 10 },
-          }),
-        },
-
-        fabInner: {
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "hidden",
-        },
       }),
     [
       effectiveNavHeight,
@@ -372,43 +203,9 @@ export default function BottomNavBar({
       itemPaddingBottom,
       labelMarginTop,
       labelFont,
-      fabSize,
-      fabLift,
-      cutoutSize,
       EXTRA_BAR_HEIGHT,
-      centerLabelBottom,
-      cutoutVisibleHeight,
-      haloUp,
-      haloLiftExtra,
-      baseBottom,
     ]
   );
-
-  // ✅ FAB press handler with cooldown popup
-  const handleFabPress = async () => {
-    try {
-      const now = Date.now();
-      const raw = await AsyncStorage.getItem(INCIDENT_LAST_SUBMIT_KEY);
-      const last = raw ? Number(raw) : 0;
-
-      const elapsed = now - (Number.isFinite(last) ? last : 0);
-      const remaining = INCIDENT_SUBMIT_COOLDOWN_MS - elapsed;
-
-      if (remaining > 0) {
-        const secs = formatSecondsCeil(remaining);
-        Alert.alert(
-          "Please wait",
-          `You can report again in ${secs} second${secs === 1 ? "" : "s"}.`
-        );
-        return;
-      }
-
-      onFabPress();
-    } catch {
-      // If storage fails, don't block user
-      onFabPress();
-    }
-  };
 
   return (
     <>
@@ -459,19 +256,22 @@ export default function BottomNavBar({
           inactiveColor={inactive}
         />
 
-        <View style={styles.centerSlot} pointerEvents="none">
-          <Text
-            style={[
-              styles.centerLabel,
-              { color: inactive },
-              activeTab === "Incident" && { color: activePrimary, fontWeight: "800" },
-            ]}
-            numberOfLines={1}
-            allowFontScaling={false}
-          >
-            {centerLabel}
-          </Text>
-        </View>
+        <NavItem
+          icon="people-outline"
+          activeIcon="people"
+          label={centerLabel}
+          active={activeTab === "Community"}
+          onPress={() => handleTabPress("Community")}
+          iconSize={iconSize}
+          labelStyle={[styles.label, { color: inactive }]}
+          labelActiveStyle={{ color: activePrimary }}
+          itemStyle={styles.item}
+          innerStyle={styles.itemInner}
+          scaleAnim={tabScalesRef.current.Community}
+          pressInScale={pressInScale}
+          activeColor={activePrimary}
+          inactiveColor={inactive}
+        />
 
         <NavItem
           icon="stats-chart-outline"
@@ -506,36 +306,6 @@ export default function BottomNavBar({
           activeColor={activePrimary}
           inactiveColor={inactive}
         />
-      </View>
-
-      {/* ✅ HALO only */}
-      <View style={styles.haloLayer}>
-        <View style={styles.cutoutClip}>
-          <View style={[styles.cutout, { backgroundColor: navBg }]} />
-        </View>
-      </View>
-
-      {/* ✅ FAB only */}
-      <View style={styles.fabLayer} pointerEvents="box-none">
-        <Pressable
-          onPress={handleFabPress}
-          onLongPress={onFabLongPress}
-          delayLongPress={350}
-          style={({ pressed }) => [
-            styles.fabPressable,
-            pressed && { transform: [{ scale: 0.98 }] },
-          ]}
-        >
-          <View style={styles.fabInner}>
-            <LinearGradient
-              colors={TC.gradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFillObject}
-            />
-            <Ionicons name="add" size={fabIconSize} color="#FFFFFF" />
-          </View>
-        </Pressable>
       </View>
     </>
   );
@@ -583,7 +353,6 @@ function NavItem({
   }, [pressInScale, scaleAnim]);
 
   const handlePressOut = useCallback(() => {
-    // Let the parent do the "pop" sequence; here we just return to 1 quickly if needed.
     Animated.timing(scaleAnim, {
       toValue: 1,
       duration: 90,

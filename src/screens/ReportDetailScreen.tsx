@@ -1286,7 +1286,7 @@ export default function ReportDetailScreen({
             fabSize={FAB_SIZE}
             onFabPress={pressFab}
             onFabLongPress={longPressFab}
-            centerLabel="Incident Log"
+            centerLabel="Community"
           />
         ) : null}
       </View>

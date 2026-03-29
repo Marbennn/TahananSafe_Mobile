@@ -237,7 +237,7 @@ export default function HotlinesScreen({
           fabBottom={fabBottom}
           fabSize={FAB_SIZE}
           onFabPress={() => handleTab("Incident")}
-          centerLabel="Incident Log"
+          centerLabel="Community"
         />
       </View>
     </SafeAreaView>
