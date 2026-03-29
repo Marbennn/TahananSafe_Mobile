@@ -16,6 +16,7 @@ export type TabKey =
   | "Home"
   | "Inbox"
   | "Incident"
+  | "Community"
   | "Reports"
   | "Ledger"
   | "Settings";
@@ -91,6 +92,7 @@ export default function AdminBotNav({
     Home: new Animated.Value(1),
     Inbox: new Animated.Value(1),
     Incident: new Animated.Value(1),
+    Community: new Animated.Value(1),
     Reports: new Animated.Value(1),
     Ledger: new Animated.Value(1),
     Settings: new Animated.Value(1),
@@ -215,6 +217,21 @@ export default function AdminBotNav({
         itemStyle={styles.item}
         innerStyle={styles.itemInner}
         scaleAnim={tabScalesRef.current.Inbox}
+        pressInScale={pressInScale}
+      />
+
+      <NavItem
+        icon="people-outline"
+        activeIcon="people"
+        label="Community"
+        active={activeTab === "Community"}
+        onPress={() => handleTabPress("Community")}
+        iconSize={iconSize}
+        labelStyle={styles.label}
+        labelActiveStyle={[styles.labelActive, { color: TC.primary }]}
+        itemStyle={styles.item}
+        innerStyle={styles.itemInner}
+        scaleAnim={tabScalesRef.current.Community}
         pressInScale={pressInScale}
       />
 

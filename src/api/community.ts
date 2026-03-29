@@ -23,6 +23,7 @@ export interface CommunityPost {
   user: CommunityUser;
   content: string;
   imageUrl?: string;
+  imageUrls: string[];
   likes: string[];
   likesCount?: number;
   likedByMe?: boolean;
@@ -97,6 +98,27 @@ function normalizeImageUrl(input: any): string | undefined {
   return apiUrl(`/${raw.replace(/^\/+/, "")}`);
 }
 
+function normalizeImageUrls(...inputs: any[]): string[] {
+  const urls: string[] = [];
+
+  const append = (value: any) => {
+    if (!value) return;
+
+    if (Array.isArray(value)) {
+      value.forEach(append);
+      return;
+    }
+
+    const normalized = normalizeImageUrl(value);
+    if (normalized && !urls.includes(normalized)) {
+      urls.push(normalized);
+    }
+  };
+
+  inputs.forEach(append);
+  return urls;
+}
+
 function normalizeUser(raw: any): CommunityUser {
   const fullName = String(raw?.name || "").trim();
   const firstName =
@@ -147,14 +169,27 @@ function normalizePost(raw: any): CommunityPost {
   const likes = normalizeLikeIds(raw?.likes || raw?.likedBy || raw?.reactions);
   const likesCountRaw = raw?.likesCount ?? raw?.likeCount ?? raw?.stats?.likes;
   const likedByMeRaw = raw?.likedByMe ?? raw?.liked ?? raw?.isLiked;
+  const imageUrls = normalizeImageUrls(
+    raw?.imageUrls,
+    raw?.photoUrls,
+    raw?.images,
+    raw?.photos,
+    raw?.attachments,
+    raw?.media?.images,
+    raw?.media?.photos,
+    raw?.media,
+    raw?.imageUrl,
+    raw?.photoUrl,
+    raw?.image,
+    raw?.photo
+  );
 
   return {
     _id: String(raw?._id || raw?.id || raw?.postId || ""),
     user: normalizeUser(raw?.user || raw?.author || raw?.createdBy || {}),
     content: String(raw?.content || raw?.text || raw?.body || ""),
-    imageUrl: normalizeImageUrl(
-      raw?.imageUrl || raw?.photoUrl || raw?.image || raw?.photo
-    ),
+    imageUrl: imageUrls[0],
+    imageUrls,
     likes,
     likesCount:
       typeof likesCountRaw === "number" ? likesCountRaw : likes.length,
@@ -204,9 +239,19 @@ export async function fetchPosts(): Promise<CommunityPost[]> {
 
 export async function createPost(
   content: string,
-  photoUri?: string,
+  photoUris?: string[],
 ): Promise<CommunityPost> {
-  if (!photoUri) {
+  const normalizedPhotoUris = Array.from(
+    new Set((photoUris ?? []).map((uri) => String(uri || "").trim()).filter(Boolean))
+  );
+
+  if (normalizedPhotoUris.length > 5) {
+    throw new Error("You can only upload up to 5 images.");
+  }
+
+  const uniquePhotoUris = normalizedPhotoUris.slice(0, 5);
+
+  if (!uniquePhotoUris.length) {
     const data = await requestJson<any>({
       method: "POST",
       path: "/api/mobile/v1/community/posts",
@@ -220,16 +265,18 @@ export async function createPost(
   const form = new FormData();
   form.append("content", content);
 
-  const mime = guessMimeType(photoUri);
-  if (!ALLOWED_IMAGE_TYPES.has(mime)) {
-    throw new Error("Unsupported image type. Use JPEG, PNG, WebP, or HEIC.");
-  }
+  for (const photoUri of uniquePhotoUris) {
+    const mime = guessMimeType(photoUri);
+    if (!ALLOWED_IMAGE_TYPES.has(mime)) {
+      throw new Error("Unsupported image type. Use JPEG, PNG, WebP, or HEIC.");
+    }
 
-  form.append("photo", {
-    uri: photoUri,
-    name: fileNameFromUri(photoUri),
-    type: mime,
-  } as any);
+    form.append(uniquePhotoUris.length === 1 ? "photo" : "photos", {
+      uri: photoUri,
+      name: fileNameFromUri(photoUri),
+      type: mime,
+    } as any);
+  }
 
   const res = await fetch(apiUrl("/api/mobile/v1/community/posts"), {
     method: "POST",

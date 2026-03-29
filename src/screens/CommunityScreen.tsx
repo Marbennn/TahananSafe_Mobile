@@ -7,6 +7,7 @@ import {
   Pressable,
   Image,
   FlatList,
+  ScrollView,
   TextInput,
   StatusBar,
   Modal,
@@ -136,6 +137,13 @@ type FilterKey = "all" | "popular" | "recent";
 type Props = {
   initialTab?: TabKey;
   onTabChange?: (tab: TabKey) => void;
+  renderNav?: (props: {
+    activeTab: TabKey;
+    onTabPress: (tab: TabKey) => void;
+    navHeight: number;
+    paddingBottom: number;
+    chevronBottom: number;
+  }) => React.ReactNode;
 };
 
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -143,6 +151,8 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "popular", label: "Popular" },
   { key: "recent", label: "Recent" },
 ];
+
+const MAX_POST_IMAGES = 5;
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -210,6 +220,7 @@ function PostCard({
   onLike,
   onComment,
   onDelete,
+  onImagePress,
   colors,
 }: {
   post: CommunityPost;
@@ -217,6 +228,7 @@ function PostCard({
   onLike: (id: string) => void;
   onComment: (id: string) => void;
   onDelete: (id: string) => void;
+  onImagePress: (imageUris: string[], index: number) => void;
   colors: ReturnType<typeof useColors>;
 }) {
   const liked =
@@ -226,6 +238,12 @@ function PostCard({
   const likeCount =
     typeof post.likesCount === "number" ? post.likesCount : post.likes.length;
   const isOwner = post.user._id === currentUserId;
+  const imageUrls =
+    post.imageUrls?.length
+      ? post.imageUrls
+      : post.imageUrl
+        ? [post.imageUrl]
+        : [];
 
   const handleMenu = () => {
     if (isOwner) {
@@ -283,12 +301,53 @@ function PostCard({
       </Text>
 
       {/* Image */}
-      {post.imageUrl ? (
-        <Image
-          source={{ uri: post.imageUrl }}
-          style={styles.postImage}
-          resizeMode="cover"
-        />
+      {imageUrls.length === 1 ? (
+        <Pressable
+          onPress={() => onImagePress(imageUrls, 0)}
+          style={styles.postImageButton}
+        >
+          <Image
+            source={{ uri: imageUrls[0] }}
+            style={styles.postImage}
+            resizeMode="cover"
+          />
+          <View style={styles.expandImageBadge}>
+            <Ionicons name="expand-outline" size={14} color="#FFFFFF" />
+            <Text style={styles.expandImageText}>Expand</Text>
+          </View>
+        </Pressable>
+      ) : imageUrls.length > 1 ? (
+        <View style={styles.postGalleryWrap}>
+          <View style={styles.postGalleryHeader}>
+            <Ionicons name="images-outline" size={16} color={colors.muted} />
+            <Text style={[styles.postGalleryCount, { color: colors.muted }]}>
+              {imageUrls.length} photos
+            </Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.postGalleryRow}
+          >
+            {imageUrls.map((imageUri, index) => (
+              <Pressable
+                key={`${post._id}-${index}`}
+                onPress={() => onImagePress(imageUrls, index)}
+                style={styles.postGalleryItem}
+              >
+                <Image
+                  source={{ uri: imageUri }}
+                  style={styles.postGalleryImage}
+                  resizeMode="cover"
+                />
+                <View style={styles.expandImageBadge}>
+                  <Ionicons name="expand-outline" size={14} color="#FFFFFF" />
+                  <Text style={styles.expandImageText}>Expand</Text>
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
       ) : null}
 
       {/* Actions */}
@@ -361,27 +420,49 @@ function CreatePostModal({
 }: {
   visible: boolean;
   onClose: () => void;
-  onSubmit: (content: string, photoUri?: string) => Promise<void>;
+  onSubmit: (content: string, photoUris?: string[]) => Promise<void>;
   colors: ReturnType<typeof useColors>;
   userAvatar?: string;
   userName?: string;
 }) {
   const [content, setContent] = useState("");
-  const [photoUri, setPhotoUri] = useState<string | undefined>();
+  const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const pickImage = async () => {
+    if (photoUris.length >= MAX_POST_IMAGES) {
+      Alert.alert("Max reached", `You can only add up to ${MAX_POST_IMAGES} images.`);
+      return;
+    }
+
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (perm.status !== "granted") {
+      Alert.alert("Permission needed", "Please allow photo access so you can upload images.");
+      return;
+    }
+
+    const remaining = MAX_POST_IMAGES - photoUris.length;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      allowsEditing: false,
       quality: 0.8,
+      allowsMultipleSelection: true,
+      selectionLimit: remaining,
     });
-    if (!result.canceled && result.assets[0]) {
-      setPhotoUri(result.assets[0].uri);
+    if (!result.canceled) {
+      const newUris = (result.assets ?? []).map((asset) => asset.uri).filter(Boolean);
+      setPhotoUris((prev) =>
+        Array.from(new Set([...prev, ...newUris])).slice(0, MAX_POST_IMAGES)
+      );
     }
   };
 
   const takePhoto = async () => {
+    if (photoUris.length >= MAX_POST_IMAGES) {
+      Alert.alert("Max reached", `You can only add up to ${MAX_POST_IMAGES} images.`);
+      return;
+    }
+
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
       Alert.alert("Permission needed", "Camera access is required to take photos.");
@@ -389,12 +470,18 @@ function CreatePostModal({
     }
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      allowsEditing: false,
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
-      setPhotoUri(result.assets[0].uri);
+      setPhotoUris((prev) =>
+        Array.from(new Set([...prev, result.assets[0].uri])).slice(0, MAX_POST_IMAGES)
+      );
     }
+  };
+
+  const removePhotoAt = (index: number) => {
+    setPhotoUris((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async () => {
@@ -402,9 +489,9 @@ function CreatePostModal({
     if (!trimmed) return;
     setSubmitting(true);
     try {
-      await onSubmit(trimmed, photoUri);
+      await onSubmit(trimmed, photoUris.length ? photoUris : undefined);
       setContent("");
-      setPhotoUri(undefined);
+      setPhotoUris([]);
       onClose();
     } catch (err: any) {
       Alert.alert("Error", err.message || "Failed to create post.");
@@ -415,7 +502,7 @@ function CreatePostModal({
 
   const handleClose = () => {
     setContent("");
-    setPhotoUri(undefined);
+    setPhotoUris([]);
     onClose();
   };
 
@@ -485,18 +572,31 @@ function CreatePostModal({
           </View>
 
           {/* Photo preview */}
-          {photoUri && (
+          {photoUris.length > 0 && (
             <View style={styles.photoPreviewWrap}>
-              <Image
-                source={{ uri: photoUri }}
-                style={[styles.photoPreview, { borderColor: colors.divider }]}
-              />
-              <Pressable
-                style={styles.removePhoto}
-                onPress={() => setPhotoUri(undefined)}
+              <Text style={[styles.photoPreviewTitle, { color: colors.muted }]}>
+                Selected images ({photoUris.length}/{MAX_POST_IMAGES})
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.photoPreviewRow}
               >
-                <Ionicons name="close-circle" size={26} color="#FFF" />
-              </Pressable>
+                {photoUris.map((photoUri, index) => (
+                  <View key={`${photoUri}-${index}`} style={styles.photoPreviewItem}>
+                    <Image
+                      source={{ uri: photoUri }}
+                      style={[styles.photoPreview, { borderColor: colors.divider }]}
+                    />
+                    <Pressable
+                      style={styles.removePhoto}
+                      onPress={() => removePhotoAt(index)}
+                    >
+                      <Ionicons name="close-circle" size={26} color="#FFF" />
+                    </Pressable>
+                  </View>
+                ))}
+              </ScrollView>
             </View>
           )}
 
@@ -652,6 +752,138 @@ function CommentsModal({
   );
 }
 
+function ExpandedImageModal({
+  visible,
+  imageUris,
+  initialIndex,
+  onClose,
+}: {
+  visible: boolean;
+  imageUris: string[];
+  initialIndex: number;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const [loading, setLoading] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+
+  useEffect(() => {
+    if (!visible || !imageUris.length) return;
+    const safeIndex = Math.max(0, Math.min(initialIndex, imageUris.length - 1));
+    setViewerIndex(safeIndex);
+  }, [visible, imageUris, initialIndex]);
+
+  const currentImageUri = imageUris[viewerIndex];
+  const canPrev = viewerIndex > 0;
+  const canNext = viewerIndex < imageUris.length - 1;
+
+  useEffect(() => {
+    setLoading(visible && !!currentImageUri);
+  }, [visible, currentImageUri]);
+
+  if (!currentImageUri) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <View style={styles.imageViewerOverlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+
+        <Pressable
+          onPress={onClose}
+          hitSlop={12}
+          style={[styles.imageViewerCloseBtn, { top: insets.top + 12 }]}
+        >
+          <Ionicons name="close" size={24} color="#FFFFFF" />
+        </Pressable>
+
+        <View style={[styles.imageViewerTopBar, { top: insets.top + 12 }]}>
+          <Text style={styles.imageViewerCounter}>
+            {imageUris.length ? `${viewerIndex + 1} / ${imageUris.length}` : ""}
+          </Text>
+        </View>
+
+        <View
+          style={[
+            styles.imageViewerBody,
+            {
+              paddingTop: insets.top + 56,
+              paddingBottom: Math.max(insets.bottom + 20, 28),
+            },
+          ]}
+        >
+          {loading ? (
+            <ActivityIndicator
+              size="large"
+              color="#FFFFFF"
+              style={styles.imageViewerLoader}
+            />
+          ) : null}
+
+          <ScrollView
+            style={styles.imageViewerScroll}
+            contentContainerStyle={styles.imageViewerScrollContent}
+            minimumZoomScale={Platform.OS === "ios" ? 1 : undefined}
+            maximumZoomScale={Platform.OS === "ios" ? 3 : undefined}
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+            centerContent
+          >
+            <Image
+              source={{ uri: currentImageUri }}
+              style={styles.expandedImage}
+              resizeMode="contain"
+              onLoadStart={() => setLoading(true)}
+              onLoadEnd={() => setLoading(false)}
+              onError={() => setLoading(false)}
+            />
+          </ScrollView>
+
+          {imageUris.length > 1 ? (
+            <>
+              <Pressable
+                onPress={() => canPrev && setViewerIndex((prev) => prev - 1)}
+                disabled={!canPrev}
+                style={[
+                  styles.imageViewerNavBtn,
+                  styles.imageViewerNavLeft,
+                  !canPrev && styles.imageViewerNavBtnDisabled,
+                ]}
+              >
+                <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+              </Pressable>
+
+              <Pressable
+                onPress={() => canNext && setViewerIndex((prev) => prev + 1)}
+                disabled={!canNext}
+                style={[
+                  styles.imageViewerNavBtn,
+                  styles.imageViewerNavRight,
+                  !canNext && styles.imageViewerNavBtnDisabled,
+                ]}
+              >
+                <Ionicons name="chevron-forward" size={24} color="#FFFFFF" />
+              </Pressable>
+            </>
+          ) : null}
+        </View>
+
+        <Text style={[styles.imageViewerHint, { bottom: Math.max(insets.bottom + 12, 20) }]}>
+          {Platform.OS === "ios"
+            ? "Tap outside to close | Pinch to zoom"
+            : "Tap outside to close"}
+        </Text>
+      </View>
+    </Modal>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Main screen                                                        */
 /* ------------------------------------------------------------------ */
@@ -659,6 +891,7 @@ function CommentsModal({
 export default function CommunityScreen({
   initialTab = "Community",
   onTabChange,
+  renderNav,
 }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -671,6 +904,10 @@ export default function CommunityScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [commentPostId, setCommentPostId] = useState<string | null>(null);
+  const [expandedImageViewer, setExpandedImageViewer] = useState<{
+    imageUris: string[];
+    initialIndex: number;
+  } | null>(null);
 
   const currentUserId: string = user?._id || user?.id || "";
   const userAvatar: string | undefined = user?.profileImage;
@@ -756,8 +993,8 @@ export default function CommunityScreen({
   );
 
   const handleCreatePost = useCallback(
-    async (content: string, photoUri?: string) => {
-      const newPost = await createPost(content, photoUri);
+    async (content: string, photoUris?: string[]) => {
+      const newPost = await createPost(content, photoUris);
       setPosts((prev) => [newPost, ...prev]);
     },
     []
@@ -828,6 +1065,9 @@ export default function CommunityScreen({
         onLike={handleLike}
         onComment={(id) => setCommentPostId(id)}
         onDelete={handleDeletePost}
+        onImagePress={(imageUris, initialIndex) =>
+          setExpandedImageViewer({ imageUris, initialIndex })
+        }
         colors={colors}
       />
     ),
@@ -942,14 +1182,24 @@ export default function CommunityScreen({
         )}
 
         {/* Bottom nav */}
-        <BottomNavBar
-          activeTab={activeTab}
-          onTabPress={handleTab}
-          navHeight={navHeight}
-          paddingBottom={bottomPad}
-          chevronBottom={chevronBottom}
-          centerLabel="Community"
-        />
+        {renderNav ? (
+          renderNav({
+            activeTab,
+            onTabPress: handleTab,
+            navHeight,
+            paddingBottom: bottomPad,
+            chevronBottom,
+          })
+        ) : (
+          <BottomNavBar
+            activeTab={activeTab}
+            onTabPress={handleTab}
+            navHeight={navHeight}
+            paddingBottom={bottomPad}
+            chevronBottom={chevronBottom}
+            centerLabel="Community"
+          />
+        )}
       </View>
 
       {/* ── Create Post Modal ── */}
@@ -969,6 +1219,13 @@ export default function CommunityScreen({
         post={commentPost}
         onAddComment={handleAddComment}
         colors={colors}
+      />
+
+      <ExpandedImageModal
+        visible={!!expandedImageViewer}
+        imageUris={expandedImageViewer?.imageUris ?? []}
+        initialIndex={expandedImageViewer?.initialIndex ?? 0}
+        onClose={() => setExpandedImageViewer(null)}
       />
     </SafeAreaView>
   );
@@ -1056,7 +1313,48 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingBottom: 12,
   },
+  postImageButton: { position: "relative" },
   postImage: { width: "100%", height: 220 },
+  postGalleryWrap: {
+    paddingBottom: 4,
+  },
+  postGalleryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+  },
+  postGalleryCount: { fontSize: 12, fontWeight: "700" },
+  postGalleryRow: {
+    paddingHorizontal: 14,
+    paddingBottom: 8,
+    gap: 10,
+  },
+  postGalleryItem: {
+    position: "relative",
+    width: 220,
+    height: 220,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  postGalleryImage: {
+    width: "100%",
+    height: "100%",
+  },
+  expandImageBadge: {
+    position: "absolute",
+    right: 12,
+    bottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(15, 23, 42, 0.72)",
+  },
+  expandImageText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
   postActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -1147,8 +1445,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   photoPreviewWrap: { paddingHorizontal: 14, marginBottom: 10 },
-  photoPreview: { width: "100%", height: 200, borderRadius: 14, borderWidth: 1 },
-  removePhoto: { position: "absolute", top: 8, right: 22 },
+  photoPreviewTitle: { fontSize: 12, fontWeight: "700", marginBottom: 10 },
+  photoPreviewRow: { gap: 10, paddingRight: 14 },
+  photoPreviewItem: { position: "relative" },
+  photoPreview: { width: 148, height: 148, borderRadius: 14, borderWidth: 1 },
+  removePhoto: { position: "absolute", top: 6, right: 6 },
   composeActions: {
     flexDirection: "row",
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -1197,4 +1498,89 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   sendBtn: { marginLeft: 8, padding: 6 },
+
+  /* Expanded image modal */
+  imageViewerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(2, 6, 23, 0.96)",
+  },
+  imageViewerCloseBtn: {
+    position: "absolute",
+    right: 16,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.14)",
+    zIndex: 2,
+  },
+  imageViewerTopBar: {
+    position: "absolute",
+    left: 16,
+    right: 72,
+    alignItems: "flex-start",
+    zIndex: 2,
+  },
+  imageViewerCounter: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+    backgroundColor: "rgba(255,255,255,0.14)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  imageViewerBody: {
+    flex: 1,
+    paddingHorizontal: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  imageViewerScroll: {
+    width: "100%",
+    flex: 1,
+  },
+  imageViewerScrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  imageViewerLoader: {
+    position: "absolute",
+    zIndex: 1,
+  },
+  imageViewerNavBtn: {
+    position: "absolute",
+    top: "50%",
+    marginTop: -24,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
+  imageViewerNavLeft: {
+    left: 8,
+  },
+  imageViewerNavRight: {
+    right: 8,
+  },
+  imageViewerNavBtnDisabled: {
+    opacity: 0.35,
+  },
+  imageViewerHint: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    textAlign: "center",
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  expandedImage: {
+    width: "100%",
+    height: "100%",
+  },
 });
