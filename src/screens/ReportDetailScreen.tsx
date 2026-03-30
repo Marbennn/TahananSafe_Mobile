@@ -110,6 +110,51 @@ function getDeletedMessageLabel(msg: ThreadMsg) {
   return msg.side === "right" ? "You deleted a message" : `${msg.sender || "Responder"} deleted a message`;
 }
 
+function getThreadBubbleMaxWidth(text: string, isTablet: boolean) {
+  const clean = String(text || "").trim();
+  if (!clean) return isTablet ? "34%" : "40%";
+
+  const lines = clean
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const words = clean.split(/\s+/).filter(Boolean);
+
+  const longestLine = lines.reduce((max, line) => Math.max(max, line.length), 0);
+  const longestWord = words.reduce((max, word) => Math.max(max, word.length), 0);
+  const effectiveLength = Math.max(clean.length, longestLine, Math.round(longestWord * 1.2));
+
+  if (effectiveLength <= 8) return isTablet ? "26%" : "32%";
+  if (effectiveLength <= 14) return isTablet ? "32%" : "40%";
+  if (effectiveLength <= 22) return isTablet ? "40%" : "50%";
+  if (effectiveLength <= 34) return isTablet ? "46%" : "56%";
+  if (effectiveLength <= 48) return isTablet ? "52%" : "60%";
+  if (effectiveLength <= 64) return isTablet ? "58%" : "66%";
+  return isTablet ? "62%" : "68%";
+}
+
+function getThreadBubbleMinWidthPx(
+  text: string,
+  isTablet: boolean,
+  maxWidthPx: number,
+  scale: (n: number) => number
+) {
+  const clean = String(text || "").trim();
+  if (!clean) return scale(54);
+
+  const words = clean.split(/\s+/).filter(Boolean);
+  const longestWord = words.reduce((max, word) => Math.max(max, word.length), 0);
+  const effectiveLength = Math.max(clean.length, Math.round(longestWord * 1.25));
+
+  if (effectiveLength <= 8) return scale(54);
+  if (effectiveLength <= 14) return Math.round(maxWidthPx * (isTablet ? 0.32 : 0.4));
+  if (effectiveLength <= 22) return Math.round(maxWidthPx * (isTablet ? 0.42 : 0.5));
+  if (effectiveLength <= 34) return Math.round(maxWidthPx * (isTablet ? 0.5 : 0.58));
+  if (effectiveLength <= 48) return Math.round(maxWidthPx * (isTablet ? 0.54 : 0.62));
+  if (effectiveLength <= 64) return Math.round(maxWidthPx * (isTablet ? 0.6 : 0.68));
+  return Math.round(maxWidthPx * (isTablet ? 0.66 : 0.76));
+}
+
 function dtoToUi(dto: ThreadDto): ThreadMsg {
   const isResident = dto.senderRole === "resident";
   const createdAtMs = dto.createdAt ? new Date(dto.createdAt).getTime() : undefined;
@@ -314,13 +359,20 @@ export default function ReportDetailScreen({
   const DETAILS_EXTRA_BOTTOM = vscale(isTablet ? 130 : 110);
 
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useEffect(() => {
     const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
 
-    const subShow = Keyboard.addListener(showEvt, () => setIsKeyboardVisible(true));
-    const subHide = Keyboard.addListener(hideEvt, () => setIsKeyboardVisible(false));
+    const subShow = Keyboard.addListener(showEvt, (event: any) => {
+      setIsKeyboardVisible(true);
+      setKeyboardHeight(event?.endCoordinates?.height ?? 0);
+    });
+    const subHide = Keyboard.addListener(hideEvt, () => {
+      setIsKeyboardVisible(false);
+      setKeyboardHeight(0);
+    });
 
     return () => {
       subShow.remove();
@@ -352,6 +404,7 @@ export default function ReportDetailScreen({
   const [loadingThreads, setLoadingThreads] = useState(false);
   const [sending, setSending] = useState(false);
   const [messages, setMessages] = useState<ThreadMsg[]>([]);
+  const [measuredBubbleWidths, setMeasuredBubbleWidths] = useState<Record<string, number>>({});
   const [threadsError, setThreadsError] = useState("");
 
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -673,6 +726,7 @@ export default function ReportDetailScreen({
     setLoadingDetail(false);
 
     setMessages([]);
+    setMeasuredBubbleWidths({});
     setThreadsError("");
     setLoadingThreads(false);
     setNewMsgCount(0);
@@ -1128,15 +1182,47 @@ export default function ReportDetailScreen({
     !selectedThreadMessage.deletedAt;
 
   const [composerH, setComposerH] = useState(vscale(64));
+  const threadBubbleMaxWidthPx = Math.round(
+    (CONTENT_MAX_W - CONTENT_SIDE_PAD * 2) * (isTablet ? 0.66 : 0.72)
+  );
 
   // ✅ FIX: composer should have a SMALL minimum padding, but not double-count insets
-  const composerBottomPad = Math.max(insets.bottom, vscale(6));
+  const composerBaseBottomPad = Math.max(insets.bottom, vscale(6));
+  const composerKeyboardLift =
+    Platform.OS === "android" && isKeyboardVisible
+      ? Math.max(vscale(44), Math.min(vscale(88), keyboardHeight * 0.22))
+      : 0;
+  const composerBottomPad =
+    Platform.OS === "android" && isKeyboardVisible ? vscale(4) : composerBaseBottomPad;
 
   useEffect(() => {
     if (view !== "threads") return;
     if (!isKeyboardVisible) return;
     setTimeout(() => scrollToBottom(true), 60);
   }, [isKeyboardVisible, view, scrollToBottom]);
+
+  const updateMeasuredBubbleWidth = useCallback(
+    (messageId: string, text: string, lineWidth: number) => {
+      if (!messageId || !Number.isFinite(lineWidth) || lineWidth <= 0) return;
+
+      setMeasuredBubbleWidths((prev) => {
+        if (prev[messageId]) return prev;
+
+        const clean = String(text || "").trim();
+        const floorWidth =
+          clean.length > 44 ? scale(150) : clean.length > 22 ? scale(118) : scale(74);
+
+        const nextWidth = clamp(
+          Math.ceil(lineWidth + scale(30)),
+          floorWidth,
+          threadBubbleMaxWidthPx
+        );
+
+        return { ...prev, [messageId]: nextWidth };
+      });
+    },
+    [scale, threadBubbleMaxWidthPx]
+  );
 
   useEffect(() => {
     if (!messageMenuVisible) return;
@@ -1581,7 +1667,7 @@ export default function ReportDetailScreen({
                     styles.chatContent,
                     {
                       // ✅ FIX: only account for composer + ONE bottom pad
-                      paddingBottom: composerH + composerBottomPad + vscale(12),
+                      paddingBottom: composerH + composerBottomPad + composerKeyboardLift + vscale(12),
                     },
                   ]}
                   showsVerticalScrollIndicator
@@ -1655,6 +1741,10 @@ export default function ReportDetailScreen({
                   {messages.map((m) => {
                     const isLeft = m.side === "left";
                     const showMeta = visibleMessageMetaId === m.id;
+                    const measuredBubbleWidth = measuredBubbleWidths[m.id];
+                    const bubbleSizingStyle = measuredBubbleWidth
+                      ? { width: measuredBubbleWidth, maxWidth: threadBubbleMaxWidthPx }
+                      : { maxWidth: threadBubbleMaxWidthPx };
                     return (
                       <View key={m.id} style={styles.msgBlock}>
                         {showMeta ? (
@@ -1742,12 +1832,14 @@ export default function ReportDetailScreen({
                               onLongPress={() => openMessageMenu(m)}
                               style={({ pressed }) => [
                                 styles.bubblePressable,
+                                bubbleSizingStyle,
                                 pressed && !m.pending && canChat && { transform: [{ scale: 0.985 }] },
                               ]}
                             >
                               <View
                                 style={[
                                   styles.bubble,
+                                  bubbleSizingStyle,
                                   isLeft ? styles.bubbleLeft : styles.bubbleRight,
                                   !isLeft && { borderColor: BORDER },
                                   m.pending && { opacity: 0.72 },
@@ -1755,6 +1847,14 @@ export default function ReportDetailScreen({
                               >
                                 <Text
                                   style={[styles.bubbleText, isLeft ? styles.bubbleTextLeft : styles.bubbleTextRight]}
+                                  onTextLayout={(event) => {
+                                    const widths = (event.nativeEvent.lines || [])
+                                      .map((line: any) => Number(line?.width || 0))
+                                      .filter((width: number) => Number.isFinite(width) && width > 0);
+
+                                    if (!widths.length) return;
+                                    updateMeasuredBubbleWidth(m.id, m.text, Math.max(...widths));
+                                  }}
                                 >
                                   {m.text}
                                 </Text>
@@ -1839,7 +1939,13 @@ export default function ReportDetailScreen({
                 ) : null}
                 <View
                   // ✅ FIX: don’t add threadsNavReserve here; just one bottom inset (small)
-                  style={[styles.composerRow, { paddingBottom: composerBottomPad }]}
+                  style={[
+                    styles.composerRow,
+                    {
+                      paddingBottom: composerBottomPad,
+                      marginBottom: composerKeyboardLift,
+                    },
+                  ]}
                   onLayout={(e) => {
                     const h = e.nativeEvent.layout.height;
                     if (h && Math.abs(h - composerH) > 2) setComposerH(h);
@@ -2372,8 +2478,8 @@ function makeStyles(args: {
         color: "#94A3B8",
       },
       messageStack: {
-        width: "100%",
         maxWidth: isTablet ? "70%" : "76%",
+        flexShrink: 1,
       },
       messageStackLeft: {
         alignSelf: "flex-start",
@@ -2384,7 +2490,8 @@ function makeStyles(args: {
         alignItems: "flex-end",
       },
       replyPreviewWrap: {
-        width: "100%",
+        maxWidth: "100%",
+        flexShrink: 1,
         flexDirection: "column",
         gap: vscale(4),
         marginBottom: vscale(8),
@@ -2460,6 +2567,7 @@ function makeStyles(args: {
       msgRowRight: { justifyContent: "flex-end" },
       bubblePressable: {
         alignSelf: "flex-start",
+        maxWidth: "100%",
       },
 
       bubble: {
@@ -2499,7 +2607,11 @@ function makeStyles(args: {
         color: "#64748B",
       },
 
-      bubbleText: { fontSize: scale(isTablet ? 12 : 11), fontWeight: "400", lineHeight: vscale(isTablet ? 16 : 15) },
+      bubbleText: {
+        fontSize: scale(isTablet ? 12 : 11),
+        fontWeight: "400",
+        lineHeight: vscale(isTablet ? 16 : 15),
+      },
       bubbleTextLeft: { color: "#334155" },
       bubbleTextRight: { color: "#0F172A" },
       replyBanner: {

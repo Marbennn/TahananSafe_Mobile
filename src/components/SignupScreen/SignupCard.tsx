@@ -96,7 +96,7 @@ export default function SignupCard({
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
-            maxLength={30}
+            maxLength={80}
             style={[styles.input, emailFocused && { borderColor: "#1D4ED8" }]}
             onFocus={() => setEmailFocused(true)}
             onBlur={() => setEmailFocused(false)}
