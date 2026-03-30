@@ -66,6 +66,7 @@ type Props = {
   onOpenUsers?: () => void;
   onOpenHotlines?: () => void;
   onOpenAlerts?: () => void;
+  onOpenMap?: () => void;
   onOpenAnalytics?: () => void;
   onOpenPendingReports?: () => void;
   onOpenVerifiedUsers?: () => void;
@@ -258,6 +259,7 @@ const AdminHomeScreen: React.FC<Props> = ({
   onOpenReports,
   onOpenCommunity,
   onOpenAlerts,
+  onOpenMap,
   onOpenPendingReports,
   onOpenSettings,
   onLogout,
@@ -520,12 +522,13 @@ const AdminHomeScreen: React.FC<Props> = ({
     (tab: TabKey) => {
       if (tab === "Home") { setActiveTab("Home"); return; }
       if (tab === "Inbox") { setActiveTab("Inbox"); onOpenAlerts?.(); return; }
+      if (tab === "Map") { setActiveTab("Map"); onOpenMap?.(); return; }
       if (tab === "Community") { setActiveTab("Community"); onOpenCommunity?.(); return; }
       if (tab === "Reports") { setActiveTab("Reports"); onOpenReports?.(); return; }
       if (tab === "Settings") { setActiveTab("Settings"); onOpenSettings?.(); return; }
       if (tab === "Incident") { setActiveTab("Incident"); openSheet(); }
     },
-    [onOpenAlerts, onOpenCommunity, onOpenReports, onOpenSettings, openSheet]
+    [onOpenAlerts, onOpenMap, onOpenCommunity, onOpenReports, onOpenSettings, openSheet]
   );
 
   const handleFabPress = useCallback(() => { setActiveTab("Incident"); openSheet(); }, [openSheet]);

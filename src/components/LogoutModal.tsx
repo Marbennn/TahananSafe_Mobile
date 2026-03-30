@@ -20,6 +20,7 @@ type Props = {
   message?: string;
   confirmLabel?: string;
   confirmColor?: string;
+  hideCancel?: boolean;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -34,6 +35,7 @@ export default function LogoutModal({
   message = "Are you sure you want to log out?",
   confirmLabel = "Log Out",
   confirmColor,
+  hideCancel = false,
 }: Props) {
   const TC = useColors();
   const { width, height } = useWindowDimensions();
@@ -93,19 +95,19 @@ export default function LogoutModal({
 
           {/* Buttons */}
           <View style={styles.btnRow}>
-            {/* Cancel */}
-            <Pressable
-              onPress={() => closeWithAnim(onCancel)}
-              hitSlop={8}
-              style={({ pressed }) => [
-                styles.btnCancel,
-                pressed && { opacity: 0.75 },
-              ]}
-            >
-              <Text style={[styles.btnCancelText, { color: TC.textDark }]}>Cancel</Text>
-            </Pressable>
+            {!hideCancel ? (
+              <Pressable
+                onPress={() => closeWithAnim(onCancel)}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.btnCancel,
+                  pressed && { opacity: 0.75 },
+                ]}
+              >
+                <Text style={[styles.btnCancelText, { color: TC.textDark }]}>Cancel</Text>
+              </Pressable>
+            ) : null}
 
-            {/* Confirm */}
             <Pressable
               onPress={() => closeWithAnim(onConfirm)}
               hitSlop={8}

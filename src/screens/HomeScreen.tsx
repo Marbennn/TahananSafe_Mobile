@@ -31,6 +31,7 @@ import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 
 import { Colors, useColors } from "../theme/colors";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
+import LogoutModal from "../components/LogoutModal";
 
 import GreetingCard from "../components/HomeScreen/GreetingCard";
 import RecentLogCard, { LogItem } from "../components/HomeScreen/RecentLogCard";
@@ -681,9 +682,12 @@ export default function HomeScreen({
 
   const fabMenuAnim = useRef(new Animated.Value(0)).current;
   const [fabMenuOpen, setFabMenuOpen] = useState(false);
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [sosModalVisible, setSosModalVisible] = useState(false);
   const [sendingSos, setSendingSos] = useState(false);
   const [sosDragging, setSosDragging] = useState(false);
+  const [sosSuccessVisible, setSosSuccessVisible] = useState(false);
+  const [sosSuccessMessage, setSosSuccessMessage] = useState("");
   const [sosSliderWidth, setSosSliderWidth] = useState(0);
   const sosModalAnim = useRef(new Animated.Value(0)).current;
   const sosThumbPulseAnim = useRef(new Animated.Value(0)).current;
@@ -859,6 +863,11 @@ export default function HomeScreen({
     resetSosSlider();
   }, [resetSosSlider, sendingSos]);
 
+  const closeSosSuccessModal = useCallback(() => {
+    setSosSuccessVisible(false);
+    setSosSuccessMessage("");
+  }, []);
+
   const submitSosAlert = useCallback(async () => {
     if (sendingSos) return;
 
@@ -891,7 +900,8 @@ export default function HomeScreen({
       const result = await sendSosAlert({ address, latitude, longitude });
       setSosModalVisible(false);
       resetSosSlider();
-      Alert.alert("Alert Sent", result.message);
+      setSosSuccessMessage(result.message);
+      setSosSuccessVisible(true);
     } catch (e: any) {
       resetSosSlider(true);
       Alert.alert("Failed", e?.message ?? "Could not send alert. Please try again.");
@@ -975,8 +985,17 @@ export default function HomeScreen({
 
   const handleFabSignOut = useCallback(() => {
     closeFabMenu();
+    setLogoutModalVisible(true);
+  }, [closeFabMenu]);
+
+  const handleLogoutModalCancel = useCallback(() => {
+    setLogoutModalVisible(false);
+  }, []);
+
+  const handleLogoutModalConfirm = useCallback(() => {
+    setLogoutModalVisible(false);
     void handleSharedSignOut();
-  }, [closeFabMenu, handleSharedSignOut]);
+  }, [handleSharedSignOut]);
 
   const fabRotate = fabMenuAnim.interpolate({
     inputRange: [0, 1],
@@ -1733,6 +1752,25 @@ export default function HomeScreen({
             </Animated.View>
           </View>
         </Modal>
+
+        <LogoutModal
+          visible={logoutModalVisible}
+          onConfirm={handleLogoutModalConfirm}
+          onCancel={handleLogoutModalCancel}
+          title="Log Out"
+          message="Are you sure you want to log out?"
+          confirmLabel="Log Out"
+        />
+
+        <LogoutModal
+          visible={sosSuccessVisible}
+          onConfirm={closeSosSuccessModal}
+          onCancel={closeSosSuccessModal}
+          title="Alert Sent"
+          message={sosSuccessMessage}
+          confirmLabel="OK"
+          hideCancel
+        />
 
         <BottomNavBar
           activeTab={activeTab}

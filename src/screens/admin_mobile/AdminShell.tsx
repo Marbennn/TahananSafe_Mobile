@@ -12,10 +12,12 @@ import AdminHotlinesScreen from "./AdminHotlinesScreen";
 import AdminAnalyticsScreen from "./AdminAnalyticsScreen";
 import AdminAlertsScreen from "./AdminAlertsScreen";
 import AdminSettingsScreen from "./AdminSettingsScreen";
+import AdminMapScreen from "./AdminMapScreen";
 
 type AdminView =
   | { type: "home" }
   | { type: "community" }
+  | { type: "map" }
   | { type: "reports" }
   | { type: "reportDetail"; reportId: string }
   | { type: "users" }
@@ -41,6 +43,7 @@ export default function AdminShell({ onOpenNotifications, onLogout }: Props) {
   const openUsers = useCallback(() => setView({ type: "users" }), []);
   const openHotlines = useCallback(() => setView({ type: "hotlines" }), []);
   const openAlerts = useCallback(() => setView({ type: "alerts" }), []);
+  const openMap = useCallback(() => setView({ type: "map" }), []);
   const openSettings = useCallback(() => setView({ type: "settings" }), []);
   const openAnalytics = useCallback(() => setView({ type: "analytics" }), []);
 
@@ -56,6 +59,7 @@ export default function AdminShell({ onOpenNotifications, onLogout }: Props) {
         onOpenUsers={openUsers}
         onOpenHotlines={openHotlines}
         onOpenAlerts={openAlerts}
+        onOpenMap={openMap}
         onOpenSettings={openSettings}
         onOpenAnalytics={openAnalytics}
         onOpenPendingReports={openReports}
@@ -67,13 +71,29 @@ export default function AdminShell({ onOpenNotifications, onLogout }: Props) {
     );
   }
 
+  if (view.type === "map") {
+    return (
+      <AdminMapScreen
+        onTabChange={(tab) => {
+          if (tab === "Home") goHome();
+          else if (tab === "Inbox") setView({ type: "alerts" });
+          else if (tab === "Community") openCommunity();
+          else if (tab === "Reports") setView({ type: "reports" });
+          else if (tab === "Settings") setView({ type: "settings" });
+        }}
+        initialTab="Map"
+      />
+    );
+  }
+
   if (view.type === "community") {
     return (
       <CommunityScreen
         initialTab="Community"
-        onTabChange={(tab) => {
+        onTabChange={(tab: any) => {
           if (tab === "Home") goHome();
           else if (tab === "Inbox") setView({ type: "alerts" });
+          else if (tab === "Map") openMap();
           else if (tab === "Reports") setView({ type: "reports" });
           else if (tab === "Settings") setView({ type: "settings" });
         }}
@@ -98,6 +118,7 @@ export default function AdminShell({ onOpenNotifications, onLogout }: Props) {
         onTabChange={(tab) => {
           if (tab === "Home") goHome();
           else if (tab === "Inbox") setView({ type: "alerts" });
+          else if (tab === "Map") openMap();
           else if (tab === "Community") openCommunity();
           else if (tab === "Settings") setView({ type: "settings" });
         }}
@@ -127,6 +148,7 @@ export default function AdminShell({ onOpenNotifications, onLogout }: Props) {
       <AdminAlertsScreen
         onTabChange={(tab) => {
           if (tab === "Home") goHome();
+          else if (tab === "Map") openMap();
           else if (tab === "Community") openCommunity();
           else if (tab === "Reports") setView({ type: "reports" });
           else if (tab === "Settings") setView({ type: "settings" });
@@ -146,9 +168,10 @@ export default function AdminShell({ onOpenNotifications, onLogout }: Props) {
       <AdminSettingsScreen
         onTabChange={(tab) => {
           if (tab === "Home") goHome();
+          else if (tab === "Inbox") setView({ type: "alerts" });
+          else if (tab === "Map") openMap();
           else if (tab === "Community") openCommunity();
           else if (tab === "Reports") setView({ type: "reports" });
-          else if (tab === "Inbox") setView({ type: "alerts" });
         }}
         initialTab="Settings"
         onFabPress={() => {}}
