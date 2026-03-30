@@ -80,3 +80,46 @@ export async function getMeApi(): Promise<GetMeResponse> {
     auth: true,
   });
 }
+
+/* ------------------------------------------------------------------ */
+/*  Forgot PIN flow (no auth required — user is locked out)            */
+/* ------------------------------------------------------------------ */
+
+type ForgotPinSendOtpResponse = { message: string };
+type ForgotPinVerifyOtpResponse = {
+  message: string;
+  resetToken: string;
+  expiresInSeconds: number;
+};
+type ForgotPinResetResponse = { message: string };
+
+export async function forgotPinSendOtp(email: string): Promise<ForgotPinSendOtpResponse> {
+  return requestJson<ForgotPinSendOtpResponse>({
+    method: "POST",
+    path: "/api/mobile/v1/forgot-pin/send-otp",
+    body: { email },
+  });
+}
+
+export async function forgotPinVerifyOtp(
+  email: string,
+  otp: string,
+): Promise<ForgotPinVerifyOtpResponse> {
+  return requestJson<ForgotPinVerifyOtpResponse>({
+    method: "POST",
+    path: "/api/mobile/v1/forgot-pin/verify-otp",
+    body: { email, otp },
+  });
+}
+
+export async function forgotPinReset(
+  email: string,
+  resetToken: string,
+  newPin: string,
+): Promise<ForgotPinResetResponse> {
+  return requestJson<ForgotPinResetResponse>({
+    method: "POST",
+    path: "/api/mobile/v1/forgot-pin/reset",
+    body: { email, resetToken, newPin },
+  });
+}

@@ -1,7 +1,7 @@
 // src/screens/PinScreen.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import InvalidPinModal from "../components/PinScreen/InvalidPinModal";
-import LogoutModal from "../components/LogoutModal";
+import ForgotPinModal from "../components/PinScreen/ForgotPinModal";
 import {
   View,
   Text,
@@ -356,16 +356,14 @@ export default function PinScreen({
         onClose={() => onInvalidPinDismiss?.()}
       />
 
-      <LogoutModal
+      <ForgotPinModal
         visible={forgotPinVisible}
-        onCancel={() => setForgotPinVisible(false)}
-        onConfirm={() => {
+        onClose={() => setForgotPinVisible(false)}
+        onPinReset={() => {
           setForgotPinVisible(false);
           onForgotPin();
         }}
-        title="Forgot PIN?"
-        message="This will turn off PIN login on this device and bring you back to login."
-        confirmLabel="Continue"
+        prefillEmail={userEmail}
       />
 
       {/* ✅ SECURITY: Lockout modal */}
