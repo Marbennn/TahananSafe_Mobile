@@ -185,20 +185,26 @@ async function shouldRequirePinIdleLock(auth: any): Promise<boolean> {
   return isPinEnabledLocally(email);
 }
 
-async function lockToPinScreen({
+async function handleIdleSessionTimeout({
   auth,
   navigation,
 }: {
   auth: any;
   navigation: any;
 }) {
-  const shouldLock = await shouldRequirePinIdleLock(auth);
-  if (!shouldLock) return;
+  const shouldLockToPin = await shouldRequirePinIdleLock(auth);
 
-  await refreshSessionBeforeIdleExit(auth);
+  if (shouldLockToPin) {
+    await refreshSessionBeforeIdleExit(auth);
+    resetPinUnlockedThisRun();
+    await setAppLockRequired(true).catch(() => {});
+    navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
+    return;
+  }
+
   resetPinUnlockedThisRun();
-  await setAppLockRequired(true).catch(() => {});
-  navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
+  await clearInvalidSession(auth);
+  navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
 }
 
 /* ===================== ROLE HELPERS ===================== */
@@ -480,7 +486,7 @@ function MainScreenWrapper({ navigation, route }: { navigation: any; route: any 
 
   // Idle timeout → close app; on reopen the splash flow sees PIN not unlocked → PinScreen
   const handleIdleLock = async () => {
-    await lockToPinScreen({ auth, navigation });
+    await handleIdleSessionTimeout({ auth, navigation });
   };
 
   return (
@@ -512,7 +518,7 @@ function AdminHomeWrapper({ navigation }: { navigation: any }) {
 
   // Idle timeout → close app; on reopen the splash flow sees PIN not unlocked → PinScreen
   const handleIdleLock = async () => {
-    await lockToPinScreen({ auth, navigation });
+    await handleIdleSessionTimeout({ auth, navigation });
   };
 
   return (
@@ -528,7 +534,7 @@ function AdminHomeWrapper({ navigation }: { navigation: any }) {
 function NotificationsWrapper({ navigation }: { navigation: any }) {
   const auth = useAuth() as any;
   const handleIdleLock = async () => {
-    await lockToPinScreen({ auth, navigation });
+    await handleIdleSessionTimeout({ auth, navigation });
   };
 
   if (isBarangayOfficial(auth?.user?.role)) {

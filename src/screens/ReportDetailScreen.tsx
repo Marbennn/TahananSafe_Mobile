@@ -1591,14 +1591,6 @@ export default function ReportDetailScreen({
                   onScroll={onChatScroll}
                   scrollEventThrottle={16}
                 >
-                  {messages.length === 0 && !loadingThreads && !threadsError ? (
-                    <View style={styles.emptyChat}>
-                      <Ionicons name="chatbubble-ellipses-outline" size={styles._emptyIcon} color="#94A3B8" />
-                      <Text style={styles.emptyChatTitle}>No messages yet</Text>
-                      <Text style={styles.emptyChatSub}>Send a message to follow up this report.</Text>
-                    </View>
-                  ) : null}
-
                   {showSharePhonePrompt ? (
                     <View style={styles.systemPromptWrap}>
                       <View style={styles.systemPromptTag}>
@@ -1649,6 +1641,14 @@ export default function ReportDetailScreen({
                           <Text style={styles.systemPromptSecondaryBtnText}>Cancel</Text>
                         </Pressable>
                       </View>
+                    </View>
+                  ) : null}
+
+                  {messages.length === 0 && !loadingThreads && !threadsError && !showSharePhonePrompt ? (
+                    <View style={styles.emptyChat}>
+                      <Ionicons name="chatbubble-ellipses-outline" size={styles._emptyIcon} color="#94A3B8" />
+                      <Text style={styles.emptyChatTitle}>No messages yet</Text>
+                      <Text style={styles.emptyChatSub}>Send a message to follow up this report.</Text>
                     </View>
                   ) : null}
 
@@ -2464,7 +2464,7 @@ function makeStyles(args: {
 
       bubble: {
         maxWidth: "100%",
-        minWidth: scale(88),
+        alignSelf: "flex-start",
         borderRadius: scale(16),
         paddingHorizontal: scale(12),
         paddingVertical: vscale(10),

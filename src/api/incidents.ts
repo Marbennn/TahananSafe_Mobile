@@ -15,6 +15,8 @@ export type CreateIncidentPayload = {
   dateStr?: string;
   timeStr?: string;
   locationStr?: string;
+  latitude?: number;
+  longitude?: number;
 
   // URIs from Expo ImagePicker (result.assets[].uri)
   photos?: string[];
@@ -94,6 +96,8 @@ export async function submitIncident(payload: CreateIncidentPayload) {
   if (payload.dateStr) form.append("dateStr", payload.dateStr);
   if (payload.timeStr) form.append("timeStr", payload.timeStr);
   if (payload.locationStr) form.append("locationStr", payload.locationStr);
+  appendIfDefined(form, "latitude", payload.latitude);
+  appendIfDefined(form, "longitude", payload.longitude);
 
   // ✅ AI fields -> backend
   appendIfDefined(form, "ai_incident_type", payload.ai_incident_type);

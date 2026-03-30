@@ -18,6 +18,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { WebView } from "react-native-webview";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -62,6 +63,7 @@ type Mode = "complain" | "emergency";
 
 // ✅ Type picker removed, but keep a safe internal value for backend compatibility
 type IncidentTypeValue = "Other" | "Emergency";
+type LocationCoords = { latitude: number; longitude: number };
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -149,6 +151,63 @@ function formatAddressFromReverseGeocode(
 
   return cleaned.join(", ");
 }
+
+function escHtml(s: string) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function buildCurrentLocationMapHtml(coords: LocationCoords, label: string) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body, #map { width: 100%; height: 100%; background: #F8FBFF; }
+    .popup-title { font: 700 13px sans-serif; color: #0B2B45; margin-bottom: 4px; }
+    .popup-text { font: 12px/1.5 sans-serif; color: #475569; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var map = L.map('map', { zoomControl: false, attributionControl: false }).setView([${coords.latitude}, ${coords.longitude}], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '\\u00a9 OpenStreetMap'
+    }).addTo(map);
+
+    L.circle([${coords.latitude}, ${coords.longitude}], {
+      radius: 28,
+      color: '#60A5FA',
+      fillColor: '#93C5FD',
+      fillOpacity: 0.25,
+      weight: 1
+    }).addTo(map);
+
+    var marker = L.circleMarker([${coords.latitude}, ${coords.longitude}], {
+      radius: 10,
+      color: '#FFFFFF',
+      weight: 3,
+      fillColor: '#2563EB',
+      fillOpacity: 1
+    }).addTo(map);
+
+    marker.bindPopup(
+      '<div class="popup-title">Your current location</div>' +
+      '<div class="popup-text">${escHtml(label || "Current location")}</div>'
+    ).openPopup();
+  <\/script>
+</body>
+</html>`;
+}
 /* ============================================================ */
 
 // Speech-to-text helpers
@@ -222,6 +281,8 @@ export default function IncidentLogScreen({
   const [timeStr, setTimeStr] = useState(() => formatTime12h(new Date()));
 
   const [locationStr, setLocationStr] = useState("Brgy. 12");
+  const [locationCoords, setLocationCoords] = useState<LocationCoords | null>(null);
+  const [showLocationMap, setShowLocationMap] = useState(false);
 
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationGranted, setLocationGranted] = useState<boolean | null>(null);
@@ -512,9 +573,16 @@ export default function IncidentLogScreen({
   const FOOTER_H = 72 * s;
   const CONTENT_BOTTOM_PAD = Math.max(insets.bottom, 10) + FOOTER_H + 16;
 
-  const requestAndSetCurrentLocation = async (opts?: { silent?: boolean }) => {
-    if (submitting || aiLoading) return;
-    if (locationLoading) return;
+  const locationMapHtml = useMemo(() => {
+    if (!locationCoords) return "";
+    return buildCurrentLocationMapHtml(locationCoords, locationStr);
+  }, [locationCoords, locationStr]);
+
+  const requestAndSetCurrentLocation = async (
+    opts?: { silent?: boolean }
+  ): Promise<LocationCoords | null> => {
+    if (submitting || aiLoading) return null;
+    if (locationLoading) return null;
 
     setLocationLoading(true);
     try {
@@ -525,13 +593,15 @@ export default function IncidentLogScreen({
       setLocationGranted(granted);
 
       if (!granted) {
+        setLocationCoords(null);
+        setShowLocationMap(false);
         if (!opts?.silent) {
           Alert.alert(
             "Location Permission Denied",
             "You denied location access. We will use the default location instead."
           );
         }
-        return;
+        return null;
       }
 
       const pos = await Location.getCurrentPositionAsync({
@@ -541,6 +611,7 @@ export default function IncidentLogScreen({
       const lat = pos.coords.latitude;
       const lon = pos.coords.longitude;
       const coordsStr = formatCoords(lat, lon);
+      const nextCoords = { latitude: lat, longitude: lon };
 
       let pretty = `GPS: ${coordsStr}`;
       try {
@@ -556,18 +627,37 @@ export default function IncidentLogScreen({
       }
 
       setLocationStr(pretty);
+      setLocationCoords(nextCoords);
 
       if (!opts?.silent) {
         Alert.alert("Location Updated", "We captured your current location.");
       }
+      return nextCoords;
     } catch (e: any) {
       log("requestAndSetCurrentLocation ERROR", e);
+      setLocationCoords(null);
+      setShowLocationMap(false);
       if (!opts?.silent) {
         Alert.alert("Location Error", e?.message || "Could not fetch your location.");
       }
+      return null;
     } finally {
       setLocationLoading(false);
     }
+  };
+
+  const handleToggleLocationMap = async () => {
+    if (submitting || aiLoading || locationLoading) return;
+
+    if (showLocationMap) {
+      setShowLocationMap(false);
+      return;
+    }
+
+    const coords = locationCoords ?? (await requestAndSetCurrentLocation({ silent: false }));
+    if (!coords) return;
+
+    setShowLocationMap(true);
   };
 
   const canAddMorePhotos = () => photos.length < MAX_PHOTOS;
@@ -711,6 +801,12 @@ export default function IncidentLogScreen({
   };
 
   const submitToBackend = async (): Promise<SubmitIncidentResponse> => {
+    const exactCoords =
+      locationCoords ??
+      (locationGranted !== false
+        ? await requestAndSetCurrentLocation({ silent: true })
+        : null);
+
     const incidentTypeToSend = getDisplayIncidentType();
 
     const payload: any = {
@@ -723,6 +819,8 @@ export default function IncidentLogScreen({
       dateStr,
       timeStr,
       locationStr,
+      latitude: exactCoords?.latitude,
+      longitude: exactCoords?.longitude,
       photos,
     };
 
@@ -1019,30 +1117,82 @@ export default function IncidentLogScreen({
             <View style={{ marginTop: 6, marginBottom: 6 }}>
               <Text style={[styles.sectionTitle, { color: TC.textDark }]}>Location</Text>
 
-              <Pressable
-                disabled={submitting || aiLoading || locationLoading}
-                onPress={() => requestAndSetCurrentLocation({ silent: false })}
-                style={({ pressed }) => [
-                  styles.locationBtnSolo,
-                  { backgroundColor: TC.surface, borderColor: TC.divider },
-                  (pressed || locationLoading || submitting || aiLoading) && { opacity: 0.9 },
-                ]}
-              >
-                {locationLoading ? (
-                  <ActivityIndicator />
-                ) : (
-                  <Ionicons name="locate-outline" size={16} color={TC.primary} />
-                )}
-                <Text style={[styles.locationBtnText, { color: TC.primary }]}>
-                  {locationLoading ? "Updating..." : "Use Current Location"}
-                </Text>
-              </Pressable>
+              <View style={styles.locationActionsRow}>
+                <Pressable
+                  disabled={submitting || aiLoading || locationLoading}
+                  onPress={() => requestAndSetCurrentLocation({ silent: false })}
+                  style={({ pressed }) => [
+                    styles.locationBtnSolo,
+                    styles.locationBtnSplit,
+                    { backgroundColor: TC.surface, borderColor: TC.divider },
+                    (pressed || locationLoading || submitting || aiLoading) && { opacity: 0.9 },
+                  ]}
+                >
+                  {locationLoading ? (
+                    <ActivityIndicator />
+                  ) : (
+                    <Ionicons name="locate-outline" size={16} color={TC.primary} />
+                  )}
+                  <Text style={[styles.locationBtnText, { color: TC.primary }]}>
+                    {locationLoading ? "Updating..." : "Use Current Location"}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  disabled={submitting || aiLoading || locationLoading}
+                  onPress={() => {
+                    void handleToggleLocationMap();
+                  }}
+                  style={({ pressed }) => [
+                    styles.locationBtnSolo,
+                    styles.locationBtnSplit,
+                    { backgroundColor: TC.surface, borderColor: TC.divider },
+                    (pressed || locationLoading || submitting || aiLoading) && { opacity: 0.9 },
+                  ]}
+                >
+                  <Ionicons
+                    name={showLocationMap ? "eye-off-outline" : "map-outline"}
+                    size={16}
+                    color={TC.primary}
+                  />
+                  <Text style={[styles.locationBtnText, { color: TC.primary }]}>
+                    {showLocationMap ? "Hide Map" : "Show in Map"}
+                  </Text>
+                </Pressable>
+              </View>
 
               {locationGranted === false && (
                 <Text style={styles.locationHintSolo}>
                   Permission denied (using default location)
                 </Text>
               )}
+
+              {showLocationMap && locationCoords ? (
+                <View
+                  style={[
+                    styles.locationMapCard,
+                    { backgroundColor: TC.surface, borderColor: TC.divider },
+                  ]}
+                >
+                  <View style={styles.locationMapHeader}>
+                    <Ionicons name="location-outline" size={16} color={TC.primary} />
+                    <Text style={[styles.locationMapTitle, { color: TC.textDark }]}>
+                      Your Current Location
+                    </Text>
+                  </View>
+
+                  <View style={[styles.locationMapFrame, { borderColor: TC.divider }]}>
+                    <WebView
+                      source={{ html: locationMapHtml }}
+                      style={styles.locationMapWebview}
+                      originWhitelist={["*"]}
+                      javaScriptEnabled
+                      domStorageEnabled
+                      scrollEnabled={false}
+                    />
+                  </View>
+                </View>
+              ) : null}
             </View>
 
             <View style={styles.metaRow}>
@@ -1318,6 +1468,13 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 14,
   },
+  locationActionsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  locationBtnSplit: {
+    flex: 1,
+  },
   locationBtnText: {
     fontSize: 13,
     fontWeight: "900",
@@ -1328,6 +1485,34 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
     color: "#9AA7B5",
+  },
+  locationMapCard: {
+    marginTop: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 12,
+  },
+  locationMapHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  locationMapTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: TEXT_DARK,
+  },
+  locationMapFrame: {
+    height: 220,
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: "hidden",
+    backgroundColor: "#EAF2FC",
+  },
+  locationMapWebview: {
+    flex: 1,
+    backgroundColor: "transparent",
   },
 
   metaRow: {
