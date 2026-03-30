@@ -602,8 +602,17 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
     <PinScreen
       accountEmail={accountEmail}
       onBack={handleBack}
-      onForgotPin={() => {
-        Alert.alert("Forgot PIN", "Recovery coming soon.");
+      onForgotPin={async () => {
+        if (accountEmail) {
+          await SecureStore.setItemAsync(pinEnabledKeyForEmail(accountEmail), "0").catch(() => {});
+          await resetPinAttempts(accountEmail).catch(() => {});
+        }
+
+        resetPinUnlockedThisRun();
+        try { await auth.logout(); } catch {}
+        await setLoggedIn(false);
+        await setHasPin(false);
+        navigation.reset({ index: 0, routes: [{ name: "Login" }] });
       }}
       onBypass={() => {
         setAppLockRequired(false).catch(() => {});

@@ -1,6 +1,7 @@
 // src/screens/PinScreen.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import InvalidPinModal from "../components/PinScreen/InvalidPinModal";
+import LogoutModal from "../components/LogoutModal";
 import {
   View,
   Text,
@@ -121,6 +122,7 @@ export default function PinScreen({
   const [pin, setPin] = useState("");
   const [lockedOut, setLockedOut] = useState(false);
   const [lockSeconds, setLockSeconds] = useState(0);
+  const [forgotPinVisible, setForgotPinVisible] = useState(false);
   const PIN_LENGTH = 4;
 
   // Lockout modal animation
@@ -292,7 +294,7 @@ export default function PinScreen({
             <Pressable
               onPress={() => {
                 onUserActivity?.();
-                onForgotPin();
+                setForgotPinVisible(true);
               }}
               hitSlop={10}
               style={({ pressed }) => [styles.forgotBtn, pressed && { opacity: 0.7 }]}
@@ -352,6 +354,18 @@ export default function PinScreen({
         visible={invalidPinVisible}
         message={invalidPinMsg}
         onClose={() => onInvalidPinDismiss?.()}
+      />
+
+      <LogoutModal
+        visible={forgotPinVisible}
+        onCancel={() => setForgotPinVisible(false)}
+        onConfirm={() => {
+          setForgotPinVisible(false);
+          onForgotPin();
+        }}
+        title="Forgot PIN?"
+        message="This will turn off PIN login on this device and bring you back to login."
+        confirmLabel="Continue"
       />
 
       {/* ✅ SECURITY: Lockout modal */}

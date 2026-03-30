@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Platform,
   Animated,
+  Modal,
   AppState,
   AppStateStatus,
   DeviceEventEmitter,
@@ -18,6 +19,7 @@ import {
   Alert,
   Easing,
   InteractionManager,
+  PanResponder,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -667,6 +669,8 @@ export default function HomeScreen({
   const iconBtnSize = clamp(Math.round(38 * s), 34, 44);
   const notifIconSize = clamp(Math.round(20 * s), 18, 24);
   const helpIconSize = clamp(Math.round(22 * s), 20, 26);
+  const sosThumbSize = clamp(Math.round(52 * s), 48, 58);
+  const sosGlowWidth = clamp(Math.round(88 * s), 74, 104);
 
   const HEADER_TOP_PAD = useMemo(() => clamp(Math.round(6 * s), 2, 10), [s]);
   const ACTION_GAP = useMemo(() => clamp(Math.round(14 * s), 10, 16), [s]);
@@ -677,6 +681,72 @@ export default function HomeScreen({
 
   const fabMenuAnim = useRef(new Animated.Value(0)).current;
   const [fabMenuOpen, setFabMenuOpen] = useState(false);
+  const [sosModalVisible, setSosModalVisible] = useState(false);
+  const [sendingSos, setSendingSos] = useState(false);
+  const [sosDragging, setSosDragging] = useState(false);
+  const [sosSliderWidth, setSosSliderWidth] = useState(0);
+  const sosModalAnim = useRef(new Animated.Value(0)).current;
+  const sosThumbPulseAnim = useRef(new Animated.Value(0)).current;
+  const sosSliderX = useRef(new Animated.Value(0)).current;
+  const sosSliderValueRef = useRef(0);
+  const sosDragStartRef = useRef(0);
+
+  useEffect(() => {
+    const id = sosSliderX.addListener(({ value }) => {
+      sosSliderValueRef.current = value;
+    });
+
+    return () => {
+      sosSliderX.removeListener(id);
+    };
+  }, [sosSliderX]);
+
+  const sosMaxSlide = useMemo(
+    () => Math.max(0, sosSliderWidth - sosThumbSize - 12),
+    [sosSliderWidth, sosThumbSize]
+  );
+  const sosCardTranslateY = useMemo(
+    () =>
+      sosModalAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [28, 0],
+      }),
+    [sosModalAnim]
+  );
+  const sosCardScale = useMemo(
+    () =>
+      sosModalAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0.94, 1],
+      }),
+    [sosModalAnim]
+  );
+  const sosGuideTranslateY = useMemo(
+    () =>
+      sosModalAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [16, 0],
+      }),
+    [sosModalAnim]
+  );
+  const sosThumbScale = useMemo(
+    () =>
+      sosThumbPulseAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 1.08],
+      }),
+    [sosThumbPulseAnim]
+  );
+  const sosTrailBaseWidth = useMemo(() => Math.max(sosSliderWidth, sosThumbSize + 12), [sosSliderWidth, sosThumbSize]);
+  const sosTrailTranslateX = useMemo(
+    () =>
+      sosSliderX.interpolate({
+        inputRange: [0, Math.max(sosMaxSlide, 1)],
+        outputRange: [sosThumbSize + 12 - sosTrailBaseWidth, 0],
+        extrapolate: "clamp",
+      }),
+    [sosMaxSlide, sosSliderX, sosThumbSize, sosTrailBaseWidth]
+  );
 
   const openFabMenu = useCallback(() => {
     if (!isFocusedRef.current || fabMenuOpen) return;
@@ -712,49 +782,174 @@ export default function HomeScreen({
     openFabMenu();
   }, [closeFabMenu, fabMenuOpen, openFabMenu]);
 
-  const handleAlertAction = useCallback(() => {
-    Alert.alert(
-      "Send SOS Alert",
-      "This will notify all Barangay Officials with your current location. Are you sure?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Send Alert",
-          style: "destructive",
-          onPress: async () => {
-            closeFabMenu();
-            let address: string | undefined;
-            let latitude: number | undefined;
-            let longitude: number | undefined;
-            try {
-              const { status } = await Location.requestForegroundPermissionsAsync();
-              if (status === "granted") {
-                const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-                latitude = loc.coords.latitude;
-                longitude = loc.coords.longitude;
-                const [place] = await Location.reverseGeocodeAsync({
-                  latitude,
-                  longitude,
-                });
-                if (place) {
-                  const parts = [place.street, place.district, place.city, place.region].filter(Boolean);
-                  address = parts.join(", ") || undefined;
-                }
-              }
-            } catch {
-              // location failed — send without address
-            }
-            try {
-              const result = await sendSosAlert({ address, latitude, longitude });
-              Alert.alert("Alert Sent", result.message);
-            } catch (e: any) {
-              Alert.alert("Failed", e?.message ?? "Could not send alert. Please try again.");
-            }
-          },
-        },
-      ]
+  const resetSosSlider = useCallback(
+    (animate = false) => {
+      sosSliderX.stopAnimation();
+
+      if (!animate) {
+        sosSliderX.setValue(0);
+        return;
+      }
+
+      Animated.spring(sosSliderX, {
+        toValue: 0,
+        useNativeDriver: false,
+        speed: 20,
+        bounciness: 0,
+      }).start();
+    },
+    [sosSliderX]
+  );
+
+  useEffect(() => {
+    sosModalAnim.stopAnimation();
+
+    if (!sosModalVisible) {
+      sosModalAnim.setValue(0);
+      return;
+    }
+
+    sosModalAnim.setValue(0);
+    Animated.spring(sosModalAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      damping: 18,
+      mass: 0.9,
+      stiffness: 180,
+    }).start();
+  }, [sosModalAnim, sosModalVisible]);
+
+  useEffect(() => {
+    sosThumbPulseAnim.stopAnimation();
+
+    if (!sosModalVisible || sendingSos || sosDragging) {
+      sosThumbPulseAnim.setValue(0);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(sosThumbPulseAnim, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: false,
+        }),
+        Animated.timing(sosThumbPulseAnim, {
+          toValue: 0,
+          duration: 700,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: false,
+        }),
+      ])
     );
-  }, [closeFabMenu]);
+
+    loop.start();
+
+    return () => {
+      loop.stop();
+      sosThumbPulseAnim.setValue(0);
+    };
+  }, [sendingSos, sosDragging, sosModalVisible, sosThumbPulseAnim]);
+
+  const closeSosModal = useCallback(() => {
+    if (sendingSos) return;
+    setSosDragging(false);
+    setSosModalVisible(false);
+    resetSosSlider();
+  }, [resetSosSlider, sendingSos]);
+
+  const submitSosAlert = useCallback(async () => {
+    if (sendingSos) return;
+
+    setSosDragging(false);
+    setSendingSos(true);
+    let address: string | undefined;
+    let latitude: number | undefined;
+    let longitude: number | undefined;
+
+    try {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === "granted") {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          latitude = loc.coords.latitude;
+          longitude = loc.coords.longitude;
+          const [place] = await Location.reverseGeocodeAsync({
+            latitude,
+            longitude,
+          });
+          if (place) {
+            const parts = [place.street, place.district, place.city, place.region].filter(Boolean);
+            address = parts.join(", ") || undefined;
+          }
+        }
+      } catch {
+        // location failed — send without address
+      }
+
+      const result = await sendSosAlert({ address, latitude, longitude });
+      setSosModalVisible(false);
+      resetSosSlider();
+      Alert.alert("Alert Sent", result.message);
+    } catch (e: any) {
+      resetSosSlider(true);
+      Alert.alert("Failed", e?.message ?? "Could not send alert. Please try again.");
+    } finally {
+      setSendingSos(false);
+    }
+  }, [resetSosSlider, sendingSos]);
+
+  const handleAlertAction = useCallback(() => {
+    closeFabMenu();
+    setSosDragging(false);
+    resetSosSlider();
+    setSosModalVisible(true);
+  }, [closeFabMenu, resetSosSlider]);
+
+  const sosPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => sosModalVisible && !sendingSos && sosMaxSlide > 0,
+        onStartShouldSetPanResponderCapture: () => sosModalVisible && !sendingSos && sosMaxSlide > 0,
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          sosModalVisible &&
+          !sendingSos &&
+          sosMaxSlide > 0 &&
+          Math.abs(gesture.dx) > 4 &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy),
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          setSosDragging(true);
+          sosSliderX.stopAnimation();
+          sosDragStartRef.current = sosSliderValueRef.current;
+        },
+        onPanResponderMove: (_, gesture) => {
+          const next = clamp(sosDragStartRef.current + gesture.dx, 0, sosMaxSlide);
+          sosSliderX.setValue(next);
+        },
+        onPanResponderRelease: () => {
+          setSosDragging(false);
+          if (sosSliderValueRef.current >= sosMaxSlide * 0.82) {
+            Animated.timing(sosSliderX, {
+              toValue: sosMaxSlide,
+              duration: 110,
+              useNativeDriver: false,
+            }).start(() => {
+              void submitSosAlert();
+            });
+            return;
+          }
+
+          resetSosSlider(true);
+        },
+        onPanResponderTerminate: () => {
+          setSosDragging(false);
+          resetSosSlider(true);
+        },
+      }),
+    [resetSosSlider, sendingSos, sosMaxSlide, sosModalVisible, sosSliderX, submitSosAlert]
+  );
 
   const handleFabHideApp = useCallback(() => {
     closeFabMenu();
@@ -1039,6 +1234,147 @@ export default function HomeScreen({
           backgroundColor: "rgba(11, 43, 69, 0.12)",
           zIndex: 18,
         },
+        sosModalRoot: {
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          paddingHorizontal: clamp(Math.round(24 * s), 20, 28),
+        },
+        sosModalBackdrop: {
+          ...StyleSheet.absoluteFillObject,
+          backgroundColor: "rgba(0,0,0,0.32)",
+        },
+        sosModalCard: {
+          width: "100%",
+          maxWidth: clamp(Math.round(320 * s), 300, 340),
+          borderRadius: clamp(Math.round(20 * s), 18, 24),
+          paddingHorizontal: clamp(Math.round(24 * s), 20, 26),
+          paddingTop: clamp(Math.round(28 * s), 24, 30),
+          paddingBottom: clamp(Math.round(20 * s), 18, 22),
+          backgroundColor: "#FFFFFF",
+          alignItems: "center",
+          ...Platform.select({
+            ios: {
+              shadowColor: "#000",
+              shadowOpacity: 0.18,
+              shadowRadius: 16,
+              shadowOffset: { width: 0, height: 10 },
+            },
+            android: { elevation: 10 },
+          }),
+        },
+        sosCloseBtn: {
+          position: "absolute",
+          top: clamp(Math.round(16 * s), 14, 18),
+          right: clamp(Math.round(16 * s), 14, 18),
+          width: clamp(Math.round(32 * s), 28, 34),
+          height: clamp(Math.round(32 * s), 28, 34),
+          borderRadius: 999,
+          backgroundColor: "#F3F4F6",
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        sosTitle: {
+          textAlign: "center",
+          fontSize: clamp(Math.round(16 * fs), 15, 18),
+          fontWeight: "900",
+          color: "#111827",
+          marginBottom: clamp(Math.round(24 * s), 20, 26),
+        },
+        sosGuideCard: {
+          alignSelf: "stretch",
+          borderRadius: clamp(Math.round(14 * s), 12, 16),
+          paddingHorizontal: clamp(Math.round(14 * s), 12, 16),
+          paddingVertical: clamp(Math.round(12 * s), 10, 14),
+          backgroundColor: "#F9FAFB",
+          borderWidth: 1,
+          borderColor: "#E5E7EB",
+          marginBottom: clamp(Math.round(16 * s), 14, 18),
+        },
+        sosGuideTitle: {
+          fontSize: clamp(Math.round(12 * fs), 11, 13),
+          fontWeight: "800",
+          color: "#111827",
+          marginBottom: clamp(Math.round(6 * s), 4, 8),
+        },
+        sosGuideLine: {
+          fontSize: clamp(Math.round(11 * fs), 10, 12),
+          fontWeight: "500",
+          lineHeight: clamp(Math.round(16 * fs), 14, 18),
+          color: "#6B7280",
+        },
+        sosSliderShell: {
+          alignSelf: "stretch",
+        },
+        sosSliderTrack: {
+          position: "relative",
+          minHeight: sosThumbSize + 12,
+          borderRadius: 999,
+          backgroundColor: "#F9FAFB",
+          borderWidth: 1,
+          borderColor: "#D7E3F4",
+          justifyContent: "center",
+          overflow: "hidden",
+        },
+        sosSliderTrail: {
+          position: "absolute",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          borderRadius: 999,
+          overflow: "hidden",
+        },
+        sosSliderTrailFill: {
+          ...StyleSheet.absoluteFillObject,
+          borderRadius: 999,
+          backgroundColor: "#DBEAFE",
+        },
+        sosSliderTrailGlow: {
+          position: "absolute",
+          top: 2,
+          bottom: 2,
+          borderRadius: 999,
+          overflow: "hidden",
+        },
+        sosSliderLabel: {
+          zIndex: 1,
+          textAlign: "center",
+          fontSize: clamp(Math.round(13 * fs), 12, 14),
+          fontWeight: "800",
+          color: "#374151",
+          paddingHorizontal: sosThumbSize + clamp(Math.round(18 * s), 16, 20),
+        },
+        sosSendingWrap: {
+          zIndex: 1,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: clamp(Math.round(8 * s), 6, 10),
+          paddingHorizontal: sosThumbSize + clamp(Math.round(18 * s), 16, 20),
+        },
+        sosSendingText: {
+          fontSize: clamp(Math.round(13 * fs), 12, 14),
+          fontWeight: "800",
+          color: "#374151",
+        },
+        sosSliderThumb: {
+          position: "absolute",
+          left: 6,
+          top: 6,
+          zIndex: 2,
+          backgroundColor: Colors.primary,
+          alignItems: "center",
+          justifyContent: "center",
+          ...Platform.select({
+            ios: {
+              shadowColor: Colors.primary,
+              shadowOpacity: 0.08,
+              shadowRadius: 3,
+              shadowOffset: { width: 0, height: 2 },
+            },
+            android: { elevation: 1 },
+          }),
+        },
         fabActionList: {
           position: "absolute",
           right: 0,
@@ -1089,6 +1425,7 @@ export default function HomeScreen({
       HEADER_TOP_PAD,
       ACTION_GAP,
       CONTENT_BOTTOM_PAD,
+      sosThumbSize,
     ]
   );
 
@@ -1265,6 +1602,137 @@ export default function HomeScreen({
             <Pressable style={StyleSheet.absoluteFillObject} onPress={closeFabMenu} />
           </Animated.View>
         ) : null}
+
+        <Modal visible={sosModalVisible} transparent animationType="fade" onRequestClose={closeSosModal}>
+          <View style={styles.sosModalRoot}>
+            <Pressable style={styles.sosModalBackdrop} onPress={closeSosModal} />
+
+            <Animated.View
+              style={[
+                styles.sosModalCard,
+                {
+                  opacity: sosModalAnim,
+                  transform: [{ translateY: sosCardTranslateY }, { scale: sosCardScale }],
+                },
+              ]}
+            >
+              <Pressable
+                onPress={closeSosModal}
+                disabled={sendingSos}
+                hitSlop={10}
+                style={({ pressed }) => [styles.sosCloseBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Ionicons name="close" size={18} color="#374151" />
+              </Pressable>
+
+              <Text style={styles.sosTitle} allowFontScaling={false}>
+                SOS Emergency Alert
+              </Text>
+
+              <Animated.View
+                style={[
+                  styles.sosGuideCard,
+                  {
+                    opacity: sosModalAnim,
+                    transform: [{ translateY: sosGuideTranslateY }],
+                  },
+                ]}
+              >
+                <Text style={styles.sosGuideTitle} allowFontScaling={false}>
+                  How it works
+                </Text>
+                <Text style={styles.sosGuideLine} allowFontScaling={false}>
+                  1. Slide to activate your emergency alert
+                </Text>
+                <Text style={styles.sosGuideLine} allowFontScaling={false}>
+                  2. Share your real-time location
+                </Text>
+                <Text style={styles.sosGuideLine} allowFontScaling={false}>
+                  3. Nearby Barangay Official will be notified
+                </Text>
+              </Animated.View>
+
+              <Animated.View
+                style={[
+                  styles.sosSliderShell,
+                  {
+                    opacity: sosModalAnim,
+                    transform: [{ translateY: sosGuideTranslateY }],
+                  },
+                ]}
+              >
+                <View
+                  style={styles.sosSliderTrack}
+                  onLayout={(event) => setSosSliderWidth(event.nativeEvent.layout.width)}
+                >
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.sosSliderTrail,
+                      {
+                        width: sosTrailBaseWidth,
+                        transform: [{ translateX: sosTrailTranslateX }],
+                      },
+                    ]}
+                  >
+                    <View style={styles.sosSliderTrailFill} />
+                    <View
+                      style={[
+                        styles.sosSliderTrailGlow,
+                        {
+                          width: sosGlowWidth,
+                          right: -sosGlowWidth * 0.22,
+                          opacity: 0.92,
+                        },
+                      ]}
+                    >
+                      <LinearGradient
+                        colors={[
+                          "rgba(96,165,250,0)",
+                          "rgba(147,197,253,0.22)",
+                          "rgba(255,255,255,0.92)",
+                          "rgba(191,219,254,0.56)",
+                          "rgba(96,165,250,0)",
+                        ]}
+                        start={{ x: 0, y: 0.5 }}
+                        end={{ x: 1, y: 0.5 }}
+                        style={StyleSheet.absoluteFillObject}
+                      />
+                    </View>
+                  </Animated.View>
+
+                  {!sendingSos ? (
+                    <Text style={styles.sosSliderLabel} allowFontScaling={false}>
+                      Slide to start SOS
+                    </Text>
+                  ) : (
+                    <View style={styles.sosSendingWrap}>
+                      <ActivityIndicator size="small" color={Colors.primary} />
+                      <Text style={styles.sosSendingText} allowFontScaling={false}>
+                        Sending SOS...
+                      </Text>
+                    </View>
+                  )}
+
+                  <Animated.View
+                    {...(sendingSos ? {} : sosPanResponder.panHandlers)}
+                    style={[
+                      styles.sosSliderThumb,
+                      {
+                        width: sosThumbSize,
+                        height: sosThumbSize,
+                        borderRadius: sosThumbSize / 2,
+                        transform: [{ translateX: sosSliderX }, { scale: sosDragging || sendingSos ? 1 : sosThumbScale }],
+                      },
+                    ]}
+                  >
+                    <Ionicons name="arrow-forward" size={22} color="#FFFFFF" />
+                  </Animated.View>
+                </View>
+              </Animated.View>
+            </Animated.View>
+          </View>
+        </Modal>
 
         <BottomNavBar
           activeTab={activeTab}
