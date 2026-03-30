@@ -28,6 +28,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
+import LogoutModal from "../components/LogoutModal";
 import { Colors, useColors } from "../theme/colors";
 import { useAuth } from "../auth/AuthContext";
 
@@ -70,6 +71,8 @@ type ThreadMsg = {
   pending?: boolean;
 };
 
+const RESPONDER_LABEL = "Barangay Admin";
+
 type Props = {
   report: ReportItem;
 
@@ -96,18 +99,18 @@ function formatThreadMeta(msg: ThreadMsg) {
 }
 
 function getThreadSenderLabel(msg?: ThreadMsg | null) {
-  if (!msg) return "Responder";
-  return msg.side === "right" ? "You" : msg.sender || "Responder";
+  if (!msg) return RESPONDER_LABEL;
+  return msg.side === "right" ? "You" : msg.sender || RESPONDER_LABEL;
 }
 
 function getReplyIndicatorText(msg: ThreadMsg) {
-  const targetLabel = msg.replyTo?.sender || (msg.replyTo?.side === "right" ? "You" : "Responder");
-  const actorLabel = msg.side === "right" ? "You" : msg.sender || "Responder";
+  const targetLabel = msg.replyTo?.sender || (msg.replyTo?.side === "right" ? "You" : RESPONDER_LABEL);
+  const actorLabel = msg.side === "right" ? "You" : msg.sender || RESPONDER_LABEL;
   return `${actorLabel} replied to ${targetLabel}`;
 }
 
 function getDeletedMessageLabel(msg: ThreadMsg) {
-  return msg.side === "right" ? "You deleted a message" : `${msg.sender || "Responder"} deleted a message`;
+  return msg.side === "right" ? "You deleted a message" : `${msg.sender || RESPONDER_LABEL} deleted a message`;
 }
 
 function getThreadBubbleMaxWidth(text: string, isTablet: boolean) {
@@ -162,7 +165,7 @@ function dtoToUi(dto: ThreadDto): ThreadMsg {
   return {
     id: dto._id,
     side: isResident ? "right" : "left",
-    sender: isResident ? undefined : dto.senderName || "Staff",
+    sender: isResident ? undefined : RESPONDER_LABEL,
     text: dto.text,
     time: dto.createdAt ? formatStamp(new Date(dto.createdAt)) : "",
     createdAtMs,
@@ -172,7 +175,7 @@ function dtoToUi(dto: ThreadDto): ThreadMsg {
     replyTo: dto.replyTo
       ? {
           threadId: dto.replyTo.threadId || null,
-          sender: dto.replyTo.senderName || (dto.replyTo.senderRole === "staff" ? "Staff" : "You"),
+          sender: dto.replyTo.senderRole === "resident" ? "You" : RESPONDER_LABEL,
           side: dto.replyTo.senderRole === "resident" ? "right" : "left",
           text: dto.replyTo.text || "",
         }
@@ -399,6 +402,8 @@ export default function ReportDetailScreen({
   const [visibleMessageMetaId, setVisibleMessageMetaId] = useState("");
   const [messageMenuVisible, setMessageMenuVisible] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState("");
+  const [deleteMessageModalVisible, setDeleteMessageModalVisible] = useState(false);
+  const [deleteTargetMessageId, setDeleteTargetMessageId] = useState("");
   const [sharePhoneDismissed, setSharePhoneDismissed] = useState(false);
 
   const [loadingThreads, setLoadingThreads] = useState(false);
@@ -412,6 +417,7 @@ export default function ReportDetailScreen({
   const [detail, setDetail] = useState<ReportDetailDto | null>(null);
 
   const [cancelling, setCancelling] = useState(false);
+  const [cancelReportModalVisible, setCancelReportModalVisible] = useState(false);
 
   const reportId = useMemo(() => {
     const id = (report as any)?.id || (report as any)?._id || "";
@@ -942,85 +948,88 @@ export default function ReportDetailScreen({
     }
   }, [editingMessageId, replyingToMessage, reportId, sending, visibleMessageMetaId]);
 
-  const cancelReport = useCallback(async () => {
+  const requestCancelReport = useCallback(() => {
     if (!reportId) {
       Alert.alert("Missing report id", "Cannot cancel because reportId is empty.");
       return;
     }
     if (cancelling) return;
 
-    Alert.alert(
-      "Cancel this report?",
-      "This will mark your incident report as CANCELLED. You can still view it in the Cancelled tab.",
-      [
-        { text: "No", style: "cancel" },
+    setCancelReportModalVisible(true);
+  }, [reportId, cancelling]);
+
+  const closeCancelReportModal = useCallback(() => {
+    if (cancelling) return;
+    setCancelReportModalVisible(false);
+  }, [cancelling]);
+
+  const confirmCancelReport = useCallback(async () => {
+    if (!reportId) {
+      Alert.alert("Missing report id", "Cannot cancel because reportId is empty.");
+      return;
+    }
+    if (cancelling) return;
+
+    setCancelReportModalVisible(false);
+    setCancelling(true);
+    try {
+      if (!isObjectId24(resolvedReportId)) {
+        throw new Error("Cannot cancel yet. Please wait for report details to load, then try again.");
+      }
+
+      const token = await getAccessToken();
+      if (!token) throw new Error("Please login again. (Missing access token)");
+
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      };
+
+      const res = await fetch(
+        `${API_BASE_URL}/api/mobile/v1/reports/${encodeURIComponent(resolvedReportId)}/cancel`,
         {
-          text: "Yes, cancel",
-          style: "destructive",
-          onPress: async () => {
-            setCancelling(true);
-            try {
-              if (!isObjectId24(resolvedReportId)) {
-                throw new Error("Cannot cancel yet. Please wait for report details to load, then try again.");
-              }
+          method: "POST",
+          headers,
+          body: JSON.stringify({ reason: "User cancelled" }),
+        }
+      );
 
-              const token = await getAccessToken();
-              if (!token) throw new Error("Please login again. (Missing access token)");
+      const data: any = await readJsonSafe(res);
+      if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error("Session expired. Please log in again.");
+        }
+        if (res.status === 403) {
+          throw new Error(
+            sanitizeApiMessage(
+              data?.message,
+              "You are not allowed to cancel this report."
+            )
+          );
+        }
+        throw new Error(
+          sanitizeApiMessage(
+            data?.message || `Cancel failed (${res.status})`,
+            "Could not cancel report on the server."
+          )
+        );
+      }
 
-              const headers: Record<string, string> = {
-                Accept: "application/json",
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              };
+      setDetail((prev) => {
+        const base: any = prev ?? {};
+        return { ...base, status: "CANCELLED", updatedAt: new Date().toISOString() } as any;
+      });
 
-              const res = await fetch(
-                `${API_BASE_URL}/api/mobile/v1/reports/${encodeURIComponent(resolvedReportId)}/cancel`,
-                {
-                  method: "POST",
-                  headers,
-                  body: JSON.stringify({ reason: "User cancelled" }),
-                }
-              );
+      lastDetailLoadedIdRef.current = "";
+      await loadDetail(true);
 
-              const data: any = await readJsonSafe(res);
-              if (!res.ok) {
-                if (res.status === 401) {
-                  throw new Error("Session expired. Please log in again.");
-                }
-                if (res.status === 403) {
-                  throw new Error(
-                    sanitizeApiMessage(
-                      data?.message,
-                      "You are not allowed to cancel this report."
-                    )
-                  );
-                }
-                throw new Error(
-                  sanitizeApiMessage(
-                    data?.message || `Cancel failed (${res.status})`,
-                    "Could not cancel report on the server."
-                  )
-                );
-              }
-
-              setDetail((prev) => {
-                const base: any = prev ?? {};
-                return { ...base, status: "CANCELLED", updatedAt: new Date().toISOString() } as any;
-              });
-
-              lastDetailLoadedIdRef.current = "";
-              await loadDetail(true);
-
-              Alert.alert("Cancelled", "Your report has been cancelled.");
-            } catch (e: any) {
-              Alert.alert("Cancel failed", e?.message || "Could not cancel report.");
-            } finally {
-              if (mountedRef.current) setCancelling(false);
-            }
-          },
-        },
-      ]
-    );
+      Alert.alert("Cancelled", "Your report has been cancelled.");
+    } catch (e: any) {
+      Alert.alert("Cancel failed", e?.message || "Could not cancel report.");
+    } finally {
+      if (mountedRef.current) setCancelling(false);
+    }
   }, [reportId, resolvedReportId, cancelling, loadDetail]);
 
   const incidentTitle =
@@ -1142,21 +1151,27 @@ export default function ReportDetailScreen({
     }, 60);
   }, [canChat, closeMessageMenu, draft, editingMessageId, scrollToBottom]);
 
-  const handleBumpThread = useCallback(async () => {
+  const requestDeleteSelectedMessage = useCallback(() => {
     if (!selectedThreadMessage || selectedThreadMessage.side !== "right" || selectedThreadMessage.pending) return;
 
+    setDeleteTargetMessageId(selectedThreadMessage.id);
+    setDeleteMessageModalVisible(true);
     closeMessageMenu();
-    Alert.alert("Delete message?", "This will permanently remove this message from the thread.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          void deleteThreadText(selectedThreadMessage.id);
-        },
-      },
-    ]);
-  }, [closeMessageMenu, deleteThreadText, selectedThreadMessage]);
+  }, [closeMessageMenu, selectedThreadMessage]);
+
+  const closeDeleteMessageModal = useCallback(() => {
+    setDeleteMessageModalVisible(false);
+    setDeleteTargetMessageId("");
+  }, []);
+
+  const confirmDeleteMessage = useCallback(() => {
+    const messageId = deleteTargetMessageId;
+    setDeleteMessageModalVisible(false);
+    setDeleteTargetMessageId("");
+    if (messageId) {
+      void deleteThreadText(messageId);
+    }
+  }, [deleteTargetMessageId, deleteThreadText]);
 
   const cancelEditingMessage = useCallback(() => {
     const restoredDraft = preEditDraftRef.current;
@@ -1316,7 +1331,7 @@ export default function ReportDetailScreen({
                 {selectedMessageCanDelete ? (
                   <Pressable
                     onPress={() => {
-                      void handleBumpThread();
+                      requestDeleteSelectedMessage();
                     }}
                     style={({ pressed }) => [
                       styles.threadMenuAction,
@@ -1334,6 +1349,26 @@ export default function ReportDetailScreen({
           ) : null}
         </View>
       </Modal>
+
+      <LogoutModal
+        visible={deleteMessageModalVisible}
+        title="Delete message?"
+        message="This will permanently remove this message from the thread."
+        confirmLabel="Delete"
+        confirmColor="#DC2626"
+        onCancel={closeDeleteMessageModal}
+        onConfirm={confirmDeleteMessage}
+      />
+
+      <LogoutModal
+        visible={cancelReportModalVisible}
+        title="Cancel this report?"
+        message="This will mark your incident report as CANCELLED. You can still view it in the Cancelled tab."
+        confirmLabel="Yes, Cancel"
+        confirmColor="#DC2626"
+        onCancel={closeCancelReportModal}
+        onConfirm={confirmCancelReport}
+      />
 
       {/* Image Viewer Modal */}
       <Modal visible={viewerVisible} animationType="fade" transparent onRequestClose={closeViewer}>
@@ -1601,7 +1636,7 @@ export default function ReportDetailScreen({
             {canCancel ? (
               <View style={styles.cancelBottomWrap}>
                 <Pressable
-                  onPress={cancelReport}
+                  onPress={requestCancelReport}
                   disabled={cancelling}
                   style={({ pressed }) => [
                     styles.cancelBottomBtn,
