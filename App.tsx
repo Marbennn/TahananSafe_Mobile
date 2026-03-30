@@ -171,6 +171,20 @@ async function refreshSessionBeforeIdleExit(auth: any) {
   }
 }
 
+async function shouldRequirePinIdleLock(auth: any): Promise<boolean> {
+  const resolvedUser = auth?.user || (await getStoredUser().catch(() => null));
+  const sessionHasPin = await getHasPin().catch(() => false);
+  const userHasPin = resolvedUser?.hasPin === true;
+  const hasPin = sessionHasPin || userHasPin;
+
+  if (!hasPin) return false;
+
+  const email = String(resolvedUser?.email || "").trim().toLowerCase();
+  if (!email) return true;
+
+  return isPinEnabledLocally(email);
+}
+
 async function lockToPinScreen({
   auth,
   navigation,
@@ -178,6 +192,9 @@ async function lockToPinScreen({
   auth: any;
   navigation: any;
 }) {
+  const shouldLock = await shouldRequirePinIdleLock(auth);
+  if (!shouldLock) return;
+
   await refreshSessionBeforeIdleExit(auth);
   resetPinUnlockedThisRun();
   await setAppLockRequired(true).catch(() => {});

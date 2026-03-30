@@ -29,12 +29,15 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { Colors, useColors } from "../theme/colors";
+import { useAuth } from "../auth/AuthContext";
 
 import type { ReportItem } from "./ReportScreen";
 import {
   fetchReportDetail,
   fetchReportThreads,
   sendReportThreadMessage,
+  updateReportThreadMessage,
+  deleteReportThreadMessage,
   ThreadDto,
   ReportDetailDto,
   buildReportPhotoUrl,
@@ -53,6 +56,15 @@ type ThreadMsg = {
   time: string;
 
   createdAtMs?: number;
+  editedAt?: string | null;
+  deletedAt?: string | null;
+  deletedByRole?: "resident" | "staff" | null;
+  replyTo?: {
+    threadId?: string | null;
+    sender?: string;
+    side: "left" | "right";
+    text: string;
+  } | null;
 
   // ✅ optimistic state
   pending?: boolean;
@@ -78,6 +90,26 @@ function formatStamp(d: Date) {
   });
 }
 
+function formatThreadMeta(msg: ThreadMsg) {
+  if (msg.pending) return "Sending...";
+  return msg.editedAt ? `${msg.time} • Edited` : msg.time;
+}
+
+function getThreadSenderLabel(msg?: ThreadMsg | null) {
+  if (!msg) return "Responder";
+  return msg.side === "right" ? "You" : msg.sender || "Responder";
+}
+
+function getReplyIndicatorText(msg: ThreadMsg) {
+  const targetLabel = msg.replyTo?.sender || (msg.replyTo?.side === "right" ? "You" : "Responder");
+  const actorLabel = msg.side === "right" ? "You" : msg.sender || "Responder";
+  return `${actorLabel} replied to ${targetLabel}`;
+}
+
+function getDeletedMessageLabel(msg: ThreadMsg) {
+  return msg.side === "right" ? "You deleted a message" : `${msg.sender || "Responder"} deleted a message`;
+}
+
 function dtoToUi(dto: ThreadDto): ThreadMsg {
   const isResident = dto.senderRole === "resident";
   const createdAtMs = dto.createdAt ? new Date(dto.createdAt).getTime() : undefined;
@@ -89,6 +121,17 @@ function dtoToUi(dto: ThreadDto): ThreadMsg {
     text: dto.text,
     time: dto.createdAt ? formatStamp(new Date(dto.createdAt)) : "",
     createdAtMs,
+    editedAt: dto.editedAt || null,
+    deletedAt: dto.deletedAt || null,
+    deletedByRole: dto.deletedByRole || null,
+    replyTo: dto.replyTo
+      ? {
+          threadId: dto.replyTo.threadId || null,
+          sender: dto.replyTo.senderName || (dto.replyTo.senderRole === "staff" ? "Staff" : "You"),
+          side: dto.replyTo.senderRole === "resident" ? "right" : "left",
+          text: dto.replyTo.text || "",
+        }
+      : null,
     pending: false,
   };
 }
@@ -106,6 +149,33 @@ function isAbortError(err: any) {
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
+}
+
+function formatSavedPhoneNumber(phone?: string) {
+  const raw = String(phone || "").trim();
+  if (!raw) return "";
+
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return raw;
+
+  if (digits.length === 12 && digits.startsWith("63")) return `0${digits.slice(2)}`;
+  if (digits.length === 11 && digits.startsWith("0")) return digits;
+  if (digits.length === 10 && digits.startsWith("9")) return `0${digits}`;
+
+  return raw;
+}
+
+function getSavedPhoneCandidate(user: any) {
+  return (
+    user?.phoneNumber ||
+    user?.contactNumber ||
+    user?.phone ||
+    user?.personalInfo?.contactNumber ||
+    user?.personalInfo?.phoneNumber ||
+    user?.profile?.contactNumber ||
+    user?.profile?.phoneNumber ||
+    ""
+  );
 }
 
 const BG = "#FFFFFF";
@@ -172,6 +242,7 @@ export default function ReportDetailScreen({
   onBack,
 }: Props) {
   const TC = useColors();
+  const { user, refreshMe } = useAuth();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
@@ -268,7 +339,15 @@ export default function ReportDetailScreen({
   const longPressFab = () => onQuickExit?.();
 
   const threadScrollRef = useRef<ScrollView | null>(null);
+  const composerInputRef = useRef<TextInput | null>(null);
+  const preEditDraftRef = useRef("");
   const [draft, setDraft] = useState("");
+  const [editingMessageId, setEditingMessageId] = useState("");
+  const [replyingToMessage, setReplyingToMessage] = useState<ThreadMsg | null>(null);
+  const [visibleMessageMetaId, setVisibleMessageMetaId] = useState("");
+  const [messageMenuVisible, setMessageMenuVisible] = useState(false);
+  const [selectedMessageId, setSelectedMessageId] = useState("");
+  const [sharePhoneDismissed, setSharePhoneDismissed] = useState(false);
 
   const [loadingThreads, setLoadingThreads] = useState(false);
   const [sending, setSending] = useState(false);
@@ -293,8 +372,38 @@ export default function ReportDetailScreen({
     return reportId;
   }, [reportId, detail]);
 
+  const savedPhoneNumber = useMemo(() => formatSavedPhoneNumber(getSavedPhoneCandidate(user)), [user]);
+  const savedPhoneDigits = useMemo(() => savedPhoneNumber.replace(/\D/g, ""), [savedPhoneNumber]);
+  const hasSharedSavedPhone = useMemo(() => {
+    if (!savedPhoneDigits) return false;
+    const altDigits = savedPhoneDigits.length > 10 ? savedPhoneDigits.slice(-10) : savedPhoneDigits;
+
+    return messages.some((m) => {
+      if (m.side !== "right") return false;
+      const msgDigits = String(m.text || "").replace(/\D/g, "");
+      if (!msgDigits) return false;
+      return msgDigits.includes(savedPhoneDigits) || (!!altDigits && msgDigits.includes(altDigits));
+    });
+  }, [messages, savedPhoneDigits]);
+  const lastIncomingMessage = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const msg = messages[i];
+      if (msg.side === "left") return msg;
+    }
+    return null;
+  }, [messages]);
+  const editingMessage = useMemo(
+    () => messages.find((m) => m.id === editingMessageId) ?? null,
+    [messages, editingMessageId]
+  );
+  const selectedThreadMessage = useMemo(
+    () => messages.find((m) => m.id === selectedMessageId) ?? null,
+    [messages, selectedMessageId]
+  );
+
   const detailAbortRef = useRef<AbortController | null>(null);
   const threadsAbortRef = useRef<AbortController | null>(null);
+  const triedRefreshPhoneRef = useRef(false);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -575,15 +684,38 @@ export default function ReportDetailScreen({
     else setDetailError("Missing report id.");
   }, [reportId, loadDetail]);
 
-  const onSend = useCallback(async () => {
-    const t = draft.trim();
+  useEffect(() => {
+    preEditDraftRef.current = "";
+    setEditingMessageId("");
+    setReplyingToMessage(null);
+    setVisibleMessageMetaId("");
+    setSelectedMessageId("");
+    setMessageMenuVisible(false);
+    setDraft("");
+    setSharePhoneDismissed(false);
+  }, [reportId]);
+
+  useEffect(() => {
+    if (view !== "threads") return;
+    if (savedPhoneNumber) return;
+    if (triedRefreshPhoneRef.current) return;
+
+    triedRefreshPhoneRef.current = true;
+    void refreshMe();
+  }, [refreshMe, savedPhoneNumber, view]);
+
+  const sendThreadText = useCallback(async (
+    rawText: string,
+    opts?: { manageDraft?: boolean; replyTo?: ThreadMsg | null }
+  ) => {
+    const t = rawText.trim();
     if (!t) return;
 
     if (!reportId) {
       Alert.alert("Missing report id", "Cannot send message because reportId is empty.");
-      return;
+      return false;
     }
-    if (sending) return;
+    if (sending) return false;
 
     setSending(true);
 
@@ -596,6 +728,14 @@ export default function ReportDetailScreen({
       text: t,
       time: formatStamp(new Date()),
       createdAtMs: now,
+      replyTo: opts?.replyTo
+        ? {
+            threadId: opts.replyTo.id,
+            sender: getThreadSenderLabel(opts.replyTo),
+            side: opts.replyTo.side,
+            text: opts.replyTo.text,
+          }
+        : null,
       pending: true,
     };
 
@@ -605,14 +745,18 @@ export default function ReportDetailScreen({
     setNewMsgCount(0);
 
     setMessages((prev) => [...prev, optimistic]);
-    setDraft("");
+    if (opts?.manageDraft) setDraft("");
 
     setTimeout(() => scrollToBottom(true), 60);
 
     const controller = new AbortController();
 
     try {
-      await sendReportThreadMessage(reportId, t, controller.signal);
+      await sendReportThreadMessage(
+        reportId,
+        { text: t, replyToThreadId: opts?.replyTo?.id || undefined },
+        controller.signal
+      );
 
       await refreshThreads({ showLoader: false });
 
@@ -623,17 +767,126 @@ export default function ReportDetailScreen({
           return prev;
         });
       }, 800);
+      return true;
     } catch (e: any) {
       if (!isAbortError(e)) {
         Alert.alert("Send failed", e?.message || "Could not send message.");
       }
       pendingOptimisticRef.current.delete(tmpId);
       setMessages((prev) => prev.filter((m) => m.id !== tmpId));
-      setDraft(t);
+      if (opts?.manageDraft) setDraft(t);
+      return false;
     } finally {
       setSending(false);
     }
-  }, [draft, reportId, sending, scrollToBottom, refreshThreads]);
+  }, [reportId, sending, scrollToBottom, refreshThreads]);
+
+  const updateThreadText = useCallback(async (messageId: string, rawText: string) => {
+    const t = rawText.trim();
+    if (!t) return false;
+
+    if (!reportId) {
+      Alert.alert("Missing report id", "Cannot edit message because reportId is empty.");
+      return false;
+    }
+    if (sending) return false;
+
+    setSending(true);
+
+    const controller = new AbortController();
+
+    try {
+      const data = await updateReportThreadMessage(reportId, messageId, t, controller.signal);
+      const updatedThread = data?.thread as ThreadDto | undefined;
+
+      if (updatedThread?._id) {
+        const updatedUi = dtoToUi(updatedThread);
+        setMessages((prev) => prev.map((m) => (m.id === updatedUi.id ? updatedUi : m)));
+      } else {
+        await refreshThreads({ showLoader: false });
+      }
+
+      return true;
+    } catch (e: any) {
+      if (!isAbortError(e)) {
+        Alert.alert("Edit failed", e?.message || "Could not edit message.");
+      }
+      return false;
+    } finally {
+      setSending(false);
+    }
+  }, [reportId, sending, refreshThreads]);
+
+  const onSend = useCallback(async () => {
+    const t = draft.trim();
+    if (!t) return;
+    if (editingMessageId) {
+      const ok = await updateThreadText(editingMessageId, t);
+      if (ok) {
+        const restoredDraft = preEditDraftRef.current;
+        preEditDraftRef.current = "";
+        setEditingMessageId("");
+        setDraft(restoredDraft);
+      }
+      return;
+    }
+    const ok = await sendThreadText(t, { manageDraft: true, replyTo: replyingToMessage });
+    if (ok) {
+      setReplyingToMessage(null);
+    }
+  }, [draft, editingMessageId, replyingToMessage, sendThreadText, updateThreadText]);
+
+  const handleShareSavedPhone = useCallback(async () => {
+    if (!savedPhoneNumber) return;
+    if (editingMessageId) {
+      preEditDraftRef.current = "";
+      setEditingMessageId("");
+      setDraft("");
+    }
+    setReplyingToMessage(null);
+    await sendThreadText(`My saved phone number is ${savedPhoneNumber}.`);
+  }, [editingMessageId, savedPhoneNumber, sendThreadText]);
+
+  const deleteThreadText = useCallback(async (messageId: string) => {
+    if (!reportId) {
+      Alert.alert("Missing report id", "Cannot delete message because reportId is empty.");
+      return false;
+    }
+    if (sending) return false;
+
+    setSending(true);
+    const controller = new AbortController();
+
+    try {
+      const data = await deleteReportThreadMessage(reportId, messageId, controller.signal);
+      const deletedThread = data?.thread as ThreadDto | undefined;
+      if (deletedThread?._id) {
+        const deletedUi = dtoToUi(deletedThread);
+        setMessages((prev) => prev.map((m) => (m.id === deletedUi.id ? deletedUi : m)));
+      } else {
+        setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      }
+      if (editingMessageId === messageId) {
+        preEditDraftRef.current = "";
+        setEditingMessageId("");
+        setDraft("");
+      }
+      if (visibleMessageMetaId === messageId) {
+        setVisibleMessageMetaId("");
+      }
+      if (replyingToMessage?.id === messageId) {
+        setReplyingToMessage(null);
+      }
+      return true;
+    } catch (e: any) {
+      if (!isAbortError(e)) {
+        Alert.alert("Delete failed", e?.message || "Could not delete message.");
+      }
+      return false;
+    } finally {
+      setSending(false);
+    }
+  }, [editingMessageId, replyingToMessage, reportId, sending, visibleMessageMetaId]);
 
   const cancelReport = useCallback(async () => {
     if (!reportId) {
@@ -781,11 +1034,100 @@ export default function ReportDetailScreen({
     statusUpper !== "CANCELLED" &&
     statusUpper !== "RESOLVED";
   const canChat = !!reportId && statusUpper !== "CANCELLED" && statusUpper !== "RESOLVED";
+  const showSharePhonePrompt = canChat && !!savedPhoneNumber && !sharePhoneDismissed;
+
+  const closeMessageMenu = useCallback(() => {
+    setMessageMenuVisible(false);
+    setSelectedMessageId("");
+  }, []);
+
+  const openMessageMenu = useCallback((message: ThreadMsg) => {
+    if (!canChat || message.pending || !!message.deletedAt) return;
+    Keyboard.dismiss();
+    setSelectedMessageId(message.id);
+    setMessageMenuVisible(true);
+  }, [canChat]);
+
+  const toggleMessageMeta = useCallback((messageId: string) => {
+    setVisibleMessageMetaId((prev) => (prev === messageId ? "" : messageId));
+  }, []);
+
+  const handleQuickReply = useCallback((target?: ThreadMsg | null) => {
+    if (!canChat) return;
+
+    if (editingMessageId) {
+      const restoredDraft = preEditDraftRef.current;
+      preEditDraftRef.current = "";
+      setEditingMessageId("");
+      setDraft(restoredDraft);
+    }
+    setReplyingToMessage(target || lastIncomingMessage || null);
+    closeMessageMenu();
+
+    setTimeout(() => {
+      composerInputRef.current?.focus();
+      scrollToBottom(true);
+    }, 60);
+  }, [canChat, closeMessageMenu, editingMessageId, lastIncomingMessage, scrollToBottom]);
+
+  const handleEditSelectedMessage = useCallback((message: ThreadMsg | null) => {
+    if (!message || message.side !== "right" || message.pending || !canChat) return;
+
+    if (!editingMessageId) {
+      preEditDraftRef.current = draft;
+    }
+
+    setReplyingToMessage(null);
+    setEditingMessageId(message.id);
+    setDraft(message.text);
+    closeMessageMenu();
+
+    setTimeout(() => {
+      composerInputRef.current?.focus();
+      scrollToBottom(true);
+    }, 60);
+  }, [canChat, closeMessageMenu, draft, editingMessageId, scrollToBottom]);
+
+  const handleBumpThread = useCallback(async () => {
+    if (!selectedThreadMessage || selectedThreadMessage.side !== "right" || selectedThreadMessage.pending) return;
+
+    closeMessageMenu();
+    Alert.alert("Delete message?", "This will permanently remove this message from the thread.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          void deleteThreadText(selectedThreadMessage.id);
+        },
+      },
+    ]);
+  }, [closeMessageMenu, deleteThreadText, selectedThreadMessage]);
+
+  const cancelEditingMessage = useCallback(() => {
+    const restoredDraft = preEditDraftRef.current;
+    preEditDraftRef.current = "";
+    setEditingMessageId("");
+    setDraft(restoredDraft);
+  }, []);
+
+  const cancelReplyMessage = useCallback(() => {
+    setReplyingToMessage(null);
+  }, []);
+
+  const selectedMessageCanReply = !!selectedThreadMessage && !selectedThreadMessage.deletedAt;
+  const selectedMessageCanEdit =
+    !!selectedThreadMessage &&
+    selectedThreadMessage.side === "right" &&
+    !selectedThreadMessage.pending &&
+    !selectedThreadMessage.deletedAt;
+  const selectedMessageCanDelete =
+    !!selectedThreadMessage &&
+    selectedThreadMessage.side === "right" &&
+    !selectedThreadMessage.pending &&
+    !selectedThreadMessage.deletedAt;
 
   const [composerH, setComposerH] = useState(vscale(64));
-
-  // ✅ FIX: only reserve the true safe-area inset (don’t inflate with extra vscale(10))
-  const threadsNavReserve = Math.max(0, insets.bottom);
 
   // ✅ FIX: composer should have a SMALL minimum padding, but not double-count insets
   const composerBottomPad = Math.max(insets.bottom, vscale(6));
@@ -795,6 +1137,12 @@ export default function ReportDetailScreen({
     if (!isKeyboardVisible) return;
     setTimeout(() => scrollToBottom(true), 60);
   }, [isKeyboardVisible, view, scrollToBottom]);
+
+  useEffect(() => {
+    if (!messageMenuVisible) return;
+    if (selectedThreadMessage) return;
+    closeMessageMenu();
+  }, [closeMessageMenu, messageMenuVisible, selectedThreadMessage]);
 
   const onChatScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
@@ -813,6 +1161,93 @@ export default function ReportDetailScreen({
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: TC.screenBg }]} edges={["top"]}>
       <StatusBar barStyle={TC.statusBar} />
+
+      <Modal visible={messageMenuVisible} animationType="fade" transparent onRequestClose={closeMessageMenu}>
+        <View style={styles.threadMenuBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeMessageMenu} />
+
+          {selectedThreadMessage ? (
+            <View style={styles.threadMenuShell} pointerEvents="box-none">
+              <View
+                style={[
+                  styles.threadMenuPreviewRow,
+                  selectedThreadMessage.side === "right"
+                    ? styles.threadMenuPreviewRowRight
+                    : styles.threadMenuPreviewRowLeft,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.threadMenuPreviewBubble,
+                    selectedThreadMessage.side === "right"
+                      ? styles.threadMenuPreviewBubbleRight
+                      : styles.threadMenuPreviewBubbleLeft,
+                  ]}
+                >
+                  <Text
+                    numberOfLines={3}
+                    style={[
+                      styles.threadMenuPreviewText,
+                      selectedThreadMessage.side === "right"
+                        ? styles.threadMenuPreviewTextRight
+                        : styles.threadMenuPreviewTextLeft,
+                    ]}
+                  >
+                    {selectedThreadMessage.text}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.threadMenuCard}>
+                {selectedMessageCanReply ? (
+                  <Pressable
+                    onPress={() => handleQuickReply(selectedThreadMessage)}
+                    style={({ pressed }) => [
+                      styles.threadMenuAction,
+                      !selectedMessageCanEdit && !selectedMessageCanDelete && styles.threadMenuActionLast,
+                      pressed && styles.threadMenuActionPressed,
+                    ]}
+                  >
+                    <Text style={styles.threadMenuActionText}>Reply</Text>
+                    <Ionicons name="arrow-undo" size={styles._menuIcon} color="#FFFFFF" />
+                  </Pressable>
+                ) : null}
+
+                {selectedMessageCanEdit ? (
+                  <Pressable
+                    onPress={() => handleEditSelectedMessage(selectedThreadMessage)}
+                    style={({ pressed }) => [
+                      styles.threadMenuAction,
+                      !selectedMessageCanDelete && styles.threadMenuActionLast,
+                      pressed && styles.threadMenuActionPressed,
+                    ]}
+                  >
+                    <Text style={styles.threadMenuActionText}>Edit</Text>
+                    <Ionicons name="create-outline" size={styles._menuIcon} color="#FFFFFF" />
+                  </Pressable>
+                ) : null}
+
+                {selectedMessageCanDelete ? (
+                  <Pressable
+                    onPress={() => {
+                      void handleBumpThread();
+                    }}
+                    style={({ pressed }) => [
+                      styles.threadMenuAction,
+                      styles.threadMenuActionLast,
+                      styles.threadMenuDeleteAction,
+                      pressed && styles.threadMenuActionPressed,
+                    ]}
+                  >
+                    <Text style={[styles.threadMenuActionText, styles.threadMenuDeleteText]}>Delete</Text>
+                    <Ionicons name="trash-outline" size={styles._menuIcon} color="#F87171" />
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
 
       {/* Image Viewer Modal */}
       <Modal visible={viewerVisible} animationType="fade" transparent onRequestClose={closeViewer}>
@@ -1164,39 +1599,176 @@ export default function ReportDetailScreen({
                     </View>
                   ) : null}
 
+                  {showSharePhonePrompt ? (
+                    <View style={styles.systemPromptWrap}>
+                      <View style={styles.systemPromptTag}>
+                        <Ionicons name="sparkles-outline" size={styles._miniIcon} color={TC.primary} />
+                        <Text style={styles.systemPromptTagText}>System</Text>
+                      </View>
+
+                      <View style={styles.systemPromptCard}>
+                        <Text style={styles.systemPromptTitle}>
+                          Would you like to share your saved phone number with the responder for quicker communication?
+                        </Text>
+                        <Text style={styles.systemPromptText}>
+                          Sharing your number can help the rescue team reach you faster in case of urgent updates.
+                        </Text>
+                        <Text style={styles.systemPromptHint}>
+                          {hasSharedSavedPhone
+                            ? "Your saved number was already shared in this thread. Press and hold a message for reply, edit, or delete options."
+                            : "Press and hold a message for reply, edit, or delete options."}
+                        </Text>
+
+                        <Pressable
+                          onPress={() => {
+                            void handleShareSavedPhone();
+                          }}
+                          disabled={sending}
+                          style={({ pressed }) => [
+                            styles.systemPromptPrimaryBtn,
+                            pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
+                            sending && { opacity: 0.7 },
+                          ]}
+                        >
+                          <Text style={styles.systemPromptPrimaryBtnText} numberOfLines={1}>
+                            {hasSharedSavedPhone
+                              ? `Send saved number again: ${savedPhoneNumber}`
+                              : `Share saved number: ${savedPhoneNumber}`}
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          onPress={() => setSharePhoneDismissed(true)}
+                          disabled={sending}
+                          style={({ pressed }) => [
+                            styles.systemPromptSecondaryBtn,
+                            pressed && { opacity: 0.92 },
+                            sending && { opacity: 0.7 },
+                          ]}
+                        >
+                          <Text style={styles.systemPromptSecondaryBtnText}>Cancel</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ) : null}
+
                   {messages.map((m) => {
                     const isLeft = m.side === "left";
+                    const showMeta = visibleMessageMetaId === m.id;
                     return (
                       <View key={m.id} style={styles.msgBlock}>
-                        {isLeft && m.sender ? (
-                          <Text style={styles.msgTopLine}>
-                            {m.sender} <Text style={styles.msgTime}>• {m.time}</Text>
-                          </Text>
-                        ) : null}
-
-                        <View style={[styles.msgRow, isLeft ? styles.msgRowLeft : styles.msgRowRight]}>
+                        {showMeta ? (
                           <View
                             style={[
-                              styles.bubble,
-                              isLeft ? styles.bubbleLeft : styles.bubbleRight,
-                              !isLeft && { borderColor: BORDER },
-                              m.pending && { opacity: 0.72 },
+                              styles.msgMetaWrap,
+                              isLeft ? styles.msgMetaWrapLeft : styles.msgMetaWrapRight,
                             ]}
                           >
-                            <Text style={[styles.bubbleText, isLeft ? styles.bubbleTextLeft : styles.bubbleTextRight]}>
-                              {m.text}
-                            </Text>
+                            <Text style={styles.msgMetaText}>{formatThreadMeta(m)}</Text>
+                          </View>
+                        ) : null}
+                        {m.deletedAt ? (
+                          <View
+                            style={[
+                              styles.deletedMessageWrap,
+                              isLeft ? styles.deletedMessageWrapLeft : styles.deletedMessageWrapRight,
+                            ]}
+                          >
+                            <Pressable
+                              onPress={() => toggleMessageMeta(m.id)}
+                              style={({ pressed }) => [pressed && { opacity: 0.88 }]}
+                            >
+                              <View style={styles.deletedMessagePill}>
+                                <Text style={styles.deletedMessageText}>{getDeletedMessageLabel(m)}</Text>
+                              </View>
+                            </Pressable>
+                          </View>
+                        ) : (
+                        <>
+                        {isLeft && m.sender ? (
+                          <Text style={styles.msgTopLineHidden}>
+                            {m.sender} <Text style={styles.msgTime}>• {formatThreadMeta(m)}</Text>
+                          </Text>
+                        ) : null}
+                        {isLeft && m.sender ? <Text style={styles.msgTopLine}>{m.sender}</Text> : null}
+                        <View
+                          style={[
+                            styles.messageStack,
+                            isLeft ? styles.messageStackLeft : styles.messageStackRight,
+                          ]}
+                        >
+                          {m.replyTo ? (
+                            <View
+                              style={[
+                                styles.replyPreviewWrap,
+                                isLeft ? styles.replyPreviewWrapLeft : styles.replyPreviewWrapRight,
+                              ]}
+                            >
+                              <View
+                                style={[
+                                  styles.replyMetaRow,
+                                  isLeft ? styles.replyMetaRowLeft : styles.replyMetaRowRight,
+                                ]}
+                              >
+                                <Ionicons name="arrow-undo" size={styles._miniIcon} color="#94A3B8" />
+                                <Text style={styles.replyMetaText} numberOfLines={1}>
+                                  {getReplyIndicatorText(m)}
+                                </Text>
+                              </View>
+                              <View
+                                style={[
+                                  styles.replyPreviewBubble,
+                                  isLeft ? styles.replyPreviewBubbleLeft : styles.replyPreviewBubbleRight,
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.replyPreviewText,
+                                    isLeft ? styles.replyPreviewTextLeft : styles.replyPreviewTextRight,
+                                  ]}
+                                  numberOfLines={2}
+                                >
+                                  {m.replyTo.text}
+                                </Text>
+                              </View>
+                            </View>
+                          ) : null}
+
+                          <View style={[styles.msgRow, isLeft ? styles.msgRowLeft : styles.msgRowRight]}>
+                            <Pressable
+                              disabled={!canChat || !!m.pending}
+                              delayLongPress={220}
+                              onPress={() => toggleMessageMeta(m.id)}
+                              onLongPress={() => openMessageMenu(m)}
+                              style={({ pressed }) => [
+                                styles.bubblePressable,
+                                pressed && !m.pending && canChat && { transform: [{ scale: 0.985 }] },
+                              ]}
+                            >
+                              <View
+                                style={[
+                                  styles.bubble,
+                                  isLeft ? styles.bubbleLeft : styles.bubbleRight,
+                                  !isLeft && { borderColor: BORDER },
+                                  m.pending && { opacity: 0.72 },
+                                ]}
+                              >
+                                <Text
+                                  style={[styles.bubbleText, isLeft ? styles.bubbleTextLeft : styles.bubbleTextRight]}
+                                >
+                                  {m.text}
+                                </Text>
+                              </View>
+                            </Pressable>
                           </View>
                         </View>
 
-                        {!isLeft ? (
-                          <Text style={[styles.msgTime, { textAlign: "right", marginTop: vscale(4) }]}>
-                            {m.pending ? "Sending…" : m.time}
-                          </Text>
-                        ) : null}
+                        </>
+                        )}
                       </View>
                     );
                   })}
+
                 </ScrollView>
 
                 {newMsgCount > 0 ? (
@@ -1225,6 +1797,46 @@ export default function ReportDetailScreen({
                     </Text>
                   </View>
                 )}
+                {replyingToMessage ? (
+                  <View style={styles.replyBanner}>
+                    <View style={styles.replyBannerAccent} />
+                    <View style={styles.replyBannerBody}>
+                      <Text style={styles.replyBannerTitle}>
+                        Replying to {getThreadSenderLabel(replyingToMessage)}
+                      </Text>
+                      <Text style={styles.replyBannerText} numberOfLines={1}>
+                        {replyingToMessage.text}
+                      </Text>
+                    </View>
+
+                    <Pressable
+                      onPress={cancelReplyMessage}
+                      hitSlop={10}
+                      style={({ pressed }) => [styles.replyBannerClose, pressed && { opacity: 0.75 }]}
+                    >
+                      <Ionicons name="close" size={styles._miniIcon} color="#64748B" />
+                    </Pressable>
+                  </View>
+                ) : null}
+                {editingMessage ? (
+                  <View style={styles.editingBanner}>
+                    <View style={styles.editingBannerAccent} />
+                    <View style={styles.editingBannerBody}>
+                      <Text style={styles.editingBannerTitle}>Editing message</Text>
+                      <Text style={styles.editingBannerText} numberOfLines={1}>
+                        {editingMessage.text}
+                      </Text>
+                    </View>
+
+                    <Pressable
+                      onPress={cancelEditingMessage}
+                      hitSlop={10}
+                      style={({ pressed }) => [styles.editingBannerClose, pressed && { opacity: 0.75 }]}
+                    >
+                      <Ionicons name="close" size={styles._miniIcon} color="#64748B" />
+                    </Pressable>
+                  </View>
+                ) : null}
                 <View
                   // ✅ FIX: don’t add threadsNavReserve here; just one bottom inset (small)
                   style={[styles.composerRow, { paddingBottom: composerBottomPad }]}
@@ -1236,9 +1848,10 @@ export default function ReportDetailScreen({
                   <View style={styles.composerInputWrap}>
                     <Ionicons name="chatbox-ellipses-outline" size={styles._miniIcon} color="#94A3B8" />
                     <TextInput
+                      ref={composerInputRef}
                       value={draft}
                       onChangeText={setDraft}
-                      placeholder="Write a message…"
+                      placeholder={editingMessage ? "Edit your message..." : "Write a message..."}
                       placeholderTextColor="#9AA4B2"
                       style={styles.composerInput}
                       returnKeyType="send"
@@ -1266,7 +1879,11 @@ export default function ReportDetailScreen({
                     {sending ? (
                       <ActivityIndicator color="#FFFFFF" />
                     ) : (
-                      <Ionicons name="send" size={styles._sendIcon} color="#FFFFFF" />
+                      <Ionicons
+                        name={editingMessage ? "checkmark" : "send"}
+                        size={styles._sendIcon}
+                        color="#FFFFFF"
+                      />
                     )}
                   </Pressable>
                 </View>
@@ -1324,6 +1941,7 @@ function makeStyles(args: {
   const _backBox = scale(36);
   const _backIcon = scale(22);
   const _sendIcon = scale(18);
+  const _menuIcon = scale(18);
 
   const _viewerIcon = scale(22);
   const _viewerPad = scale(40);
@@ -1568,16 +2186,285 @@ function makeStyles(args: {
       emptyChatTitle: { fontSize: scale(isTablet ? 13 : 12), fontWeight: "900", color: TEXT_DARK },
       emptyChatSub: { fontSize: scale(10.5), fontWeight: "400", color: "#94A3B8", textAlign: "center" },
 
-      msgBlock: { marginBottom: vscale(12) },
+      msgBlock: { width: "100%", marginBottom: vscale(12) },
+      systemPromptWrap: { marginBottom: vscale(12), gap: vscale(8) },
+      systemPromptTag: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(6),
+        alignSelf: "flex-start",
+      },
+      systemPromptTagText: { fontSize: scale(10), fontWeight: "900", color: "#64748B" },
+      systemPromptCard: {
+        borderRadius: scale(16),
+        borderWidth: 1,
+        borderColor: "#DBE7F5",
+        backgroundColor: "#F8FBFF",
+        paddingHorizontal: scale(12),
+        paddingVertical: vscale(12),
+        gap: vscale(10),
+      },
+      systemPromptTitle: {
+        fontSize: scale(isTablet ? 12 : 11),
+        fontWeight: "700",
+        lineHeight: vscale(isTablet ? 17 : 16),
+        color: "#334155",
+      },
+      systemPromptText: {
+        fontSize: scale(10.5),
+        fontWeight: "400",
+        lineHeight: vscale(15),
+        color: "#6B7280",
+      },
+      systemPromptHint: {
+        fontSize: scale(10.25),
+        fontWeight: "600",
+        lineHeight: vscale(15),
+        color: primary,
+      },
+      systemPromptPrimaryBtn: {
+        minHeight: vscale(40),
+        borderRadius: scale(14),
+        borderWidth: 1,
+        borderColor: primary,
+        backgroundColor: "#FFFFFF",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: scale(12),
+      },
+      systemPromptPrimaryBtnText: {
+        fontSize: scale(10.5),
+        fontWeight: "900",
+        color: primary,
+      },
+      systemPromptActionRow: {
+        flexDirection: "row",
+        gap: scale(10),
+      },
+      systemPromptMiniBtn: {
+        flex: 1,
+        minHeight: vscale(38),
+        borderRadius: scale(14),
+        borderWidth: 1,
+        borderColor: "#D7E3F4",
+        backgroundColor: "#FFFFFF",
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "row",
+        gap: scale(6),
+        paddingHorizontal: scale(10),
+      },
+      systemPromptMiniBtnText: {
+        fontSize: scale(10.5),
+        fontWeight: "800",
+        color: primary,
+      },
+      systemPromptSecondaryBtn: {
+        minHeight: vscale(38),
+        borderRadius: scale(14),
+        backgroundColor: "#EEF2F7",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: scale(12),
+      },
+      systemPromptSecondaryBtnText: {
+        fontSize: scale(10.5),
+        fontWeight: "800",
+        color: "#64748B",
+      },
+      threadMenuBackdrop: {
+        flex: 1,
+        backgroundColor: "rgba(15,23,42,0.26)",
+        justifyContent: "center",
+        paddingHorizontal: scale(20),
+      },
+      threadMenuShell: {
+        alignSelf: "center",
+        width: "100%",
+        maxWidth: scale(288),
+        gap: vscale(12),
+      },
+      threadMenuPreviewRow: {
+        flexDirection: "row",
+        width: "100%",
+      },
+      threadMenuPreviewRowLeft: { justifyContent: "flex-start" },
+      threadMenuPreviewRowRight: { justifyContent: "flex-end" },
+      threadMenuPreviewBubble: {
+        maxWidth: "84%",
+        borderRadius: scale(18),
+        paddingHorizontal: scale(14),
+        paddingVertical: vscale(10),
+      },
+      threadMenuPreviewBubbleLeft: {
+        backgroundColor: "#EEF2F7",
+        borderWidth: 1,
+        borderColor: "#E6ECF5",
+      },
+      threadMenuPreviewBubbleRight: {
+        backgroundColor: "#FFFFFF",
+        borderWidth: 1,
+        borderColor: "#D7E3F4",
+      },
+      threadMenuPreviewText: {
+        fontSize: scale(isTablet ? 12 : 11),
+        fontWeight: "500",
+        lineHeight: vscale(isTablet ? 16 : 15),
+      },
+      threadMenuPreviewTextLeft: { color: "#334155" },
+      threadMenuPreviewTextRight: { color: "#0F172A" },
+      threadMenuCard: {
+        borderRadius: scale(18),
+        backgroundColor: "#15181E",
+        overflow: "hidden",
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: "rgba(255,255,255,0.08)",
+        shadowColor: "#000000",
+        shadowOpacity: 0.24,
+        shadowRadius: scale(18),
+        shadowOffset: { width: 0, height: vscale(8) },
+        elevation: 10,
+      },
+      threadMenuAction: {
+        minHeight: vscale(50),
+        paddingHorizontal: scale(16),
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: "rgba(255,255,255,0.08)",
+      },
+      threadMenuActionPressed: {
+        backgroundColor: "rgba(255,255,255,0.08)",
+      },
+      threadMenuActionLast: {
+        borderBottomWidth: 0,
+      },
+      threadMenuActionText: {
+        fontSize: scale(12),
+        fontWeight: "700",
+        color: "#FFFFFF",
+      },
+      threadMenuDeleteAction: {
+        backgroundColor: "rgba(127,29,29,0.12)",
+      },
+      threadMenuDeleteText: {
+        color: "#F87171",
+      },
       msgTopLine: { fontSize: scale(10), fontWeight: "900", color: "#6B7280", marginBottom: vscale(6) },
+      msgTopLineHidden: {
+        display: "none",
+      },
       msgTime: { fontSize: scale(9), fontWeight: "400", color: "#94A3B8" },
+      msgMetaWrap: {
+        width: "100%",
+        marginBottom: vscale(6),
+      },
+      msgMetaWrapLeft: {
+        alignItems: "flex-start",
+      },
+      msgMetaWrapRight: {
+        alignItems: "flex-end",
+      },
+      msgMetaText: {
+        fontSize: scale(9.5),
+        fontWeight: "500",
+        color: "#94A3B8",
+      },
+      messageStack: {
+        width: "100%",
+        maxWidth: isTablet ? "70%" : "76%",
+      },
+      messageStackLeft: {
+        alignSelf: "flex-start",
+        alignItems: "flex-start",
+      },
+      messageStackRight: {
+        alignSelf: "flex-end",
+        alignItems: "flex-end",
+      },
+      replyPreviewWrap: {
+        width: "100%",
+        flexDirection: "column",
+        gap: vscale(4),
+        marginBottom: vscale(8),
+      },
+      replyPreviewWrapLeft: {
+        alignSelf: "flex-start",
+        alignItems: "flex-start",
+      },
+      replyPreviewWrapRight: {
+        alignSelf: "flex-end",
+        alignItems: "flex-end",
+      },
+      replyMetaRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        flexWrap: "nowrap",
+        gap: scale(4),
+      },
+      replyMetaRowLeft: { alignSelf: "flex-start" },
+      replyMetaRowRight: { alignSelf: "flex-end", justifyContent: "flex-end" },
+      replyMetaText: {
+        fontSize: scale(9.5),
+        fontWeight: "600",
+        color: "#94A3B8",
+        maxWidth: scale(isTablet ? 240 : 190),
+      },
+      replyPreviewBubble: {
+        maxWidth: "100%",
+        borderRadius: scale(14),
+        paddingHorizontal: scale(12),
+        paddingVertical: vscale(8),
+        borderWidth: 1,
+      },
+      replyPreviewBubbleLeft: {
+        backgroundColor: "#EEF2F7",
+        borderColor: "#E6ECF5",
+      },
+      replyPreviewBubbleRight: {
+        backgroundColor: "#1F2937",
+        borderColor: "#1F2937",
+      },
+      replyPreviewText: {
+        fontSize: scale(10.5),
+        fontWeight: "500",
+        lineHeight: vscale(14),
+      },
+      replyPreviewTextLeft: { color: "#334155" },
+      replyPreviewTextRight: { color: "#F8FAFC" },
+      deletedMessageWrap: {
+        width: "100%",
+        marginTop: vscale(2),
+      },
+      deletedMessageWrapLeft: {
+        alignItems: "flex-start",
+      },
+      deletedMessageWrapRight: {
+        alignItems: "flex-end",
+      },
+      deletedMessagePill: {
+        borderRadius: scale(999),
+        backgroundColor: "#111827",
+        paddingHorizontal: scale(14),
+        paddingVertical: vscale(7),
+      },
+      deletedMessageText: {
+        fontSize: scale(10.5),
+        fontWeight: "500",
+        color: "#E5E7EB",
+      },
 
       msgRow: { flexDirection: "row", alignItems: "flex-end" },
       msgRowLeft: { justifyContent: "flex-start" },
       msgRowRight: { justifyContent: "flex-end" },
+      bubblePressable: {
+        alignSelf: "flex-start",
+      },
 
       bubble: {
-        maxWidth: isTablet ? "70%" : "82%",
+        maxWidth: "100%",
+        minWidth: scale(88),
         borderRadius: scale(16),
         paddingHorizontal: scale(12),
         paddingVertical: vscale(10),
@@ -1585,10 +2472,116 @@ function makeStyles(args: {
       },
       bubbleLeft: { backgroundColor: "#EEF2F7", borderColor: "#E6ECF5" },
       bubbleRight: { backgroundColor: "#FFFFFF" },
+      replySnippet: {
+        borderRadius: scale(12),
+        borderLeftWidth: scale(3),
+        paddingHorizontal: scale(10),
+        paddingVertical: vscale(7),
+        marginBottom: vscale(8),
+      },
+      replySnippetLeft: {
+        backgroundColor: "rgba(255,255,255,0.6)",
+        borderLeftColor: "#94A3B8",
+      },
+      replySnippetRight: {
+        backgroundColor: "#F8FBFF",
+        borderLeftColor: primary,
+      },
+      replySnippetLabel: {
+        fontSize: scale(9.5),
+        fontWeight: "800",
+        color: "#334155",
+        marginBottom: vscale(2),
+      },
+      replySnippetText: {
+        fontSize: scale(9.5),
+        fontWeight: "400",
+        color: "#64748B",
+      },
 
       bubbleText: { fontSize: scale(isTablet ? 12 : 11), fontWeight: "400", lineHeight: vscale(isTablet ? 16 : 15) },
       bubbleTextLeft: { color: "#334155" },
       bubbleTextRight: { color: "#0F172A" },
+      replyBanner: {
+        paddingHorizontal: scale(12),
+        paddingVertical: vscale(10),
+        borderTopWidth: 1,
+        borderTopColor: BORDER,
+        backgroundColor: "#F8FBFF",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(10),
+      },
+      replyBannerAccent: {
+        width: scale(3),
+        alignSelf: "stretch",
+        borderRadius: scale(999),
+        backgroundColor: "#64748B",
+      },
+      replyBannerBody: {
+        flex: 1,
+        gap: vscale(2),
+      },
+      replyBannerTitle: {
+        fontSize: scale(10.5),
+        fontWeight: "900",
+        color: "#334155",
+      },
+      replyBannerText: {
+        fontSize: scale(10.5),
+        fontWeight: "400",
+        color: "#64748B",
+      },
+      replyBannerClose: {
+        width: scale(28),
+        height: scale(28),
+        borderRadius: scale(14),
+        borderWidth: 1,
+        borderColor: BORDER,
+        backgroundColor: "#FFFFFF",
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      editingBanner: {
+        paddingHorizontal: scale(12),
+        paddingVertical: vscale(10),
+        borderTopWidth: 1,
+        borderTopColor: BORDER,
+        backgroundColor: "#F8FBFF",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(10),
+      },
+      editingBannerAccent: {
+        width: scale(3),
+        alignSelf: "stretch",
+        borderRadius: scale(999),
+        backgroundColor: primary,
+      },
+      editingBannerBody: {
+        flex: 1,
+        gap: vscale(2),
+      },
+      editingBannerTitle: {
+        fontSize: scale(10.5),
+        fontWeight: "900",
+        color: primary,
+      },
+      editingBannerText: {
+        fontSize: scale(10.5),
+        fontWeight: "400",
+        color: "#475569",
+      },
+      editingBannerClose: {
+        width: scale(28),
+        height: scale(28),
+        borderRadius: scale(14),
+        borderWidth: 1,
+        borderColor: BORDER,
+        backgroundColor: "#FFFFFF",
+        alignItems: "center",
+        justifyContent: "center",
+      },
 
       composerRow: {
         paddingHorizontal: scale(12),
@@ -1749,6 +2742,7 @@ function makeStyles(args: {
       _backBox,
       _backIcon,
       _sendIcon,
+      _menuIcon,
       _viewerIcon,
       _viewerPad,
       _cancelIcon,

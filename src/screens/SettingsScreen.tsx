@@ -214,7 +214,7 @@ export default function SettingsScreen({
   // ==========================
   // ✅ Per-account security UI
   // ==========================
-  const { user } = useAuth() as any;
+  const { user, refreshMe } = useAuth() as any;
   const userEmail: string = (user?.email ? String(user.email) : "").trim().toLowerCase();
 
   // ✅ Account modal
@@ -328,6 +328,7 @@ export default function SettingsScreen({
             await setPinEnabledForEmail(userEmail, true);
             setPinEnabled(true);
             await setHasPin(true);
+            await refreshMe?.().catch(() => {});
 
             try {
               const userId = String(me.user._id);
@@ -382,6 +383,7 @@ export default function SettingsScreen({
 
       await setPinApi({ pin: pinDraft.trim() });
       await setHasPin(true);
+      await refreshMe?.().catch(() => {});
 
       try {
         const me = await getMeApi();

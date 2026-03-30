@@ -44,6 +44,11 @@ export default function IdleTimerWrapper({ onTimeout, children }: Props) {
     }, IDLE_MS);
   }, [clearTimer, triggerTimeout]);
 
+  const handleActivity = useCallback(() => {
+    if (timeoutInFlightRef.current) return;
+    resetTimer();
+  }, [resetTimer]);
+
   useEffect(() => {
     resetTimer();
 
@@ -77,12 +82,14 @@ export default function IdleTimerWrapper({ onTimeout, children }: Props) {
   return (
     <View
       style={{ flex: 1 }}
+      onTouchStart={handleActivity}
+      onTouchMove={handleActivity}
       onStartShouldSetResponderCapture={() => {
-        resetTimer();
+        handleActivity();
         return false;
       }}
       onMoveShouldSetResponderCapture={() => {
-        resetTimer();
+        handleActivity();
         return false;
       }}
     >

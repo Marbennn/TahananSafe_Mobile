@@ -12,6 +12,15 @@ export type ThreadDto = {
   senderName: string;
   text: string;
   createdAt: string;
+  editedAt?: string | null;
+  deletedAt?: string | null;
+  deletedByRole?: "resident" | "staff" | null;
+  replyTo?: {
+    threadId?: string | null;
+    senderName?: string;
+    senderRole?: "resident" | "staff";
+    text?: string;
+  } | null;
 };
 
 // ✅ matches your Mongo incident document fields
@@ -154,7 +163,7 @@ export async function fetchReportThreads(
  */
 export async function sendReportThreadMessage(
   reportId: string,
-  message: string,
+  message: string | { text: string; replyToThreadId?: string | null },
   signal?: AbortSignal
 ) {
   const token = await getAccessToken();
@@ -169,6 +178,73 @@ export async function sendReportThreadMessage(
     `${API_URL}/api/mobile/reports/${encodeURIComponent(reportId)}/threads`,
     {
       method: "POST",
+      headers,
+      body: JSON.stringify(
+        typeof message === "string"
+          ? { text: message }
+          : { text: message.text, replyToThreadId: message.replyToThreadId || undefined }
+      ),
+      signal,
+    }
+  );
+
+  const data = await parseJsonSafe(res);
+
+  if (!res.ok) {
+    throw new Error(data?.message || `Failed (${res.status})`);
+  }
+
+  return data; // { message, thread }
+}
+
+export async function deleteReportThreadMessage(
+  reportId: string,
+  threadId: string,
+  signal?: AbortSignal
+) {
+  const token = await getAccessToken();
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(
+    `${API_URL}/api/mobile/reports/${encodeURIComponent(reportId)}/threads/${encodeURIComponent(threadId)}`,
+    {
+      method: "DELETE",
+      headers,
+      signal,
+    }
+  );
+
+  const data = await parseJsonSafe(res);
+
+  if (!res.ok) {
+    throw new Error(data?.message || `Failed (${res.status})`);
+  }
+
+  return data; // { message, thread }
+}
+
+export async function updateReportThreadMessage(
+  reportId: string,
+  threadId: string,
+  message: string,
+  signal?: AbortSignal
+) {
+  const token = await getAccessToken();
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(
+    `${API_URL}/api/mobile/reports/${encodeURIComponent(reportId)}/threads/${encodeURIComponent(threadId)}`,
+    {
+      method: "PUT",
       headers,
       body: JSON.stringify({ text: message }),
       signal,
