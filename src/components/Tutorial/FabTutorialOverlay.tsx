@@ -2,7 +2,7 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors, useColors } from "../../theme/colors";
+import { Colors } from "../../theme/colors";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -19,6 +19,7 @@ type Props = {
   fabSize: number;
   fabBottom: number;
   navHeight: number; // not used right now but useful later
+  fabRight?: number;
 
   title?: string;
   message?: string;
@@ -32,14 +33,13 @@ export default function FabTutorialOverlay({
   fabSize,
   fabBottom,
   navHeight,
+  fabRight,
   title = "Create an Incident Log",
   message = "Tap the + button to add a new report.",
 }: Props) {
-  const TC = useColors();
-  if (!visible) return null;
-
   // ✅ Tutorial positioning (based on center FAB)
-  const fabCenterX = width / 2;
+  const fabCenterX =
+    typeof fabRight === "number" ? width - fabRight - fabSize / 2 : width / 2;
 
   const ringSize = Math.round(fabSize + 18);
   const ringLeft = fabCenterX - ringSize / 2;
@@ -138,6 +138,8 @@ export default function FabTutorialOverlay({
     ]
   );
 
+  if (!visible) return null;
+
   return (
     <View style={styles.tutorialOverlay} pointerEvents="box-none">
       {/* Dimmer (tap anywhere to dismiss) */}
@@ -165,7 +167,7 @@ export default function FabTutorialOverlay({
             message
           )}
         </Text>
-        <Text style={styles.tooltipHint}>Tap anywhere to continue</Text>
+        <Text style={styles.tooltipHint}>Tap anywhere to dismiss</Text>
       </View>
     </View>
   );

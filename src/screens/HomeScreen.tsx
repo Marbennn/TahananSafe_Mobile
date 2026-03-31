@@ -41,6 +41,8 @@ import HomeScreenLogo from "../../assets/HomeScreen/NewLogo.svg";
 // âœ… Tutorial overlay
 import FabTutorialOverlay from "../components/Tutorial/FabTutorialOverlay";
 import ReportTutorialModal from "../components/Tutorial/ReportTutorialModal";
+import VerifyAccountTutorialModal from "../components/Tutorial/VerifyAccountTutorialModal";
+import TutorialPickerModal from "../components/Tutorial/TutorialPickerModal";
 
 // âœ… Auth context
 import { useAuth } from "../auth/AuthContext";
@@ -229,7 +231,9 @@ export default function HomeScreen({
 
   // âœ… Tutorial
   const [showFabTutorial, setShowFabTutorial] = useState(false);
+  const [showTutorialMenu, setShowTutorialMenu] = useState(false);
   const [showReportTutorial, setShowReportTutorial] = useState(false);
+  const [showVerifyTutorial, setShowVerifyTutorial] = useState(false);
   const tutorialBootRef = useRef(false);
 
   const showFabTutorialOnce = useCallback(async () => {
@@ -997,6 +1001,52 @@ export default function HomeScreen({
     void handleSharedSignOut();
   }, [handleSharedSignOut]);
 
+  const openTutorialByKey = useCallback((key: "report" | "verify" | "quick_actions") => {
+    setShowTutorialMenu(false);
+
+    setTimeout(() => {
+      if (key === "report") {
+        setShowReportTutorial(true);
+        return;
+      }
+      if (key === "verify") {
+        setShowVerifyTutorial(true);
+        return;
+      }
+      setShowFabTutorial(true);
+    }, 140);
+  }, []);
+
+  const tutorialOptions = useMemo(
+    () => [
+      {
+        key: "report",
+        icon: "document-text-outline" as const,
+        iconColor: "#1A3C6E",
+        title: "How to Submit a Report",
+        description: "Learn the step-by-step flow for creating and tracking an incident report.",
+        onPress: () => openTutorialByKey("report"),
+      },
+      {
+        key: "verify",
+        icon: "shield-checkmark-outline" as const,
+        iconColor: "#0F766E",
+        title: "How to Verify Your Account",
+        description: "See how to take a selfie, upload a valid ID, and complete verification.",
+        onPress: () => openTutorialByKey("verify"),
+      },
+      {
+        key: "quick_actions",
+        icon: "add-circle-outline" as const,
+        iconColor: "#7C3AED",
+        title: "How to Use Quick Actions",
+        description: "View the shortcut guide for Incident Log, Alert, Hide App, and Sign Out.",
+        onPress: () => openTutorialByKey("quick_actions"),
+      },
+    ],
+    [openTutorialByKey]
+  );
+
   const fabRotate = fabMenuAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ["0deg", "135deg"],
@@ -1484,7 +1534,7 @@ export default function HomeScreen({
             <Pressable
               onPress={() => {
                 if (fabMenuOpen) closeFabMenu();
-                setShowReportTutorial(true);
+                setShowTutorialMenu(true);
               }}
               hitSlop={12}
               style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
@@ -1920,15 +1970,26 @@ export default function HomeScreen({
           s={s}
           fabSize={FAB_SIZE}
           fabBottom={fabBottom}
+          fabRight={16}
           navHeight={navHeight}
           title="Open Quick Actions"
           message="Tap the + button to open Incident Log, Alert, Hide App, and Sign Out shortcuts."
         />
 
-        {/* âœ… Report submission tutorial modal */}
+        <TutorialPickerModal
+          visible={showTutorialMenu}
+          onClose={() => setShowTutorialMenu(false)}
+          options={tutorialOptions}
+        />
+
         <ReportTutorialModal
           visible={showReportTutorial}
           onClose={() => setShowReportTutorial(false)}
+        />
+
+        <VerifyAccountTutorialModal
+          visible={showVerifyTutorial}
+          onClose={() => setShowVerifyTutorial(false)}
         />
       </View>
     </SafeAreaView>

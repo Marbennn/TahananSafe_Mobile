@@ -2,7 +2,7 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors, useColors } from "../../theme/colors";
+import { Colors } from "../../theme/colors";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -36,9 +36,6 @@ export default function IncidentSubmitTutorialOverlay({
   title = "Submit your report",
   message = "Tap this button to securely send your incident.",
 }: Props) {
-  const TC = useColors();
-  if (!visible) return null;
-
   const ringPad = clamp(Math.round(10 * s), 8, 14);
 
   // Highlight frame around the target
@@ -139,6 +136,8 @@ export default function IncidentSubmitTutorialOverlay({
     [frameX, frameY, frameW, frameH, arrowSize, arrowTop, tooltipLeft, tooltipTop, tooltipMaxW, s]
   );
 
+  if (!visible) return null;
+
   return (
     <View style={styles.overlay} pointerEvents="box-none">
       <Pressable style={styles.dimmer} onPress={onClose} />
@@ -156,7 +155,7 @@ export default function IncidentSubmitTutorialOverlay({
       <View style={styles.tooltip} pointerEvents="none">
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.text}>{message}</Text>
-        <Text style={styles.hint}>Tap anywhere to continue</Text>
+        <Text style={styles.hint}>Tap anywhere to dismiss</Text>
       </View>
     </View>
   );
