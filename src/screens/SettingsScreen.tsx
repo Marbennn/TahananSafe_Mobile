@@ -38,7 +38,6 @@ import LogoutModal from "../components/LogoutModal";
 
 type Props = {
   onAccountPress?: () => void;
-  onPrivacyPress?: () => void;
   onHelpPress?: () => void;
   onTermsPress?: () => void;
 
@@ -153,7 +152,6 @@ function statusPillText(enabled?: boolean, loading?: boolean) {
 
 export default function SettingsScreen({
   onAccountPress,
-  onPrivacyPress,
   onHelpPress,
   onTermsPress,
   onAboutPress, // kept for compatibility (not used)
@@ -231,6 +229,16 @@ export default function SettingsScreen({
   const [persModalVisible, setPersModalVisible] = useState(false);
   const openPersonalizationModal = () => setPersModalVisible(true);
   const closePersonalizationModal = () => setPersModalVisible(false);
+
+  // ✅ Help & Support modal
+  const [helpModalVisible, setHelpModalVisible] = useState(false);
+  const openHelpModal = () => setHelpModalVisible(true);
+  const closeHelpModal = () => setHelpModalVisible(false);
+
+  // ✅ Terms modal
+  const [termsModalVisible, setTermsModalVisible] = useState(false);
+  const openTermsModal = () => setTermsModalVisible(true);
+  const closeTermsModal = () => setTermsModalVisible(false);
 
   // Biometrics
   const [bioEnabled, setBioEnabled] = useState(false);
@@ -505,14 +513,14 @@ export default function SettingsScreen({
         label: "Help and Support",
         subtitle: "FAQs, contact support",
         icon: "help-circle-outline",
-        onPress: onHelpPress,
+        onPress: openHelpModal,
       },
       {
         key: "terms",
         label: "Terms and Conditions",
         subtitle: "Policies & agreements",
         icon: "document-text-outline",
-        onPress: onTermsPress,
+        onPress: openTermsModal,
       },
       // ✅ Personalization now opens a modal (like Account)
       {
@@ -523,7 +531,7 @@ export default function SettingsScreen({
         onPress: openPersonalizationModal,
       },
     ],
-    [onHelpPress, onTermsPress]
+    [openHelpModal, openTermsModal]
   );
 
   const canManageSecurity = !!userEmail;
@@ -546,26 +554,6 @@ export default function SettingsScreen({
                 <Ionicons name="close" size={iconSize} color={muted} />
               </Pressable>
             </View>
-
-            <View style={[styles.currentAccountRow, { borderColor: divider }]}>
-              <View style={[styles.currentAvatar, { backgroundColor: chipBg }]}>
-                <Ionicons name="person" size={scale(18)} color={primary} />
-              </View>
-
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.currentTitle, { color: textDark }]}>Current Account</Text>
-                <Text style={[styles.currentSub, { color: muted }]}>
-                  {userEmail ? maskEmail(userEmail) : "Not signed in"}
-                </Text>
-              </View>
-
-              <View style={[styles.currentPill, { backgroundColor: chipBg }]}>
-                <Ionicons name={currentStatusIcon as any} size={smallIcon} color={primary} />
-                <Text style={[styles.currentPillText, { color: primary }]}>{currentStatusLabel}</Text>
-              </View>
-            </View>
-
-            <View style={[styles.line, { backgroundColor: divider }]} />
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountModalContent}>
               <Pressable
@@ -642,48 +630,7 @@ export default function SettingsScreen({
               </Pressable>
             </View>
 
-            <View style={[styles.currentAccountRow, { borderColor: divider }]}>
-              <View style={[styles.currentAvatar, { backgroundColor: chipBg }]}>
-                <Ionicons name="lock-closed" size={scale(18)} color={primary} />
-              </View>
-
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.currentTitle, { color: textDark }]}>Current Account</Text>
-                <Text style={[styles.currentSub, { color: muted }]}>
-                  {userEmail ? maskEmail(userEmail) : "Not signed in"}
-                </Text>
-              </View>
-
-              <View style={[styles.currentPill, { backgroundColor: chipBg }]}>
-                <Ionicons name={currentStatusIcon as any} size={smallIcon} color={primary} />
-                <Text style={[styles.currentPillText, { color: primary }]}>{currentStatusLabel}</Text>
-              </View>
-            </View>
-
-            <View style={[styles.line, { backgroundColor: divider }]} />
-
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountModalContent}>
-              {/* Privacy */}
-              <Pressable
-                onPress={() => {
-                  closePrivacySecurity();
-                  onPrivacyPress?.();
-                }}
-                android_ripple={{ color: "rgba(0,0,0,0.06)" }}
-                style={styles.accountModalItem}
-              >
-                <View style={styles.settingLeft}>
-                  <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
-                    <Ionicons name="shield-checkmark-outline" size={iconSize} color={primary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.settingTitleInner, { color: textDark }]}>Privacy</Text>
-                    <Text style={[styles.settingSub, { color: muted }]}>Permissions, data protection</Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={iconSize} color={primary} />
-              </Pressable>
-
               {/* Biometrics */}
               <View style={[styles.accountModalItem, styles.psExpandedCard]}>
                 <View style={styles.psTopRow}>
@@ -778,13 +725,6 @@ export default function SettingsScreen({
                         thumbColor={pinEnabled ? primary : "#F3F4F6"}
                       />
                     </View>
-
-                    {!!userEmail && (
-                      <View style={styles.accountFoot}>
-                        <Ionicons name="mail-outline" size={smallIcon} color={muted} />
-                        <Text style={[styles.accountFootText, { color: muted }]}>Account: {userEmail}</Text>
-                      </View>
-                    )}
                   </>
                 )}
               </View>
@@ -975,6 +915,186 @@ export default function SettingsScreen({
                 </View>
                 <Ionicons name="chevron-forward" size={iconSize} color={primary} />
               </Pressable>
+
+              <View style={{ height: vscale(12) }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={helpModalVisible} transparent animationType="slide" onRequestClose={closeHelpModal}>
+        <View style={styles.accountModalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeHelpModal} />
+          <View style={[styles.accountModalSheet, { backgroundColor: surface, borderColor: divider }]}>
+            <View style={styles.accountModalHeader}>
+              <Text style={[styles.accountModalTitle, { color: textDark }]}>Help and Support</Text>
+
+              <Pressable onPress={closeHelpModal} hitSlop={10} style={styles.accountModalClose}>
+                <Ionicons name="close" size={iconSize} color={muted} />
+              </Pressable>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountModalContent}>
+              <View style={[styles.helpIntroCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+                <View style={[styles.helpIntroIcon, { backgroundColor: chipBg }]}>
+                  <Ionicons name="help-buoy-outline" size={scale(20)} color={primary} />
+                </View>
+
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.helpIntroTitle, { color: textDark }]}>Need help using TahananSafe?</Text>
+                  <Text style={[styles.helpIntroSub, { color: muted }]}>
+                    Find quick guidance for incidents, account security, and urgent assistance.
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.helpInfoCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+                <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
+                  <Ionicons name="document-text-outline" size={iconSize} color={primary} />
+                </View>
+                <View style={styles.helpInfoBody}>
+                  <Text style={[styles.helpInfoTitle, { color: textDark }]}>Reporting help</Text>
+                  <Text style={[styles.helpInfoSub, { color: muted }]}>
+                    Use Incident Log to describe the situation, attach photos, and submit your report.
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.helpInfoCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+                <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
+                  <Ionicons name="shield-checkmark-outline" size={iconSize} color={primary} />
+                </View>
+                <View style={styles.helpInfoBody}>
+                  <Text style={[styles.helpInfoTitle, { color: textDark }]}>Security help</Text>
+                  <Text style={[styles.helpInfoSub, { color: muted }]}>
+                    Open Privacy and Security to manage biometrics and PIN protection for this device.
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.helpInfoCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+                <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
+                  <Ionicons name="call-outline" size={iconSize} color={primary} />
+                </View>
+                <View style={styles.helpInfoBody}>
+                  <Text style={[styles.helpInfoTitle, { color: textDark }]}>Emergency help</Text>
+                  <Text style={[styles.helpInfoSub, { color: muted }]}>
+                    For urgent situations, use the Hotlines tab or the SOS Alert action from the Home screen.
+                  </Text>
+                </View>
+              </View>
+
+              {onHelpPress ? (
+                <Pressable
+                  onPress={() => {
+                    closeHelpModal();
+                    onHelpPress();
+                  }}
+                  android_ripple={{ color: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }}
+                  style={[styles.accountModalItem, { backgroundColor: cardBg, borderColor: cardBorder }]}
+                >
+                  <View style={styles.settingLeft}>
+                    <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
+                      <Ionicons name="chatbubble-ellipses-outline" size={iconSize} color={primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.settingTitleInner, { color: textDark }]}>Contact support</Text>
+                      <Text style={[styles.settingSub, { color: muted }]}>Open the support channel</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={iconSize} color={primary} />
+                </Pressable>
+              ) : null}
+
+              <View style={{ height: vscale(12) }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={termsModalVisible} transparent animationType="slide" onRequestClose={closeTermsModal}>
+        <View style={styles.accountModalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeTermsModal} />
+          <View style={[styles.accountModalSheet, { backgroundColor: surface, borderColor: divider }]}>
+            <View style={styles.accountModalHeader}>
+              <Text style={[styles.accountModalTitle, { color: textDark }]}>Terms and Conditions</Text>
+
+              <Pressable onPress={closeTermsModal} hitSlop={10} style={styles.accountModalClose}>
+                <Ionicons name="close" size={iconSize} color={muted} />
+              </Pressable>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountModalContent}>
+              <View style={[styles.helpIntroCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+                <View style={[styles.helpIntroIcon, { backgroundColor: chipBg }]}>
+                  <Ionicons name="document-text-outline" size={scale(20)} color={primary} />
+                </View>
+
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.helpIntroTitle, { color: textDark }]}>Using TahananSafe responsibly</Text>
+                  <Text style={[styles.helpIntroSub, { color: muted }]}>
+                    By using the app, you agree to provide truthful information and use community and reporting tools properly.
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.helpInfoCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+                <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
+                  <Ionicons name="person-outline" size={iconSize} color={primary} />
+                </View>
+                <View style={styles.helpInfoBody}>
+                  <Text style={[styles.helpInfoTitle, { color: textDark }]}>Account responsibility</Text>
+                  <Text style={[styles.helpInfoSub, { color: muted }]}>
+                    Keep your login credentials, biometrics, and PIN secure and do not share access with others.
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.helpInfoCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+                <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
+                  <Ionicons name="warning-outline" size={iconSize} color={primary} />
+                </View>
+                <View style={styles.helpInfoBody}>
+                  <Text style={[styles.helpInfoTitle, { color: textDark }]}>Responsible reporting</Text>
+                  <Text style={[styles.helpInfoSub, { color: muted }]}>
+                    Incident reports and SOS alerts should only be used for legitimate concerns and emergencies.
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.helpInfoCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+                <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
+                  <Ionicons name="shield-checkmark-outline" size={iconSize} color={primary} />
+                </View>
+                <View style={styles.helpInfoBody}>
+                  <Text style={[styles.helpInfoTitle, { color: textDark }]}>Data and safety</Text>
+                  <Text style={[styles.helpInfoSub, { color: muted }]}>
+                    Submitted information may be reviewed to support response, safety, and account security workflows.
+                  </Text>
+                </View>
+              </View>
+
+              {onTermsPress ? (
+                <Pressable
+                  onPress={() => {
+                    closeTermsModal();
+                    onTermsPress();
+                  }}
+                  android_ripple={{ color: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }}
+                  style={[styles.accountModalItem, { backgroundColor: cardBg, borderColor: cardBorder }]}
+                >
+                  <View style={styles.settingLeft}>
+                    <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
+                      <Ionicons name="open-outline" size={iconSize} color={primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.settingTitleInner, { color: textDark }]}>View full terms</Text>
+                      <Text style={[styles.settingSub, { color: muted }]}>Open the complete terms document</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={iconSize} color={primary} />
+                </Pressable>
+              ) : null}
 
               <View style={{ height: vscale(12) }} />
             </ScrollView>
@@ -1493,6 +1613,56 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       justifyContent: "space-between",
       gap: scale(12),
       overflow: "hidden",
+    },
+    helpIntroCard: {
+      borderRadius: CARD_R,
+      borderWidth: 1,
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(14),
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: scale(12),
+    },
+    helpIntroIcon: {
+      width: vscale(42),
+      height: vscale(42),
+      borderRadius: vscale(21),
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    helpIntroTitle: {
+      fontSize: scale(14),
+      fontWeight: "800",
+    },
+    helpIntroSub: {
+      marginTop: vscale(4),
+      fontSize: scale(12),
+      lineHeight: scale(18),
+      fontWeight: "500",
+    },
+    helpInfoCard: {
+      borderRadius: CARD_R,
+      borderWidth: 1,
+      borderColor: "#E7EEF7",
+      backgroundColor: "#FFFFFF",
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(12),
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: scale(12),
+    },
+    helpInfoBody: {
+      flex: 1,
+    },
+    helpInfoTitle: {
+      fontSize: scale(13),
+      fontWeight: "800",
+    },
+    helpInfoSub: {
+      marginTop: vscale(4),
+      fontSize: scale(12),
+      lineHeight: scale(18),
+      fontWeight: "500",
     },
 
     // Expanded cards inside Privacy & Security modal

@@ -247,6 +247,26 @@ export default function GreetingCard({ greeting, dateLine, userName = "User" }: 
     return clamp(px, Math.round(86 * s), Math.round(150 * s));
   }, [cardWApprox, s]);
 
+  const indicatorSegmentW = useMemo(() => clamp(Math.round(13 * s), 10, 16), [s]);
+  const indicatorGap = useMemo(() => clamp(Math.round(5 * s), 3, 6), [s]);
+  const indicatorTrackH = useMemo(() => clamp(Math.round(4 * s), 3, 5), [s]);
+  const indicatorThumbW = useMemo(() => Math.max(indicatorSegmentW, indicatorTrackH * 2), [
+    indicatorSegmentW,
+    indicatorTrackH,
+  ]);
+  const indicatorStep = indicatorSegmentW + indicatorGap;
+  const indicatorRailW = indicatorSegmentW * SLIDE_COUNT + indicatorGap * (SLIDE_COUNT - 1);
+
+  const indicatorTranslateX = useMemo(
+    () =>
+      translateX.interpolate({
+        inputRange: [-(SLIDE_COUNT - 1) * w, 0],
+        outputRange: [indicatorStep * (SLIDE_COUNT - 1), 0],
+        extrapolate: "clamp",
+      }),
+    [indicatorStep, translateX, w]
+  );
+
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -309,7 +329,7 @@ export default function GreetingCard({ greeting, dateLine, userName = "User" }: 
           lineHeight: clamp(Math.round(14 * fs), 12, 17),
         },
 
-        dotsRow: {
+        indicatorRow: {
           position: "absolute",
           left: 0,
           right: 0,
@@ -319,19 +339,30 @@ export default function GreetingCard({ greeting, dateLine, userName = "User" }: 
           alignItems: "center",
         },
 
-        dot: {
-          width: clamp(Math.round(6 * s), 5, 7),
-          height: clamp(Math.round(6 * s), 5, 7),
-          borderRadius: 999,
-          backgroundColor: "rgba(255,255,255,0.35)",
-          marginHorizontal: clamp(Math.round(3 * s), 2, 4),
+        indicatorRail: {
+          width: indicatorRailW,
+          height: indicatorTrackH,
+          position: "relative",
         },
-
-        dotActive: {
-          backgroundColor: "#FFFFFF",
+        indicatorSegmentsRow: {
+          ...StyleSheet.absoluteFillObject,
+          flexDirection: "row",
+        },
+        indicatorSegment: {
+          height: indicatorTrackH,
+          borderRadius: 999,
+          backgroundColor: "rgba(255,255,255,0.25)",
+        },
+        indicatorThumb: {
+          position: "absolute",
+          left: 0,
+          top: 0,
+          height: indicatorTrackH,
+          borderRadius: 999,
+          backgroundColor: "rgba(255,255,255,0.96)",
         },
       }),
-    [s, fs, CARD_H, MH, R, rightCropPad]
+    [s, fs, CARD_H, MH, R, rightCropPad, indicatorRailW, indicatorTrackH]
   );
 
   const trackW = size.w * SLIDE_COUNT;
@@ -382,11 +413,32 @@ export default function GreetingCard({ greeting, dateLine, userName = "User" }: 
             </Text>
           </Animated.View>
 
-          <View style={styles.dotsRow} pointerEvents="none">
-            {Array.from({ length: SLIDE_COUNT }).map((_, i) => {
-              const isActive = i === activeIndex;
-              return <View key={i} style={[styles.dot, isActive && styles.dotActive]} />;
-            })}
+          <View style={styles.indicatorRow} pointerEvents="none">
+            <View style={styles.indicatorRail}>
+              <View style={styles.indicatorSegmentsRow}>
+                {Array.from({ length: SLIDE_COUNT }).map((_, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.indicatorSegment,
+                      {
+                        width: indicatorSegmentW,
+                        marginRight: i === SLIDE_COUNT - 1 ? 0 : indicatorGap,
+                      },
+                    ]}
+                  />
+                ))}
+              </View>
+              <Animated.View
+                style={[
+                  styles.indicatorThumb,
+                  {
+                    width: indicatorThumbW,
+                    transform: [{ translateX: indicatorTranslateX }],
+                  },
+                ]}
+              />
+            </View>
           </View>
         </View>
       </View>

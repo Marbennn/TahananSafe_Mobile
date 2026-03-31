@@ -1,5 +1,5 @@
 // src/components/Settings/VerifyAccountCard.tsx
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -10,8 +10,11 @@ import {
   Alert,
   Platform,
   ActivityIndicator,
+  Animated,
+  Easing,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -24,32 +27,19 @@ import {
 } from "../../api/verification";
 
 type Props = {
-  // theme colors
   primary: string;
   divider: string;
   surface: string;
-
-  // scaling helpers from screen
   scale: (n: number) => number;
   vscale: (n: number) => number;
-
-  // user/account state
   user: any;
   userEmail: string;
-
-  // kept in props (may be used elsewhere in SettingsScreen)
   bioEnabled: boolean;
   pinEnabled: boolean;
-
-  // actions (kept in props for future use; not used since pill removed)
   onOpenAccount: () => void;
   onOpenPrivacySecurity: () => void;
   onOpenPinSetup: () => void;
 };
-
-function clamp01(n: number) {
-  return Math.max(0, Math.min(1, n));
-}
 
 function maskEmail(email: string) {
   const e = String(email || "").trim();
@@ -80,42 +70,169 @@ type IdOption = {
 
 const ID_OPTIONS: IdOption[] = [
   { key: "passport", label: "Passport", sub: "Valid passport photo" },
-  { key: "drivers_license", label: "Driver’s License", sub: "Front side is required" },
+  { key: "drivers_license", label: "Driver's License", sub: "Front side is required" },
   { key: "phil_id", label: "Philippine Valid ID", sub: "PhilSys, UMID, PRC, etc." },
 ];
 
-// ✅ detect selfie verification from common backend fields (optional / future)
 function isSelfieVerifiedFromUser(user: any) {
   const u = user ?? {};
-
   const directBool =
     u.selfieVerified === true ||
     u.isSelfieVerified === true ||
     u.selfieSubmitted === true ||
     u.hasSelfie === true ||
     u.has_selfie === true;
-
   const hasTimestamp =
     !!u.selfieVerifiedAt ||
     !!u.selfieSubmittedAt ||
     !!u.selfie_uploaded_at ||
     !!u.selfie_verified_at;
-
   const stringFlag =
     String(u.selfieVerified ?? "").toLowerCase() === "true" ||
     String(u.isSelfieVerified ?? "").toLowerCase() === "true" ||
     String(u.selfieSubmitted ?? "").toLowerCase() === "true" ||
     String(u.hasSelfie ?? "").toLowerCase() === "true";
-
   return !!(directBool || hasTimestamp || stringFlag);
 }
 
-// ✅ AsyncStorage keys (per account)
 function selfieSubmittedKey(email: string) {
   return `tahanansafe_selfie_submitted_${String(email || "").trim().toLowerCase()}`;
 }
 function selfieUriKey(email: string) {
   return `tahanansafe_selfie_uri_${String(email || "").trim().toLowerCase()}`;
+}
+
+/* ── Verify Now button with sliding light ── */
+function VerifyNowButton({
+  onPress,
+  label,
+  primary,
+  scale,
+  styles,
+}: {
+  onPress: () => void;
+  label: string;
+  primary: string;
+  scale: (n: number) => number;
+  styles: any;
+}) {
+  const shimmer = useRef(new Animated.Value(-1)).current;
+  useEffect(() => {
+    shimmer.setValue(-1);
+    Animated.timing(shimmer, {
+      toValue: 2,
+      duration: 2400,
+      easing: Easing.bezier(0.4, 0, 0.2, 1),
+      useNativeDriver: true,
+    }).start();
+    return () => shimmer.stopAnimation();
+  }, [shimmer]);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.ctaBtn, pressed && { opacity: 0.88 }]}
+      hitSlop={6}
+    >
+      <LinearGradient
+        colors={["rgba(255,255,255,0.2)", "rgba(255,255,255,0.08)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={[styles.ctaGradient, { overflow: "hidden" as const }]}
+      >
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            ...StyleSheet.absoluteFillObject,
+            transform: [
+              {
+                translateX: shimmer.interpolate({
+                  inputRange: [-1, 2],
+                  outputRange: [-120, 400],
+                }),
+              },
+            ],
+          }}
+        >
+          <LinearGradient
+            colors={[
+              "rgba(255,255,255,0)",
+              "rgba(255,255,255,0.08)",
+              "rgba(255,255,255,0.28)",
+              "rgba(255,255,255,0.08)",
+              "rgba(255,255,255,0)",
+            ]}
+            locations={[0, 0.25, 0.5, 0.75, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={{ width: 120, height: "100%" }}
+          />
+        </Animated.View>
+        <Text style={styles.ctaText}>{label}</Text>
+        <View style={styles.ctaArrow}>
+          <Ionicons name="arrow-forward" size={scale(14)} color={primary} />
+        </View>
+      </LinearGradient>
+    </Pressable>
+  );
+}
+
+/* ── Step node with animated check ── */
+function StepNode({
+  done,
+  active,
+  size,
+  primary,
+  scale,
+}: {
+  done: boolean;
+  active: boolean;
+  size: number;
+  primary: string;
+  scale: (n: number) => number;
+}) {
+  const pop = useRef(new Animated.Value(done ? 1 : 0)).current;
+  const prevDone = useRef(done);
+  useEffect(() => {
+    if (done && !prevDone.current) {
+      pop.setValue(0);
+      Animated.spring(pop, { toValue: 1, friction: 4, tension: 160, useNativeDriver: true }).start();
+    }
+    prevDone.current = done;
+  }, [done, pop]);
+
+  const nodeScale = done
+    ? pop.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] })
+    : 1;
+
+  return (
+    <Animated.View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: done ? "#FFFFFF" : active ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.15)",
+        borderWidth: 2.5,
+        borderColor: done ? "#FFFFFF" : active ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.3)",
+        alignItems: "center",
+        justifyContent: "center",
+        transform: [{ scale: nodeScale as any }],
+      }}
+    >
+      {done ? (
+        <Ionicons name="checkmark-sharp" size={scale(14)} color={primary} />
+      ) : (
+        <View
+          style={{
+            width: size * 0.28,
+            height: size * 0.28,
+            borderRadius: size * 0.14,
+            backgroundColor: active ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.4)",
+          }}
+        />
+      )}
+    </Animated.View>
+  );
 }
 
 export default function VerifyAccountCard({
@@ -129,30 +246,19 @@ export default function VerifyAccountCard({
   bioEnabled,
   pinEnabled,
 }: Props) {
-  const styles = useMemo(() => makeStyles(scale, vscale), [scale, vscale]);
+  const TC = useColors();
 
-  // ==========================
-  // ✅ Backend verification status (FULL verification)
-  // ==========================
+  // ── Backend verification status ──
   const [verStatus, setVerStatus] = useState<VerificationStatus>("none");
   const [verReason, setVerReason] = useState<string>("");
   const [verLoading, setVerLoading] = useState<boolean>(false);
 
   const refreshStatus = useCallback(async () => {
-    if (!userEmail) {
-      setVerStatus("none");
-      setVerReason("");
-      return;
-    }
-
+    if (!userEmail) { setVerStatus("none"); setVerReason(""); return; }
     try {
       setVerLoading(true);
       const accessToken = await getAccessToken();
-      if (!accessToken) {
-        setVerStatus("none");
-        setVerReason("");
-        return;
-      }
+      if (!accessToken) { setVerStatus("none"); setVerReason(""); return; }
       const s = await getVerificationStatusApi({ accessToken });
       setVerStatus(s.status || "none");
       setVerReason(s.reason || "");
@@ -164,22 +270,14 @@ export default function VerifyAccountCard({
     }
   }, [userEmail]);
 
-  useEffect(() => {
-    refreshStatus();
-  }, [refreshStatus]);
+  useEffect(() => { refreshStatus(); }, [refreshStatus]);
 
-  // ==========================
-  // ✅ LOCAL selfie status (so stage=2 works now)
-  // ==========================
+  // ── Local selfie status ──
   const [selfieLocalDone, setSelfieLocalDone] = useState(false);
   const [selfieLocalUri, setSelfieLocalUri] = useState<string>("");
 
   const loadSelfieLocal = useCallback(async () => {
-    if (!userEmail) {
-      setSelfieLocalDone(false);
-      setSelfieLocalUri("");
-      return;
-    }
+    if (!userEmail) { setSelfieLocalDone(false); setSelfieLocalUri(""); return; }
     try {
       const [flag, uri] = await Promise.all([
         AsyncStorage.getItem(selfieSubmittedKey(userEmail)),
@@ -193,147 +291,102 @@ export default function VerifyAccountCard({
     }
   }, [userEmail]);
 
-  useEffect(() => {
-    loadSelfieLocal();
-  }, [loadSelfieLocal]);
+  useEffect(() => { loadSelfieLocal(); }, [loadSelfieLocal]);
 
-  // ==========================
-  // ✅ Verify progress logic
-  // ==========================
-  /**
-   * RULES:
-   * - Basic Level     = logged in
-   * - Semi-verified   = Selfie submitted (local OR backend fields)
-   * - Fully Verified  = ONLY if verStatus === "approved"
-   */
+  // ── Verification stage ──
   const hasLogin = !!userEmail;
   const selfieVerified = !!userEmail && (selfieLocalDone || isSelfieVerifiedFromUser(user));
   const isApproved = verStatus === "approved";
 
-  // stage: 0..3
   let stage = 0;
   if (hasLogin) stage = 1;
   if (hasLogin && selfieVerified) stage = 2;
   if (isApproved) stage = 3;
-
 
   const displayName = hasLogin ? displayNameFromEmail(userEmail) : "Guest";
   const displaySub = hasLogin ? maskEmail(userEmail) : "Not signed in";
   const displayPhoneLike = user?.phone ? String(user.phone) : "";
 
   const nodes = [
-    { key: "basic", done: stage >= 1 },
-    { key: "semi", done: stage >= 2 },
-    { key: "full", done: stage >= 3 },
+    { key: "basic", label: "Basic", done: stage >= 1, active: stage === 0 },
+    { key: "semi", label: "Semi-verified", done: stage >= 2, active: stage === 1 },
+    { key: "full", label: "Fully Verified", done: stage >= 3, active: stage === 2 },
   ];
 
-  const segmentsDone = clamp01((stage - 1) / (3 - 1)); // 0..1
 
-  // ==========================
-  // ✅ Selfie modal (Level 2 requirement)
-  // ==========================
+  // ── Card entrance animation ──
+  const enterAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(enterAnim, {
+      toValue: 1,
+      duration: 600,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [enterAnim]);
+
+  // ── Selfie modal ──
   const [selfieModalVisible, setSelfieModalVisible] = useState(false);
   const [selfieUri, setSelfieUri] = useState<string>("");
   const [selfieLoading, setSelfieLoading] = useState(false);
 
   const openSelfieModal = () => {
-    if (!userEmail) {
-      Alert.alert("Login required", "Please login first.");
-      return;
-    }
+    if (!userEmail) { Alert.alert("Login required", "Please login first."); return; }
     setSelfieUri("");
     setSelfieModalVisible(true);
   };
   const closeSelfieModal = () => setSelfieModalVisible(false);
 
-  // ==========================
-  // ✅ ID modal (Full verification)
-  // ==========================
+  // ── ID modal ──
   const [verifyModalVisible, setVerifyModalVisible] = useState(false);
   const [idImageUri, setIdImageUri] = useState<string>("");
   const [idType, setIdType] = useState<IdOption["key"]>("phil_id");
   const [submitLoading, setSubmitLoading] = useState(false);
 
   const closeVerifyModal = () => setVerifyModalVisible(false);
-
   const canVerifyNow = !!userEmail && verStatus !== "pending" && verStatus !== "approved";
 
-  // ✅ STEP-BY-STEP RULE: Verify Now opens different modal depending on stage
   const onPressVerifyNow = () => {
-    if (!userEmail) {
-      Alert.alert("Login required", "Please login first.");
-      return;
-    }
-
-    // If user is still basic (stage 1) -> selfie first
-    if (stage < 2) {
-      openSelfieModal();
-      return;
-    }
-
-    // If semi-verified (stage 2) -> open ID verification
+    if (!userEmail) { Alert.alert("Login required", "Please login first."); return; }
+    if (stage < 2) { openSelfieModal(); return; }
     setVerifyModalVisible(true);
   };
 
-  // ==========================
-  // ✅ Permissions + Camera
-  // ==========================
+  // ── Permissions ──
   const requestCameraPermission = useCallback(async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission needed", "Camera permission is required.");
-      return false;
-    }
+    if (status !== "granted") { Alert.alert("Permission needed", "Camera permission is required."); return false; }
     return true;
   }, []);
 
   const requestLibraryPermission = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission needed", "Media library permission is required.");
-      return false;
-    }
+    if (status !== "granted") { Alert.alert("Permission needed", "Media library permission is required."); return false; }
     return true;
   }, []);
 
-  // ==========================
-  // ✅ Selfie actions
-  // ==========================
+  // ── Selfie actions ──
   const takeSelfie = useCallback(async () => {
     const ok = await requestCameraPermission();
     if (!ok) return;
-
     const res = await ImagePicker.launchCameraAsync({
-      quality: 0.85,
-      allowsEditing: true,
-      aspect: [1, 1],
+      quality: 0.85, allowsEditing: true, aspect: [1, 1],
       cameraType: ImagePicker.CameraType.front,
     });
-
-    if (!res.canceled && res.assets?.[0]?.uri) {
-      setSelfieUri(res.assets[0].uri);
-    }
+    if (!res.canceled && res.assets?.[0]?.uri) setSelfieUri(res.assets[0].uri);
   }, [requestCameraPermission]);
 
   const submitSelfie = useCallback(async () => {
     if (!userEmail) return;
-
-    if (!selfieUri) {
-      Alert.alert("Missing selfie", "Please take a selfie first.");
-      return;
-    }
-
+    if (!selfieUri) { Alert.alert("Missing selfie", "Please take a selfie first."); return; }
     try {
       setSelfieLoading(true);
-
       await Promise.all([
         AsyncStorage.setItem(selfieSubmittedKey(userEmail), "1"),
         AsyncStorage.setItem(selfieUriKey(userEmail), selfieUri),
       ]);
-
       setSelfieLocalDone(true);
       setSelfieLocalUri(selfieUri);
-
       closeSelfieModal();
       Alert.alert("Selfie submitted", "You are now Semi-verified.");
     } catch {
@@ -343,66 +396,39 @@ export default function VerifyAccountCard({
     }
   }, [userEmail, selfieUri]);
 
-  // ==========================
-  // ✅ ID actions
-  // ==========================
+  // ── ID actions ──
   const pickFromGallery = useCallback(async () => {
     const ok = await requestLibraryPermission();
     if (!ok) return;
-
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
-      allowsEditing: true,
-      aspect: [4, 3],
+      quality: 0.85, allowsEditing: true, aspect: [4, 3],
     });
-
-    if (!res.canceled && res.assets?.[0]?.uri) {
-      setIdImageUri(res.assets[0].uri);
-    }
+    if (!res.canceled && res.assets?.[0]?.uri) setIdImageUri(res.assets[0].uri);
   }, [requestLibraryPermission]);
 
   const takePhoto = useCallback(async () => {
     const ok = await requestCameraPermission();
     if (!ok) return;
-
     const res = await ImagePicker.launchCameraAsync({
-      quality: 0.85,
-      allowsEditing: true,
-      aspect: [4, 3],
+      quality: 0.85, allowsEditing: true, aspect: [4, 3],
       cameraType: ImagePicker.CameraType.back,
     });
-
-    if (!res.canceled && res.assets?.[0]?.uri) {
-      setIdImageUri(res.assets[0].uri);
-    }
+    if (!res.canceled && res.assets?.[0]?.uri) setIdImageUri(res.assets[0].uri);
   }, [requestCameraPermission]);
 
   const removeSelected = () => setIdImageUri("");
 
   const submitVerification = async () => {
     if (!userEmail) return;
-
-    if (!idImageUri) {
-      Alert.alert("Missing ID", "Please upload a valid ID photo before submitting.");
-      return;
-    }
-
+    if (!idImageUri) { Alert.alert("Missing ID", "Please upload a valid ID photo before submitting."); return; }
     try {
       setSubmitLoading(true);
-
       const accessToken = await getAccessToken();
       if (!accessToken) throw new Error("Session missing. Please login again.");
-
-      const res = await submitVerificationApi({
-        accessToken,
-        idType,
-        fileUri: idImageUri,
-      });
-
+      const res = await submitVerificationApi({ accessToken, idType, fileUri: idImageUri });
       setVerStatus(res.status || "pending");
       setVerReason("");
-
       closeVerifyModal();
       Alert.alert("Submitted", "Your verification request was submitted for review.");
     } catch (e: any) {
@@ -412,174 +438,143 @@ export default function VerifyAccountCard({
     }
   };
 
-  // ==========================
-  // ✅ Status chip display
-  // ==========================
-  const statusChip = (() => {
+  // ── Status badge ──
+  const statusBadge = (() => {
     if (!userEmail) return null;
-
-    if (verLoading) {
-      return (
-        <View style={styles.statusPill}>
-          <ActivityIndicator size="small" color="#fff" />
-          <Text style={styles.statusPillText}>Checking</Text>
-        </View>
-      );
-    }
-
-    if (verStatus === "pending") {
-      return (
-        <View style={styles.statusPill}>
-          <Ionicons name="time-outline" size={scale(14)} color="#fff" />
-          <Text style={styles.statusPillText}>Under review</Text>
-        </View>
-      );
-    }
-
-    if (verStatus === "approved") {
-      return (
-        <View style={styles.statusPill}>
-          <Ionicons name="checkmark-circle-outline" size={scale(14)} color="#fff" />
-          <Text style={styles.statusPillText}>Verified</Text>
-        </View>
-      );
-    }
-
-    if (verStatus === "rejected") {
-      return (
-        <View style={styles.statusPill}>
-          <Ionicons name="close-circle-outline" size={scale(14)} color="#fff" />
-          <Text style={styles.statusPillText}>Rejected</Text>
-        </View>
-      );
-    }
-
+    if (verLoading) return { icon: "hourglass-outline" as const, label: "Checking...", bg: "rgba(255,255,255,0.15)" };
+    if (verStatus === "pending") return { icon: "time-outline" as const, label: "Under review", bg: "rgba(251,191,36,0.2)" };
+    if (verStatus === "approved") return { icon: "shield-checkmark" as const, label: "Verified", bg: "rgba(52,211,153,0.2)" };
+    if (verStatus === "rejected") return { icon: "close-circle-outline" as const, label: "Rejected", bg: "rgba(248,113,113,0.2)" };
     return null;
   })();
 
-  /**
-   * ✅ FIX:
-   * Selfie should NOT replace the profile icon.
-   * Only use real profile photo (user.photoURL). Otherwise show default icon.
-   */
   const avatarUri = user?.photoURL ? String(user.photoURL) : "";
 
+  const NODE_SIZE = scale(28);
+  const CARD_RADIUS = scale(22);
+
+  const styles = useMemo(() => makeStyles(scale, vscale), [scale, vscale]);
+
   return (
-    <View style={[styles.verifyCard, { borderColor: divider, backgroundColor: surface }]}>
-      <View style={[styles.verifyHeader, { backgroundColor: primary }]}>
-        {/* Top row */}
-        <View style={styles.verifyTopRow}>
-          <View style={styles.verifyHeaderRow}>
-            <View style={styles.verifyAvatarWrap}>
+    <Animated.View
+      style={[
+        styles.outerWrap,
+        {
+          opacity: enterAnim,
+          transform: [
+            { translateY: enterAnim.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) },
+          ],
+        },
+      ]}
+    >
+      <LinearGradient
+        colors={["#07519C", "#04396E", "#021C36"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.card, { borderRadius: CARD_RADIUS }]}
+      >
+        {/* Decorative circles */}
+        <View style={styles.decoCircle1} />
+        <View style={styles.decoCircle2} />
+
+        {/* ── Top section: Avatar + Info + Badge ── */}
+        <View style={styles.topSection}>
+          <View style={styles.avatarContainer}>
+            <View style={styles.avatarRing}>
               {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.verifyAvatarImg} />
+                <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
               ) : (
-                <View style={styles.verifyAvatarFallback}>
-                  <Ionicons name="person" size={scale(22)} color="#fff" />
-                </View>
+                <LinearGradient
+                  colors={["rgba(255,255,255,0.2)", "rgba(255,255,255,0.05)"]}
+                  style={styles.avatarFallback}
+                >
+                  <Ionicons name="person" size={scale(24)} color="rgba(255,255,255,0.85)" />
+                </LinearGradient>
               )}
             </View>
-
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.verifyName} numberOfLines={1}>
-                {displayName}
-              </Text>
-              <Text style={styles.verifyContact} numberOfLines={1}>
-                {displayPhoneLike ? displayPhoneLike : displaySub}
-              </Text>
-            </View>
           </View>
 
-          <View style={styles.topRightWrap}>
-            {!!statusChip && <View style={{ marginBottom: vscale(6) }}>{statusChip}</View>}
-
-            <Pressable
-              onPress={onPressVerifyNow}
-              disabled={!canVerifyNow}
-              android_ripple={{ color: "rgba(255,255,255,0.18)" }}
-              style={({ pressed }) => [
-                styles.verifyNowBtn,
-                !canVerifyNow ? styles.verifyNowBtnDisabled : null,
-                pressed ? { opacity: 0.92 } : null,
-              ]}
-              hitSlop={10}
-            >
-              <Text style={styles.verifyNowText}>
-                {verStatus === "rejected" ? "Verify again" : "Verify now"}
-              </Text>
-              <Ionicons name="chevron-forward" size={scale(14)} color="#fff" />
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Progress stepper */}
-        <View style={styles.stepperWrap}>
-          <View style={styles.barOuter}>
-            <View style={styles.barTrack} />
-            <View style={[styles.barFill, { transform: [{ scaleX: segmentsDone }] }]} />
-
-            <View style={styles.nodesRow}>
-              {nodes.map((n) => (
-                <View key={n.key} style={styles.nodeSlot}>
-                  <View style={[styles.nodeCircle, n.done ? styles.nodeCircleDone : null]}>
-                    {n.done ? (
-                      <Ionicons name="checkmark" size={scale(14)} color={primary} />
-                    ) : (
-                      <View style={styles.nodeDot} />
-                    )}
-                  </View>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.labelsRow}>
-            <View style={styles.labelCell}>
-              <Text style={styles.stepLabel} numberOfLines={1}>
-                Basic Level
-              </Text>
-            </View>
-            <View style={styles.labelCell}>
-              <Text style={styles.stepLabel} numberOfLines={1}>
-                Semi-verified
-              </Text>
-            </View>
-            <View style={styles.labelCell}>
-              <Text style={styles.stepLabel} numberOfLines={1}>
-                Fully Verified
-              </Text>
-            </View>
-          </View>
-
-            {verStatus === "rejected" && !!verReason ? (
-            <Text style={styles.rejectedReason} numberOfLines={2}>
-              Reason: {verReason}
+          <View style={styles.infoBlock}>
+            <Text style={styles.nameText} numberOfLines={1}>{displayName}</Text>
+            <Text style={styles.emailText} numberOfLines={1}>
+              {displayPhoneLike ? displayPhoneLike : displaySub}
             </Text>
-          ) : null}
-        </View>
-      </View>
+          </View>
 
-      {/* ===================== */}
-      {/* ✅ SELFIE MODAL (BASIC -> SEMI) */}
-      {/* ===================== */}
+          {statusBadge && (
+            <View style={[styles.statusBadge, { backgroundColor: statusBadge.bg }]}>
+              {verLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name={statusBadge.icon} size={scale(13)} color="#fff" />
+              )}
+              <Text style={styles.statusBadgeText}>{statusBadge.label}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* ── Progress stepper ── */}
+        <View style={styles.nodesRow}>
+          {nodes.map((n) => (
+            <View key={n.key} style={styles.nodeColumn}>
+              <StepNode
+                done={n.done}
+                active={n.active}
+                size={NODE_SIZE}
+                primary={primary}
+                scale={scale}
+              />
+              <Text
+                style={[
+                  styles.nodeLabel,
+                  n.done && styles.nodeLabelDone,
+                  n.active && styles.nodeLabelActive,
+                ]}
+                numberOfLines={1}
+              >
+                {n.label}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {/* ── Rejection reason ── */}
+        {verStatus === "rejected" && !!verReason && (
+          <View style={styles.rejectedWrap}>
+            <Ionicons name="alert-circle" size={scale(14)} color="#FCA5A5" />
+            <Text style={styles.rejectedText} numberOfLines={2}>
+              {verReason}
+            </Text>
+          </View>
+        )}
+
+        {/* ── CTA Button ── */}
+        {canVerifyNow && (
+          <VerifyNowButton
+            onPress={onPressVerifyNow}
+            label={verStatus === "rejected" ? "Verify again" : "Verify now"}
+            primary={primary}
+            scale={scale}
+            styles={styles}
+          />
+        )}
+      </LinearGradient>
+
+      {/* ── SELFIE MODAL ── */}
       <Modal visible={selfieModalVisible} transparent animationType="fade" onRequestClose={closeSelfieModal}>
         <View style={styles.centerOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeSelfieModal} />
-
           <View style={[styles.centerCard, { backgroundColor: surface, borderColor: divider }]}>
             <View style={styles.centerHeader}>
               <View style={styles.centerHeaderLeft}>
-                <View style={[styles.centerBadge, { backgroundColor: "rgba(30,99,208,0.10)" }]}>
+                <View style={[styles.centerBadge, { backgroundColor: "rgba(7,81,156,0.08)" }]}>
                   <Ionicons name="camera-outline" size={scale(18)} color={primary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.centerTitle, { color: "#0F172A" }]}>Selfie verification</Text>
-                  <Text style={[styles.centerSub, { color: "#64748B" }]}>
-                    Take a clear picture.
-                  </Text>
+                  <Text style={[styles.centerTitle, { color: TC.textDark }]}>Selfie verification</Text>
+                  <Text style={[styles.centerSub, { color: TC.muted }]}>Take a clear picture.</Text>
                 </View>
               </View>
-
             </View>
 
             <View style={styles.previewWrap}>
@@ -589,7 +584,6 @@ export default function VerifyAccountCard({
                 <Pressable
                   onPress={takeSelfie}
                   disabled={selfieLoading}
-                  android_ripple={{ color: "rgba(0,0,0,0.06)" }}
                   style={[styles.previewPlaceholder, { borderColor: divider }]}
                 >
                   <Ionicons name="camera-outline" size={scale(26)} color={primary} />
@@ -603,7 +597,6 @@ export default function VerifyAccountCard({
                 <Pressable
                   onPress={() => setSelfieUri("")}
                   disabled={selfieLoading}
-                  android_ripple={{ color: "rgba(0,0,0,0.06)" }}
                   style={[styles.uploadBtn, { borderColor: divider }]}
                 >
                   <Ionicons name="trash-outline" size={scale(16)} color="#DC2626" />
@@ -616,21 +609,14 @@ export default function VerifyAccountCard({
               <Pressable
                 onPress={closeSelfieModal}
                 disabled={selfieLoading}
-                android_ripple={{ color: "rgba(0,0,0,0.06)" }}
                 style={[styles.actionBtn, styles.actionGhost, { borderColor: divider }]}
               >
-                <Text style={[styles.actionBtnText, { color: "#0F172A" }]}>Cancel</Text>
+                <Text style={[styles.actionBtnText, { color: TC.textDark }]}>Cancel</Text>
               </Pressable>
-
               <Pressable
                 onPress={submitSelfie}
                 disabled={selfieLoading}
-                android_ripple={{ color: "rgba(255,255,255,0.18)" }}
-                style={[
-                  styles.actionBtn,
-                  { backgroundColor: primary, borderColor: primary },
-                  selfieLoading ? { opacity: 0.85 } : null,
-                ]}
+                style={[styles.actionBtn, { backgroundColor: primary, borderColor: primary }, selfieLoading && { opacity: 0.85 }]}
               >
                 {selfieLoading ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -645,33 +631,28 @@ export default function VerifyAccountCard({
         </View>
       </Modal>
 
-      {/* ===================== */}
-      {/* ✅ ID MODAL (SEMI -> FULL) */}
-      {/* ===================== */}
+      {/* ── ID MODAL ── */}
       <Modal visible={verifyModalVisible} transparent animationType="fade" onRequestClose={closeVerifyModal}>
         <View style={styles.centerOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeVerifyModal} />
-
           <View style={[styles.centerCard, { backgroundColor: surface, borderColor: divider }]}>
             <View style={styles.centerHeader}>
               <View style={styles.centerHeaderLeft}>
-                <View style={[styles.centerBadge, { backgroundColor: "rgba(30,99,208,0.10)" }]}>
+                <View style={[styles.centerBadge, { backgroundColor: "rgba(7,81,156,0.08)" }]}>
                   <Ionicons name="id-card-outline" size={scale(18)} color={primary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.centerTitle, { color: "#0F172A" }]}>Verify your identity</Text>
-                  <Text style={[styles.centerSub, { color: "#64748B" }]}>Upload a clear photo of a valid ID.</Text>
+                  <Text style={[styles.centerTitle, { color: TC.textDark }]}>Verify your identity</Text>
+                  <Text style={[styles.centerSub, { color: TC.muted }]}>Upload a clear photo of a valid ID.</Text>
                 </View>
               </View>
-
               <Pressable onPress={closeVerifyModal} hitSlop={10} style={styles.centerCloseBtn}>
-                <Ionicons name="close" size={scale(18)} color="#64748B" />
+                <Ionicons name="close" size={scale(18)} color={TC.muted} />
               </Pressable>
             </View>
 
             <View style={[styles.typeBox, { borderColor: divider }]}>
-              <Text style={[styles.typeTitle, { color: "#0F172A" }]}>Choose ID type</Text>
-
+              <Text style={[styles.typeTitle, { color: TC.textDark }]}>Choose ID type</Text>
               <View style={styles.typeOptions}>
                 {ID_OPTIONS.map((opt) => {
                   const active = idType === opt.key;
@@ -679,18 +660,17 @@ export default function VerifyAccountCard({
                     <Pressable
                       key={opt.key}
                       onPress={() => setIdType(opt.key)}
-                      android_ripple={{ color: "rgba(0,0,0,0.06)" }}
                       style={[
                         styles.typeOption,
                         { borderColor: divider },
-                        active ? { borderColor: primary, backgroundColor: "rgba(30,99,208,0.06)" } : null,
+                        active && { borderColor: primary, backgroundColor: "rgba(7,81,156,0.06)" },
                       ]}
                     >
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.typeOptionLabel, { color: "#0F172A" }]}>{opt.label}</Text>
-                        <Text style={[styles.typeOptionSub, { color: "#64748B" }]}>{opt.sub}</Text>
+                        <Text style={[styles.typeOptionLabel, { color: TC.textDark }]}>{opt.label}</Text>
+                        <Text style={[styles.typeOptionSub, { color: TC.muted }]}>{opt.sub}</Text>
                       </View>
-                      {active ? <Ionicons name="checkmark-circle" size={scale(18)} color={primary} /> : null}
+                      {active && <Ionicons name="checkmark-circle" size={scale(18)} color={primary} />}
                     </Pressable>
                   );
                 })}
@@ -703,7 +683,7 @@ export default function VerifyAccountCard({
               ) : (
                 <View style={[styles.previewPlaceholder, { borderColor: divider }]}>
                   <Ionicons name="image-outline" size={scale(22)} color="#94A3B8" />
-                  <Text style={[styles.previewText, { color: "#64748B" }]}>No ID uploaded yet</Text>
+                  <Text style={[styles.previewText, { color: TC.muted }]}>No ID uploaded yet</Text>
                 </View>
               )}
             </View>
@@ -712,28 +692,23 @@ export default function VerifyAccountCard({
               <Pressable
                 onPress={pickFromGallery}
                 disabled={submitLoading}
-                android_ripple={{ color: "rgba(0,0,0,0.06)" }}
                 style={[styles.uploadBtn, { borderColor: divider }]}
               >
                 <Ionicons name="images-outline" size={scale(16)} color={primary} />
-                <Text style={[styles.uploadBtnText, { color: "#0F172A" }]}>Gallery</Text>
+                <Text style={[styles.uploadBtnText, { color: TC.textDark }]}>Gallery</Text>
               </Pressable>
-
               <Pressable
                 onPress={takePhoto}
                 disabled={submitLoading}
-                android_ripple={{ color: "rgba(0,0,0,0.06)" }}
                 style={[styles.uploadBtn, { borderColor: divider }]}
               >
                 <Ionicons name="camera-outline" size={scale(16)} color={primary} />
-                <Text style={[styles.uploadBtnText, { color: "#0F172A" }]}>Camera</Text>
+                <Text style={[styles.uploadBtnText, { color: TC.textDark }]}>Camera</Text>
               </Pressable>
-
               {!!idImageUri && (
                 <Pressable
                   onPress={removeSelected}
                   disabled={submitLoading}
-                  android_ripple={{ color: "rgba(0,0,0,0.06)" }}
                   style={[styles.uploadBtn, { borderColor: divider }]}
                 >
                   <Ionicons name="trash-outline" size={scale(16)} color="#DC2626" />
@@ -746,21 +721,14 @@ export default function VerifyAccountCard({
               <Pressable
                 onPress={closeVerifyModal}
                 disabled={submitLoading}
-                android_ripple={{ color: "rgba(0,0,0,0.06)" }}
                 style={[styles.actionBtn, styles.actionGhost, { borderColor: divider }]}
               >
-                <Text style={[styles.actionBtnText, { color: "#0F172A" }]}>Cancel</Text>
+                <Text style={[styles.actionBtnText, { color: TC.textDark }]}>Cancel</Text>
               </Pressable>
-
               <Pressable
                 onPress={submitVerification}
                 disabled={submitLoading}
-                android_ripple={{ color: "rgba(255,255,255,0.18)" }}
-                style={[
-                  styles.actionBtn,
-                  { backgroundColor: primary, borderColor: primary },
-                  submitLoading ? { opacity: 0.85 } : null,
-                ]}
+                style={[styles.actionBtn, { backgroundColor: primary, borderColor: primary }, submitLoading && { opacity: 0.85 }]}
               >
                 {submitLoading ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -770,7 +738,7 @@ export default function VerifyAccountCard({
               </Pressable>
             </View>
 
-            <Text style={[styles.centerFoot, { color: "#64748B" }]}>
+            <Text style={[styles.centerFoot, { color: TC.muted }]}>
               Tip: Make sure the ID is readable and not blurry.
             </Text>
 
@@ -778,237 +746,188 @@ export default function VerifyAccountCard({
           </View>
         </View>
       </Modal>
-    </View>
+    </Animated.View>
   );
 }
 
 function makeStyles(scale: (n: number) => number, vscale: (n: number) => number) {
-  const CARD_R = scale(18);
-  const NODE = vscale(26);
-
-  const ROW_PAD = scale(6);
-  const TRACK_INSET = ROW_PAD + NODE / 2;
+  const CARD_R = scale(22);
 
   return StyleSheet.create({
-    verifyCard: {
-      borderRadius: CARD_R,
-      borderWidth: 1,
-      overflow: "hidden",
+    outerWrap: {
       marginTop: vscale(10),
     },
 
-    verifyHeader: {
-      paddingHorizontal: scale(14),
+    card: {
+      overflow: "hidden",
+      paddingHorizontal: scale(16),
       paddingTop: vscale(14),
       paddingBottom: vscale(12),
     },
 
-    verifyTopRow: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      justifyContent: "space-between",
-      gap: scale(10),
+    /* Decorative background circles */
+    decoCircle1: {
+      position: "absolute",
+      top: -scale(30),
+      right: -scale(30),
+      width: scale(120),
+      height: scale(120),
+      borderRadius: scale(60),
+      backgroundColor: "rgba(255,255,255,0.04)",
+    },
+    decoCircle2: {
+      position: "absolute",
+      bottom: -scale(20),
+      left: -scale(20),
+      width: scale(80),
+      height: scale(80),
+      borderRadius: scale(40),
+      backgroundColor: "rgba(255,255,255,0.03)",
     },
 
-    verifyHeaderRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: scale(12),
-      flex: 1,
-      minWidth: 0,
-    },
-
-    topRightWrap: {
-      alignItems: "flex-end",
-      justifyContent: "flex-start",
-      minWidth: scale(108),
-    },
-
-    statusPill: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: scale(6),
-      paddingHorizontal: scale(10),
-      paddingVertical: vscale(6),
-      borderRadius: vscale(14),
-      backgroundColor: "rgba(255,255,255,0.18)",
-      borderWidth: 1,
-      borderColor: "rgba(255,255,255,0.28)",
-    },
-    statusPillText: {
-      color: "#fff",
-      fontSize: scale(11),
-      fontWeight: "900",
-      letterSpacing: 0.2,
-    },
-
-    verifyNowBtn: {
+    /* ── Top section ── */
+    topSection: {
       flexDirection: "row",
       alignItems: "center",
-      gap: scale(4),
-      paddingHorizontal: scale(10),
-      paddingVertical: vscale(6),
-      borderRadius: vscale(14),
-      backgroundColor: "rgba(255,255,255,0.18)",
-      borderWidth: 1,
-      borderColor: "rgba(255,255,255,0.28)",
-    },
-    verifyNowBtnDisabled: {
-      opacity: 0.55,
-    },
-    verifyNowText: {
-      color: "#fff",
-      fontSize: scale(11),
-      fontWeight: "600",
-      letterSpacing: 0.2,
+      gap: scale(14),
     },
 
-    verifyAvatarWrap: {
-      width: vscale(52),
-      height: vscale(52),
-      borderRadius: vscale(26),
+    avatarContainer: {
+      alignItems: "center",
+      justifyContent: "center",
+      width: scale(62),
+      height: scale(62),
+    },
+    avatarRing: {
+      width: scale(54),
+      height: scale(54),
+      borderRadius: scale(27),
+      borderWidth: 2.5,
+      borderColor: "rgba(255,255,255,0.35)",
       overflow: "hidden",
-      backgroundColor: "rgba(255,255,255,0.18)",
       alignItems: "center",
       justifyContent: "center",
     },
-    verifyAvatarImg: { width: "100%", height: "100%" },
-    verifyAvatarFallback: {
+    avatarImg: {
+      width: "100%",
+      height: "100%",
+    },
+    avatarFallback: {
       width: "100%",
       height: "100%",
       alignItems: "center",
       justifyContent: "center",
     },
 
-    verifyName: {
+    infoBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+    nameText: {
       color: "#FFFFFF",
-      fontSize: scale(16),
-      fontWeight: "900",
-      letterSpacing: 0.2,
+      fontSize: scale(17),
+      fontWeight: "800",
+      letterSpacing: 0.3,
     },
-    verifyContact: {
+    emailText: {
       marginTop: vscale(2),
-      color: "rgba(255,255,255,0.82)",
+      color: "rgba(255,255,255,0.7)",
       fontSize: scale(12),
-      fontWeight: "600",
-      letterSpacing: 0.2,
+      fontWeight: "500",
     },
 
-    stepperWrap: {
-      marginTop: vscale(14),
-      paddingBottom: vscale(2),
+    statusBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(5),
+      paddingHorizontal: scale(10),
+      paddingVertical: vscale(5),
+      borderRadius: scale(20),
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.15)",
     },
-
-    barOuter: {
-      marginTop: vscale(4),
-      paddingHorizontal: scale(6),
-      paddingVertical: vscale(10),
-    },
-
-    barTrack: {
-      position: "absolute",
-      left: TRACK_INSET,
-      right: TRACK_INSET,
-      top: vscale(22),
-      height: vscale(4),
-      borderRadius: vscale(4),
-      backgroundColor: "rgba(255,255,255,0.28)",
-    },
-
-    barFill: {
-      position: "absolute",
-      left: TRACK_INSET,
-      right: TRACK_INSET,
-      top: vscale(22),
-      height: vscale(4),
-      borderRadius: vscale(4),
-      backgroundColor: "rgba(255,255,255,0.92)",
-      transformOrigin: "left" as any,
+    statusBadgeText: {
+      color: "#FFFFFF",
+      fontSize: scale(10),
+      fontWeight: "800",
+      letterSpacing: 0.3,
     },
 
     nodesRow: {
+      marginTop: vscale(12),
       flexDirection: "row",
       justifyContent: "space-between",
+    },
+    nodeColumn: {
       alignItems: "center",
-      paddingHorizontal: ROW_PAD,
-    },
-
-    nodeSlot: {
-      width: NODE,
-      height: NODE,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-
-    nodeCircle: {
-      width: NODE,
-      height: NODE,
-      borderRadius: NODE / 2,
-      backgroundColor: "rgba(255,255,255,0.25)",
-      borderWidth: 2,
-      borderColor: "rgba(255,255,255,0.55)",
-      alignItems: "center",
-      justifyContent: "center",
-    },
-
-    nodeCircleDone: {
-      backgroundColor: "#FFFFFF",
-      borderColor: "#FFFFFF",
-    },
-
-    nodeDot: {
-      width: vscale(6),
-      height: vscale(6),
-      borderRadius: vscale(3),
-      backgroundColor: "rgba(255,255,255,0.75)",
-    },
-
-    labelsRow: {
-      marginTop: vscale(8),
-      flexDirection: "row",
-      alignItems: "flex-start",
-    },
-    labelCell: {
       flex: 1,
-      alignItems: "center",
     },
-    stepLabel: {
-      textAlign: "center",
-      color: "rgba(255,255,255,0.85)",
+    nodeLabel: {
+      marginTop: vscale(6),
+      color: "rgba(255,255,255,0.45)",
       fontSize: scale(10),
+      fontWeight: "600",
+      textAlign: "center",
+    },
+    nodeLabelDone: {
+      color: "rgba(255,255,255,0.9)",
+      fontWeight: "800",
+    },
+    nodeLabelActive: {
+      color: "rgba(255,255,255,0.7)",
+    },
+
+    /* ── Rejected ── */
+    rejectedWrap: {
+      marginTop: vscale(10),
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(6),
+      paddingHorizontal: scale(10),
+      paddingVertical: vscale(6),
+      borderRadius: scale(8),
+      backgroundColor: "rgba(248,113,113,0.12)",
+    },
+    rejectedText: {
+      flex: 1,
+      color: "#FCA5A5",
+      fontSize: scale(11),
       fontWeight: "600",
     },
 
-    stepStatusText: {
-      marginTop: vscale(6),
-      textAlign: "center",
-      color: "rgba(255,255,255,0.9)",
-      fontSize: scale(11),
-      fontWeight: "900",
+    /* ── CTA Button ── */
+    ctaBtn: {
+      marginTop: vscale(10),
+      borderRadius: scale(14),
+      overflow: "hidden",
     },
-
-    levelHintWrap: {
-      marginTop: vscale(6),
+    ctaGradient: {
+      flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: vscale(2),
+      paddingVertical: vscale(12),
+      paddingHorizontal: scale(18),
+      gap: scale(10),
+      borderRadius: scale(14),
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.15)",
     },
-    levelHintLine: {
-      textAlign: "center",
-      color: "rgba(255,255,255,0.82)",
-      fontSize: scale(10),
-      fontWeight: "700",
+    ctaText: {
+      color: "#FFFFFF",
+      fontSize: scale(13),
+      fontWeight: "800",
+      letterSpacing: 0.3,
+    },
+    ctaArrow: {
+      width: scale(24),
+      height: scale(24),
+      borderRadius: scale(12),
+      backgroundColor: "#FFFFFF",
+      alignItems: "center",
+      justifyContent: "center",
     },
 
-    rejectedReason: {
-      marginTop: vscale(6),
-      textAlign: "center",
-      color: "rgba(255,255,255,0.86)",
-      fontSize: scale(10),
-      fontWeight: "700",
-      lineHeight: scale(14),
-    },
-
+    /* ── Modal styles (kept from original) ── */
     centerOverlay: {
       flex: 1,
       backgroundColor: "rgba(15, 23, 42, 0.35)",
@@ -1016,15 +935,13 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       justifyContent: "center",
       paddingHorizontal: scale(16),
     },
-
     centerCard: {
       width: "100%",
       maxWidth: 520,
-      borderRadius: CARD_R,
+      borderRadius: scale(18),
       borderWidth: 1,
       padding: scale(14),
     },
-
     centerHeader: {
       flexDirection: "row",
       alignItems: "flex-start",
@@ -1054,7 +971,6 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       borderWidth: 1,
       borderRadius: vscale(12),
       padding: scale(12),
-      backgroundColor: "#FFFFFF",
     },
     typeTitle: { fontSize: scale(12), fontWeight: "900", marginBottom: vscale(10) },
     typeOptions: { gap: vscale(8) },
@@ -1067,7 +983,6 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       alignItems: "center",
       justifyContent: "space-between",
       gap: scale(10),
-      backgroundColor: "#FFFFFF",
     },
     typeOptionLabel: { fontSize: scale(12), fontWeight: "900" },
     typeOptionSub: { marginTop: vscale(2), fontSize: scale(11), fontWeight: "500", lineHeight: scale(15) },
@@ -1084,7 +999,6 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       height: vscale(160),
       borderRadius: vscale(12),
       borderWidth: 1,
-      backgroundColor: "#FFFFFF",
       alignItems: "center",
       justifyContent: "center",
       gap: vscale(6),
@@ -1107,7 +1021,6 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       borderRadius: vscale(14),
       paddingHorizontal: scale(12),
       paddingVertical: vscale(8),
-      backgroundColor: "#FFFFFF",
     },
     uploadBtnText: { fontSize: scale(12), fontWeight: "900" },
 

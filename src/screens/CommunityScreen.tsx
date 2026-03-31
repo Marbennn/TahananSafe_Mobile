@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -1317,7 +1318,13 @@ export default function CommunityScreen({
 }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
   const { user } = useAuth() as any;
+
+  const wScale = Math.min(Math.max(width / 375, 0.9), 1.25);
+  const hScale = Math.min(Math.max(height / 812, 0.9), 1.2);
+  const scale = (n: number) => Math.round(n * wScale);
+  const vscale = (n: number) => Math.round(n * hScale);
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
@@ -1564,12 +1571,31 @@ export default function CommunityScreen({
 
       <View style={{ flex: 1 }}>
         {/* ── Header ── */}
-        <View style={styles.header}>
+        <View
+          style={[
+            styles.header,
+            {
+              paddingHorizontal: scale(16),
+              paddingTop: vscale(8),
+              paddingBottom: vscale(6),
+            },
+          ]}
+        >
           <View style={styles.headerCopy}>
-            <Text style={[styles.headerTitle, { color: colors.textDark }]}>
+            <Text
+              style={[
+                styles.headerTitle,
+                { color: colors.textDark, fontSize: scale(28), letterSpacing: 0.2 },
+              ]}
+            >
               Community
             </Text>
-            <Text style={[styles.headerSubtitle, { color: colors.muted }]}>
+            <Text
+              style={[
+                styles.headerSubtitle,
+                { color: colors.muted, marginTop: vscale(4), fontSize: scale(13) },
+              ]}
+            >
               Share updates, photos, and neighborhood conversations
             </Text>
           </View>
@@ -1782,13 +1808,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 8,
   },
   headerCopy: { flex: 1 },
-  headerTitle: { fontSize: 28, fontWeight: "900" },
-  headerSubtitle: { marginTop: 4, fontSize: 12, fontWeight: "500", lineHeight: 16 },
+  headerTitle: { fontWeight: "900" },
+  headerSubtitle: { fontWeight: "400" },
 
   /* Loading */
   loadingWrap: { flex: 1, justifyContent: "center", alignItems: "center" },

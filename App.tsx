@@ -35,6 +35,7 @@ import ReportDetailScreen from "./src/screens/ReportDetailScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
 import AdminNotificationsScreen from "./src/screens/admin_mobile/AdminNotificationsScreen";
+import AppAlertProvider from "./src/components/AppAlertProvider";
 
 import IncidentLogScreen from "./src/screens/IncidentLogScreen";
 import IncidentLogConfirmedScreen from "./src/screens/IncidentLogConfirmedScreen";
@@ -917,72 +918,74 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
-        <AuthProvider>
-          <NavigationContainer>
-            <Stack.Navigator
-              id="root-stack"
-              initialRouteName="Splash"
-              screenOptions={{ headerShown: false, gestureEnabled: true }}
-            >
-              <Stack.Screen name="Splash">
-                {({ navigation }) => (
-                  <AppSplashScreenWrapper
-                    onGoMain={() => navigation.reset({ index: 0, routes: [{ name: "Main" }] })}
-                    onGoAdminHome={() =>
-                      navigation.reset({ index: 0, routes: [{ name: "AdminHomeScreen" }] })
-                    }
-                    onGoPin={() => navigation.reset({ index: 0, routes: [{ name: "Pin" }] })}
-                    onGoCreatePin={() =>
-                      navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] })
-                    }
-                    onGoOnboarding={() => navigation.replace("OnboardingPager")}
-                    onGoAuthFlow={() =>
-                      navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })
-                    }
-                  />
-                )}
-              </Stack.Screen>
+          <AuthProvider>
+            <AppAlertProvider>
+              <NavigationContainer>
+                <Stack.Navigator
+                  id="root-stack"
+                  initialRouteName="Splash"
+                  screenOptions={{ headerShown: false, gestureEnabled: true }}
+                >
+                  <Stack.Screen name="Splash">
+                    {({ navigation }) => (
+                      <AppSplashScreenWrapper
+                        onGoMain={() => navigation.reset({ index: 0, routes: [{ name: "Main" }] })}
+                        onGoAdminHome={() =>
+                          navigation.reset({ index: 0, routes: [{ name: "AdminHomeScreen" }] })
+                        }
+                        onGoPin={() => navigation.reset({ index: 0, routes: [{ name: "Pin" }] })}
+                        onGoCreatePin={() =>
+                          navigation.reset({ index: 0, routes: [{ name: "CreatePin" }] })
+                        }
+                        onGoOnboarding={() => navigation.replace("OnboardingPager")}
+                        onGoAuthFlow={() =>
+                          navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })
+                        }
+                      />
+                    )}
+                  </Stack.Screen>
 
-              <Stack.Screen name="OnboardingPager">
-                {({ navigation }) => (
-                  <OnboardingPagerScreen
-                    onDone={() => navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })}
-                  />
-                )}
-              </Stack.Screen>
+                  <Stack.Screen name="OnboardingPager">
+                    {({ navigation }) => (
+                      <OnboardingPagerScreen
+                        onDone={() => navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] })}
+                      />
+                    )}
+                  </Stack.Screen>
 
-              <Stack.Screen name="AuthFlow">
-                {({ navigation }) => <AuthFlowWrapper navigation={navigation} />}
-              </Stack.Screen>
+                  <Stack.Screen name="AuthFlow">
+                    {({ navigation }) => <AuthFlowWrapper navigation={navigation} />}
+                  </Stack.Screen>
 
-              <Stack.Screen name="Login">
-                {({ navigation }) => <LoginWrapper navigation={navigation} />}
-              </Stack.Screen>
+                  <Stack.Screen name="Login">
+                    {({ navigation }) => <LoginWrapper navigation={navigation} />}
+                  </Stack.Screen>
 
-              <Stack.Screen name="CreatePin">
-                {({ navigation }) => <CreatePinWrapper navigation={navigation} />}
-              </Stack.Screen>
+                  <Stack.Screen name="CreatePin">
+                    {({ navigation }) => <CreatePinWrapper navigation={navigation} />}
+                  </Stack.Screen>
 
-              <Stack.Screen name="Pin">
-                {({ navigation }) => <PinScreenWrapper navigation={navigation} />}
-              </Stack.Screen>
+                  <Stack.Screen name="Pin">
+                    {({ navigation }) => <PinScreenWrapper navigation={navigation} />}
+                  </Stack.Screen>
 
-              <Stack.Screen name="Main">
-                {({ navigation, route }) => (
-                  <MainScreenWrapper navigation={navigation} route={route} />
-                )}
-              </Stack.Screen>
+                  <Stack.Screen name="Main">
+                    {({ navigation, route }) => (
+                      <MainScreenWrapper navigation={navigation} route={route} />
+                    )}
+                  </Stack.Screen>
 
-              <Stack.Screen name="AdminHomeScreen">
-                {({ navigation }) => <AdminHomeWrapper navigation={navigation} />}
-              </Stack.Screen>
+                  <Stack.Screen name="AdminHomeScreen">
+                    {({ navigation }) => <AdminHomeWrapper navigation={navigation} />}
+                  </Stack.Screen>
 
-              <Stack.Screen name="Notifications">
-                {({ navigation }) => <NotificationsWrapper navigation={navigation} />}
-              </Stack.Screen>
-            </Stack.Navigator>
-          </NavigationContainer>
-        </AuthProvider>
+                  <Stack.Screen name="Notifications">
+                    {({ navigation }) => <NotificationsWrapper navigation={navigation} />}
+                  </Stack.Screen>
+                </Stack.Navigator>
+              </NavigationContainer>
+            </AppAlertProvider>
+          </AuthProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
