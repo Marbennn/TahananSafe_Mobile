@@ -62,6 +62,13 @@ function displayNameFromEmail(email: string) {
     .join(" ");
 }
 
+function displayNameFromUser(user: any, email: string) {
+  const firstName = String(user?.firstName || "").trim();
+  const lastName = String(user?.lastName || "").trim();
+  const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
+  return fullName || displayNameFromEmail(email);
+}
+
 type IdOption = {
   key: "passport" | "drivers_license" | "phil_id";
   label: string;
@@ -303,9 +310,14 @@ export default function VerifyAccountCard({
   if (hasLogin && selfieVerified) stage = 2;
   if (isApproved) stage = 3;
 
-  const displayName = hasLogin ? displayNameFromEmail(userEmail) : "Guest";
+  const displayName = hasLogin ? displayNameFromUser(user, userEmail) : "Guest";
   const displaySub = hasLogin ? maskEmail(userEmail) : "Not signed in";
-  const displayPhoneLike = user?.phone ? String(user.phone) : "";
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("") || "U";
 
   const nodes = [
     { key: "basic", label: "Basic", done: stage >= 1, active: stage === 0 },
@@ -448,7 +460,7 @@ export default function VerifyAccountCard({
     return null;
   })();
 
-  const avatarUri = user?.photoURL ? String(user.photoURL) : "";
+  const avatarUri = String(user?.profileImage || user?.photoURL || "").trim();
 
   const NODE_SIZE = scale(28);
   const CARD_RADIUS = scale(22);
@@ -488,7 +500,7 @@ export default function VerifyAccountCard({
                   colors={["rgba(255,255,255,0.2)", "rgba(255,255,255,0.05)"]}
                   style={styles.avatarFallback}
                 >
-                  <Ionicons name="person" size={scale(24)} color="rgba(255,255,255,0.85)" />
+                  <Text style={styles.avatarFallbackInitials}>{initials}</Text>
                 </LinearGradient>
               )}
             </View>
@@ -497,7 +509,7 @@ export default function VerifyAccountCard({
           <View style={styles.infoBlock}>
             <Text style={styles.nameText} numberOfLines={1}>{displayName}</Text>
             <Text style={styles.emailText} numberOfLines={1}>
-              {displayPhoneLike ? displayPhoneLike : displaySub}
+              {displaySub}
             </Text>
           </View>
 
@@ -812,12 +824,17 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       width: "100%",
       height: "100%",
     },
-    avatarFallback: {
-      width: "100%",
-      height: "100%",
-      alignItems: "center",
-      justifyContent: "center",
-    },
+  avatarFallback: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarFallbackInitials: {
+    color: "rgba(255,255,255,0.92)",
+    fontSize: scale(20),
+    fontWeight: "900",
+  },
 
     infoBlock: {
       flex: 1,

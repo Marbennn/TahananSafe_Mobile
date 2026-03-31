@@ -1,6 +1,6 @@
 // App.tsx
 import "react-native-gesture-handler";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Alert, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { enableScreens } from "react-native-screens";
@@ -36,6 +36,7 @@ import SettingsScreen from "./src/screens/SettingsScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
 import AdminNotificationsScreen from "./src/screens/admin_mobile/AdminNotificationsScreen";
 import AppAlertProvider from "./src/components/AppAlertProvider";
+import LogoutModal from "./src/components/LogoutModal";
 
 import IncidentLogScreen from "./src/screens/IncidentLogScreen";
 import IncidentLogConfirmedScreen from "./src/screens/IncidentLogConfirmedScreen";
@@ -186,16 +187,25 @@ async function shouldRequirePinIdleLock(auth: any): Promise<boolean> {
   return isPinEnabledLocally(email);
 }
 
-async function handleIdleSessionTimeout({
+async function getIdleSessionTimeoutMode({
+  auth,
+}: {
+  auth: any;
+}) {
+  const shouldLockToPin = await shouldRequirePinIdleLock(auth);
+  return shouldLockToPin ? "pin" : "logout";
+}
+
+async function performIdleSessionTimeout({
   auth,
   navigation,
+  mode,
 }: {
   auth: any;
   navigation: any;
+  mode: "pin" | "logout";
 }) {
-  const shouldLockToPin = await shouldRequirePinIdleLock(auth);
-
-  if (shouldLockToPin) {
+  if (mode === "pin") {
     await refreshSessionBeforeIdleExit(auth);
     resetPinUnlockedThisRun();
     await setAppLockRequired(true).catch(() => {});
@@ -206,6 +216,54 @@ async function handleIdleSessionTimeout({
   resetPinUnlockedThisRun();
   await clearInvalidSession(auth);
   navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
+}
+
+function AuthenticatedIdleBoundary({
+  navigation,
+  children,
+}: {
+  navigation: any;
+  children: React.ReactNode;
+}) {
+  const auth = useAuth() as any;
+  const [idleModalMode, setIdleModalMode] = React.useState<"pin" | "logout" | null>(null);
+
+  const handleIdleLock = useCallback(async () => {
+    const mode = await getIdleSessionTimeoutMode({ auth });
+    setIdleModalMode((current) => current ?? mode);
+  }, [auth]);
+
+  const handleIdleModalConfirm = useCallback(async () => {
+    const mode = idleModalMode;
+    setIdleModalMode(null);
+    if (!mode) return;
+
+    await performIdleSessionTimeout({ auth, navigation, mode });
+  }, [auth, idleModalMode, navigation]);
+
+  return (
+    <>
+      <IdleTimerWrapper onTimeout={handleIdleLock}>
+        {children}
+      </IdleTimerWrapper>
+
+      <LogoutModal
+        visible={!!idleModalMode}
+        onConfirm={() => {
+          void handleIdleModalConfirm();
+        }}
+        onCancel={() => {}}
+        hideCancel
+        title={idleModalMode === "pin" ? "Screen Idle" : "Logged Out"}
+        message={
+          idleModalMode === "pin"
+            ? "Screen idled for 15 mins. Please enter your PIN again."
+            : "You have been logged out after 15 mins of screen idle."
+        }
+        confirmLabel={idleModalMode === "pin" ? "Enter PIN" : "OK"}
+      />
+    </>
+  );
 }
 
 /* ===================== ROLE HELPERS ===================== */
@@ -486,12 +544,8 @@ function MainScreenWrapper({ navigation, route }: { navigation: any; route: any 
   };
 
   // Idle timeout → close app; on reopen the splash flow sees PIN not unlocked → PinScreen
-  const handleIdleLock = async () => {
-    await handleIdleSessionTimeout({ auth, navigation });
-  };
-
   return (
-    <IdleTimerWrapper onTimeout={handleIdleLock}>
+    <AuthenticatedIdleBoundary navigation={navigation}>
       <MainShell
         onLogout={handleLogout}
         onOpenNotifications={() => navigation.navigate("Notifications")}
@@ -500,7 +554,7 @@ function MainScreenWrapper({ navigation, route }: { navigation: any; route: any 
           try { navigation.setParams({ openReport: undefined }); } catch { /* ignore */ }
         }}
       />
-    </IdleTimerWrapper>
+    </AuthenticatedIdleBoundary>
   );
 }
 
@@ -518,38 +572,30 @@ function AdminHomeWrapper({ navigation }: { navigation: any }) {
   };
 
   // Idle timeout → close app; on reopen the splash flow sees PIN not unlocked → PinScreen
-  const handleIdleLock = async () => {
-    await handleIdleSessionTimeout({ auth, navigation });
-  };
-
   return (
-    <IdleTimerWrapper onTimeout={handleIdleLock}>
+    <AuthenticatedIdleBoundary navigation={navigation}>
       <AdminShell
         onOpenNotifications={() => navigation.navigate("Notifications")}
         onLogout={handleLogout}
       />
-    </IdleTimerWrapper>
+    </AuthenticatedIdleBoundary>
   );
 }
 
 function NotificationsWrapper({ navigation }: { navigation: any }) {
   const auth = useAuth() as any;
-  const handleIdleLock = async () => {
-    await handleIdleSessionTimeout({ auth, navigation });
-  };
-
   if (isBarangayOfficial(auth?.user?.role)) {
     return (
-      <IdleTimerWrapper onTimeout={handleIdleLock}>
+      <AuthenticatedIdleBoundary navigation={navigation}>
         <AdminNotificationsScreen onBack={() => navigation.goBack()} />
-      </IdleTimerWrapper>
+      </AuthenticatedIdleBoundary>
     );
   }
 
   return (
-    <IdleTimerWrapper onTimeout={handleIdleLock}>
+    <AuthenticatedIdleBoundary navigation={navigation}>
       <NotificationsScreen onBack={() => navigation.goBack()} />
-    </IdleTimerWrapper>
+    </AuthenticatedIdleBoundary>
   );
 }
 

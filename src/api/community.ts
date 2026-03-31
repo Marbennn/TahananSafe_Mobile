@@ -94,6 +94,14 @@ function normalizeImageUrl(input: any): string | undefined {
 
   if (!raw) return undefined;
 
+  if (
+    raw.startsWith("data:") ||
+    raw.startsWith("file:") ||
+    raw.startsWith("content://")
+  ) {
+    return raw;
+  }
+
   if (raw.startsWith("/")) return apiUrl(raw);
 
   if (raw.startsWith("http://") || raw.startsWith("https://")) {

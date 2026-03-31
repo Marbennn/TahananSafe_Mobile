@@ -13,10 +13,14 @@ import {
   Alert,
   Switch,
   Modal,
+  Image,
+  ActivityIndicator,
+  KeyboardAvoidingView,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from "expo-image-picker";
 
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { Colors } from "../theme/colors";
@@ -31,6 +35,7 @@ import * as SecureStore from "expo-secure-store";
 // ✅ Needed to talk to backend and keep App.tsx routing correct
 import { getAccessToken, setHasPin, setPinSkippedForUser } from "../auth/session";
 import { setPinApi, getMeApi } from "../api/pin";
+import { saveProfileSettings } from "../api/user";
 
 // ✅ NEW: Verify Account card component
 import VerifyAccountCard from "../components/Settings/VerifyAccountCard";
@@ -150,6 +155,27 @@ function statusPillText(enabled?: boolean, loading?: boolean) {
   return enabled ? "Enabled" : "Disabled";
 }
 
+function normalizeName(value: string) {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function normalizePhone(value: string) {
+  const raw = String(value || "").trim();
+  if (raw.startsWith("+")) return `+${raw.slice(1).replace(/\D/g, "")}`;
+  return raw.replace(/\D/g, "");
+}
+
+function isValidProfilePhone(value: string) {
+  const phone = normalizePhone(value);
+  return /^09\d{9}$/.test(phone) || /^\+639\d{9}$/.test(phone);
+}
+
+function getUserInitials(user: any) {
+  const first = String(user?.firstName || "").trim();
+  const last = String(user?.lastName || "").trim();
+  return `${first[0] || ""}${last[0] || ""}`.toUpperCase() || "U";
+}
+
 export default function SettingsScreen({
   onAccountPress,
   onHelpPress,
@@ -212,13 +238,21 @@ export default function SettingsScreen({
   // ==========================
   // ✅ Per-account security UI
   // ==========================
-  const { user, refreshMe } = useAuth() as any;
+  const { user, refreshMe, setUser } = useAuth() as any;
   const userEmail: string = (user?.email ? String(user.email) : "").trim().toLowerCase();
 
   // ✅ Account modal
   const [accountModalVisible, setAccountModalVisible] = useState(false);
   const openAccountModal = () => setAccountModalVisible(true);
   const closeAccountModal = () => setAccountModalVisible(false);
+
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileImageUri, setProfileImageUri] = useState("");
+  const [profilePickedImageUri, setProfilePickedImageUri] = useState<string | null>(null);
+  const [profileFirstName, setProfileFirstName] = useState("");
+  const [profileLastName, setProfileLastName] = useState("");
+  const [profileContactNumber, setProfileContactNumber] = useState("");
 
   // ✅ Privacy & Security modal
   const [psModalVisible, setPsModalVisible] = useState(false);
@@ -239,6 +273,138 @@ export default function SettingsScreen({
   const [termsModalVisible, setTermsModalVisible] = useState(false);
   const openTermsModal = () => setTermsModalVisible(true);
   const closeTermsModal = () => setTermsModalVisible(false);
+
+  const hydrateProfileForm = useCallback(() => {
+    setProfileFirstName(String(user?.firstName || ""));
+    setProfileLastName(String(user?.lastName || ""));
+    setProfileContactNumber(String(user?.phoneNumber || ""));
+    setProfileImageUri(String(user?.profileImage || ""));
+    setProfilePickedImageUri(null);
+  }, [user]);
+
+  const openProfileModal = useCallback(() => {
+    closeAccountModal();
+    hydrateProfileForm();
+    setTimeout(() => setProfileModalVisible(true), 140);
+  }, [hydrateProfileForm]);
+
+  const closeProfileModal = useCallback(() => {
+    if (profileSaving) return;
+    setProfileModalVisible(false);
+  }, [profileSaving]);
+
+  const requestProfileCameraPermission = useCallback(async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Camera permission is required to take a profile picture.");
+      return false;
+    }
+    return true;
+  }, []);
+
+  const requestProfileLibraryPermission = useCallback(async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Photo library permission is required to upload a profile picture.");
+      return false;
+    }
+    return true;
+  }, []);
+
+  const pickProfileFromGallery = useCallback(async () => {
+    const ok = await requestProfileLibraryPermission();
+    if (!ok) return;
+
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+
+    const uri = res.canceled ? "" : String(res.assets?.[0]?.uri || "");
+    if (!uri) return;
+
+    setProfileImageUri(uri);
+    setProfilePickedImageUri(uri);
+  }, [requestProfileLibraryPermission]);
+
+  const takeProfilePhoto = useCallback(async () => {
+    const ok = await requestProfileCameraPermission();
+    if (!ok) return;
+
+    const res = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+      allowsEditing: true,
+      aspect: [1, 1],
+      cameraType: ImagePicker.CameraType.front,
+    });
+
+    const uri = res.canceled ? "" : String(res.assets?.[0]?.uri || "");
+    if (!uri) return;
+
+    setProfileImageUri(uri);
+    setProfilePickedImageUri(uri);
+  }, [requestProfileCameraPermission]);
+
+  const onChangeProfilePhoto = useCallback(() => {
+    Alert.alert("Profile picture", "Choose a source:", [
+      { text: "Take a Picture", onPress: () => void takeProfilePhoto() },
+      { text: "Upload from Gallery", onPress: () => void pickProfileFromGallery() },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }, [pickProfileFromGallery, takeProfilePhoto]);
+
+  const onSaveProfile = useCallback(async () => {
+    const firstName = normalizeName(profileFirstName);
+    const lastName = normalizeName(profileLastName);
+    const contactNumber = normalizePhone(profileContactNumber);
+
+    if (!firstName) {
+      Alert.alert("Invalid", "First name is required.");
+      return;
+    }
+    if (!lastName) {
+      Alert.alert("Invalid", "Last name is required.");
+      return;
+    }
+    if (!contactNumber || !isValidProfilePhone(contactNumber)) {
+      Alert.alert("Invalid", "Use 09XXXXXXXXX or +639XXXXXXXXX for your contact number.");
+      return;
+    }
+
+    try {
+      setProfileSaving(true);
+      const response = await saveProfileSettings(
+        {
+          firstName,
+          lastName,
+          contactNumber,
+        },
+        profilePickedImageUri || undefined,
+      );
+
+      if (response?.user) {
+        setUser?.(response.user);
+      }
+      await refreshMe?.().catch(() => {});
+
+      setProfileModalVisible(false);
+      Alert.alert("Profile updated", "Your profile details have been saved.");
+    } catch (e: any) {
+      Alert.alert("Save failed", e?.message || "Unable to update your profile right now.");
+    } finally {
+      setProfileSaving(false);
+    }
+  }, [
+    profileFirstName,
+    profileLastName,
+    profileContactNumber,
+    profilePickedImageUri,
+    refreshMe,
+    setUser,
+  ]);
 
   // Biometrics
   const [bioEnabled, setBioEnabled] = useState(false);
@@ -557,11 +723,7 @@ export default function SettingsScreen({
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountModalContent}>
               <Pressable
-                onPress={() => {
-                  closeAccountModal();
-                  if (onAccountPress) onAccountPress();
-                  else Alert.alert("Profile", "Wire this to your Profile screen.");
-                }}
+                onPress={openProfileModal}
                 android_ripple={{ color: "rgba(0,0,0,0.06)" }}
                 style={styles.accountModalItem}
               >
@@ -614,6 +776,134 @@ export default function SettingsScreen({
               <View style={{ height: vscale(12) }} />
             </ScrollView>
           </View>
+        </View>
+      </Modal>
+
+      <Modal visible={profileModalVisible} transparent animationType="slide" onRequestClose={closeProfileModal}>
+        <View style={styles.accountModalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeProfileModal} />
+          <KeyboardAvoidingView
+            style={styles.profileModalKeyboard}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
+          >
+            <View style={[styles.profileModalSheet, { backgroundColor: surface, borderColor: divider }]}>
+              <View style={styles.accountModalHeader}>
+                <Text style={[styles.accountModalTitle, { color: textDark }]}>Profile</Text>
+
+                <Pressable onPress={closeProfileModal} hitSlop={10} style={styles.accountModalClose}>
+                  <Ionicons name="close" size={iconSize} color={muted} />
+                </Pressable>
+              </View>
+
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.profileModalContent}
+              >
+                <View style={styles.profileModalSections}>
+                  <View style={[styles.profileHeroCard, { backgroundColor: cardBg, borderColor: divider }]}>
+                    <View style={styles.profileAvatarWrap}>
+                      {profileImageUri ? (
+                        <Image source={{ uri: profileImageUri }} style={styles.profileAvatarImage} />
+                      ) : (
+                        <View style={[styles.profileAvatarFallback, { backgroundColor: chipBg }]}>
+                          <Text style={[styles.profileAvatarFallbackText, { color: primary }]}>
+                            {getUserInitials({ firstName: profileFirstName, lastName: profileLastName })}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <Text style={[styles.profileHeroTitle, { color: textDark }]}>
+                      {normalizeName(`${profileFirstName} ${profileLastName}`) || "Your profile"}
+                    </Text>
+                    <Text style={[styles.profileHeroSub, { color: muted }]}>
+                      {userEmail || "Update your personal details and profile picture."}
+                    </Text>
+
+                    <Pressable
+                      onPress={onChangeProfilePhoto}
+                      style={({ pressed }) => [
+                        styles.profilePhotoBtn,
+                        { borderColor: divider, backgroundColor: chipBg },
+                        pressed && { opacity: 0.82 },
+                      ]}
+                    >
+                      <Ionicons name="camera-outline" size={smallIcon} color={primary} />
+                      <Text style={[styles.profilePhotoBtnText, { color: primary }]}>Change photo</Text>
+                    </Pressable>
+                  </View>
+
+                  <View style={[styles.profileFormCard, { backgroundColor: cardBg, borderColor: divider }]}>
+                    <View style={styles.profileFieldBlock}>
+                      <Text style={[styles.profileFieldLabel, { color: textDark }]}>First Name</Text>
+                      <TextInput
+                        value={profileFirstName}
+                        onChangeText={setProfileFirstName}
+                        placeholder="Enter your first name"
+                        placeholderTextColor={muted}
+                        style={[styles.profileInput, { borderColor: divider, color: textDark, backgroundColor: surface }]}
+                      />
+                    </View>
+
+                    <View style={styles.profileFieldBlock}>
+                      <Text style={[styles.profileFieldLabel, { color: textDark }]}>Last Name</Text>
+                      <TextInput
+                        value={profileLastName}
+                        onChangeText={setProfileLastName}
+                        placeholder="Enter your last name"
+                        placeholderTextColor={muted}
+                        style={[styles.profileInput, { borderColor: divider, color: textDark, backgroundColor: surface }]}
+                      />
+                    </View>
+
+                    <View style={styles.profileFieldBlock}>
+                      <Text style={[styles.profileFieldLabel, { color: textDark }]}>Contact Number</Text>
+                      <TextInput
+                        value={profileContactNumber}
+                        onChangeText={setProfileContactNumber}
+                        placeholder="09XXXXXXXXX or +639XXXXXXXXX"
+                        placeholderTextColor={muted}
+                        keyboardType="phone-pad"
+                        style={[styles.profileInput, { borderColor: divider, color: textDark, backgroundColor: surface }]}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.profileModalActions}>
+                    <Pressable
+                      onPress={closeProfileModal}
+                      disabled={profileSaving}
+                      style={({ pressed }) => [
+                        styles.profileActionBtn,
+                        { backgroundColor: "#F3F4F6" },
+                        pressed && !profileSaving && { opacity: 0.8 },
+                      ]}
+                    >
+                      <Text style={[styles.profileActionBtnText, { color: textDark }]}>Cancel</Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => void onSaveProfile()}
+                      disabled={profileSaving}
+                      style={({ pressed }) => [
+                        styles.profileActionBtn,
+                        { backgroundColor: primary },
+                        pressed && !profileSaving && { opacity: 0.85 },
+                      ]}
+                    >
+                      {profileSaving ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.profileActionPrimaryText}>Save Profile</Text>
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -1547,6 +1837,20 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       paddingBottom: Platform.OS === "ios" ? vscale(12) : vscale(10),
       maxHeight: "86%",
     },
+    profileModalKeyboard: {
+      flex: 1,
+      justifyContent: "flex-end",
+      width: "100%",
+    },
+    profileModalSheet: {
+      borderTopLeftRadius: CARD_R,
+      borderTopRightRadius: CARD_R,
+      borderWidth: 1,
+      overflow: "hidden",
+      width: "100%",
+      paddingBottom: 0,
+      maxHeight: "88%",
+    },
 
     accountModalHeader: {
       paddingHorizontal: scale(14),
@@ -1601,6 +1905,13 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       paddingBottom: vscale(16),
       gap: vscale(10),
     },
+    profileModalContent: {
+      paddingHorizontal: scale(14),
+      paddingBottom: vscale(10),
+    },
+    profileModalSections: {
+      gap: vscale(8),
+    },
     accountModalItem: {
       borderRadius: CARD_R,
       borderWidth: 1,
@@ -1613,6 +1924,106 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       justifyContent: "space-between",
       gap: scale(12),
       overflow: "hidden",
+    },
+    profileHeroCard: {
+      borderRadius: CARD_R,
+      borderWidth: 1,
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(16),
+      alignItems: "center",
+    },
+    profileAvatarWrap: {
+      width: scale(92),
+      height: scale(92),
+      borderRadius: scale(46),
+      overflow: "hidden",
+      marginBottom: vscale(12),
+    },
+    profileAvatarImage: {
+      width: "100%",
+      height: "100%",
+      borderRadius: scale(46),
+    },
+    profileAvatarFallback: {
+      width: "100%",
+      height: "100%",
+      borderRadius: scale(46),
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    profileAvatarFallbackText: {
+      fontSize: scale(28),
+      fontWeight: "900",
+    },
+    profileHeroTitle: {
+      fontSize: scale(16),
+      fontWeight: "900",
+      textAlign: "center",
+    },
+    profileHeroSub: {
+      marginTop: vscale(4),
+      fontSize: scale(12),
+      fontWeight: "500",
+      textAlign: "center",
+      lineHeight: scale(18),
+    },
+    profilePhotoBtn: {
+      marginTop: vscale(12),
+      borderWidth: 1,
+      borderRadius: scale(14),
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(10),
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(8),
+    },
+    profilePhotoBtnText: {
+      fontSize: scale(12),
+      fontWeight: "800",
+    },
+    profileFormCard: {
+      borderRadius: CARD_R,
+      borderWidth: 1,
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(14),
+      gap: vscale(12),
+    },
+    profileFieldBlock: {
+      gap: vscale(6),
+    },
+    profileFieldLabel: {
+      fontSize: scale(12),
+      fontWeight: "900",
+    },
+    profileInput: {
+      minHeight: vscale(44),
+      borderWidth: 1,
+      borderRadius: scale(14),
+      paddingHorizontal: scale(12),
+      fontSize: scale(14),
+      fontWeight: "600",
+    },
+    profileModalActions: {
+      flexDirection: "row",
+      gap: scale(10),
+      paddingBottom: 0,
+    },
+    profileActionBtn: {
+      flex: 1,
+      minHeight: vscale(46),
+      borderRadius: scale(14),
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: scale(14),
+    },
+    profileActionBtnText: {
+      fontSize: scale(13),
+      fontWeight: "800",
+    },
+    profileActionPrimaryText: {
+      fontSize: scale(13),
+      fontWeight: "900",
+      color: "#FFFFFF",
     },
     helpIntroCard: {
       borderRadius: CARD_R,

@@ -36,6 +36,8 @@ export type ReportDetailDto = {
   dateStr?: string; // "02/17/2026"
   timeStr?: string; // "3:41PM"
   locationStr?: string; // "2420, ... Philippines"
+  latitude?: number | null;
+  longitude?: number | null;
   status?: string; // "submitted" | "reviewing" | "resolved"
   photos?: any[]; // [{ fileId, url, fileName, mimeType, size }]
   createdAt?: string;

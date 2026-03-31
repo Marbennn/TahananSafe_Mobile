@@ -235,6 +235,56 @@ function buildReactionSummary(comment: CommunityComment) {
   };
 }
 
+function patchCurrentUserProfileInPosts(
+  posts: CommunityPost[],
+  currentUserId: string,
+  profile: { firstName?: string; lastName?: string; profileImage?: string }
+) {
+  if (!currentUserId) return posts;
+
+  let changed = false;
+  const nextFirstName = String(profile.firstName || "");
+  const nextLastName = String(profile.lastName || "");
+  const nextProfileImage = String(profile.profileImage || "");
+
+  const patchUser = (communityUser: CommunityPost["user"]) => {
+    if (String(communityUser?._id || "") !== String(currentUserId)) {
+      return communityUser;
+    }
+
+    if (
+      String(communityUser.firstName || "") === nextFirstName &&
+      String(communityUser.lastName || "") === nextLastName &&
+      String(communityUser.profileImage || "") === nextProfileImage
+    ) {
+      return communityUser;
+    }
+
+    changed = true;
+    return {
+      ...communityUser,
+      firstName: nextFirstName || communityUser.firstName,
+      lastName: nextLastName || communityUser.lastName,
+      profileImage: nextProfileImage || communityUser.profileImage,
+    };
+  };
+
+  const nextPosts = posts.map((post) => ({
+    ...post,
+    user: patchUser(post.user),
+    comments: post.comments.map((comment) => ({
+      ...comment,
+      user: patchUser(comment.user),
+      replies: comment.replies.map((reply) => ({
+        ...reply,
+        user: patchUser(reply.user),
+      })),
+    })),
+  }));
+
+  return changed ? nextPosts : posts;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Sub-components                                                     */
 /* ------------------------------------------------------------------ */
@@ -279,6 +329,7 @@ function PostCard({
   currentUserId,
   onLike,
   onComment,
+  onToggleSave,
   onOpenOptions,
   onImagePress,
   colors,
@@ -287,16 +338,20 @@ function PostCard({
   currentUserId: string;
   onLike: (id: string) => void;
   onComment: (id: string) => void;
+  onToggleSave: (id: string) => void;
   onOpenOptions: (id: string) => void;
   onImagePress: (imageUris: string[], index: number) => void;
   colors: ReturnType<typeof useColors>;
 }) {
+  const isOwner = String(post.user._id || "") === String(currentUserId);
   const liked =
     typeof post.likedByMe === "boolean"
       ? post.likedByMe
       : post.likes.includes(currentUserId);
   const likeCount =
     typeof post.likesCount === "number" ? post.likesCount : post.likes.length;
+  const saved = Boolean(post.savedByMe);
+  const saveCount = typeof post.savesCount === "number" ? post.savesCount : 0;
   const commentCount = countThreadComments(post.comments);
   const previewItems = buildCommentPreviewItems(post.comments).slice(-2);
   const imageUrls =
@@ -336,9 +391,11 @@ function PostCard({
         <Text style={[styles.postTime, { color: colors.muted }]}>
           {timeAgo(post.createdAt)}
         </Text>
-        <Pressable hitSlop={8} style={styles.postMenu} onPress={() => onOpenOptions(post._id)}>
-          <Ionicons name="ellipsis-horizontal" size={18} color={colors.muted} />
-        </Pressable>
+        {isOwner ? (
+          <Pressable hitSlop={8} style={styles.postMenu} onPress={() => onOpenOptions(post._id)}>
+            <Ionicons name="ellipsis-horizontal" size={18} color={colors.muted} />
+          </Pressable>
+        ) : null}
       </View>
 
       {/* Content */}
@@ -418,6 +475,24 @@ function PostCard({
           <Ionicons name="chatbubble-outline" size={19} color={colors.muted} />
           <Text style={[styles.actionText, { color: colors.muted }]}>
             {commentCount}
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => onToggleSave(post._id)}
+          style={[
+            styles.actionBtn,
+            { backgroundColor: saved ? `${colors.primary}18` : colors.inputBg },
+          ]}
+          hitSlop={6}
+        >
+          <Ionicons
+            name={saved ? "bookmark" : "bookmark-outline"}
+            size={18}
+            color={saved ? colors.primary : colors.muted}
+          />
+          <Text style={[styles.actionText, { color: saved ? colors.primary : colors.muted }]}>
+            {saveCount}
           </Text>
         </Pressable>
       </View>
@@ -786,20 +861,16 @@ function PostOptionsModal({
   visible,
   canEdit,
   canDelete,
-  isSaved,
   onClose,
   onEdit,
-  onToggleSave,
   onDelete,
   colors,
 }: {
   visible: boolean;
   canEdit: boolean;
   canDelete: boolean;
-  isSaved: boolean;
   onClose: () => void;
   onEdit: () => void;
-  onToggleSave: () => void;
   onDelete: () => void;
   colors: ReturnType<typeof useColors>;
 }) {
@@ -833,20 +904,6 @@ function PostOptionsModal({
                 </Text>
               </Pressable>
             ) : null}
-
-            <Pressable
-              onPress={onToggleSave}
-              style={[styles.postOptionBtn, { backgroundColor: colors.inputBg }]}
-            >
-              <Ionicons
-                name={isSaved ? "bookmark" : "bookmark-outline"}
-                size={18}
-                color={colors.primary}
-              />
-              <Text style={[styles.postOptionLabel, { color: colors.textDark }]}>
-                {isSaved ? "Unsave Post" : "Save Post"}
-              </Text>
-            </Pressable>
 
             {canDelete ? (
               <Pressable
@@ -1349,6 +1406,18 @@ export default function CommunityScreen({
     lastName: user?.lastName,
   });
 
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    setPosts((prev) =>
+      patchCurrentUserProfileInPosts(prev, currentUserId, {
+        firstName: user?.firstName,
+        lastName: user?.lastName,
+        profileImage: user?.profileImage,
+      })
+    );
+  }, [currentUserId, user?.firstName, user?.lastName, user?.profileImage]);
+
   const NAV_BASE_HEIGHT = 78;
   const bottomPad = Math.max(insets.bottom, 10);
   const navHeight = NAV_BASE_HEIGHT + bottomPad;
@@ -1555,6 +1624,7 @@ export default function CommunityScreen({
         currentUserId={currentUserId}
         onLike={handleLike}
         onComment={(id) => setCommentPostId(id)}
+        onToggleSave={handleToggleSave}
         onOpenOptions={(id) => setPostOptionsPostId(id)}
         onImagePress={(imageUris, initialIndex) =>
           setExpandedImageViewer({ imageUris, initialIndex })
@@ -1562,7 +1632,7 @@ export default function CommunityScreen({
         colors={colors}
       />
     ),
-    [handleLike, currentUserId, colors]
+    [handleLike, handleToggleSave, currentUserId, colors]
   );
 
   return (
@@ -1739,18 +1809,11 @@ export default function CommunityScreen({
         visible={!!optionsPost}
         canEdit={optionsPost?.user._id === currentUserId}
         canDelete={optionsPost?.user._id === currentUserId}
-        isSaved={Boolean(optionsPost?.savedByMe)}
         onClose={() => setPostOptionsPostId(null)}
         onEdit={() => {
           if (!optionsPost) return;
           setPostOptionsPostId(null);
           setEditingPostId(optionsPost._id);
-        }}
-        onToggleSave={() => {
-          if (!optionsPost) return;
-          const postId = optionsPost._id;
-          setPostOptionsPostId(null);
-          void handleToggleSave(postId);
         }}
         onDelete={() => {
           if (!optionsPost) return;

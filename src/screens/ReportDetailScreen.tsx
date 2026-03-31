@@ -26,6 +26,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { WebView } from "react-native-webview";
 
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import LogoutModal from "../components/LogoutModal";
@@ -197,6 +198,66 @@ function isAbortError(err: any) {
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
+}
+
+function escHtml(s: string) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function buildReportLocationMapHtml(
+  coords: { latitude: number; longitude: number },
+  label: string
+) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body, #map { width: 100%; height: 100%; background: #F8FBFF; }
+    .popup-title { font: 700 13px sans-serif; color: #0B2B45; margin-bottom: 4px; }
+    .popup-text { font: 12px/1.5 sans-serif; color: #475569; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var map = L.map('map', { zoomControl: false, attributionControl: false }).setView([${coords.latitude}, ${coords.longitude}], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '\\u00a9 OpenStreetMap'
+    }).addTo(map);
+
+    L.circle([${coords.latitude}, ${coords.longitude}], {
+      radius: 30,
+      color: '#60A5FA',
+      fillColor: '#93C5FD',
+      fillOpacity: 0.24,
+      weight: 1
+    }).addTo(map);
+
+    var marker = L.circleMarker([${coords.latitude}, ${coords.longitude}], {
+      radius: 10,
+      color: '#FFFFFF',
+      weight: 3,
+      fillColor: '#07519C',
+      fillOpacity: 1
+    }).addTo(map);
+
+    marker.bindPopup(
+      '<div class="popup-title">Incident location</div>' +
+      '<div class="popup-text">${escHtml(label || "Saved report location")}</div>'
+    ).openPopup();
+  <\/script>
+</body>
+</html>`;
 }
 
 function formatSavedPhoneNumber(phone?: string) {
@@ -1050,6 +1111,27 @@ export default function ReportDetailScreen({
   const witnessRole = detail?.witnessType || (report as any)?.witnessRole || (report as any)?.witnessType || "—";
 
   const locationLabel = detail?.locationStr || (report as any)?.locationStr || (report as any)?.location || "—";
+  const locationLatitude = Number(detail?.latitude ?? (report as any)?.latitude);
+  const locationLongitude = Number(detail?.longitude ?? (report as any)?.longitude);
+  const hasLocationCoords =
+    Number.isFinite(locationLatitude) &&
+    Number.isFinite(locationLongitude) &&
+    Math.abs(locationLatitude) <= 90 &&
+    Math.abs(locationLongitude) <= 180;
+  const [showLocationMap, setShowLocationMap] = useState(false);
+  const reportLocationMapHtml = useMemo(() => {
+    if (!hasLocationCoords) return "";
+    return buildReportLocationMapHtml(
+      { latitude: locationLatitude, longitude: locationLongitude },
+      locationLabel
+    );
+  }, [hasLocationCoords, locationLabel, locationLatitude, locationLongitude]);
+
+  useEffect(() => {
+    if (!hasLocationCoords) {
+      setShowLocationMap(false);
+    }
+  }, [hasLocationCoords, reportId]);
 
   const statusUpper = prettyStatus(detail?.status || (report as any)?.status);
   const accent = useMemo(() => statusColor(statusUpper, PRIMARY), [statusUpper, PRIMARY]);
@@ -1571,8 +1653,49 @@ export default function ReportDetailScreen({
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="location-outline" size={styles._iconSize} color={TEXT_DARK} />
                 <Text style={styles.sectionTitle}>Location</Text>
+                <Pressable
+                  onPress={() => {
+                    if (!hasLocationCoords) {
+                      Alert.alert("Map unavailable", "This report does not have saved map coordinates.");
+                      return;
+                    }
+                    setShowLocationMap((prev) => !prev);
+                  }}
+                  style={({ pressed }) => [
+                    styles.locationMapBtn,
+                    pressed && { opacity: 0.86 },
+                    !hasLocationCoords && styles.locationMapBtnDisabled,
+                  ]}
+                >
+                  <Ionicons
+                    name={showLocationMap ? "map" : "map-outline"}
+                    size={styles._miniIcon}
+                    color={hasLocationCoords ? PRIMARY : "#94A3B8"}
+                  />
+                  <Text
+                    style={[
+                      styles.locationMapBtnText,
+                      !hasLocationCoords && styles.locationMapBtnTextDisabled,
+                    ]}
+                  >
+                    {showLocationMap ? "Hide map" : "Show on map"}
+                  </Text>
+                </Pressable>
               </View>
               <Text style={styles.locationText}>{locationLabel}</Text>
+              {showLocationMap && hasLocationCoords && reportLocationMapHtml ? (
+                <View style={styles.locationMapCard}>
+                  <WebView
+                    source={{ html: reportLocationMapHtml }}
+                    originWhitelist={["*"]}
+                    javaScriptEnabled
+                    domStorageEnabled
+                    scrollEnabled={false}
+                    nestedScrollEnabled={false}
+                    style={styles.locationMapWebview}
+                  />
+                </View>
+              ) : null}
             </View>
 
             <View style={styles.sectionCard}>
@@ -2194,6 +2317,29 @@ function makeStyles(args: {
       sectionHeaderRow: { flexDirection: "row", alignItems: "center", gap: scale(8), marginBottom: vscale(10) },
       sectionTitle: { flex: 1, fontSize: scale(isTablet ? 13 : 12), fontWeight: "900", color: TEXT_DARK },
       sectionHint: { fontSize: scale(10), fontWeight: "900", color: "#94A3B8" },
+      locationMapBtn: {
+        minHeight: vscale(28),
+        borderRadius: scale(999),
+        borderWidth: 1,
+        borderColor: "#D7E3F4",
+        backgroundColor: "#F8FBFF",
+        paddingHorizontal: scale(10),
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: scale(5),
+      },
+      locationMapBtnDisabled: {
+        opacity: 0.7,
+      },
+      locationMapBtnText: {
+        fontSize: scale(10.25),
+        fontWeight: "900",
+        color: primary,
+      },
+      locationMapBtnTextDisabled: {
+        color: "#94A3B8",
+      },
 
       narrativeText: {
         fontSize: scale(isTablet ? 12.5 : 11.5),
@@ -2223,6 +2369,19 @@ function makeStyles(args: {
         fontWeight: "400",
         color: TEXT_MUTED,
         lineHeight: vscale(isTablet ? 18 : 16),
+      },
+      locationMapCard: {
+        marginTop: vscale(12),
+        borderRadius: scale(16),
+        borderWidth: 1,
+        borderColor: BORDER,
+        overflow: "hidden",
+        backgroundColor: "#F8FBFF",
+      },
+      locationMapWebview: {
+        width: "100%",
+        height: vscale(isTablet ? 220 : 190),
+        backgroundColor: "#F8FBFF",
       },
 
       witnessRow: { flexDirection: "row", alignItems: "center", gap: scale(10) },

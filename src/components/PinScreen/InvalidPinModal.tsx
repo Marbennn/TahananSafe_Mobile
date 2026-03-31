@@ -1,5 +1,5 @@
 // src/components/PinScreen/InvalidPinModal.tsx
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -40,7 +40,7 @@ export default function InvalidPinModal({
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
-  const styles = React.useMemo(() => createStyles(scale, vscale), [width, height]);
+  const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
 
   const fade = useRef(new Animated.Value(0)).current;
   const pop = useRef(new Animated.Value(0.96)).current;
@@ -74,12 +74,11 @@ export default function InvalidPinModal({
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={closeWithAnim}>
       <View style={styles.modalRoot}>
-        <Animated.View style={[styles.backdrop, { opacity: fade }]} />
+        <Animated.View style={[styles.backdrop, { opacity: fade, backgroundColor: TC.overlay }]} />
 
         <Animated.View
           style={[styles.card, { opacity: fade, transform: [{ scale: pop }], backgroundColor: TC.surface }]}
         >
-          {/* Icon badge */}
           <View style={styles.badgeWrap}>
             <View style={styles.badgeHalo}>
               <Ionicons name="keypad-outline" size={scale(34)} color="#DC2626" />
@@ -92,18 +91,18 @@ export default function InvalidPinModal({
             {message || "The PIN you entered is incorrect.\nPlease try again."}
           </Text>
 
-          <Pressable
-            onPress={closeWithAnim}
-            hitSlop={8}
-            style={({ pressed }) => [
-              styles.btnOuter,
-              pressed ? { opacity: 0.85, transform: [{ scale: 0.99 }] } : null,
-            ]}
-          >
-            <View style={styles.btnInner}>
-              <Text style={styles.btnText}>{buttonText || "Try Again"}</Text>
-            </View>
-          </Pressable>
+          <View style={styles.btnRow}>
+            <Pressable
+              onPress={closeWithAnim}
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.btnConfirm,
+                pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
+              ]}
+            >
+              <Text style={styles.btnConfirmText}>{buttonText || "Try Again"}</Text>
+            </Pressable>
+          </View>
         </Animated.View>
       </View>
     </Modal>
@@ -116,7 +115,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       flex: 1,
       justifyContent: "center",
       alignItems: "center",
-      paddingHorizontal: scale(18),
+      paddingHorizontal: scale(24),
     },
     backdrop: {
       ...StyleSheet.absoluteFillObject,
@@ -125,7 +124,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     card: {
       width: "100%",
       maxWidth: scale(320),
-      borderRadius: scale(18),
+      borderRadius: scale(20),
       backgroundColor: "#FFFFFF",
       paddingHorizontal: scale(24),
       paddingTop: scale(28),
@@ -143,7 +142,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     badgeWrap: {
-      marginBottom: scale(16),
+      marginBottom: scale(18),
     },
     badgeHalo: {
       width: scale(72),
@@ -169,28 +168,26 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       marginBottom: scale(24),
     },
 
-    btnOuter: {
+    btnRow: {
       alignSelf: "stretch",
-      borderRadius: scale(50),
-      overflow: "hidden",
+    },
+    btnConfirm: {
+      height: vscale(46),
+      borderRadius: scale(14),
+      backgroundColor: "#DC2626",
+      alignItems: "center",
+      justifyContent: "center",
       ...Platform.select({
         ios: {
           shadowColor: "#DC2626",
-          shadowOpacity: 0.2,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: 5 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 4 },
         },
         android: { elevation: 5 },
       }),
     },
-    btnInner: {
-      height: vscale(46),
-      borderRadius: scale(50),
-      backgroundColor: "#DC2626",
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    btnText: {
+    btnConfirmText: {
       color: "#FFFFFF",
       fontSize: scale(13),
       fontWeight: "900",
