@@ -19,7 +19,7 @@ export type PersonalDetailsResponse = {
 export type ProfileSettingsPayload = {
   firstName: string;
   lastName: string;
-  contactNumber: string;
+  contactNumber?: string;
 };
 
 function guessMimeType(uri: string): string {
@@ -73,7 +73,11 @@ export async function saveProfileSettings(
   const form = new FormData();
   form.append("firstName", payload.firstName);
   form.append("lastName", payload.lastName);
-  form.append("contactNumber", payload.contactNumber);
+
+  const normalizedContactNumber = String(payload.contactNumber || "").trim();
+  if (normalizedContactNumber) {
+    form.append("contactNumber", normalizedContactNumber);
+  }
 
   const normalizedUri = String(profileImageUri || "").trim();
   if (normalizedUri) {

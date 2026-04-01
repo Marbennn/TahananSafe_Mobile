@@ -1,5 +1,5 @@
 // src/screens/SettingsScreen.tsx
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
   Image,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Keyboard,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -170,10 +171,52 @@ function isValidProfilePhone(value: string) {
   return /^09\d{9}$/.test(phone) || /^\+639\d{9}$/.test(phone);
 }
 
+const PROFILE_PHONE_PREFIX = "+63";
+
+function digitsOnly(value: string) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function normalizeToProfileLocal10(value: string) {
+  const raw = String(value || "").trim();
+  const digits = digitsOnly(raw);
+
+  if (digits.startsWith("63")) return digits.slice(2).slice(0, 10);
+  if (digits.startsWith("0")) return digits.slice(1).slice(0, 10);
+  return digits.slice(0, 10);
+}
+
+function formatProfilePhone(local10: string) {
+  return `${PROFILE_PHONE_PREFIX} ${local10}`;
+}
+
+function isValidProfileLocalMobile10(local10: string) {
+  return /^9\d{9}$/.test(String(local10 || ""));
+}
+
+function getStoredProfilePhone(user: any) {
+  return String(
+    user?.phoneNumber ||
+    user?.contactNumber ||
+    user?.personalInfo?.contactNumber ||
+    user?.personalInfo?.phoneNumber ||
+    user?.profile?.contactNumber ||
+    user?.profile?.phoneNumber ||
+    ""
+  ).trim();
+}
+
 function getUserInitials(user: any) {
   const first = String(user?.firstName || "").trim();
   const last = String(user?.lastName || "").trim();
   return `${first[0] || ""}${last[0] || ""}`.toUpperCase() || "U";
+}
+
+function sanitizeAvatarUri(value: any) {
+  const clean = String(value || "").trim();
+  if (!clean) return "";
+  if (clean === "null" || clean === "undefined") return "";
+  return clean;
 }
 
 export default function SettingsScreen({
@@ -253,6 +296,16 @@ export default function SettingsScreen({
   const [profileFirstName, setProfileFirstName] = useState("");
   const [profileLastName, setProfileLastName] = useState("");
   const [profileContactNumber, setProfileContactNumber] = useState("");
+  const [profileContactFocused, setProfileContactFocused] = useState(false);
+  const [profileContactTouched, setProfileContactTouched] = useState(false);
+  const [profileAvatarLoadFailed, setProfileAvatarLoadFailed] = useState(false);
+  const [profileKeyboardHeight, setProfileKeyboardHeight] = useState(0);
+  const profileScrollRef = useRef<ScrollView | null>(null);
+  const profileFieldOffsets = useRef({
+    firstName: 0,
+    lastName: 0,
+    contactNumber: 0,
+  });
 
   // ✅ Privacy & Security modal
   const [psModalVisible, setPsModalVisible] = useState(false);
@@ -277,10 +330,64 @@ export default function SettingsScreen({
   const hydrateProfileForm = useCallback(() => {
     setProfileFirstName(String(user?.firstName || ""));
     setProfileLastName(String(user?.lastName || ""));
-    setProfileContactNumber(String(user?.phoneNumber || ""));
-    setProfileImageUri(String(user?.profileImage || ""));
+    setProfileContactNumber(normalizeToProfileLocal10(getStoredProfilePhone(user)));
+    setProfileImageUri(sanitizeAvatarUri(user?.profileImage));
     setProfilePickedImageUri(null);
+    setProfileContactFocused(false);
+    setProfileContactTouched(false);
   }, [user]);
+
+  const safeProfileImageUri = useMemo(
+    () => sanitizeAvatarUri(profileImageUri),
+    [profileImageUri]
+  );
+  const savedProfileHeroName = useMemo(
+    () => normalizeName(`${user?.firstName || ""} ${user?.lastName || ""}`) || "Your profile",
+    [user?.firstName, user?.lastName]
+  );
+  const savedProfileHeroInitials = useMemo(
+    () => getUserInitials({ firstName: user?.firstName, lastName: user?.lastName }),
+    [user?.firstName, user?.lastName]
+  );
+
+  useEffect(() => {
+    setProfileAvatarLoadFailed(false);
+  }, [safeProfileImageUri]);
+
+  useEffect(() => {
+    if (!profileModalVisible) {
+      setProfileKeyboardHeight(0);
+      return;
+    }
+
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setProfileKeyboardHeight(Math.max(0, Number(event?.endCoordinates?.height || 0)));
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setProfileKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [profileModalVisible]);
+
+  const scrollProfileFieldIntoView = useCallback(
+    (field: "firstName" | "lastName" | "contactNumber") => {
+      setTimeout(() => {
+        const y = profileFieldOffsets.current[field] || 0;
+        profileScrollRef.current?.scrollTo({
+          y: Math.max(0, y - vscale(18)),
+          animated: true,
+        });
+      }, Platform.OS === "android" ? 120 : 40);
+    },
+    [vscale]
+  );
 
   const openProfileModal = useCallback(() => {
     closeAccountModal();
@@ -359,7 +466,7 @@ export default function SettingsScreen({
   const onSaveProfile = useCallback(async () => {
     const firstName = normalizeName(profileFirstName);
     const lastName = normalizeName(profileLastName);
-    const contactNumber = normalizePhone(profileContactNumber);
+    const contactNumber = String(profileContactNumber || "").trim();
 
     if (!firstName) {
       Alert.alert("Invalid", "First name is required.");
@@ -369,8 +476,8 @@ export default function SettingsScreen({
       Alert.alert("Invalid", "Last name is required.");
       return;
     }
-    if (!contactNumber || !isValidProfilePhone(contactNumber)) {
-      Alert.alert("Invalid", "Use 09XXXXXXXXX or +639XXXXXXXXX for your contact number.");
+    if (contactNumber && !isValidProfileLocalMobile10(contactNumber)) {
+      Alert.alert("Invalid", "Please enter a valid mobile number.");
       return;
     }
 
@@ -380,13 +487,18 @@ export default function SettingsScreen({
         {
           firstName,
           lastName,
-          contactNumber,
+          contactNumber: contactNumber ? formatProfilePhone(contactNumber) : undefined,
         },
         profilePickedImageUri || undefined,
       );
 
       if (response?.user) {
-        setUser?.(response.user);
+        setUser?.({
+          ...response.user,
+          phoneNumber:
+            String(response.user?.phoneNumber || response.user?.contactNumber || "").trim() ||
+            getStoredProfilePhone(user),
+        });
       }
       await refreshMe?.().catch(() => {});
 
@@ -403,6 +515,7 @@ export default function SettingsScreen({
     profileContactNumber,
     profilePickedImageUri,
     refreshMe,
+    user,
     setUser,
   ]);
 
@@ -663,7 +776,7 @@ export default function SettingsScreen({
       {
         key: "account",
         label: "Account",
-        subtitle: "Profile, email, sessions",
+        subtitle: "Profile, sessions",
         icon: "person-circle-outline",
         onPress: openAccountModal,
       },
@@ -740,23 +853,6 @@ export default function SettingsScreen({
               </Pressable>
 
               <Pressable
-                onPress={() => Alert.alert("Email", "Wire this to your Email settings screen.")}
-                android_ripple={{ color: "rgba(0,0,0,0.06)" }}
-                style={styles.accountModalItem}
-              >
-                <View style={styles.settingLeft}>
-                  <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
-                    <Ionicons name="mail-outline" size={iconSize} color={primary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.settingTitleInner, { color: textDark }]}>Email</Text>
-                    <Text style={[styles.settingSub, { color: muted }]}>Update email address</Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={iconSize} color={primary} />
-              </Pressable>
-
-              <Pressable
                 onPress={() => Alert.alert("Sessions", "Wire this to your Sessions screen.")}
                 android_ripple={{ color: "rgba(0,0,0,0.06)" }}
                 style={styles.accountModalItem}
@@ -784,7 +880,7 @@ export default function SettingsScreen({
           <Pressable style={StyleSheet.absoluteFill} onPress={closeProfileModal} />
           <KeyboardAvoidingView
             style={styles.profileModalKeyboard}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
             keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
           >
             <View style={[styles.profileModalSheet, { backgroundColor: surface, borderColor: divider }]}>
@@ -797,26 +893,40 @@ export default function SettingsScreen({
               </View>
 
               <ScrollView
+                ref={profileScrollRef}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
-                contentContainerStyle={styles.profileModalContent}
+                contentContainerStyle={[
+                  styles.profileModalContent,
+                  {
+                    paddingBottom:
+                      vscale(10) +
+                      (Platform.OS === "android"
+                        ? Math.max(profileKeyboardHeight - insets.bottom, 0)
+                        : 0),
+                  },
+                ]}
               >
                 <View style={styles.profileModalSections}>
                   <View style={[styles.profileHeroCard, { backgroundColor: cardBg, borderColor: divider }]}>
                     <View style={styles.profileAvatarWrap}>
-                      {profileImageUri ? (
-                        <Image source={{ uri: profileImageUri }} style={styles.profileAvatarImage} />
+                      {safeProfileImageUri && !profileAvatarLoadFailed ? (
+                        <Image
+                          source={{ uri: safeProfileImageUri }}
+                          style={styles.profileAvatarImage}
+                          onError={() => setProfileAvatarLoadFailed(true)}
+                        />
                       ) : (
                         <View style={[styles.profileAvatarFallback, { backgroundColor: chipBg }]}>
                           <Text style={[styles.profileAvatarFallbackText, { color: primary }]}>
-                            {getUserInitials({ firstName: profileFirstName, lastName: profileLastName })}
+                            {savedProfileHeroInitials}
                           </Text>
                         </View>
                       )}
                     </View>
 
                     <Text style={[styles.profileHeroTitle, { color: textDark }]}>
-                      {normalizeName(`${profileFirstName} ${profileLastName}`) || "Your profile"}
+                      {savedProfileHeroName}
                     </Text>
                     <Text style={[styles.profileHeroSub, { color: muted }]}>
                       {userEmail || "Update your personal details and profile picture."}
@@ -836,7 +946,12 @@ export default function SettingsScreen({
                   </View>
 
                   <View style={[styles.profileFormCard, { backgroundColor: cardBg, borderColor: divider }]}>
-                    <View style={styles.profileFieldBlock}>
+                    <View
+                      style={styles.profileFieldBlock}
+                      onLayout={(event) => {
+                        profileFieldOffsets.current.firstName = event.nativeEvent.layout.y;
+                      }}
+                    >
                       <Text style={[styles.profileFieldLabel, { color: textDark }]}>First Name</Text>
                       <TextInput
                         value={profileFirstName}
@@ -844,10 +959,16 @@ export default function SettingsScreen({
                         placeholder="Enter your first name"
                         placeholderTextColor={muted}
                         style={[styles.profileInput, { borderColor: divider, color: textDark, backgroundColor: surface }]}
+                        onFocus={() => scrollProfileFieldIntoView("firstName")}
                       />
                     </View>
 
-                    <View style={styles.profileFieldBlock}>
+                    <View
+                      style={styles.profileFieldBlock}
+                      onLayout={(event) => {
+                        profileFieldOffsets.current.lastName = event.nativeEvent.layout.y;
+                      }}
+                    >
                       <Text style={[styles.profileFieldLabel, { color: textDark }]}>Last Name</Text>
                       <TextInput
                         value={profileLastName}
@@ -855,19 +976,53 @@ export default function SettingsScreen({
                         placeholder="Enter your last name"
                         placeholderTextColor={muted}
                         style={[styles.profileInput, { borderColor: divider, color: textDark, backgroundColor: surface }]}
+                        onFocus={() => scrollProfileFieldIntoView("lastName")}
                       />
                     </View>
 
-                    <View style={styles.profileFieldBlock}>
+                    <View
+                      style={styles.profileFieldBlock}
+                      onLayout={(event) => {
+                        profileFieldOffsets.current.contactNumber = event.nativeEvent.layout.y;
+                      }}
+                    >
                       <Text style={[styles.profileFieldLabel, { color: textDark }]}>Contact Number</Text>
-                      <TextInput
-                        value={profileContactNumber}
-                        onChangeText={setProfileContactNumber}
-                        placeholder="09XXXXXXXXX or +639XXXXXXXXX"
-                        placeholderTextColor={muted}
-                        keyboardType="phone-pad"
-                        style={[styles.profileInput, { borderColor: divider, color: textDark, backgroundColor: surface }]}
-                      />
+                      <View
+                        style={[
+                          styles.profileInput,
+                          styles.profilePhoneInputWrap,
+                          { borderColor: divider, backgroundColor: surface },
+                          profileContactFocused && { borderColor: primary },
+                        ]}
+                      >
+                        <Text style={[styles.profilePhonePrefix, { color: textDark }]}>
+                          {PROFILE_PHONE_PREFIX}
+                        </Text>
+
+                        <TextInput
+                          value={profileContactNumber}
+                          onChangeText={(value) => setProfileContactNumber(digitsOnly(value).slice(0, 10))}
+                          placeholder="9XXXXXXXXX"
+                          placeholderTextColor={muted}
+                          keyboardType="number-pad"
+                          style={[styles.profilePhoneInput, { color: textDark }]}
+                          onFocus={() => {
+                            setProfileContactFocused(true);
+                            scrollProfileFieldIntoView("contactNumber");
+                          }}
+                          onBlur={() => {
+                            setProfileContactFocused(false);
+                            setProfileContactTouched(true);
+                          }}
+                          maxLength={10}
+                        />
+                      </View>
+
+                      {profileContactTouched &&
+                      profileContactNumber.length > 0 &&
+                      !isValidProfileLocalMobile10(profileContactNumber) ? (
+                        <Text style={styles.profileFieldError}>Please enter a valid mobile number</Text>
+                      ) : null}
                     </View>
                   </View>
 
@@ -2002,6 +2157,28 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       paddingHorizontal: scale(12),
       fontSize: scale(14),
       fontWeight: "600",
+    },
+    profilePhoneInputWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: scale(14),
+      gap: scale(10),
+    },
+    profilePhonePrefix: {
+      fontSize: scale(14),
+      fontWeight: "700",
+    },
+    profilePhoneInput: {
+      flex: 1,
+      fontSize: scale(14),
+      fontWeight: "600",
+      paddingVertical: 0,
+    },
+    profileFieldError: {
+      marginTop: vscale(2),
+      fontSize: scale(12),
+      fontWeight: "600",
+      color: "#DC2626",
     },
     profileModalActions: {
       flexDirection: "row",

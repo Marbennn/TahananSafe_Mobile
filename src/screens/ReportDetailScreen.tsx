@@ -1528,30 +1528,38 @@ export default function ReportDetailScreen({
 
       <View style={[styles.page, { backgroundColor: TC.screenBg }]}>
         <View style={[styles.heroWrap, { paddingTop: Math.max(insets.top, vscale(6)), backgroundColor: TC.screenBg }]}>
+          <View style={styles.heroTopBar}>
+            <Pressable
+              onPress={onBack}
+              hitSlop={12}
+              style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.75 }]}
+            >
+              <Ionicons name="chevron-back" size={styles._backIcon} color={TC.textDark} />
+            </Pressable>
+
+            <Text style={[styles.heroTitle, { color: TC.textDark }]} numberOfLines={1}>
+              {incidentTitle}
+            </Text>
+          </View>
+
           <View style={[styles.heroCard, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
-            <View style={styles.heroHeaderRow}>
-              <Pressable
-                onPress={onBack}
-                hitSlop={12}
-                style={({ pressed }) => [styles.backBtn, { backgroundColor: TC.surface, borderColor: TC.divider }, pressed && { opacity: 0.75 }]}
-              >
-                <Ionicons name="chevron-back" size={styles._backIcon} color={TC.textDark} />
-              </Pressable>
-
-              <Text style={[styles.heroTitle, { color: TC.textDark }]} numberOfLines={1}>
-                {incidentTitle}
-              </Text>
-
-              <View style={{ width: styles._backBox, height: styles._backBox }} />
-            </View>
-
             <View style={styles.heroStatusCenterRow}>
-              <View style={[styles.statusPill, { borderColor: TC.divider, backgroundColor: TC.surface }]}>
-                <View style={[styles.dot, { backgroundColor: accent }]} />
-                <Ionicons name={sIcon} size={styles._miniIcon} color={accent} />
-                <Text style={[styles.statusPillText, { color: accent }]} numberOfLines={1}>
-                  {statusUpper}
-                </Text>
+              <View style={styles.heroMetaSlot}>
+                <View style={[styles.statusPill, { borderColor: TC.divider, backgroundColor: TC.surface }]}>
+                  <View style={[styles.dot, { backgroundColor: accent }]} />
+                  <Ionicons name={sIcon} size={styles._miniIcon} color={accent} />
+                  <Text style={[styles.statusPillText, { color: accent }]} numberOfLines={1}>
+                    {statusUpper}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.heroMetaSlot}>
+                <View style={[styles.alertNoPill, { borderColor: TC.divider, backgroundColor: TC.surface }]}>
+                  <Text style={[styles.alertNoPillText, { color: TC.primary }]} numberOfLines={1}>
+                    Report no: {reportCode}
+                  </Text>
+                </View>
               </View>
             </View>
 
@@ -1751,7 +1759,7 @@ export default function ReportDetailScreen({
               ) : (
                 <View style={styles.emptyEvidence}>
                   <Ionicons name="image-outline" size={styles._emptyIcon} color="#94A3B8" />
-                  <Text style={styles.emptyEvidenceText}>No uploaded evidence yet.</Text>
+                  <Text style={styles.emptyEvidenceText}>No uploaded evidence.</Text>
                 </View>
               )}
             </View>
@@ -1781,9 +1789,6 @@ export default function ReportDetailScreen({
               </View>
             ) : null}
 
-            <Text style={styles.footerNote}>
-              Alert no: <Text style={styles.footerCode}>{reportCode}</Text>
-            </Text>
           </ScrollView>
         ) : (
           <KeyboardAvoidingView
@@ -2217,7 +2222,14 @@ function makeStyles(args: {
       safe: { flex: 1, backgroundColor: BG },
       page: { flex: 1, backgroundColor: BG },
 
-      heroWrap: { paddingHorizontal: sidePad, paddingBottom: vscale(10), backgroundColor: BG },
+      heroWrap: { paddingHorizontal: sidePad, paddingBottom: vscale(10), backgroundColor: BG, gap: vscale(10) },
+
+      heroTopBar: {
+        ...CONTENT_ALIGN,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(10),
+      },
 
       heroCard: {
         ...CONTENT_ALIGN,
@@ -2229,20 +2241,9 @@ function makeStyles(args: {
         paddingVertical: vscale(12),
       },
 
-      heroHeaderRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: scale(10),
-      },
-
       backBtn: {
         width: _backBox,
         height: _backBox,
-        borderRadius: scale(12),
-        borderWidth: 1,
-        borderColor: BORDER,
-        backgroundColor: "#FFFFFF",
         alignItems: "center",
         justifyContent: "center",
       },
@@ -2257,11 +2258,14 @@ function makeStyles(args: {
       },
 
       heroStatusCenterRow: {
-        marginTop: vscale(8),
         flexDirection: "row",
         alignItems: "center",
-        justifyContent: "center",
         width: "100%",
+      },
+      heroMetaSlot: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
       },
 
       statusPill: {
@@ -2272,8 +2276,23 @@ function makeStyles(args: {
         paddingVertical: vscale(6),
         borderRadius: scale(999),
         borderWidth: 1,
+        maxWidth: "94%",
       },
       statusPillText: { fontSize: scale(10.5), fontWeight: "900" },
+      alertNoPill: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(6),
+        paddingHorizontal: scale(10),
+        paddingVertical: vscale(6),
+        borderRadius: scale(999),
+        borderWidth: 1,
+        maxWidth: "94%",
+      },
+      alertNoPillText: {
+        fontSize: scale(10.25),
+        fontWeight: "900",
+      },
       dot: { width: scale(7), height: scale(7), borderRadius: scale(99) },
 
       tabsWrap: {
@@ -2453,17 +2472,6 @@ function makeStyles(args: {
         fontWeight: "900",
         color: "#DC2626",
       },
-
-      footerNote: {
-        ...CONTENT_ALIGN,
-        paddingTop: vscale(2),
-        paddingBottom: vscale(12),
-        textAlign: "center",
-        fontSize: scale(10.5),
-        fontWeight: "400",
-        color: "#94A3B8",
-      },
-      footerCode: { color: primary, fontWeight: "900" },
 
       threadsKav: { flex: 1, backgroundColor: BG },
 

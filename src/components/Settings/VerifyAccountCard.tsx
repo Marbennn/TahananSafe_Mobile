@@ -318,7 +318,6 @@ export default function VerifyAccountCard({
     .slice(0, 2)
     .map((part) => part.charAt(0).toUpperCase())
     .join("") || "U";
-
   const nodes = [
     { key: "basic", label: "Basic", done: stage >= 1, active: stage === 0 },
     { key: "semi", label: "Semi-verified", done: stage >= 2, active: stage === 1 },
@@ -460,7 +459,17 @@ export default function VerifyAccountCard({
     return null;
   })();
 
-  const avatarUri = String(user?.profileImage || user?.photoURL || "").trim();
+  const avatarUri = useMemo(() => {
+    const clean = String(user?.profileImage || user?.photoURL || "").trim();
+    if (!clean) return "";
+    if (clean === "null" || clean === "undefined") return "";
+    return clean;
+  }, [user?.photoURL, user?.profileImage]);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [avatarUri]);
 
   const NODE_SIZE = scale(28);
   const CARD_RADIUS = scale(22);
@@ -493,8 +502,12 @@ export default function VerifyAccountCard({
         <View style={styles.topSection}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatarRing}>
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
+              {avatarUri && !avatarLoadFailed ? (
+                <Image
+                  source={{ uri: avatarUri }}
+                  style={styles.avatarImg}
+                  onError={() => setAvatarLoadFailed(true)}
+                />
               ) : (
                 <LinearGradient
                   colors={["rgba(255,255,255,0.2)", "rgba(255,255,255,0.05)"]}
