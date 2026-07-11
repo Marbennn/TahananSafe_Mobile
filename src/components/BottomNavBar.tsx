@@ -430,7 +430,6 @@ export default function BottomNavBar({
           onIncidentLog={onFabPress}
           onSos={() => onTabPress("Home")}
           onServices={() => onTabPress("Home")}
-          onChatbot={() => onTabPress("Home")}
           onHideApp={() => onQuickExit?.()}
           onSignOut={() => onQuickExit?.()}
         />

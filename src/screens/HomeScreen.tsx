@@ -1013,7 +1013,7 @@ export default function HomeScreen({
         icon: "add-circle-outline" as const,
         iconColor: "#7C3AED",
         title: "How to Use Quick Actions",
-        description: "View the shortcut guide for Incident Log, S.O.S, Services, Chatbot, Hide App, and Sign Out.",
+        description: "View the shortcut guide for Incident Log, S.O.S, Services, Hide App, and Sign Out.",
         onPress: () => openTutorialByKey("quick_actions"),
       },
     ],
@@ -1539,7 +1539,14 @@ export default function HomeScreen({
 
               <Pressable
                 onPress={handleQuickSchedule}
-                style={({ pressed }) => [styles.quickActionCard, { backgroundColor: TC.surface, borderColor: TC.divider }, pressed && styles.quickActionPressed]}
+                style={({ pressed }) => [
+                  styles.quickActionCard,
+                  {
+                    backgroundColor: TC.isDark ? "#26364A" : "#EFF2F5",
+                    borderColor: TC.isDark ? "#42546A" : "#D7DDE3",
+                  },
+                  pressed && styles.quickActionPressed,
+                ]}
               >
                 <Ionicons name="calendar-outline" size={25} color="#159D9A" />
                 <Text style={[styles.quickActionLabel, { color: TC.textDark }]} allowFontScaling={false}>Schedule</Text>
@@ -1547,7 +1554,14 @@ export default function HomeScreen({
 
               <Pressable
                 onPress={() => navigateToTab("Inbox")}
-                style={({ pressed }) => [styles.quickActionCard, { backgroundColor: TC.surface, borderColor: TC.divider }, pressed && styles.quickActionPressed]}
+                style={({ pressed }) => [
+                  styles.quickActionCard,
+                  {
+                    backgroundColor: TC.isDark ? "#26364A" : "#EFF2F5",
+                    borderColor: TC.isDark ? "#42546A" : "#D7DDE3",
+                  },
+                  pressed && styles.quickActionPressed,
+                ]}
               >
                 <Ionicons name="document-text-outline" size={25} color={TC.textDark} />
                 <Text style={[styles.quickActionLabel, { color: TC.textDark }]} allowFontScaling={false}>Hotlines</Text>
@@ -1745,7 +1759,6 @@ export default function HomeScreen({
           onIncidentLog={handleFabIncidentLog}
           onSos={handleAlertAction}
           onServices={handleFabServices}
-          onChatbot={handleFabChatbot}
           onHideApp={handleFabHideApp}
           onSignOut={handleFabSignOut}
         />
@@ -1760,7 +1773,7 @@ export default function HomeScreen({
           fabBottom={fabBottom}
           navHeight={navHeight}
           title="Open Quick Actions"
-          message="Tap the + button to open Incident Log, S.O.S, Services, Chatbot, Hide App, and Sign Out shortcuts."
+          message="Tap the + button to open Incident Log, S.O.S, Services, Hide App, and Sign Out shortcuts."
         />
 
         <TutorialPickerModal

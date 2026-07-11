@@ -124,9 +124,6 @@ function formatDateLine(createdAt?: string) {
   }
 }
 
-const SESSION_EXPIRED_TITLE = "Session Expired";
-const SESSION_EXPIRED_MESSAGE = "Your session expired. Please log in again.";
-
 function getErrorMessage(error: any): string {
   return String(error?.message || error?.payload?.message || "");
 }
@@ -534,19 +531,8 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
   }, []);
 
   const redirectToAuthFlow = React.useCallback(
-    async (message?: string) => {
+    async () => {
       await clearInvalidSession(auth);
-
-      if (message) {
-        Alert.alert(SESSION_EXPIRED_TITLE, message, [
-          {
-            text: "OK",
-            onPress: () => navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] }),
-          },
-        ]);
-        return;
-      }
-
       navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
     },
     [auth, navigation]
@@ -624,7 +610,7 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
           navigation.reset({ index: 0, routes: [{ name: targetHome }] });
         } catch (e: any) {
           if (isSessionAuthError(e)) {
-            await redirectToAuthFlow(SESSION_EXPIRED_MESSAGE);
+            await redirectToAuthFlow();
             return;
           }
 

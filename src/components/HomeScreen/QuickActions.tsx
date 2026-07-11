@@ -32,7 +32,6 @@ type Props = {
   onIncidentLog: () => void;
   onSos: () => void;
   onServices: () => void;
-  onChatbot: () => void;
   onHideApp: () => void;
   onSignOut: () => void;
 };
@@ -56,7 +55,6 @@ export default function QuickActions({
   onIncidentLog,
   onSos,
   onServices,
-  onChatbot,
   onHideApp,
   onSignOut,
 }: Props) {
@@ -216,7 +214,6 @@ export default function QuickActions({
     { label: "Incident Log", menuLabel: "Incident Log", icon: "document-text-outline", onPress: onIncidentLog },
     { label: "Alert", menuLabel: "Alert", icon: "warning-outline", onPress: onSos },
     { label: "Services", menuLabel: "Services", icon: "grid-outline", onPress: onServices },
-    { label: "Chatbot", menuLabel: "Chatbot", icon: "chatbubble-ellipses-outline", onPress: onChatbot },
     { label: "Hide App", menuLabel: "Hide App", icon: "eye-off-outline", onPress: onHideApp },
     { label: "Sign Out", menuLabel: "Sign Out", icon: "log-out-outline", onPress: onSignOut },
   ];

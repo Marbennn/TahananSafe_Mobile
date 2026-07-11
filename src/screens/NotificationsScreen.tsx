@@ -5,6 +5,7 @@ import {
   Text,
   StyleSheet,
   Pressable,
+  Animated,
   StatusBar,
   TextInput,
   useWindowDimensions,
@@ -16,9 +17,10 @@ import {
   Modal,
   DeviceEventEmitter,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors, useColors } from "../theme/colors";
+import { LinearGradient } from "expo-linear-gradient";
+import { useColors } from "../theme/colors";
 import { useNavigation } from "@react-navigation/native";
 
 import {
@@ -248,6 +250,7 @@ export default function NotificationsScreen({ onBack }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [showCaughtUp, setShowCaughtUp] = useState(false);
 
   const [filter, setFilter] = useState<FilterKey>("all");
 
@@ -259,8 +262,53 @@ export default function NotificationsScreen({ onBack }: Props) {
   const [itemMenu, setItemMenu] = useState<NotifVM | null>(null);
   const refreshInFlightRef = useRef(false);
   const lastReportSyncAtRef = useRef(0);
+  const caughtUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const caughtUpAnim = useRef(new Animated.Value(0)).current;
 
   const unreadCount = useMemo(() => items.filter((i) => i.unread).length, [items]);
+
+  const hideCaughtUp = useCallback(() => {
+    if (caughtUpTimerRef.current) {
+      clearTimeout(caughtUpTimerRef.current);
+      caughtUpTimerRef.current = null;
+    }
+
+    Animated.timing(caughtUpAnim, {
+      toValue: 0,
+      duration: 240,
+      useNativeDriver: true,
+    }).start(() => setShowCaughtUp(false));
+  }, [caughtUpAnim]);
+
+  const showCaughtUpOnce = useCallback((list: NotifVM[]) => {
+    if (caughtUpTimerRef.current) clearTimeout(caughtUpTimerRef.current);
+
+    if (list.some((item) => item.unread)) {
+      hideCaughtUp();
+      return;
+    }
+
+    setShowCaughtUp(true);
+    caughtUpAnim.stopAnimation();
+    caughtUpAnim.setValue(0);
+    Animated.timing(caughtUpAnim, {
+      toValue: 1,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
+
+    caughtUpTimerRef.current = setTimeout(() => {
+      hideCaughtUp();
+      caughtUpTimerRef.current = null;
+    }, 1600);
+  }, [caughtUpAnim, hideCaughtUp]);
+
+  useEffect(() => {
+    return () => {
+      if (caughtUpTimerRef.current) clearTimeout(caughtUpTimerRef.current);
+      caughtUpAnim.stopAnimation();
+    };
+  }, [caughtUpAnim]);
 
   const fetchReportStatusSnapshot = useCallback(async () => {
     try {
@@ -322,6 +370,7 @@ export default function NotificationsScreen({ onBack }: Props) {
 
       mapped.sort((a, b) => b._ts - a._ts);
       setItems(mapped);
+      showCaughtUpOnce(mapped);
     } catch (e: any) {
       setErrorMsg(e?.message ? String(e.message) : "Failed to load notifications.");
       setItems([]);
@@ -329,7 +378,7 @@ export default function NotificationsScreen({ onBack }: Props) {
       setLoading(false);
       refreshInFlightRef.current = false;
     }
-  }, [syncStatusesFromReports]);
+  }, [showCaughtUpOnce, syncStatusesFromReports]);
 
   useEffect(() => {
     load();
@@ -341,6 +390,7 @@ export default function NotificationsScreen({ onBack }: Props) {
     try {
       setRefreshing(true);
       setErrorMsg("");
+      setShowCaughtUp(false);
       if (opts?.withStatusSync !== false) {
         await syncStatusesFromReports();
       }
@@ -359,13 +409,14 @@ export default function NotificationsScreen({ onBack }: Props) {
 
       mapped.sort((a, b) => b._ts - a._ts);
       setItems(mapped);
+      showCaughtUpOnce(mapped);
     } catch (e: any) {
       setErrorMsg(e?.message ? String(e.message) : "Failed to refresh notifications.");
     } finally {
       setRefreshing(false);
       refreshInFlightRef.current = false;
     }
-  }, [syncStatusesFromReports]);
+  }, [showCaughtUpOnce, syncStatusesFromReports]);
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(NOTIF_CHANGED_EVENT, () => {
@@ -587,12 +638,19 @@ export default function NotificationsScreen({ onBack }: Props) {
   const selectedTime = itemMenu?.timeLabel ?? "";
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle={TC.statusBar} />
+    <View style={styles.safe}>
+      <StatusBar barStyle={TC.statusBar} translucent backgroundColor="transparent" />
 
       <View style={styles.page}>
+        <LinearGradient
+          colors={TC.isDark ? [TC.surface, TC.screenBg] : ["#EAF3FF", "#F5FAFE"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.headerBg}
+        />
+
         {/* Top Bar */}
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, { paddingTop: insets.top + vscale(8) }]}>
           <Pressable
             onPress={onBack}
             hitSlop={12}
@@ -608,12 +666,7 @@ export default function NotificationsScreen({ onBack }: Props) {
                 <View style={styles.unreadPill}>
                   <Text style={styles.unreadPillText}>{unreadCount} new</Text>
                 </View>
-              ) : (
-                <View style={styles.caughtPill}>
-                  <Ionicons name="checkmark-circle-outline" size={scale(14)} color="#16A34A" />
-                  <Text style={styles.caughtPillText}>All caught up</Text>
-                </View>
-              )}
+              ) : null}
             </View>
             <Text style={styles.subTitle}>Tap to open - Long press for actions</Text>
           </View>
@@ -684,7 +737,17 @@ export default function NotificationsScreen({ onBack }: Props) {
             keyExtractor={(item) => item.id}
             stickySectionHeadersEnabled={false}
             showsVerticalScrollIndicator={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            alwaysBounceVertical
+            bounces
+            overScrollMode="always"
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => onRefresh()}
+                tintColor={TC.primary}
+                colors={[TC.primary]}
+              />
+            }
             contentContainerStyle={[styles.content, { paddingBottom: CONTENT_BOTTOM_PAD }]}
             ListEmptyComponent={
               listEmpty ? (
@@ -696,9 +759,11 @@ export default function NotificationsScreen({ onBack }: Props) {
               ) : null
             }
             renderSectionHeader={({ section }) => (
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>{section.title}</Text>
-                <View style={styles.sectionLine} />
+              <View style={styles.sectionHeaderWrap}>
+                <View style={styles.sectionPill}>
+                  <Ionicons name="calendar-outline" size={scale(14)} color={TC.muted} />
+                  <Text style={styles.sectionTitle}>{section.title}</Text>
+                </View>
               </View>
             )}
             renderItem={({ item: n }) => {
@@ -753,6 +818,31 @@ export default function NotificationsScreen({ onBack }: Props) {
             }}
           />
         )}
+
+        {showCaughtUp ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.caughtUpOverlay,
+              {
+                opacity: caughtUpAnim,
+                transform: [
+                  {
+                    scale: caughtUpAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.92, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <View style={styles.caughtPill}>
+              <Ionicons name="checkmark-circle-outline" size={scale(18)} color="#16A34A" />
+              <Text style={styles.caughtPillText}>All caught up</Text>
+            </View>
+          </Animated.View>
+        ) : null}
 
         {/* Global Menu Modal */}
         <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
@@ -842,28 +932,30 @@ export default function NotificationsScreen({ onBack }: Props) {
           </Pressable>
         </Modal>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 function makeStyles(scale: (n: number) => number, vscale: (n: number) => number, TC: ReturnType<typeof useColors>) {
-  const SEARCH_H = vscale(40);
-
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: TC.screenBg },
     page: { flex: 1, backgroundColor: TC.screenBg },
 
+    headerBg: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      height: vscale(220),
+    },
+
     topBar: {
-      paddingHorizontal: scale(14),
-
-      // CHANGED: push the whole header down a bit
-      // was: paddingTop: vscale(6)
-      paddingTop: vscale(14),
-
-      paddingBottom: vscale(18),
+      paddingHorizontal: scale(16),
+      paddingTop: vscale(8),
+      paddingBottom: vscale(10),
       flexDirection: "row",
       alignItems: "center",
-      gap: scale(10),
+      gap: scale(12),
     },
     backBtn: {
       width: scale(36),
@@ -880,15 +972,17 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       flexWrap: "wrap",
     },
     topTitle: {
-      fontSize: scale(22),
+      fontSize: scale(28),
       fontWeight: "900",
       color: TC.textDark,
+      letterSpacing: -0.2,
     },
     subTitle: {
-      marginTop: vscale(2),
-      fontSize: scale(11),
-      fontWeight: "700",
+      marginTop: vscale(4),
+      fontSize: scale(12),
+      fontWeight: "400",
       color: TC.muted,
+      lineHeight: scale(16),
     },
 
     unreadPill: {
@@ -905,19 +999,30 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       color: TC.primary,
     },
 
+    caughtUpOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 20,
+    },
     caughtPill: {
       flexDirection: "row",
       alignItems: "center",
       gap: scale(6),
-      paddingHorizontal: scale(10),
-      paddingVertical: vscale(5),
-      borderRadius: scale(999),
+      paddingHorizontal: scale(18),
+      paddingVertical: vscale(12),
+      borderRadius: scale(16),
       backgroundColor: TC.isDark ? "#064E3B" : "#ECFDF5",
       borderWidth: 1,
       borderColor: TC.isDark ? "#065F46" : "#BBF7D0",
+      shadowColor: "#0F172A",
+      shadowOpacity: 0.14,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 5 },
+      elevation: 5,
     },
     caughtPillText: {
-      fontSize: scale(10),
+      fontSize: scale(13),
       fontWeight: "900",
       color: TC.isDark ? "#6EE7B7" : "#166534",
     },
@@ -928,22 +1033,22 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       borderRadius: scale(12),
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: TC.surface,
+      backgroundColor: TC.isDark ? TC.surface : "#F3F8FF",
       borderWidth: 1,
-      borderColor: TC.divider,
+      borderColor: TC.isDark ? TC.divider : "#E7EEF7",
     },
 
     searchRow: {
-      paddingHorizontal: scale(14),
-      paddingTop: vscale(2),
-      paddingBottom: vscale(8),
+      paddingHorizontal: scale(16),
+      paddingTop: vscale(12),
+      paddingBottom: vscale(0),
     },
     searchBox: {
-      height: SEARCH_H,
-      backgroundColor: TC.surface,
-      borderRadius: Math.round(SEARCH_H / 2),
+      height: vscale(44),
+      backgroundColor: TC.isDark ? TC.surface : "#F8FBFF",
+      borderRadius: scale(16),
       borderWidth: 1,
-      borderColor: TC.divider,
+      borderColor: TC.isDark ? TC.divider : "#EEF4FF",
       paddingHorizontal: scale(12),
       flexDirection: "row",
       alignItems: "center",
@@ -962,63 +1067,75 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
     },
 
     filtersRow: {
-      paddingHorizontal: scale(14),
+      paddingHorizontal: scale(16),
+      paddingTop: vscale(12),
       paddingBottom: vscale(10),
       flexDirection: "row",
       flexWrap: "wrap",
-      gap: scale(8),
+      gap: scale(10),
     },
     pill: {
-      paddingHorizontal: scale(12),
-      paddingVertical: vscale(7),
+      minHeight: vscale(42),
+      paddingHorizontal: scale(16),
+      paddingVertical: vscale(8),
       borderRadius: scale(999),
-      backgroundColor: TC.surface,
-      borderWidth: 1,
-      borderColor: TC.divider,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: TC.isDark ? TC.surface : "#E5E9EF",
+      borderWidth: 0,
     },
     pillActive: {
-      backgroundColor: TC.chipBg,
-      borderColor: TC.divider,
+      backgroundColor: TC.isDark ? TC.primaryDark : "#06223F",
     },
     pillText: {
-      fontSize: scale(11),
-      fontWeight: "900",
-      color: TC.muted,
+      fontSize: scale(12),
+      fontWeight: "800",
+      color: TC.isDark ? TC.muted : "#4B5563",
     },
     pillTextActive: {
-      color: TC.primary,
+      color: "#FFFFFF",
     },
 
     content: {
-      paddingHorizontal: scale(14),
-      paddingTop: vscale(2),
+      paddingHorizontal: scale(16),
+      paddingTop: vscale(6),
       gap: vscale(10),
+      flexGrow: 1,
     },
 
-    sectionHeader: {
-      paddingTop: vscale(6),
-      paddingBottom: vscale(6),
+    sectionHeaderWrap: {
+      paddingTop: vscale(10),
+      paddingBottom: vscale(8),
+    },
+    sectionPill: {
+      alignSelf: "flex-start",
       flexDirection: "row",
       alignItems: "center",
-      gap: scale(10),
+      gap: scale(6),
+      borderWidth: 1,
+      borderColor: TC.isDark ? TC.divider : "#EEF4FF",
+      backgroundColor: TC.surface,
+      paddingHorizontal: scale(10),
+      paddingVertical: vscale(6),
+      borderRadius: scale(999),
     },
     sectionTitle: {
-      fontSize: scale(12),
+      fontSize: scale(11),
       fontWeight: "900",
       color: TC.muted,
-    },
-    sectionLine: {
-      flex: 1,
-      height: 1,
-      backgroundColor: TC.divider,
     },
 
     card: {
       backgroundColor: TC.surface,
       borderWidth: 1,
-      borderColor: TC.divider,
-      borderRadius: scale(16),
+      borderColor: TC.isDark ? TC.divider : "#D9DEE7",
+      borderRadius: scale(14),
       overflow: "hidden",
+      shadowColor: "transparent",
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 0,
     },
     cardUnread: {
       borderColor: TC.isDark ? TC.primary : "#D8E9FF",
@@ -1042,8 +1159,8 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       alignItems: "center",
       gap: scale(10),
       paddingVertical: vscale(12),
-      paddingHorizontal: scale(12),
-      paddingLeft: scale(12) + scale(4),
+      paddingHorizontal: scale(16),
+      paddingLeft: scale(16) + scale(4),
     },
 
     iconWrap: {
@@ -1064,7 +1181,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
     },
     cardTitle: {
       flex: 1,
-      fontSize: scale(12),
+      fontSize: scale(15),
       fontWeight: "900",
       color: TC.textDark,
     },
@@ -1080,10 +1197,11 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
 
     cardMsg: {
       marginTop: vscale(3),
-      fontSize: scale(10),
-      fontWeight: "700",
+      fontSize: scale(12),
+      fontWeight: "400",
+      fontStyle: "italic",
       color: TC.muted,
-      lineHeight: vscale(14),
+      lineHeight: vscale(18),
     },
 
     metaRow: {
@@ -1093,16 +1211,16 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       gap: scale(6),
     },
     cardTime: {
-      fontSize: scale(9),
-      fontWeight: "800",
+      fontSize: scale(10),
+      fontWeight: "500",
       color: TC.muted,
     },
 
     emptyCard: {
       backgroundColor: TC.surface,
       borderWidth: 1,
-      borderColor: TC.divider,
-      borderRadius: scale(16),
+      borderColor: TC.isDark ? TC.divider : "#D9DEE7",
+      borderRadius: scale(14),
       paddingVertical: vscale(24),
       paddingHorizontal: scale(16),
       alignItems: "center",

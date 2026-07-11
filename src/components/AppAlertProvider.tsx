@@ -40,6 +40,52 @@ function normalizeButtons(buttons?: AlertButton[]) {
   return [{ text: "OK" }] as AlertButton[];
 }
 
+/**
+ * Requests can fail in the background while the API is unavailable. Those
+ * failures are already represented by the screen's empty/loading state, so
+ * showing a modal for every poll or refresh quickly becomes disruptive.
+ * Keep user-actionable validation and permission alerts visible; suppress only
+ * transport/backend failures here.
+ */
+function shouldSuppressBackendAlert(title: string, message?: string) {
+  const text = `${title} ${message || ""}`.toLowerCase();
+
+  const silentAuthFailure = [
+    "session expired",
+    "access token expired",
+    "invalid or expired access token",
+    "invalid refresh token",
+    "expired refresh token",
+    "please log in again",
+  ].some((marker) => text.includes(marker));
+
+  if (silentAuthFailure) return true;
+
+  return [
+    "network request failed",
+    "failed to fetch",
+    "network error",
+    "fetch failed",
+    "unable to connect",
+    "connection error",
+    "connection failed",
+    "econnrefused",
+    "server unavailable",
+    "backend unavailable",
+    "service unavailable",
+    "internal server error",
+    "bad gateway",
+    "gateway timeout",
+    "status code 500",
+    "status code 502",
+    "status code 503",
+    "request failed",
+    "status fetch failed",
+    "timed out",
+    "timeout",
+  ].some((marker) => text.includes(marker));
+}
+
 function installAlertPatch() {
   if ((RNAlert.alert as any).__tahananSafePatched) return;
 
@@ -83,6 +129,8 @@ export default function AppAlertProvider({ children }: Props) {
 
   useEffect(() => {
     alertHandler = (title, message, alertButtons, options) => {
+      if (shouldSuppressBackendAlert(String(title || ""), message)) return;
+
       setQueue((prev) => [
         ...prev,
         {
