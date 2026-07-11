@@ -8,6 +8,7 @@ import {
   Platform,
   useWindowDimensions,
   Animated,
+  Easing,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -132,12 +133,20 @@ export default function BottomNavBar({
     }
 
     setQuickActionsOpen(true);
-    Animated.spring(quickActionsAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 8,
-      tension: 160,
-    }).start();
+    Animated.sequence([
+      Animated.timing(quickActionsAnim, {
+        toValue: 0.92,
+        duration: 400,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.spring(quickActionsAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        friction: 7,
+        tension: 150,
+      }),
+    ]).start();
   }, [quickActionsAnim, quickActionsOpen]);
   const fabArchSize = useMemo(
     () => clamp(Math.round(fabSize + 34 * s), fabSize + 28, fabSize + 44),
@@ -411,10 +420,15 @@ export default function BottomNavBar({
       </View>
 
       {onFabPress && fabQuickActions && quickActionsOpen ? (
-        <Pressable
-          style={[StyleSheet.absoluteFillObject, { zIndex: 10, backgroundColor: "rgba(0,0,0,0.22)" }]}
-          onPress={toggleQuickActions}
-        />
+        <Animated.View
+          pointerEvents="box-none"
+          style={[StyleSheet.absoluteFillObject, { zIndex: 10, opacity: quickActionsAnim }]}
+        >
+          <Pressable
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.22)" }]}
+            onPress={toggleQuickActions}
+          />
+        </Animated.View>
       ) : null}
 
       {onFabPress && fabQuickActions ? (

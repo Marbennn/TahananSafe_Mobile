@@ -707,12 +707,20 @@ export default function HomeScreen({
 
     fabMenuAnim.stopAnimation();
     setFabMenuOpen(true);
-    Animated.spring(fabMenuAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 8,
-      tension: 160,
-    }).start();
+    Animated.sequence([
+      Animated.timing(fabMenuAnim, {
+        toValue: 0.92,
+        duration: 400,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.spring(fabMenuAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        friction: 7,
+        tension: 150,
+      }),
+    ]).start();
   }, [fabMenuAnim, fabMenuOpen]);
 
   const closeFabMenu = useCallback(() => {
@@ -1738,7 +1746,6 @@ export default function HomeScreen({
           paddingBottom={bottomPad}
           chevronBottom={chevronBottom}
           centerLabel="Services"
-          centerLabelActive={fabMenuOpen}
         />
 
         {fabMenuOpen ? (
