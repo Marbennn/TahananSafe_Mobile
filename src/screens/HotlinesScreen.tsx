@@ -68,6 +68,7 @@ const ACCENT_SOFT = "#F2F6FF";
 
 export default function HotlinesScreen({
   onTabChange,
+  onQuickExit,
   initialTab = "Inbox", // Inbox = Hotlines
 }: Props) {
   const TC = useColors();
@@ -235,9 +236,11 @@ export default function HotlinesScreen({
           paddingBottom={bottomPad}
           chevronBottom={chevronBottom}
           centerLabel="Services"
+          fabQuickActions
           fabBottom={fabBottom}
           fabSize={FAB_SIZE}
           onFabPress={() => handleTab("Incident")}
+          onQuickExit={onQuickExit}
         />
       </View>
     </SafeAreaView>

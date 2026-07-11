@@ -159,6 +159,52 @@ export async function fetchReportThreads(
   return (data?.threads || []) as ThreadDto[];
 }
 
+export async function fetchReportTyping(
+  reportId: string,
+  signal?: AbortSignal
+): Promise<{ isTyping: boolean; role?: "staff" | "resident" | null }> {
+  const token = await getAccessToken();
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(
+    `${API_URL}/api/mobile/reports/${encodeURIComponent(reportId)}/typing`,
+    { method: "GET", headers, signal }
+  );
+  const data = await parseJsonSafe(res);
+  if (!res.ok) throw new Error(data?.message || `Failed (${res.status})`);
+
+  return {
+    isTyping: data?.isTyping === true,
+    role: data?.role === "staff" ? "staff" : data?.role === "resident" ? "resident" : null,
+  };
+}
+
+export async function setReportTyping(
+  reportId: string,
+  isTyping: boolean,
+  signal?: AbortSignal
+): Promise<void> {
+  const token = await getAccessToken();
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(
+    `${API_URL}/api/mobile/reports/${encodeURIComponent(reportId)}/typing`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ isTyping }),
+      signal,
+    }
+  );
+  const data = await parseJsonSafe(res);
+  if (!res.ok) throw new Error(data?.message || `Failed (${res.status})`);
+}
+
 /**
  * ✅ Send a message to report threads
  *

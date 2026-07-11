@@ -1,5 +1,5 @@
 // src/components/BottomNavBar.tsx
-import React, { useMemo, useRef, useCallback } from "react";
+import React, { useMemo, useRef, useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { Colors, useColors } from "../theme/colors";
+import QuickActions from "./HomeScreen/QuickActions";
 
 export type TabKey =
   | "Home"
@@ -40,6 +41,8 @@ type Props = {
 
   onFabPress?: () => void;
   onFabLongPress?: () => void;
+  fabQuickActions?: boolean;
+  onQuickExit?: () => void;
 
   centerLabel?: string;
   centerLabelActive?: boolean;
@@ -70,6 +73,8 @@ export default function BottomNavBar({
   fabSize = 68,
   onFabPress,
   onFabLongPress,
+  fabQuickActions = false,
+  onQuickExit,
   centerLabel,
   centerLabelActive = false,
   Chevron,
@@ -80,6 +85,8 @@ export default function BottomNavBar({
   const navBg = TC.isDark ? "#1E293B" : NAV_BG;
   const inactive = TC.isDark ? "#64748B" : INACTIVE;
   const activePrimary = TC.primary;
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const quickActionsAnim = useRef(new Animated.Value(0)).current;
 
   const EXTRA_BAR_HEIGHT = useMemo(
     () => clamp(Math.round(12 * s), 10, 18),
@@ -112,6 +119,26 @@ export default function BottomNavBar({
     () => clamp(Math.round(30 * s), 26, 34),
     [s]
   );
+  const quickActionsFs = useMemo(() => clamp(s * 1.06, 0.95, 1.3), [s]);
+
+  const toggleQuickActions = useCallback(() => {
+    if (quickActionsOpen) {
+      Animated.timing(quickActionsAnim, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }).start(() => setQuickActionsOpen(false));
+      return;
+    }
+
+    setQuickActionsOpen(true);
+    Animated.spring(quickActionsAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 160,
+    }).start();
+  }, [quickActionsAnim, quickActionsOpen]);
   const fabArchSize = useMemo(
     () => clamp(Math.round(fabSize + 34 * s), fabSize + 28, fabSize + 44),
     [fabSize, s]
@@ -383,7 +410,31 @@ export default function BottomNavBar({
         />
       </View>
 
-      {onFabPress ? (
+      {onFabPress && fabQuickActions && quickActionsOpen ? (
+        <Pressable
+          style={[StyleSheet.absoluteFillObject, { zIndex: 10, backgroundColor: "rgba(0,0,0,0.22)" }]}
+          onPress={toggleQuickActions}
+        />
+      ) : null}
+
+      {onFabPress && fabQuickActions ? (
+        <QuickActions
+          isOpen={quickActionsOpen}
+          animation={quickActionsAnim}
+          navHeight={navHeight}
+          fabBottom={centerFabBottom}
+          fabSize={fabSize}
+          s={s}
+          fs={quickActionsFs}
+          onToggle={toggleQuickActions}
+          onIncidentLog={onFabPress}
+          onSos={() => onTabPress("Home")}
+          onServices={() => onTabPress("Home")}
+          onChatbot={() => onTabPress("Home")}
+          onHideApp={() => onQuickExit?.()}
+          onSignOut={() => onQuickExit?.()}
+        />
+      ) : onFabPress ? (
         <View
           style={[styles.centerFabWrap, { bottom: centerFabBottom }]}
           pointerEvents="box-none"

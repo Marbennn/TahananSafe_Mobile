@@ -37,6 +37,8 @@ import type { ReportItem } from "./ReportScreen";
 import {
   fetchReportDetail,
   fetchReportThreads,
+  fetchReportTyping,
+  setReportTyping,
   sendReportThreadMessage,
   updateReportThreadMessage,
   deleteReportThreadMessage,
@@ -490,6 +492,7 @@ export default function ReportDetailScreen({
 
   const threadScrollRef = useRef<ScrollView | null>(null);
   const composerInputRef = useRef<TextInput | null>(null);
+  const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const preEditDraftRef = useRef("");
   const [draft, setDraft] = useState("");
   const [editingMessageId, setEditingMessageId] = useState("");
@@ -503,6 +506,7 @@ export default function ReportDetailScreen({
 
   const [loadingThreads, setLoadingThreads] = useState(false);
   const [sending, setSending] = useState(false);
+  const [adminTyping, setAdminTyping] = useState(false);
   const [messages, setMessages] = useState<ThreadMsg[]>([]);
   const [measuredBubbleWidths, setMeasuredBubbleWidths] = useState<Record<string, number>>({});
   const [threadsError, setThreadsError] = useState("");
@@ -673,9 +677,38 @@ export default function ReportDetailScreen({
     }
   }, [reportId]);
 
-  const hasMessageNotification = newMsgCount > 0;
   useEffect(() => {
-    if (!hasMessageNotification) {
+    if (!reportId) {
+      setAdminTyping(false);
+      return;
+    }
+
+    let mounted = true;
+    const pollTyping = async () => {
+      try {
+        const status = await fetchReportTyping(reportId);
+        if (mounted) setAdminTyping(status.isTyping && status.role === "staff");
+      } catch {
+        if (mounted) setAdminTyping(false);
+      }
+    };
+
+    void pollTyping();
+    const timer = setInterval(() => {
+      void pollTyping();
+    }, 1000);
+
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+      setAdminTyping(false);
+    };
+  }, [reportId]);
+
+  const hasMessageNotification = newMsgCount > 0;
+  const hasMessageIndicator = hasMessageNotification || adminTyping || sending;
+  useEffect(() => {
+    if (!hasMessageIndicator) {
       messageDotAnims.forEach((dot) => dot.setValue(0));
       return;
     }
@@ -702,7 +735,7 @@ export default function ReportDetailScreen({
     });
 
     return () => loops.forEach((loop) => loop.stop());
-  }, [hasMessageNotification, messageDotAnims]);
+  }, [hasMessageIndicator, messageDotAnims]);
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -921,6 +954,35 @@ export default function ReportDetailScreen({
     void refreshMe();
   }, [refreshMe, savedPhoneNumber, view]);
 
+  const publishTypingStatus = useCallback(
+    (isTyping: boolean) => {
+      if (!reportId) return;
+      void setReportTyping(reportId, isTyping).catch(() => {});
+    },
+    [reportId]
+  );
+
+  const handleComposerTextChange = useCallback(
+    (value: string) => {
+      setDraft(value);
+
+      if (typingStopTimerRef.current) {
+        clearTimeout(typingStopTimerRef.current);
+        typingStopTimerRef.current = null;
+      }
+
+      const isTyping = value.trim().length > 0;
+      publishTypingStatus(isTyping);
+      if (isTyping) {
+        typingStopTimerRef.current = setTimeout(() => {
+          publishTypingStatus(false);
+          typingStopTimerRef.current = null;
+        }, 1200);
+      }
+    },
+    [publishTypingStatus]
+  );
+
   const sendThreadText = useCallback(async (
     rawText: string,
     opts?: { manageDraft?: boolean; replyTo?: ThreadMsg | null }
@@ -934,6 +996,7 @@ export default function ReportDetailScreen({
     }
     if (sending) return false;
 
+    publishTypingStatus(false);
     setSending(true);
 
     const now = Date.now();
@@ -996,7 +1059,7 @@ export default function ReportDetailScreen({
     } finally {
       setSending(false);
     }
-  }, [reportId, sending, scrollToBottom, refreshThreads]);
+  }, [publishTypingStatus, reportId, sending, scrollToBottom, refreshThreads]);
 
   const updateThreadText = useCallback(async (messageId: string, rawText: string) => {
     const t = rawText.trim();
@@ -1367,6 +1430,7 @@ export default function ReportDetailScreen({
     statusUpper !== "CANCELLED" &&
     statusUpper !== "RESOLVED";
   const canChat = !!reportId && statusUpper !== "CANCELLED" && statusUpper !== "RESOLVED";
+  const canViewMessages = !!reportId;
   const showSharePhonePrompt = canChat && !!savedPhoneNumber && !sharePhoneDismissed;
 
   const closeMessageMenu = useCallback(() => {
@@ -2333,6 +2397,24 @@ export default function ReportDetailScreen({
                     </Pressable>
                   </View>
                 ) : null}
+                {adminTyping || sending ? (
+                  <View style={styles.typingIndicatorWrap} pointerEvents="none">
+                    <View style={styles.typingIndicatorBubble}>
+                      <View style={styles.typingIndicatorDots}>
+                        {messageDotAnims.map((dot, index) => (
+                          <Animated.View
+                            key={index}
+                            style={[
+                              styles.typingIndicatorDot,
+                              { transform: [{ translateY: dot.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }) }] },
+                            ]}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                ) : null}
+
                 <View
                   // ✅ FIX: don’t add threadsNavReserve here; just one bottom inset (small)
                   style={[
@@ -2353,7 +2435,7 @@ export default function ReportDetailScreen({
                     <TextInput
                       ref={composerInputRef}
                       value={draft}
-                      onChangeText={setDraft}
+                      onChangeText={handleComposerTextChange}
                       placeholder={editingMessage ? "Edit your message..." : "Write a message..."}
                       placeholderTextColor="#9AA4B2"
                       style={styles.composerInput}
@@ -2399,7 +2481,7 @@ export default function ReportDetailScreen({
           </Modal>
         )}
 
-        {view !== "messages" && canChat ? (
+        {view !== "messages" && canViewMessages ? (
           <Pressable
             onPress={openMessagesModal}
             accessibilityRole="button"
@@ -3826,6 +3908,32 @@ function makeStyles(args: {
       composerDock: {
         backgroundColor: "#F7F9FC",
         paddingTop: vscale(8),
+      },
+      typingIndicatorWrap: {
+        paddingLeft: scale(59),
+        paddingRight: scale(22),
+        paddingBottom: vscale(4),
+        alignItems: "flex-start",
+        backgroundColor: "#F7F9FC",
+      },
+      typingIndicatorBubble: {
+        alignItems: "center",
+        justifyContent: "center",
+        width: scale(44),
+        height: vscale(28),
+        borderRadius: scale(14),
+        backgroundColor: "#EEF2F7",
+      },
+      typingIndicatorDots: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(3),
+      },
+      typingIndicatorDot: {
+        width: scale(4),
+        height: scale(4),
+        borderRadius: scale(2),
+        backgroundColor: "#64748B",
       },
       composerRow: {
         marginHorizontal: scale(28),

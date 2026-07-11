@@ -644,10 +644,12 @@ export default function ReportScreen({
           paddingBottom={bottomPad}
           chevronBottom={chevronBottom}
           centerLabel="Services"
+          fabQuickActions
           fabBottom={fabBottom}
           fabSize={FAB_SIZE}
           onFabPress={() => handleTab("Incident")}
           onFabLongPress={longPressFab}
+          onQuickExit={onQuickExit}
         />
       </View>
     </View>

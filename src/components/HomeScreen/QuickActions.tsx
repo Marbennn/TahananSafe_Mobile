@@ -247,6 +247,8 @@ export default function QuickActions({
               const revealStart = reverseIndex * 0.08;
               const revealEnd = Math.min(1, revealStart + 0.38);
               const hasDelay = revealStart > 0;
+              const startOffset =
+                reverseIndex * (actionPillHeight + actionPillGap) + clamp(Math.round(10 * s), 8, 12);
               const itemOpacity = animation.interpolate({
                 inputRange: hasDelay ? [0, revealStart, revealEnd] : [0, revealEnd],
                 outputRange: hasDelay ? [0, 0, 1] : [0, 1],
@@ -254,7 +256,7 @@ export default function QuickActions({
               });
               const itemTranslateY = animation.interpolate({
                 inputRange: hasDelay ? [0, revealStart, revealEnd] : [0, revealEnd],
-                outputRange: hasDelay ? [14, 14, 0] : [14, 0],
+                outputRange: hasDelay ? [startOffset, startOffset, 0] : [startOffset, 0],
                 extrapolate: "clamp",
               });
               const itemScale = animation.interpolate({

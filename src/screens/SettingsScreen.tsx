@@ -2374,9 +2374,11 @@ export default function SettingsScreen({
           paddingBottom={bottomPad}
           chevronBottom={chevronBottom}
           centerLabel="Services"
+          fabQuickActions
           fabBottom={fabBottom}
           fabSize={FAB_SIZE}
           onFabPress={onFabPress ?? (() => handleTab("Incident"))}
+          onQuickExit={onQuickExit}
         />
       </View>
 
