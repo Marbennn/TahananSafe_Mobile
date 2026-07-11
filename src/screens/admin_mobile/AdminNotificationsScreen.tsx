@@ -31,6 +31,7 @@ import {
 
 import { getAccessToken } from "../../auth/session";
 import type { ReportItem } from "../ReportScreen";
+import { normalizeReportStatus } from "../../utils/reportStatus";
 
 type Props = {
   onBack: () => void;
@@ -123,13 +124,7 @@ function getApiBaseUrl() {
 const API_BASE_URL = getApiBaseUrl();
 
 function normalizeStatus(dbStatus?: string): ReportItem["status"] {
-  const s = String(dbStatus ?? "").trim().toLowerCase();
-  if (s === "submitted" || s === "pending") return "PENDING";
-  if (s === "reviewing" || s === "ongoing" || s === "on going" || s === "in_progress" || s === "in progress")
-    return "ONGOING";
-  if (s === "cancelled" || s === "canceled") return "CANCELLED";
-  if (s === "resolved" || s === "done" || s === "completed") return "RESOLVED";
-  return "PENDING";
+  return normalizeReportStatus(dbStatus);
 }
 
 function normalizePhoto(p: any): string {

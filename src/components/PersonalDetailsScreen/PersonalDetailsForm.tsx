@@ -357,7 +357,6 @@ export default function PersonalDetailsForm({
             minimumDate={minDobDate}
             maximumDate={maxDobDate}
             onChange={onChangeAndroid}
-            accentColor={Colors.primary}
           />
         )}
 

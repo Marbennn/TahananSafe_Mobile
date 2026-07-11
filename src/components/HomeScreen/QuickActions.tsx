@@ -1,238 +1,319 @@
 // src/components/HomeScreen/QuickActions.tsx
 import React, { useMemo } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
+  Animated,
+  Platform,
   Pressable,
+  StyleSheet,
+  Text,
   useWindowDimensions,
+  View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { useColors } from "../../theme/colors";
-import BlueBoxSvg from "../../../assets/HomeScreen/BlueBox.svg";
-import AlertSvg from "../../../assets/HomeScreen/AlertIcon.svg";
-import ProfileIconSvg from "../../../assets/HomeScreen/ProfileIcon.svg";
-
-type Props = {
-  onSignOut?: () => void;
-  onHideApp?: () => void;
-  onAlert?: () => void;
-  onProfile?: () => void;
-};
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-type IconRenderer = (size: number) => React.ReactElement;
+type IconName = React.ComponentProps<typeof Ionicons>["name"];
+
+type Props = {
+  isOpen: boolean;
+  animation: Animated.Value;
+  navHeight: number;
+  fabBottom?: number;
+  fabSize: number;
+  s: number;
+  fs: number;
+  onToggle: () => void;
+  onIncidentLog: () => void;
+  onSos: () => void;
+  onServices: () => void;
+  onChatbot: () => void;
+  onHideApp: () => void;
+  onSignOut: () => void;
+};
+
+type ActionItem = {
+  label: string;
+  menuLabel: string;
+  icon: IconName;
+  onPress: () => void;
+};
 
 export default function QuickActions({
-  onSignOut,
+  isOpen,
+  animation,
+  navHeight,
+  fabBottom,
+  fabSize,
+  s,
+  fs,
+  onToggle,
+  onIncidentLog,
+  onSos,
+  onServices,
+  onChatbot,
   onHideApp,
-  onAlert,
-  onProfile,
+  onSignOut,
 }: Props) {
   const TC = useColors();
   const { width } = useWindowDimensions();
-
-  // scale factor
-  const s = useMemo(() => clamp(width / 375, 0.9, 1.25), [width]);
-
-  // ✅ small font bump for titles/labels
-  const fs = useMemo(() => clamp(s * 1.06, 0.95, 1.3), [s]);
-
-  // base spacing
-  const BASE_PAD = useMemo(() => clamp(Math.round(16 * s), 12, 20), [s]);
-  const GAP = useMemo(() => clamp(Math.round(10 * s), 8, 14), [s]);
-
-  // available width inside padding
-  const available = useMemo(() => width - BASE_PAD * 2, [width, BASE_PAD]);
-
-  // ideal tile width
-  const idealItemW = useMemo(() => (available - GAP * 3) / 4, [available, GAP]);
-
-  // button hit-area size
-  const btnSize = useMemo(() => clamp(Math.round(idealItemW), 62, 88), [idealItemW]);
-
-  // center perfectly
-  const rowContentW = useMemo(() => btnSize * 4 + GAP * 3, [btnSize, GAP]);
-  const extra = useMemo(() => Math.max(0, available - rowContentW), [available, rowContentW]);
-  const sidePad = useMemo(() => BASE_PAD + Math.floor(extra / 2), [BASE_PAD, extra]);
-
-  // smaller blue tile inside the same button
-  const TILE_FACTOR = 0.88;
-  const tileSize = useMemo(() => Math.round(btnSize * TILE_FACTOR), [btnSize]);
-
-  // icons scale off tile
-  const iconSizeSvg = useMemo(() => clamp(Math.round(tileSize * 0.42), 18, 30), [tileSize]);
-  const iconSizeIon = useMemo(() => clamp(Math.round(tileSize * 0.38), 16, 28), [tileSize]);
+  const centerFabBottom = fabBottom ?? navHeight - fabSize / 2 - 10;
+  const fabArchSize = clamp(Math.round(fabSize + 34 * s), fabSize + 28, fabSize + 44);
+  const actionPillMaxWidth = Math.max(190, Math.min(202, width - 32));
+  const actionPillWidth = clamp(Math.round(196 * s), 190, actionPillMaxWidth);
+  const actionPillHeight = clamp(Math.round(56 * s), 56, 60);
+  const actionPillGap = clamp(Math.round(10 * s), 10, 12);
+  const actionIconChipSize = clamp(Math.round(32 * s), 30, 34);
+  const actionIconSize = clamp(Math.round(18 * s), 17, 20);
+  const actionMenuRight = clamp(Math.round(10 * s), 8, 14);
+  const actionMenuBottom = fabSize + clamp(Math.round(8 * s), 8, 12);
+  const actionPillRadius = actionPillHeight / 2;
+  const actionMenuBg = TC.isDark ? TC.surface : "#FFFFFF";
+  const actionIconBg = TC.isDark ? "rgba(74, 158, 245, 0.16)" : "#EEF8FF";
 
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        wrap: { marginTop: clamp(Math.round(14 * s), 10, 18) },
-
-        // ✅ bigger title
-        title: {
-          paddingHorizontal: sidePad,
-          fontSize: clamp(Math.round(14 * fs), 13, 16),
-          fontWeight: "900",
-          color: TC.textDark,
+        archRoot: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: centerFabBottom,
+          alignItems: "center",
+          zIndex: 2,
+          elevation: 2,
         },
-
-        row: {
-          paddingHorizontal: sidePad,
-          paddingTop: clamp(Math.round(12 * s), 10, 16),
+        root: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: centerFabBottom,
+          alignItems: "center",
+          zIndex: 20,
+          elevation: 20,
+        },
+        actionMenu: {
+          position: "absolute",
+          right: actionMenuRight,
+          bottom: actionMenuBottom,
+          width: actionPillWidth,
+          zIndex: 3,
+          gap: actionPillGap,
+        },
+        actionPill: {
+          width: actionPillWidth,
+          height: actionPillHeight,
+          borderRadius: actionPillRadius,
+          backgroundColor: actionMenuBg,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: TC.isDark ? "rgba(148, 163, 184, 0.22)" : "#E7EEF7",
+          paddingLeft: clamp(Math.round(14 * s), 12, 16),
+          paddingRight: clamp(Math.round(18 * s), 16, 20),
           flexDirection: "row",
-          gap: GAP,
-          justifyContent: "center",
-        },
-
-        item: {
-          width: btnSize,
           alignItems: "center",
+          gap: clamp(Math.round(12 * s), 10, 14),
+          ...Platform.select({
+            ios: {
+              shadowColor: "#0F172A",
+              shadowOpacity: TC.isDark ? 0.28 : 0.16,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 4 },
+            },
+            android: { elevation: 6 },
+          }),
         },
-
-        // Pressable still uses btnSize (layout unchanged)
-        btn: {
-          width: btnSize,
-          height: btnSize,
-          alignItems: "center",
-          justifyContent: "center",
-        },
-
-        iconOverlay: {
-          ...StyleSheet.absoluteFillObject,
+        actionIconChip: {
+          width: actionIconChipSize,
+          height: actionIconChipSize,
+          borderRadius: actionIconChipSize / 2,
+          backgroundColor: actionIconBg,
           alignItems: "center",
           justifyContent: "center",
         },
-
-        // ✅ bigger label
-        label: {
-          marginTop: clamp(Math.round(8 * s), 6, 10),
-          fontSize: clamp(Math.round(12 * fs), 11, 14),
-          fontWeight: "900",
+        actionLabel: {
+          flex: 1,
+          fontSize: clamp(Math.round(14 * fs), 14, 16),
+          fontWeight: "800",
           color: TC.textDark,
-          textAlign: "center",
+          textAlign: "left",
+          includeFontPadding: false,
+        },
+        fabButton: {
+          width: fabSize,
+          height: fabSize,
+          borderRadius: fabSize / 2,
+          overflow: "hidden",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 2,
+          ...Platform.select({
+            ios: {
+              shadowColor: "#000",
+              shadowOpacity: 0.18,
+              shadowRadius: 14,
+              shadowOffset: { width: 0, height: 8 },
+            },
+            android: { elevation: 10 },
+          }),
+        },
+        fabArchClip: {
+          position: "absolute",
+          bottom: fabSize / 2,
+          width: fabArchSize,
+          height: fabArchSize / 2,
+          overflow: "hidden",
+          alignItems: "center",
+          zIndex: 1,
+        },
+        fabArch: {
+          width: fabArchSize,
+          height: fabArchSize,
+          borderRadius: fabArchSize / 2,
+          backgroundColor: TC.surface,
         },
       }),
-    [s, fs, sidePad, GAP, btnSize, TC]
+    [
+      TC.surface,
+      TC.textDark,
+      TC.isDark,
+      actionIconBg,
+      actionIconChipSize,
+      actionMenuBg,
+      actionMenuBottom,
+      actionMenuRight,
+      actionPillGap,
+      actionPillHeight,
+      actionPillRadius,
+      actionPillWidth,
+      centerFabBottom,
+      fabArchSize,
+      fabSize,
+      fs,
+      s,
+    ]
   );
 
+  const actionsOpacity = animation;
+  const actionsScale = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.98, 1],
+  });
+  const actionsTranslateY = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [16, 0],
+  });
+  const fabRotate = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "135deg"],
+  });
+
+  const actions: ActionItem[] = [
+    { label: "Incident Log", menuLabel: "Incident Log", icon: "document-text-outline", onPress: onIncidentLog },
+    { label: "Alert", menuLabel: "Alert", icon: "warning-outline", onPress: onSos },
+    { label: "Services", menuLabel: "Services", icon: "grid-outline", onPress: onServices },
+    { label: "Chatbot", menuLabel: "Chatbot", icon: "chatbubble-ellipses-outline", onPress: onChatbot },
+    { label: "Hide App", menuLabel: "Hide App", icon: "eye-off-outline", onPress: onHideApp },
+    { label: "Sign Out", menuLabel: "Sign Out", icon: "log-out-outline", onPress: onSignOut },
+  ];
+
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.title}>Quick Actions</Text>
-
-      <View style={styles.row}>
-        <QuickAction
-          itemStyle={styles.item}
-          btnStyle={styles.btn}
-          label="Alert"
-          onPress={onAlert ?? (() => {})}
-          iconNudge={{ x: 0, y: -4 }}
-          Icon={(sz) => <AlertSvg width={sz} height={sz} />}
-          tileSize={tileSize}
-          iconOverlayStyle={styles.iconOverlay}
-          labelStyle={styles.label}
-          iconSize={iconSizeSvg}
-        />
-
-        <QuickAction
-          itemStyle={styles.item}
-          btnStyle={styles.btn}
-          label="Profile"
-          onPress={onProfile ?? (() => {})}
-          iconNudge={{ x: 0, y: -4 }}
-          Icon={(sz) => <ProfileIconSvg width={sz} height={sz} />}
-          tileSize={tileSize}
-          iconOverlayStyle={styles.iconOverlay}
-          labelStyle={styles.label}
-          iconSize={iconSizeSvg}
-        />
-
-        <QuickAction
-          itemStyle={styles.item}
-          btnStyle={styles.btn}
-          label="Sign out"
-          onPress={onSignOut ?? (() => {})}
-          iconNudge={{ x: 0, y: -4 }}
-          Icon={(sz) => <Ionicons name="log-out-outline" size={sz} color="#fff" />}
-          tileSize={tileSize}
-          iconOverlayStyle={styles.iconOverlay}
-          labelStyle={styles.label}
-          iconSize={iconSizeIon}
-        />
-
-        <QuickAction
-          itemStyle={styles.item}
-          btnStyle={styles.btn}
-          label="Hide App"
-          onPress={onHideApp ?? (() => {})}
-          iconNudge={{ x: 0, y: -4 }}
-          Icon={(sz) => <Ionicons name="eye-off-outline" size={sz} color="#fff" />}
-          tileSize={tileSize}
-          iconOverlayStyle={styles.iconOverlay}
-          labelStyle={styles.label}
-          iconSize={iconSizeIon}
-        />
+    <>
+      <View pointerEvents="none" style={styles.archRoot}>
+        <View style={styles.fabArchClip}>
+          <View style={styles.fabArch} />
+        </View>
       </View>
-    </View>
-  );
-}
 
-function QuickAction({
-  label,
-  onPress,
-  Icon,
-  iconNudge = { x: 0, y: 0 },
-  tileSize,
-  iconSize,
-  itemStyle,
-  btnStyle,
-  iconOverlayStyle,
-  labelStyle,
-}: {
-  label: string;
-  onPress: () => void;
-  Icon: IconRenderer;
-  iconNudge?: { x?: number; y?: number };
-  tileSize: number;
-  iconSize: number;
-  itemStyle: any;
-  btnStyle: any;
-  iconOverlayStyle: any;
-  labelStyle: any;
-}) {
-  const x = iconNudge.x ?? 0;
-  const y = iconNudge.y ?? 0;
+      <View pointerEvents="box-none" style={styles.root}>
+        {isOpen ? (
+          <Animated.View
+            style={[
+              styles.actionMenu,
+              {
+                opacity: actionsOpacity,
+                transform: [{ translateY: actionsTranslateY }, { scale: actionsScale }],
+              },
+            ]}
+          >
+            {actions.map((item, index) => {
+              // Reveal from the bottom item upward so the stack feels connected
+              // to the FAB instead of appearing all at once.
+              const reverseIndex = actions.length - 1 - index;
+              const revealStart = reverseIndex * 0.08;
+              const revealEnd = Math.min(1, revealStart + 0.38);
+              const hasDelay = revealStart > 0;
+              const itemOpacity = animation.interpolate({
+                inputRange: hasDelay ? [0, revealStart, revealEnd] : [0, revealEnd],
+                outputRange: hasDelay ? [0, 0, 1] : [0, 1],
+                extrapolate: "clamp",
+              });
+              const itemTranslateY = animation.interpolate({
+                inputRange: hasDelay ? [0, revealStart, revealEnd] : [0, revealEnd],
+                outputRange: hasDelay ? [14, 14, 0] : [14, 0],
+                extrapolate: "clamp",
+              });
+              const itemScale = animation.interpolate({
+                inputRange: hasDelay ? [0, revealStart, revealEnd] : [0, revealEnd],
+                outputRange: hasDelay ? [0.96, 0.96, 1] : [0.96, 1],
+                extrapolate: "clamp",
+              });
 
-  return (
-    <View style={itemStyle}>
-      <Pressable
-        onPress={onPress}
-        hitSlop={12}
-        style={({ pressed }) => [
-          btnStyle,
-          pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
-        ]}
-      >
-        <BlueBoxSvg width={tileSize} height={tileSize} />
+              return (
+                <Animated.View
+                  key={item.label}
+                  style={{
+                    opacity: itemOpacity,
+                    transform: [{ translateY: itemTranslateY }, { scale: itemScale }],
+                  }}
+                >
+                  <Pressable
+                    onPress={item.onPress}
+                    style={({ pressed }) => [
+                      styles.actionPill,
+                      pressed && { transform: [{ scale: 0.98 }] },
+                    ]}
+                    hitSlop={6}
+                  >
+                    <View style={styles.actionIconChip}>
+                      <Ionicons name={item.icon} size={actionIconSize} color={TC.primary} />
+                    </View>
+                    <Text
+                      style={styles.actionLabel}
+                      numberOfLines={1}
+                      allowFontScaling={false}
+                    >
+                      {item.menuLabel}
+                    </Text>
+                  </Pressable>
+                </Animated.View>
+              );
+            })}
+          </Animated.View>
+        ) : null}
 
-        <View
-          pointerEvents="none"
-          style={[
-            iconOverlayStyle,
-            { transform: [{ translateX: x }, { translateY: y }] },
+        <Pressable
+          onPress={onToggle}
+          style={({ pressed }) => [
+            styles.fabButton,
+            pressed && { transform: [{ scale: 0.95 }] },
           ]}
         >
-          {Icon(iconSize)}
-        </View>
-      </Pressable>
-
-      <Text style={labelStyle} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
+          <LinearGradient
+            colors={TC.gradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <Animated.View style={{ transform: [{ rotate: fabRotate }] }}>
+            <Ionicons name="add" size={30} color="#FFFFFF" />
+          </Animated.View>
+        </Pressable>
+      </View>
+    </>
   );
 }

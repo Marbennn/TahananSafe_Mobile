@@ -1769,7 +1769,6 @@ export default function CommunityScreen({
             navHeight={navHeight}
             paddingBottom={bottomPad}
             chevronBottom={chevronBottom}
-            centerLabel="Community"
           />
         )}
       </View>

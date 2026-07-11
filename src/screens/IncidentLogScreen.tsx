@@ -14,15 +14,13 @@ import {
   KeyboardAvoidingView,
   Image,
   ActivityIndicator,
+  Switch,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { WebView } from "react-native-webview";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Colors, useColors } from "../theme/colors";
 
 // ✅ Speech-to-text (voice input)
 import {
@@ -41,6 +39,8 @@ import IncidentLogConfirmScreen from "./IncidentLogConfirmationScreen";
 // ✅ TYPE
 import type { IncidentPreviewData } from "../components/IncidentLogConfirmationScreen/IncidentPreviewCard";
 import type { TabKey } from "../components/BottomNavBar";
+import IncidentLocationMapModal from "../components/IncidentLocationMapModal";
+import IncidentVideoPreviewModal from "../components/IncidentVideoPreviewModal";
 
 type IncidentSubmittedPayload = {
   incidentId: string;
@@ -152,62 +152,6 @@ function formatAddressFromReverseGeocode(
   return cleaned.join(", ");
 }
 
-function escHtml(s: string) {
-  return String(s || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function buildCurrentLocationMapHtml(coords: LocationCoords, label: string) {
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body, #map { width: 100%; height: 100%; background: #F8FBFF; }
-    .popup-title { font: 700 13px sans-serif; color: #0B2B45; margin-bottom: 4px; }
-    .popup-text { font: 12px/1.5 sans-serif; color: #475569; }
-  </style>
-</head>
-<body>
-  <div id="map"></div>
-  <script>
-    var map = L.map('map', { zoomControl: false, attributionControl: false }).setView([${coords.latitude}, ${coords.longitude}], 16);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '\\u00a9 OpenStreetMap'
-    }).addTo(map);
-
-    L.circle([${coords.latitude}, ${coords.longitude}], {
-      radius: 28,
-      color: '#60A5FA',
-      fillColor: '#93C5FD',
-      fillOpacity: 0.25,
-      weight: 1
-    }).addTo(map);
-
-    var marker = L.circleMarker([${coords.latitude}, ${coords.longitude}], {
-      radius: 10,
-      color: '#FFFFFF',
-      weight: 3,
-      fillColor: '#2563EB',
-      fillOpacity: 1
-    }).addTo(map);
-
-    marker.bindPopup(
-      '<div class="popup-title">Your current location</div>' +
-      '<div class="popup-text">${escHtml(label || "Current location")}</div>'
-    ).openPopup();
-  <\/script>
-</body>
-</html>`;
-}
 /* ============================================================ */
 
 // Speech-to-text helpers
@@ -263,7 +207,6 @@ export default function IncidentLogScreen({
   onSubmitted,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const TC = useColors();
   const { width: screenWidth } = useWindowDimensions();
   const s = useMemo(() => clamp(screenWidth / 375, 0.9, 1.2), [screenWidth]);
 
@@ -280,10 +223,11 @@ export default function IncidentLogScreen({
   const [dateStr, setDateStr] = useState(() => formatDateMMDDYYYY(new Date()));
   const [timeStr, setTimeStr] = useState(() => formatTime12h(new Date()));
 
-  const [locationStr, setLocationStr] = useState("Brgy. 12");
+  const [shareLocation, setShareLocation] = useState(false);
+  const [includeWitness, setIncludeWitness] = useState(false);
+  const [locationStr, setLocationStr] = useState("");
   const [locationCoords, setLocationCoords] = useState<LocationCoords | null>(null);
   const [showLocationMap, setShowLocationMap] = useState(false);
-
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationGranted, setLocationGranted] = useState<boolean | null>(null);
 
@@ -298,6 +242,10 @@ export default function IncidentLogScreen({
 
   const [photos, setPhotos] = useState<string[]>([]);
   const MAX_PHOTOS = 3;
+  const [videos, setVideos] = useState<string[]>([]);
+  const MAX_VIDEOS = 1;
+  const MAX_VIDEO_SIZE_BYTES = 10 * 1024 * 1024;
+  const [previewVideoUri, setPreviewVideoUri] = useState<string | null>(null);
 
   const [showPreview, setShowPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -331,7 +279,7 @@ export default function IncidentLogScreen({
 
   const autoAnalyzeIfNeeded = React.useCallback(async (): Promise<boolean> => {
     if (mode !== "complain") return true;
-    if (submitting) return false;
+    if (submitting || aiLoading) return false;
 
     if (recognizing) {
       Alert.alert("Voice input active", "Please stop voice input before securing the complaint.");
@@ -459,13 +407,6 @@ export default function IncidentLogScreen({
   }, []);
 
   React.useEffect(() => {
-    (async () => {
-      await requestAndSetCurrentLocation({ silent: true });
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  React.useEffect(() => {
     return () => {
       try {
         ExpoSpeechRecognitionModule.abort();
@@ -573,11 +514,6 @@ export default function IncidentLogScreen({
   const FOOTER_H = 72 * s;
   const CONTENT_BOTTOM_PAD = Math.max(insets.bottom, 10) + FOOTER_H + 16;
 
-  const locationMapHtml = useMemo(() => {
-    if (!locationCoords) return "";
-    return buildCurrentLocationMapHtml(locationCoords, locationStr);
-  }, [locationCoords, locationStr]);
-
   const requestAndSetCurrentLocation = async (
     opts?: { silent?: boolean }
   ): Promise<LocationCoords | null> => {
@@ -646,17 +582,35 @@ export default function IncidentLogScreen({
     }
   };
 
-  const handleToggleLocationMap = async () => {
+  const toggleShareLocation = async (value: boolean) => {
     if (submitting || aiLoading || locationLoading) return;
 
-    if (showLocationMap) {
+    setShareLocation(value);
+    if (!value) {
+      setLocationCoords(null);
+      setLocationStr("");
       setShowLocationMap(false);
+      setLocationGranted(null);
       return;
     }
 
-    const coords = locationCoords ?? (await requestAndSetCurrentLocation({ silent: false }));
+    const coords = await requestAndSetCurrentLocation({ silent: false });
+    if (!coords) {
+      setShareLocation(false);
+    }
+  };
+
+  const openLocationMap = async () => {
+    if (submitting || aiLoading || locationLoading) return;
+
+    let coords = locationCoords;
+    if (!coords) {
+      coords = await requestAndSetCurrentLocation({ silent: false });
+    }
+
     if (!coords) return;
 
+    setShareLocation(true);
     setShowLocationMap(true);
   };
 
@@ -760,8 +714,126 @@ export default function IncidentLogScreen({
   };
 
   const removePhotoAt = (index: number) => {
-    if (submitting || aiLoading) return;
+    if (submitting) return;
     setPhotos((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const canAddMoreVideos = () => videos.length < MAX_VIDEOS;
+
+  const videoSizeLabel = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+
+  const isVideoWithinSizeLimit = (asset: ImagePicker.ImagePickerAsset | undefined) => {
+    const fileSize = asset?.fileSize;
+    if (typeof fileSize !== "number" || !Number.isFinite(fileSize)) return true;
+
+    if (fileSize <= MAX_VIDEO_SIZE_BYTES) return true;
+
+    Alert.alert(
+      "Video too large",
+      `Please upload a video that is 10MB or smaller. Selected video is ${videoSizeLabel(fileSize)}.`
+    );
+    return false;
+  };
+
+  const addVideoUris = (newUris: string[]) => {
+    if (!newUris || newUris.length === 0) return;
+
+    setVideos((prev) => {
+      const merged = Array.from(new Set([...prev, ...newUris]));
+      return merged.slice(0, MAX_VIDEOS);
+    });
+  };
+
+  const pickVideoFromGallery = async () => {
+    if (submitting || aiLoading) return;
+
+    if (!canAddMoreVideos()) {
+      Alert.alert("Max reached", `You can only add up to ${MAX_VIDEOS} video.`);
+      return;
+    }
+
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (perm.status !== "granted") {
+      Alert.alert("Permission needed", "Please allow video access so you can upload evidence.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["videos"],
+      allowsEditing: false,
+      allowsMultipleSelection: false,
+      videoMaxDuration: 60,
+      quality: 0.7,
+    });
+
+    if (result.canceled) return;
+
+    const asset = result.assets?.[0];
+    if (!isVideoWithinSizeLimit(asset)) return;
+
+    const uri = asset?.uri;
+    if (uri) addVideoUris([uri]);
+  };
+
+  const recordVideo = async () => {
+    if (submitting || aiLoading) return;
+
+    if (!canAddMoreVideos()) {
+      Alert.alert("Max reached", `You can only add up to ${MAX_VIDEOS} video.`);
+      return;
+    }
+
+    const camPerm = await ImagePicker.requestCameraPermissionsAsync();
+    if (camPerm.status !== "granted") {
+      Alert.alert("Permission needed", "Please allow camera access so you can record video evidence.");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["videos"],
+      allowsEditing: false,
+      videoMaxDuration: 60,
+      quality: 0.7,
+    });
+
+    if (result.canceled) return;
+
+    const asset = result.assets?.[0];
+    if (!isVideoWithinSizeLimit(asset)) return;
+
+    const uri = asset?.uri;
+    if (uri) addVideoUris([uri]);
+  };
+
+  const onAddVideo = async () => {
+    try {
+      if (submitting || aiLoading) return;
+
+      if (!canAddMoreVideos()) {
+        Alert.alert("Max reached", `You can only add up to ${MAX_VIDEOS} video.`);
+        return;
+      }
+
+      Alert.alert("Add Video", "Choose a source:", [
+        { text: "Record Video", onPress: () => void recordVideo() },
+        { text: "Upload from Gallery", onPress: () => void pickVideoFromGallery() },
+        { text: "Cancel", style: "cancel" },
+      ]);
+    } catch (e) {
+      log("onAddVideo ERROR", e);
+      Alert.alert("Error", "Could not open video options. Please try again.");
+    }
+  };
+
+  const removeVideoAt = (index: number) => {
+    if (submitting || aiLoading) return;
+    setVideos((prev) => {
+      const removedUri = prev[index];
+      if (removedUri && previewVideoUri === removedUri) {
+        setPreviewVideoUri(null);
+      }
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   /** ✅ UPDATED: preview uses AI incident type */
@@ -770,13 +842,17 @@ export default function IncidentLogScreen({
       incidentType: getDisplayIncidentType(),
       details,
       offenderName,
-      witnessName,
-      witnessType,
+      witnessName: includeWitness ? witnessName : "",
+      witnessType: includeWitness ? witnessType : "",
       dateStr,
       timeStr,
-      locationStr,
+      locationStr: shareLocation ? locationStr : "",
+      latitude: shareLocation ? locationCoords?.latitude : undefined,
+      longitude: shareLocation ? locationCoords?.longitude : undefined,
       photoCount: photos.length,
       photos,
+      videoCount: videos.length,
+      videos,
       mode,
       aiResult,
     } as any);
@@ -789,6 +865,14 @@ export default function IncidentLogScreen({
     setWitnessName("");
     setWitnessType("");
     setPhotos([]);
+    setVideos([]);
+    setPreviewVideoUri(null);
+    setShareLocation(false);
+    setIncludeWitness(false);
+    setLocationStr("");
+    setLocationCoords(null);
+    setShowLocationMap(false);
+    setLocationGranted(null);
     setSpeechPreview("");
     setSpeechError(null);
     speechBaseRef.current = "";
@@ -801,11 +885,12 @@ export default function IncidentLogScreen({
   };
 
   const submitToBackend = async (): Promise<SubmitIncidentResponse> => {
-    const exactCoords =
-      locationCoords ??
-      (locationGranted !== false
-        ? await requestAndSetCurrentLocation({ silent: true })
-        : null);
+    const exactCoords = shareLocation
+      ? locationCoords ??
+        (locationGranted !== false
+          ? await requestAndSetCurrentLocation({ silent: true })
+          : null)
+      : null;
 
     const incidentTypeToSend = getDisplayIncidentType();
 
@@ -814,14 +899,15 @@ export default function IncidentLogScreen({
       incidentType: incidentTypeToSend,
       details,
       offenderName,
-      witnessName,
-      witnessType,
+      witnessName: includeWitness ? witnessName : "",
+      witnessType: includeWitness ? witnessType : "",
       dateStr,
       timeStr,
-      locationStr,
+      locationStr: shareLocation ? locationStr : "",
       latitude: exactCoords?.latitude,
       longitude: exactCoords?.longitude,
       photos,
+      videos,
     };
 
     if (aiResult) {
@@ -863,9 +949,9 @@ export default function IncidentLogScreen({
     }
   };
 
-  /** ✅ UPDATED: Secure Complaint now auto-analyzes first */
+  /** Open review without running AI analysis. */
   const onSubmit = async () => {
-    if (submitting || aiLoading) return;
+    if (submitting) return;
 
     if (recognizing) {
       Alert.alert("Voice input active", "Please stop voice input before submitting.");
@@ -876,18 +962,6 @@ export default function IncidentLogScreen({
       Alert.alert("Incomplete", "Please fill in the required fields.");
       return;
     }
-
-    const blocked = await blockIfCoolingDown("submit a report");
-    if (blocked) return;
-
-    if (mode === "emergency") {
-      await submitToBackend();
-      return;
-    }
-
-    // ✅ AUTO AI ANALYZE here (only for complain)
-    const ok = await autoAnalyzeIfNeeded();
-    if (!ok) return;
 
     if (onProceedConfirm) {
       onProceedConfirm(buildPreviewData());
@@ -914,14 +988,20 @@ export default function IncidentLogScreen({
     return { incidentId, createdAt };
   };
 
-  const actionText =
-    mode === "emergency"
-      ? "Send Emergency"
-      : aiLoading
-      ? "Analyzing..."
-      : "Secure Complaint";
+  const primaryActionText = submitting ? "Submitting..." : "Review Details";
 
-  const detailsLabel = mode === "emergency" ? "Emergency Detail" : "Incident Detail";
+  const draftedLine = useMemo(
+    () =>
+      new Date().toLocaleString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    [dateStr, timeStr]
+  );
 
   if (showPreview) {
     return (
@@ -936,72 +1016,68 @@ export default function IncidentLogScreen({
   }
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: TC.screenBg }]} edges={["top"]}>
-      <StatusBar barStyle={TC.statusBar} />
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <StatusBar barStyle="light-content" backgroundColor="#88AFD1" />
 
       <KeyboardAvoidingView
-        style={[styles.page, { backgroundColor: TC.screenBg }]}
+        style={styles.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
       >
-        {/* Top bar */}
-        <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 8) }]}>
+        <View style={styles.statusBand} />
+
+        <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 14) }]}>
           <Pressable
             disabled={submitting || aiLoading}
             onPress={onBack ?? (() => Alert.alert("Back", "Wire onBack() to navigation"))}
             hitSlop={12}
-            style={({ pressed }) => [
-              styles.backBtn,
-              (pressed || submitting || aiLoading) && { opacity: 0.7 },
-            ]}
+            style={({ pressed }) => [styles.closeBtn, (pressed || submitting || aiLoading) && { opacity: 0.65 }]}
           >
-            <Ionicons name="chevron-back" size={24} color={TC.primary} />
+            <Ionicons name="close" size={28} color="#344052" />
           </Pressable>
 
-          <Text style={[styles.topTitle, { color: TC.textDark }]}>Incident Log</Text>
-
-          <View style={{ width: 36, height: 36 }} />
+          <Text style={styles.topTitle} allowFontScaling={false}>New Report</Text>
+          <View style={styles.headerSpacer} />
         </View>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: CONTENT_BOTTOM_PAD },
-          ]}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: CONTENT_BOTTOM_PAD }]}
         >
-          <View style={[styles.card, { backgroundColor: TC.isDark ? "#1E293B" : "#F3F7FB", borderColor: TC.divider }]}>
-            <View style={styles.detailsHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: TC.textDark }]}>
-                {detailsLabel} <Text style={styles.required}>*</Text>
-              </Text>
+          <View style={styles.stepHeader}>
+            <Text style={styles.stepEyebrow} allowFontScaling={false}>STEP 1 OF 3</Text>
+            <Text style={styles.stepTitle} allowFontScaling={false}>Report</Text>
+            <View style={styles.progressRow}>
+              <View style={[styles.progressSegment, styles.progressSegmentActive]} />
+              <View style={styles.progressSegment} />
+              <View style={styles.progressSegment} />
+            </View>
+          </View>
 
+          <View style={styles.card}>
+            <View style={styles.fieldHeaderRow}>
+              <Text style={styles.fieldLabel} allowFontScaling={false}>
+                Incident Description<Text style={styles.required}>*</Text>
+              </Text>
               <Pressable
                 disabled={submitting || aiLoading}
                 onPress={toggleVoiceInput}
                 hitSlop={10}
                 style={({ pressed }) => [
-                  styles.micBtn,
-                  !recognizing && { backgroundColor: TC.surface, borderColor: TC.divider },
-                  recognizing && styles.micBtnActive,
-                  (pressed || submitting || aiLoading) && { opacity: 0.9 },
+                  styles.voiceBtn,
+                  recognizing && styles.voiceBtnActive,
+                  (pressed || submitting || aiLoading) && { opacity: 0.8 },
                 ]}
               >
-                <Ionicons
-                  name={recognizing ? "mic" : "mic-outline"}
-                  size={16}
-                  color={recognizing ? "#FFFFFF" : TC.primary}
-                />
-                <Text style={[styles.micText, !recognizing && { color: TC.primary }, recognizing && { color: "#FFFFFF" }]}>
-                  {recognizing ? "Listening..." : "Voice"}
-                </Text>
+                <Ionicons name={recognizing ? "mic" : "mic-outline"} size={15} color={recognizing ? "#FFFFFF" : "#344052"} />
               </Pressable>
             </View>
 
-            {!!speechError && <Text style={styles.speechErrorText}>{speechError}</Text>}
-            {!!aiError && <Text style={styles.aiErrorText}>{aiError}</Text>}
+            {!!speechError && <Text style={styles.errorText}>{speechError}</Text>}
+            {!!aiError && <Text style={styles.errorText}>{aiError}</Text>}
 
-            <View style={[styles.input, styles.textArea, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
+            <View style={[styles.inputBox, styles.descriptionBox]}>
               <TextInput
                 ref={detailsInputRef}
                 editable={!submitting && !aiLoading}
@@ -1014,38 +1090,63 @@ export default function IncidentLogScreen({
                   }
                   setAiError(null);
                 }}
-                placeholder="A detailed explanation of what happened, including actions, sequence of events, and any relevant details observed during the incident."
-                placeholderTextColor={TC.placeholder}
+                placeholder="Describe what happened in detail....."
+                placeholderTextColor="#A9A9A9"
                 multiline
                 textAlignVertical="top"
-                style={[styles.textAreaInput, { color: TC.textDark }]}
+                style={styles.descriptionInput}
               />
             </View>
 
             {recognizing && (
-              <Text style={[styles.speechHint, { color: TC.muted }]}>Speak now. Tap “Listening...” to stop.</Text>
+              <Text style={styles.helperText} allowFontScaling={false}>Listening. Tap the mic to stop.</Text>
             )}
 
-            {/* Add Photo */}
-            <View style={styles.photoRow}>
+            <View style={styles.fieldHeaderRow}>
+              <Text style={styles.fieldLabel} allowFontScaling={false}>Complaint</Text>
+              <Text style={styles.optionalText} allowFontScaling={false}>(Optional)</Text>
+            </View>
+
+            <View style={styles.inputBox}>
+              <TextInput
+                editable={!submitting && !aiLoading}
+                value={offenderName}
+                onChangeText={setOffenderName}
+                placeholder="Enter reported person name"
+                placeholderTextColor="#A9A9A9"
+                style={styles.textInput}
+              />
+            </View>
+          </View>
+
+          <View style={styles.card}>
+            <View style={styles.fieldHeaderRow}>
+              <Text style={styles.fieldLabel} allowFontScaling={false}>Evidence</Text>
+              <Text style={styles.optionalText} allowFontScaling={false}>(Optional)</Text>
+            </View>
+
+            <View style={styles.evidenceRow}>
               <Pressable
                 disabled={submitting || aiLoading}
                 onPress={onAddPhoto}
-                style={({ pressed }) => [
-                  styles.photoBtn,
-                  { backgroundColor: TC.surface, borderColor: TC.divider },
-                  (pressed || submitting || aiLoading) && { opacity: 0.9 },
-                ]}
+                style={({ pressed }) => [styles.evidenceTile, pressed && { opacity: 0.8 }]}
               >
-                <Ionicons name="cloud-upload-outline" size={18} color={TC.primary} />
-                <Text style={[styles.photoBtnText, { color: TC.primary }]}>Add Photo</Text>
+                <Ionicons name="image-outline" size={24} color="#344052" />
+                <Text style={styles.evidenceText} allowFontScaling={false}>Add Photo</Text>
               </Pressable>
 
-              <Text style={[styles.maxText, { color: TC.muted }]}>(Max {MAX_PHOTOS})</Text>
+              <Pressable
+                disabled={submitting || aiLoading}
+                onPress={onAddVideo}
+                style={({ pressed }) => [styles.evidenceTile, pressed && { opacity: 0.8 }]}
+              >
+                <Ionicons name="videocam-outline" size={25} color="#344052" />
+                <Text style={styles.evidenceText} allowFontScaling={false}>Add Video</Text>
+              </Pressable>
             </View>
 
-            {photos.length > 0 && (
-              <View style={styles.thumbRow}>
+            {(photos.length > 0 || videos.length > 0) && (
+              <View style={styles.attachmentWrap}>
                 {photos.map((uri, idx) => (
                   <Pressable
                     key={`${uri}-${idx}`}
@@ -1053,251 +1154,238 @@ export default function IncidentLogScreen({
                     onPress={() => {
                       Alert.alert("Remove photo?", "Do you want to remove this photo?", [
                         { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Remove",
-                          style: "destructive",
-                          onPress: () => removePhotoAt(idx),
-                        },
+                        { text: "Remove", style: "destructive", onPress: () => removePhotoAt(idx) },
                       ]);
                     }}
-                    style={({ pressed }) => [
-                      styles.thumbBox,
-                      { borderColor: TC.divider, backgroundColor: TC.isDark ? "#1E3A5F" : "#EEF4FB" },
-                      (pressed || submitting || aiLoading) && { opacity: 0.92 },
-                    ]}
+                    style={styles.photoPreview}
                   >
-                    <Image source={{ uri }} style={styles.thumbImg} />
-                    <View style={styles.thumbX}>
-                      <Ionicons name="close" size={14} color="#FFFFFF" />
+                    <Image source={{ uri }} style={styles.photoPreviewImage} />
+                    <View style={styles.removeBadge}>
+                      <Ionicons name="close" size={12} color="#FFFFFF" />
                     </View>
+                  </Pressable>
+                ))}
+
+                {videos.map((uri, idx) => (
+                  <Pressable
+                    key={`${uri}-${idx}`}
+                    disabled={submitting || aiLoading}
+                    onPress={() => setPreviewVideoUri(uri)}
+                    style={styles.videoPreview}
+                  >
+                    <View style={styles.videoPreviewInner}>
+                      <Ionicons name="play-circle-outline" size={23} color="#344052" />
+                      <Text style={styles.videoPreviewText} numberOfLines={1}>Video</Text>
+                    </View>
+                    <Pressable
+                      disabled={submitting || aiLoading}
+                      onPress={(event) => {
+                        event.stopPropagation();
+                        Alert.alert("Remove video?", "Do you want to remove this video?", [
+                          { text: "Cancel", style: "cancel" },
+                          { text: "Remove", style: "destructive", onPress: () => removeVideoAt(idx) },
+                        ]);
+                      }}
+                      hitSlop={8}
+                      style={styles.removeBadge}
+                    >
+                      <Ionicons name="close" size={12} color="#FFFFFF" />
+                    </Pressable>
                   </Pressable>
                 ))}
               </View>
             )}
+          </View>
 
-            <Text style={[styles.sectionTitle, { marginTop: 14, color: TC.textDark }]}>
-              Offender (Optional)
-            </Text>
-
-            <View style={[styles.input, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
-              <TextInput
-                editable={!submitting && !aiLoading}
-                value={offenderName}
-                onChangeText={setOffenderName}
-                placeholder="Name of Offender"
-                placeholderTextColor={TC.placeholder}
-                style={[styles.textInput, { color: TC.textDark }]}
+          <View style={styles.cardCompact}>
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleTextWrap}>
+                <Text style={styles.toggleTitle} allowFontScaling={false}>Share Live Location</Text>
+                <Text style={styles.toggleSubtitle} allowFontScaling={false}>Help responders find you</Text>
+              </View>
+              <Switch
+                value={shareLocation}
+                disabled={submitting || aiLoading || locationLoading}
+                onValueChange={(value) => void toggleShareLocation(value)}
+                trackColor={{ false: "#111111", true: "#00223E" }}
+                thumbColor="#FFFFFF"
               />
             </View>
 
-            <Text style={[styles.sectionTitle, { marginTop: 14, color: TC.textDark }]}>Witness</Text>
-
-            <View style={[styles.input, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
-              <TextInput
-                editable={!submitting && !aiLoading}
-                value={witnessName}
-                onChangeText={setWitnessName}
-                placeholder="Name (Optional)"
-                placeholderTextColor={TC.placeholder}
-                style={[styles.textInput, { color: TC.textDark }]}
-              />
-            </View>
-
-            <View style={[styles.input, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
-              <TextInput
-                editable={!submitting && !aiLoading}
-                value={witnessType}
-                onChangeText={setWitnessType}
-                placeholder="Type (Neighbor, Family, etc.)."
-                placeholderTextColor={TC.placeholder}
-                style={[styles.textInput, { color: TC.textDark }]}
-              />
-            </View>
-
-            <View style={{ marginTop: 6, marginBottom: 6 }}>
-              <Text style={[styles.sectionTitle, { color: TC.textDark }]}>Location</Text>
-
-              <View style={styles.locationActionsRow}>
+            {shareLocation && (
+              <View style={styles.locationBlock}>
+                <Text style={styles.locationStatus} numberOfLines={2}>
+                  {locationLoading ? "Getting current location..." : locationStr || "Location unavailable"}
+                </Text>
                 <Pressable
                   disabled={submitting || aiLoading || locationLoading}
-                  onPress={() => requestAndSetCurrentLocation({ silent: false })}
+                  onPress={openLocationMap}
                   style={({ pressed }) => [
-                    styles.locationBtnSolo,
-                    styles.locationBtnSplit,
-                    { backgroundColor: TC.surface, borderColor: TC.divider },
-                    (pressed || locationLoading || submitting || aiLoading) && { opacity: 0.9 },
-                  ]}
-                >
-                  {locationLoading ? (
-                    <ActivityIndicator />
-                  ) : (
-                    <Ionicons name="locate-outline" size={16} color={TC.primary} />
-                  )}
-                  <Text style={[styles.locationBtnText, { color: TC.primary }]}>
-                    {locationLoading ? "Updating..." : "Use Current Location"}
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  disabled={submitting || aiLoading || locationLoading}
-                  onPress={() => {
-                    void handleToggleLocationMap();
-                  }}
-                  style={({ pressed }) => [
-                    styles.locationBtnSolo,
-                    styles.locationBtnSplit,
-                    { backgroundColor: TC.surface, borderColor: TC.divider },
-                    (pressed || locationLoading || submitting || aiLoading) && { opacity: 0.9 },
+                    styles.showMapBtn,
+                    (pressed || submitting || aiLoading || locationLoading) && { opacity: 0.78 },
+                    locationLoading && styles.showMapBtnDisabled,
                   ]}
                 >
                   <Ionicons
-                    name={showLocationMap ? "eye-off-outline" : "map-outline"}
+                    name="map-outline"
                     size={16}
-                    color={TC.primary}
+                    color={locationLoading ? "#94A3B8" : "#00518D"}
                   />
-                  <Text style={[styles.locationBtnText, { color: TC.primary }]}>
-                    {showLocationMap ? "Hide Map" : "Show in Map"}
+                  <Text
+                    style={[
+                      styles.showMapText,
+                      locationLoading && styles.showMapTextDisabled,
+                    ]}
+                    allowFontScaling={false}
+                  >
+                    Show in Map
                   </Text>
                 </Pressable>
               </View>
+            )}
 
-              {locationGranted === false && (
-                <Text style={styles.locationHintSolo}>
-                  Permission denied (using default location)
-                </Text>
-              )}
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleTextWrap}>
+                <Text style={styles.toggleTitle} allowFontScaling={false}>Add Witness</Text>
+                <Text style={styles.toggleSubtitle} allowFontScaling={false}>Include contact details</Text>
+              </View>
+              <Switch
+                value={includeWitness}
+                disabled={submitting || aiLoading}
+                onValueChange={(value) => {
+                  setIncludeWitness(value);
+                  if (!value) {
+                    setWitnessName("");
+                    setWitnessType("");
+                  }
+                }}
+                trackColor={{ false: "#111111", true: "#00223E" }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
 
-              {showLocationMap && locationCoords ? (
-                <View
-                  style={[
-                    styles.locationMapCard,
-                    { backgroundColor: TC.surface, borderColor: TC.divider },
-                  ]}
-                >
-                  <View style={styles.locationMapHeader}>
-                    <Ionicons name="location-outline" size={16} color={TC.primary} />
-                    <Text style={[styles.locationMapTitle, { color: TC.textDark }]}>
-                      Your Current Location
-                    </Text>
-                  </View>
-
-                  <View style={[styles.locationMapFrame, { borderColor: TC.divider }]}>
-                    <WebView
-                      source={{ html: locationMapHtml }}
-                      style={styles.locationMapWebview}
-                      originWhitelist={["*"]}
-                      javaScriptEnabled
-                      domStorageEnabled
-                      scrollEnabled={false}
-                    />
-                  </View>
+            {includeWitness && (
+              <View style={styles.witnessFields}>
+                <View style={styles.inputBox}>
+                  <TextInput
+                    editable={!submitting && !aiLoading}
+                    value={witnessName}
+                    onChangeText={setWitnessName}
+                    placeholder="Witness name"
+                    placeholderTextColor="#A9A9A9"
+                    style={styles.textInput}
+                  />
                 </View>
-              ) : null}
-            </View>
-
-            <View style={styles.metaRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.metaText, { color: TC.textDark }]}>
-                  <Text style={[styles.metaLabel, { color: TC.muted }]}>Date:</Text> {dateStr}
-                </Text>
-                <Text style={[styles.metaText, { marginTop: 6, color: TC.textDark }]}>
-                  <Text style={[styles.metaLabel, { color: TC.muted }]}>Location:</Text> {locationStr}
-                </Text>
+                <View style={styles.inputBox}>
+                  <TextInput
+                    editable={!submitting && !aiLoading}
+                    value={witnessType}
+                    onChangeText={setWitnessType}
+                    placeholder="Contact number or relationship"
+                    placeholderTextColor="#A9A9A9"
+                    style={styles.textInput}
+                  />
+                </View>
               </View>
-
-              <View style={{ alignItems: "flex-end" }}>
-                <Text style={[styles.metaText, { color: TC.textDark }]}>
-                  <Text style={[styles.metaLabel, { color: TC.muted }]}>Time:</Text> {timeStr}
-                </Text>
-              </View>
-            </View>
+            )}
           </View>
+
+          <Text style={styles.draftedText} allowFontScaling={false}>Drafted: {draftedLine}</Text>
         </ScrollView>
 
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 10), backgroundColor: TC.screenBg }]}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <Pressable
             disabled={submitting || aiLoading}
             onPress={onSubmit}
-            style={({ pressed }) => [
-              styles.submitShadow,
-              (pressed || submitting || aiLoading) && { opacity: 0.95 },
-            ]}
+            style={({ pressed }) => [styles.submitBtn, (pressed || submitting || aiLoading) && { opacity: 0.88 }]}
           >
-            <LinearGradient
-              colors={TC.gradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={[styles.submitBtn, { height: 56 * s }]}
-            >
-              {submitting ? (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                  <ActivityIndicator color="#FFFFFF" />
-                  <Text style={styles.submitText}>Submitting...</Text>
-                </View>
-              ) : aiLoading ? (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                  <ActivityIndicator color="#FFFFFF" />
-                  <Text style={styles.submitText}>Analyzing...</Text>
-                </View>
-              ) : (
-                <Text style={styles.submitText}>{actionText}</Text>
-              )}
-            </LinearGradient>
+            {submitting || aiLoading ? <ActivityIndicator color="#FFFFFF" /> : null}
+            <Text style={styles.submitText} allowFontScaling={false}>{primaryActionText}</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+
+      <IncidentLocationMapModal
+        visible={showLocationMap}
+        coords={locationCoords}
+        label={locationStr || "Current location"}
+        title="Live Location"
+        onClose={() => setShowLocationMap(false)}
+      />
+      <IncidentVideoPreviewModal
+        visible={!!previewVideoUri}
+        uri={previewVideoUri}
+        onClose={() => setPreviewVideoUri(null)}
+      />
     </SafeAreaView>
   );
 }
 
-const BG = "#F5FAFE";
-const CARD_BG = "#F3F7FB";
-const BORDER = "#E7EEF7";
-const TEXT_DARK = "#0B2B45";
+const BG = "#F5F7FA";
+const CARD_BG = "#FFFFFF";
+const BORDER = "#D9DEE5";
+const TEXT_DARK = "#344052";
+const TEXT_MUTED = "#7B7F86";
+const NAVY = "#00223E";
 const SHADOW = "#000";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
   page: { flex: 1, backgroundColor: BG },
 
+  statusBand: {
+    height: 0,
+    backgroundColor: "#88AFD1",
+  },
+
   topBar: {
-    paddingHorizontal: 14,
-    paddingBottom: 8,
+    paddingHorizontal: 22,
+    paddingBottom: 22,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
+  closeBtn: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   backBtn: {
     width: 40,
     height: 40,
-    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
   topTitle: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: TEXT_DARK,
-    letterSpacing: 0.2,
+    flex: 1,
+    textAlign: "center",
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#374151",
+  },
+  headerSpacer: {
+    width: 40,
+    height: 40,
   },
 
   scrollContent: {
-    paddingHorizontal: 14,
-    paddingTop: 4,
-    gap: 14,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    gap: 16,
   },
 
   card: {
     backgroundColor: CARD_BG,
-    borderRadius: 18,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: BORDER,
-    padding: 16,
+    padding: 17,
     shadowColor: SHADOW,
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 2,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
   },
 
   detailsHeaderRow: {
@@ -1313,9 +1401,56 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: TEXT_DARK,
   },
+  stepHeader: {
+    paddingHorizontal: 12,
+  },
+  stepEyebrow: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#858B94",
+    marginBottom: 3,
+  },
+  stepTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: TEXT_DARK,
+    marginBottom: 10,
+  },
+  progressRow: {
+    flexDirection: "row",
+    gap: 12,
+    paddingRight: 12,
+  },
+  progressSegment: {
+    flex: 1,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: "#D8DDE2",
+  },
+  progressSegmentActive: {
+    backgroundColor: NAVY,
+  },
+  fieldHeaderRow: {
+    minHeight: 22,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 9,
+  },
+  fieldLabel: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: TEXT_DARK,
+  },
   required: {
     color: "#E11D48",
     fontWeight: "900",
+  },
+  optionalText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: TEXT_MUTED,
   },
 
   micBtn: {
@@ -1336,7 +1471,32 @@ const styles = StyleSheet.create({
   micText: {
     fontSize: 12,
     fontWeight: "900",
-    color: Colors.primary,
+    color: "#0B5C94",
+  },
+  voiceBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F1F5F9",
+  },
+  voiceBtnActive: {
+    backgroundColor: "#E11D48",
+  },
+  errorText: {
+    marginTop: -4,
+    marginBottom: 8,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#E11D48",
+  },
+  helperText: {
+    marginTop: 8,
+    marginBottom: 13,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#677586",
   },
   speechHint: {
     marginTop: -4,
@@ -1357,18 +1517,41 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: BORDER,
-    borderRadius: 14,
+    borderRadius: 10,
     paddingHorizontal: 14,
-    height: 48,
+    height: 58,
     justifyContent: "center",
     marginBottom: 12,
   },
+  inputBox: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D6D6D6",
+    borderRadius: 10,
+    minHeight: 58,
+    justifyContent: "center",
+    paddingHorizontal: 13,
+    marginBottom: 14,
+  },
 
   textInput: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 15,
+    fontWeight: "500",
     color: TEXT_DARK,
-    paddingVertical: Platform.OS === "android" ? 0 : 12,
+    paddingVertical: Platform.OS === "android" ? 0 : 13,
+  },
+  descriptionBox: {
+    height: 131,
+    paddingTop: 13,
+    paddingBottom: 13,
+  },
+  descriptionInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "500",
+    lineHeight: 21,
+    color: TEXT_DARK,
+    padding: 0,
   },
 
   textArea: {
@@ -1413,7 +1596,7 @@ const styles = StyleSheet.create({
   photoBtnText: {
     fontSize: 13,
     fontWeight: "900",
-    color: Colors.primary,
+    color: "#0B5C94",
   },
   maxText: {
     marginLeft: 12,
@@ -1455,6 +1638,85 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  evidenceRow: {
+    flexDirection: "row",
+    gap: 14,
+    paddingHorizontal: 21,
+    paddingTop: 7,
+    paddingBottom: 4,
+  },
+  evidenceTile: {
+    flex: 1,
+    height: 100,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: "#D9DEE5",
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#FFFFFF",
+  },
+  evidenceText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: TEXT_DARK,
+  },
+  attachmentWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 14,
+    rowGap: 10,
+    paddingHorizontal: 21,
+    paddingTop: 14,
+  },
+  photoPreview: {
+    width: "29.8%",
+    height: 58,
+    borderRadius: 10,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "#EEF4FB",
+  },
+  photoPreviewImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  videoPreview: {
+    width: "29.8%",
+    height: 58,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  videoPreviewInner: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+    paddingHorizontal: 6,
+  },
+  videoPreviewText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: TEXT_DARK,
+  },
+  removeBadge: {
+    position: "absolute",
+    top: 5,
+    right: 5,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "rgba(0,0,0,0.62)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   locationBtnSolo: {
     flexDirection: "row",
@@ -1478,7 +1740,7 @@ const styles = StyleSheet.create({
   locationBtnText: {
     fontSize: 13,
     fontWeight: "900",
-    color: Colors.primary,
+    color: "#0B5C94",
   },
   locationHintSolo: {
     marginTop: 8,
@@ -1530,10 +1792,91 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#52677A",
   },
+  cardCompact: {
+    backgroundColor: CARD_BG,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: BORDER,
+    paddingHorizontal: 17,
+    paddingVertical: 17,
+    shadowColor: SHADOW,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+    gap: 14,
+  },
+  toggleRow: {
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  toggleTextWrap: {
+    flex: 1,
+  },
+  toggleTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: TEXT_DARK,
+  },
+  toggleSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "500",
+    color: TEXT_MUTED,
+  },
+  locationStatus: {
+    marginTop: 0,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 17,
+    color: "#5C6673",
+  },
+  locationBlock: {
+    marginTop: -6,
+    gap: 10,
+  },
+  showMapBtn: {
+    alignSelf: "flex-start",
+    minHeight: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: "#CFE0EF",
+    backgroundColor: "#F8FBFF",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  showMapBtnDisabled: {
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F1F5F9",
+  },
+  showMapText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#00518D",
+  },
+  showMapTextDisabled: {
+    color: "#94A3B8",
+  },
+  witnessFields: {
+    gap: 10,
+    marginTop: -4,
+  },
+  draftedText: {
+    marginTop: -6,
+    textAlign: "center",
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#858585",
+  },
 
   footer: {
-    paddingHorizontal: 14,
-    paddingTop: 10,
+    paddingHorizontal: 29,
+    paddingTop: 8,
     backgroundColor: BG,
     borderTopWidth: 0,
     borderTopColor: "rgba(227,232,239,0.9)",
@@ -1548,14 +1891,17 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   submitBtn: {
+    minHeight: 56,
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
+    gap: 10,
+    backgroundColor: NAVY,
   },
   submitText: {
     color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "900",
-    letterSpacing: 0.2,
+    fontSize: 18,
+    fontWeight: "500",
   },
 });

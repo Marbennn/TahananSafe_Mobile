@@ -10,6 +10,7 @@ import {
   Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { Colors, useColors } from "../theme/colors";
 
@@ -41,6 +42,7 @@ type Props = {
   onFabLongPress?: () => void;
 
   centerLabel?: string;
+  centerLabelActive?: boolean;
 
   Chevron?: React.ComponentType<{ width?: number; height?: number }>;
 };
@@ -64,7 +66,12 @@ export default function BottomNavBar({
   navHeight,
   paddingBottom,
   chevronBottom,
-  centerLabel = "Community",
+  fabBottom,
+  fabSize = 68,
+  onFabPress,
+  onFabLongPress,
+  centerLabel,
+  centerLabelActive = false,
   Chevron,
 }: Props) {
   const { width } = useWindowDimensions();
@@ -96,6 +103,18 @@ export default function BottomNavBar({
   const effectiveNavHeight = useMemo(
     () => navHeight + EXTRA_BAR_HEIGHT,
     [navHeight, EXTRA_BAR_HEIGHT]
+  );
+  const centerFabBottom = useMemo(
+    () => fabBottom ?? navHeight - fabSize / 2 - 10,
+    [fabBottom, fabSize, navHeight]
+  );
+  const centerFabIconSize = useMemo(
+    () => clamp(Math.round(30 * s), 26, 34),
+    [s]
+  );
+  const fabArchSize = useMemo(
+    () => clamp(Math.round(fabSize + 34 * s), fabSize + 28, fabSize + 44),
+    [fabSize, s]
   );
 
   /* ===================== TAB CLICK ANIMATIONS ===================== */
@@ -183,6 +202,56 @@ export default function BottomNavBar({
           justifyContent: "center",
         },
 
+        centerSpacer: {
+          flex: 1,
+          minWidth: 0,
+          alignItems: "center",
+          justifyContent: "center",
+          paddingBottom: itemPaddingBottom + EXTRA_BAR_HEIGHT * 0.35,
+        },
+
+        centerFabWrap: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          alignItems: "center",
+          zIndex: 3,
+          elevation: 3,
+        },
+
+        centerFabButton: {
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden",
+          zIndex: 2,
+          ...Platform.select({
+            ios: {
+              shadowColor: "#000",
+              shadowOpacity: 0.18,
+              shadowRadius: 14,
+              shadowOffset: { width: 0, height: 8 },
+            },
+            android: { elevation: 10 },
+          }),
+        },
+
+        centerFabArchClip: {
+          position: "absolute",
+          bottom: fabSize / 2,
+          width: fabArchSize,
+          height: fabArchSize / 2,
+          overflow: "hidden",
+          alignItems: "center",
+          zIndex: 1,
+        },
+
+        centerFabArch: {
+          width: fabArchSize,
+          height: fabArchSize,
+          borderRadius: fabArchSize / 2,
+          backgroundColor: navBg,
+        },
+
         label: {
           marginTop: labelMarginTop,
           fontSize: labelFont,
@@ -194,6 +263,12 @@ export default function BottomNavBar({
           color: Colors.primary,
           fontWeight: "800",
         },
+        centerLabel: {
+          marginTop: labelMarginTop,
+          fontSize: labelFont,
+          fontWeight: "600",
+          includeFontPadding: false,
+        },
       }),
     [
       effectiveNavHeight,
@@ -204,6 +279,9 @@ export default function BottomNavBar({
       labelMarginTop,
       labelFont,
       EXTRA_BAR_HEIGHT,
+      fabArchSize,
+      fabSize,
+      navBg,
     ]
   );
 
@@ -256,22 +334,19 @@ export default function BottomNavBar({
           inactiveColor={inactive}
         />
 
-        <NavItem
-          icon="people-outline"
-          activeIcon="people"
-          label={centerLabel}
-          active={activeTab === "Community"}
-          onPress={() => handleTabPress("Community")}
-          iconSize={iconSize}
-          labelStyle={[styles.label, { color: inactive }]}
-          labelActiveStyle={{ color: activePrimary }}
-          itemStyle={styles.item}
-          innerStyle={styles.itemInner}
-          scaleAnim={tabScalesRef.current.Community}
-          pressInScale={pressInScale}
-          activeColor={activePrimary}
-          inactiveColor={inactive}
-        />
+        <View style={styles.centerSpacer} pointerEvents="none">
+          {centerLabel ? (
+            <Text
+              style={[
+                styles.centerLabel,
+                { color: centerLabelActive ? activePrimary : inactive },
+              ]}
+              allowFontScaling={false}
+            >
+              {centerLabel}
+            </Text>
+          ) : null}
+        </View>
 
         <NavItem
           icon="stats-chart-outline"
@@ -307,6 +382,40 @@ export default function BottomNavBar({
           inactiveColor={inactive}
         />
       </View>
+
+      {onFabPress ? (
+        <View
+          style={[styles.centerFabWrap, { bottom: centerFabBottom }]}
+          pointerEvents="box-none"
+        >
+          <View pointerEvents="none" style={styles.centerFabArchClip}>
+            <View style={styles.centerFabArch} />
+          </View>
+
+          <Pressable
+            onPress={onFabPress}
+            onLongPress={onFabLongPress}
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.centerFabButton,
+              {
+                width: fabSize,
+                height: fabSize,
+                borderRadius: fabSize / 2,
+                transform: [{ scale: pressed ? 0.95 : 1 }],
+              },
+            ]}
+          >
+            <LinearGradient
+              colors={TC.gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+            <Ionicons name="add" size={centerFabIconSize} color="#FFFFFF" />
+          </Pressable>
+        </View>
+      ) : null}
     </>
   );
 }

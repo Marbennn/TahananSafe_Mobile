@@ -8,14 +8,13 @@ import {
   ScrollView,
   StatusBar,
   TextInput,
+  Animated,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Alert,
   Image,
   useWindowDimensions,
-  Animated,
-  Easing,
   Keyboard,
   Modal,
   AppState,
@@ -25,13 +24,14 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { WebView } from "react-native-webview";
 
-import BottomNavBar, { TabKey } from "../components/BottomNavBar";
+import type { TabKey } from "../components/BottomNavBar";
 import LogoutModal from "../components/LogoutModal";
+import IncidentVideoPreviewModal from "../components/IncidentVideoPreviewModal";
 import { Colors, useColors } from "../theme/colors";
 import { useAuth } from "../auth/AuthContext";
+import { fetchMyNotifications, toggleNotificationRead } from "../api/notifications";
 
 import type { ReportItem } from "./ReportScreen";
 import {
@@ -48,7 +48,7 @@ import {
 // ✅ token + base url for cancel action
 import { getAccessToken } from "../auth/session";
 
-type ViewKey = "details" | "threads";
+type ViewKey = "details" | "messages" | "timeline";
 
 type ThreadMsg = {
   id: string;
@@ -97,6 +97,32 @@ function formatStamp(d: Date) {
 function formatThreadMeta(msg: ThreadMsg) {
   if (msg.pending) return "Sending...";
   return msg.editedAt ? `${msg.time} • Edited` : msg.time;
+}
+
+function formatChatTime(msg: ThreadMsg) {
+  if (msg.pending) return "Sending";
+  if (msg.createdAtMs && Number.isFinite(msg.createdAtMs)) {
+    return new Date(msg.createdAtMs).toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+  const parts = String(msg.time || "").split(",");
+  return (parts[parts.length - 1] || msg.time || "").trim();
+}
+
+function formatChatDayPill(msg?: ThreadMsg) {
+  if (!msg?.createdAtMs || !Number.isFinite(msg.createdAtMs)) return "Today";
+  const d = new Date(msg.createdAtMs);
+  const today = new Date();
+  const isToday =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate();
+  const day = isToday
+    ? "Today"
+    : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${day}, ${formatChatTime(msg)}`;
 }
 
 function getThreadSenderLabel(msg?: ThreadMsg | null) {
@@ -188,6 +214,40 @@ function dtoToUi(dto: ThreadDto): ThreadMsg {
 function prettyStatus(s?: string) {
   if (!s) return "PENDING";
   return String(s).toUpperCase();
+}
+
+function formatStatusLabel(s?: string) {
+  const raw = String(s || "").trim();
+  if (!raw) return "Submitted";
+
+  const normalized = raw.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+  if (normalized.includes("mediation")) return "Mediation";
+  if (normalized.includes("review")) return "Under Review";
+  if (normalized.includes("assist") || normalized.includes("ongoing") || normalized.includes("progress")) {
+    return "Ongoing";
+  }
+  if (normalized.includes("resolve") || normalized.includes("complete")) return "Resolved";
+  if (normalized.includes("cancel")) return "Cancelled";
+  if (normalized.includes("submit") || normalized.includes("pending")) return "Submitted";
+
+  return normalized
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatTimelineStamp(value?: string | Date | null) {
+  if (!value) return "";
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function isAbortError(err: any) {
@@ -367,13 +427,6 @@ export default function ReportDetailScreen({
 
   const PRIMARY: string = String((Colors as any).primary ?? "#0B5AA7");
 
-  const gradColors = (Colors.gradient ??
-    ([PRIMARY, String((Colors as any).primaryDark ?? "#021C36")] as const)) as readonly [
-    string,
-    string,
-    ...string[]
-  ];
-
   const CONTENT_MAX_W = isTablet ? Math.min(720, Math.round(width * 0.92)) : width;
   const CONTENT_SIDE_PAD = isTablet ? scale(18) : scale(14);
 
@@ -401,26 +454,15 @@ export default function ReportDetailScreen({
     [width, height, PRIMARY, isTablet, isNarrow, CONTENT_MAX_W, CONTENT_SIDE_PAD, thumbW, thumbH]
   );
 
-  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [view, setView] = useState<ViewKey>("details");
 
-  // =========================
-  // ✅ BottomNavBar sizing (prevent FAB from getting bigger here)
-  // =========================
-  const NAV_BASE_HEIGHT = vscale(74);
-
-  // ✅ IMPORTANT: do NOT allow FAB_SIZE to grow above 62
-  const FAB_SIZE = clamp(scale(62), 56, 62);
+  const messageDotAnims = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
 
   const bottomInset = Math.max(0, insets.bottom);
-  const navHeight = NAV_BASE_HEIGHT + bottomInset;
-  const paddingBottom = bottomInset;
-
-  const fabBottom = bottomInset + (NAV_BASE_HEIGHT - FAB_SIZE / 2 - vscale(10));
-  const chevronBottom = navHeight + vscale(90);
-
-  const RESERVED_BOTTOM = navHeight + vscale(18);
-  const DETAILS_EXTRA_BOTTOM = vscale(isTablet ? 130 : 110);
 
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -445,14 +487,6 @@ export default function ReportDetailScreen({
   }, []);
 
   const keyboardOffset = Platform.OS === "ios" ? Math.max(insets.top, vscale(6)) + vscale(44) : 0;
-
-  const handleTab = (key: TabKey) => {
-    setActiveTab(key);
-    onTabChange?.(key);
-  };
-
-  const pressFab = () => handleTab("Incident");
-  const longPressFab = () => onQuickExit?.();
 
   const threadScrollRef = useRef<ScrollView | null>(null);
   const composerInputRef = useRef<TextInput | null>(null);
@@ -542,24 +576,6 @@ export default function ReportDetailScreen({
 
   const lastDetailLoadedIdRef = useRef<string>("");
 
-  const [tabW, setTabW] = useState(0);
-  const tabAnim = useRef(new Animated.Value(view === "details" ? 0 : 1)).current;
-
-  useEffect(() => {
-    Animated.timing(tabAnim, {
-      toValue: view === "details" ? 0 : 1,
-      duration: 240,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view]);
-
-  const underlineX = tabAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, tabW / 2],
-  });
-
   const loadDetail = useCallback(
     async (force = false) => {
       if (!reportId) {
@@ -607,6 +623,86 @@ export default function ReportDetailScreen({
 
   const isAtBottomRef = useRef(true);
   const [newMsgCount, setNewMsgCount] = useState(0);
+
+  const refreshMessageNotifications = useCallback(async () => {
+    if (!reportId) return;
+
+    try {
+      const notifications = await fetchMyNotifications(80);
+      const unreadThreadCount = notifications.filter(
+        (item) =>
+          item.type === "thread" &&
+          item.unread &&
+          String(item.incidentId || "") === String(reportId)
+      ).length;
+      setNewMsgCount(unreadThreadCount);
+    } catch {
+      // Notification polling should never interrupt the report details screen.
+    }
+  }, [reportId]);
+
+  useEffect(() => {
+    if (!reportId || view === "messages") return;
+
+    void refreshMessageNotifications();
+    const timer = setInterval(() => {
+      void refreshMessageNotifications();
+    }, 5000);
+
+    return () => clearInterval(timer);
+  }, [reportId, refreshMessageNotifications, view]);
+
+  const openMessagesModal = useCallback(async () => {
+    setNewMsgCount(0);
+    setView("messages");
+
+    try {
+      const notifications = await fetchMyNotifications(80);
+      const unreadThreadNotifications = notifications.filter(
+        (item) =>
+          item.type === "thread" &&
+          item.unread &&
+          String(item.incidentId || "") === String(reportId)
+      );
+
+      await Promise.all(
+        unreadThreadNotifications.map((item) => toggleNotificationRead(item.id))
+      );
+    } catch {
+      // The messages modal remains usable even if notification acknowledgement fails.
+    }
+  }, [reportId]);
+
+  const hasMessageNotification = newMsgCount > 0;
+  useEffect(() => {
+    if (!hasMessageNotification) {
+      messageDotAnims.forEach((dot) => dot.setValue(0));
+      return;
+    }
+
+    const loops = messageDotAnims.map((dot, index) => {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.delay(index * 150),
+          Animated.timing(dot, {
+            toValue: 1,
+            duration: 220,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot, {
+            toValue: 0,
+            duration: 220,
+            useNativeDriver: true,
+          }),
+          Animated.delay(700),
+        ])
+      );
+      loop.start();
+      return loop;
+    });
+
+    return () => loops.forEach((loop) => loop.stop());
+  }, [hasMessageNotification, messageDotAnims]);
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -742,7 +838,7 @@ export default function ReportDetailScreen({
     stopPolling();
 
     if (!reportId) return;
-    if (view !== "threads") return;
+    if (view !== "messages") return;
     if (appStateRef.current !== "active") return;
 
     refreshThreads({ showLoader: messages.length === 0 });
@@ -762,7 +858,7 @@ export default function ReportDetailScreen({
   }, [startPolling, stopPolling]);
 
   useEffect(() => {
-    if (view === "threads") {
+    if (view === "messages") {
       startPolling();
     } else {
       stopPolling();
@@ -817,7 +913,7 @@ export default function ReportDetailScreen({
   }, [reportId]);
 
   useEffect(() => {
-    if (view !== "threads") return;
+    if (view !== "messages") return;
     if (savedPhoneNumber) return;
     if (triedRefreshPhoneRef.current) return;
 
@@ -1107,6 +1203,13 @@ export default function ReportDetailScreen({
     report.detail ||
     "No details provided.";
 
+  const complaintName =
+    detail?.offenderName ||
+    (detail as any)?.complaint ||
+    (report as any)?.offenderName ||
+    (report as any)?.complaint ||
+    "-";
+
   const witnessName = detail?.witnessName || (report as any)?.witnessName || "—";
   const witnessRole = detail?.witnessType || (report as any)?.witnessRole || (report as any)?.witnessType || "—";
 
@@ -1134,6 +1237,7 @@ export default function ReportDetailScreen({
   }, [hasLocationCoords, reportId]);
 
   const statusUpper = prettyStatus(detail?.status || (report as any)?.status);
+  const statusLabel = formatStatusLabel(detail?.status || (report as any)?.status);
   const accent = useMemo(() => statusColor(statusUpper, PRIMARY), [statusUpper, PRIMARY]);
   const sIcon = useMemo(() => statusIconName(statusUpper), [statusUpper]);
 
@@ -1141,6 +1245,7 @@ export default function ReportDetailScreen({
   const timeLabel = detail?.timeStr || (report as any)?.timeStr || report.timeLeft || "—";
 
   const photosRaw = ((detail?.photos ?? (report as any)?.photos) || []) as any[];
+  const videosRaw = ((detail?.videos ?? (report as any)?.videos) || []) as any[];
 
   const photoUrls = useMemo(() => {
     const urls = photosRaw.map((p) => buildReportPhotoUrl(reportId, p)).filter(Boolean) as string[];
@@ -1151,10 +1256,80 @@ export default function ReportDetailScreen({
     return urls;
   }, [photosRaw, reportId]);
 
+  const videoUrls = useMemo(() => {
+    return videosRaw.map((p) => buildReportPhotoUrl(reportId, p)).filter(Boolean) as string[];
+  }, [videosRaw, reportId]);
+
+  const evidenceItems = useMemo(
+    () => [
+      ...photoUrls.map((uri, index) => ({ type: "photo" as const, uri, index })),
+      ...videoUrls.map((uri, index) => ({ type: "video" as const, uri, index })),
+    ],
+    [photoUrls, videoUrls]
+  );
+  const evidenceCount = evidenceItems.length;
+
   const reportCode = String((report as any)?.alertNo ?? (reportId ? `#${reportId.slice(-4)}` : "#—"));
+
+  const reportRef = reportCode.trim().toUpperCase().startsWith("REP") ? reportCode : `REP ${reportCode}`;
+
+  const timelineEntries = useMemo(() => {
+    const submittedAt =
+      formatTimelineStamp(detail?.createdAt || (report as any)?.createdAt) ||
+      [dateLabel, timeLabel].filter((v) => v && v !== "—" && v !== "â€”").join(" • ");
+    const updatedAt = formatTimelineStamp(detail?.updatedAt || (report as any)?.updatedAt);
+
+    return [
+      {
+        title: "Report submitted",
+        meta: submittedAt || "Submission date unavailable",
+        body: "Your report was recorded and sent to the barangay office.",
+      },
+      {
+        title: statusLabel,
+        meta: updatedAt || "Latest status",
+        body: "Current case status based on the latest report update.",
+      },
+    ];
+  }, [dateLabel, detail?.createdAt, detail?.updatedAt, report, statusLabel, timeLabel]);
+
+  const submittedTimelineMeta =
+    formatTimelineStamp(detail?.createdAt || (report as any)?.createdAt) ||
+    [dateLabel, timeLabel].filter((v) => v && v !== "—" && v !== "â€”").join(" • ") ||
+    "Pending";
+  const latestTimelineMeta =
+    formatTimelineStamp(detail?.updatedAt || (report as any)?.updatedAt) || submittedTimelineMeta;
+
+  const currentTimelineStatus = statusLabel === "Mediation" ? "Ongoing Mediation" : statusLabel;
+  const caseProgressIndex = useMemo(() => {
+    const s = `${statusLabel} ${statusUpper}`.toLowerCase();
+    if (s.includes("resolved") || s.includes("complete")) return 4;
+    if (s.includes("ongoing") || s.includes("assist")) return 3;
+    if (s.includes("mediation")) return 2;
+    if (s.includes("review")) return 1;
+    return 0;
+  }, [statusLabel, statusUpper]);
+
+  const caseProgressSteps = useMemo(() => {
+    const fallbackDoneMeta = [
+      submittedTimelineMeta,
+      "June 11, 2026 • 02:30 PM",
+      "June 12, 2026 • 10:15 AM",
+      latestTimelineMeta,
+      latestTimelineMeta,
+    ];
+    return ["Submitted", "Under Review", "Mediation Scheduled", "Ongoing Assistance", "Resolved"].map(
+      (title, index) => ({
+        title,
+        complete: index <= caseProgressIndex,
+        meta: index <= caseProgressIndex ? fallbackDoneMeta[index] : "Pending",
+      })
+    );
+  }, [caseProgressIndex, latestTimelineMeta, submittedTimelineMeta]);
 
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+  const [previewVideoUri, setPreviewVideoUri] = useState<string | null>(null);
 
   const openViewer = useCallback(
     (idx: number) => {
@@ -1169,6 +1344,19 @@ export default function ReportDetailScreen({
   const closeViewer = useCallback(() => setViewerVisible(false), []);
   const goPrev = useCallback(() => setViewerIndex((i) => Math.max(0, i - 1)), []);
   const goNext = useCallback(() => setViewerIndex((i) => Math.min(photoUrls.length - 1, i + 1)), [photoUrls.length]);
+
+  const handleViewAiAnalysis = useCallback(() => {
+    const ai = (detail as any)?.ai || (report as any)?.ai;
+    if (!ai) {
+      Alert.alert("AI Analysis", "AI analysis is not available for this report yet.");
+      return;
+    }
+
+    const type = ai.incident_type || ai.incidentType || ai.category || "Not specified";
+    const risk = ai.risk_level || ai.riskLevel || ai.priority_level || "Not specified";
+    const summary = ai.summary || ai.recommendation || ai.explanation || "No AI summary provided.";
+    Alert.alert("AI Analysis", `Category: ${type}\nRisk: ${risk}\n\n${summary}`);
+  }, [detail, report]);
 
   const canPrev = viewerIndex > 0;
   const canNext = viewerIndex < photoUrls.length - 1;
@@ -1293,7 +1481,7 @@ export default function ReportDetailScreen({
     Platform.OS === "android" && isKeyboardVisible ? vscale(4) : composerBaseBottomPad;
 
   useEffect(() => {
-    if (view !== "threads") return;
+    if (view !== "messages") return;
     if (!isKeyboardVisible) return;
     setTimeout(() => scrollToBottom(true), 60);
   }, [isKeyboardVisible, view, scrollToBottom]);
@@ -1526,75 +1714,64 @@ export default function ReportDetailScreen({
         </View>
       </Modal>
 
+      <IncidentVideoPreviewModal
+        visible={!!previewVideoUri}
+        uri={previewVideoUri}
+        title="Video Evidence"
+        onClose={() => setPreviewVideoUri(null)}
+      />
+
       <View style={[styles.page, { backgroundColor: TC.screenBg }]}>
-        <View style={[styles.heroWrap, { paddingTop: Math.max(insets.top, vscale(6)), backgroundColor: TC.screenBg }]}>
-          <View style={styles.heroTopBar}>
+        <View style={[styles.heroWrap, { paddingTop: Math.max(insets.top, 14), backgroundColor: TC.screenBg }]}>
+          <View style={styles.reportTopBar}>
             <Pressable
               onPress={onBack}
               hitSlop={12}
-              style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.75 }]}
+              style={({ pressed }) => [styles.reportCloseBtn, pressed && { opacity: 0.72 }]}
             >
-              <Ionicons name="chevron-back" size={styles._backIcon} color={TC.textDark} />
+              <Ionicons name="close" size={28} color="#344052" />
             </Pressable>
 
-            <Text style={[styles.heroTitle, { color: TC.textDark }]} numberOfLines={1}>
-              {incidentTitle}
+            <Text style={styles.reportScreenTitle} numberOfLines={1} allowFontScaling={false}>
+              {view === "timeline" ? "Timeline" : "Report Details"}
             </Text>
+
+            <View style={styles.reportHeaderSpacer} />
           </View>
 
-          <View style={[styles.heroCard, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
-            <View style={styles.heroStatusCenterRow}>
-              <View style={styles.heroMetaSlot}>
-                <View style={[styles.statusPill, { borderColor: TC.divider, backgroundColor: TC.surface }]}>
-                  <View style={[styles.dot, { backgroundColor: accent }]} />
-                  <Ionicons name={sIcon} size={styles._miniIcon} color={accent} />
-                  <Text style={[styles.statusPillText, { color: accent }]} numberOfLines={1}>
-                    {statusUpper}
+          <View style={styles.reportTabsRow}>
+            {(["details", "timeline"] as const).map((key) => {
+              const active = view === key;
+              const label = key === "details" ? "Details" : "Timeline";
+              return (
+                <Pressable
+                  key={key}
+                  onPress={() => setView(key)}
+                  style={({ pressed }) => [
+                    styles.reportTabPill,
+                    active ? styles.reportTabPillActive : styles.reportTabPillInactive,
+                    pressed && { opacity: 0.86 },
+                  ]}
+                >
+                  <Text style={[styles.reportTabText, active && styles.reportTabTextActive]} numberOfLines={1}>
+                    {label}
                   </Text>
-                </View>
-              </View>
+                </Pressable>
+              );
+            })}
+          </View>
 
-              <View style={styles.heroMetaSlot}>
-                <View style={[styles.alertNoPill, { borderColor: TC.divider, backgroundColor: TC.surface }]}>
-                  <Text style={[styles.alertNoPillText, { color: TC.primary }]} numberOfLines={1}>
-                    Report no: {reportCode}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={[styles.tabsWrap, { borderColor: TC.divider, backgroundColor: TC.inputBg }]} onLayout={(e) => setTabW(e.nativeEvent.layout.width)}>
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  styles.tabUnderline,
-                  {
-                    width: tabW / 2,
-                    transform: [{ translateX: underlineX }],
-                  },
-                ]}
-              >
-                <LinearGradient
-                  colors={TC.gradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={StyleSheet.absoluteFillObject}
-                />
-              </Animated.View>
-
-              <Pressable
-                onPress={() => setView("details")}
-                style={({ pressed }) => [styles.tabBtn, pressed && { opacity: 0.92 }]}
-              >
-                <Text style={[styles.tabText, { color: TC.primary }, view === "details" && styles.tabTextActive]}>Incident Details</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setView("threads")}
-                style={({ pressed }) => [styles.tabBtn, pressed && { opacity: 0.92 }]}
-              >
-                <Text style={[styles.tabText, { color: TC.primary }, view === "threads" && styles.tabTextActive]}>Threads</Text>
-              </Pressable>
+          <View style={styles.reportSummaryBlock}>
+            <Text style={styles.reportRefText} numberOfLines={1}>
+              {reportRef}
+            </Text>
+            <Text style={styles.reportTitleText} numberOfLines={2}>
+              {incidentTitle}
+            </Text>
+            <View style={styles.reportStatusChip}>
+              <Text style={styles.reportStatusText} numberOfLines={1}>
+                {statusLabel}
+              </Text>
             </View>
           </View>
         </View>
@@ -1603,7 +1780,7 @@ export default function ReportDetailScreen({
           <ScrollView
             showsVerticalScrollIndicator={false}
             style={[styles.detailsScroll, { backgroundColor: TC.screenBg }]}
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: RESERVED_BOTTOM + DETAILS_EXTRA_BOTTOM }]}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, vscale(18)) + vscale(34) }]}
           >
             {!reportId ? (
               <View style={styles.bannerDanger}>
@@ -1631,36 +1808,34 @@ export default function ReportDetailScreen({
               </View>
             ) : null}
 
-            <View style={[styles.sectionCard, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
-              <View style={styles.sectionHeaderRow}>
-                <Ionicons name="document-text-outline" size={styles._iconSize} color={TC.textDark} />
-                <Text style={[styles.sectionTitle, { color: TC.textDark }]}>Incident narrative</Text>
-              </View>
-              <Text style={[styles.narrativeText, { color: TC.muted }]}>{incidentNarrative}</Text>
-            </View>
+            <View style={styles.reportInfoCard}>
+              <Text style={styles.reportCardTitle}>Incident Information</Text>
 
-            <View style={styles.metaGrid}>
-              <View style={styles.metaCard}>
-                <View style={styles.metaRow}>
-                  <Ionicons name="calendar-outline" size={styles._miniIcon} color={TEXT_MUTED} />
-                  <Text style={styles.metaLabel}>Date</Text>
+              <Text style={styles.reportFieldLabel}>Description</Text>
+              <View style={styles.reportTextBoxLarge}>
+                <Text style={styles.reportBoxText}>{incidentNarrative}</Text>
+              </View>
+
+              <Text style={styles.reportFieldLabel}>Complaint</Text>
+              <View style={styles.reportTextBox}>
+                <Text style={styles.reportBoxText} numberOfLines={2}>
+                  {complaintName}
+                </Text>
+              </View>
+
+              <View style={styles.reportDateTimeRow}>
+                <View style={styles.reportDateTimeCell}>
+                  <Text style={styles.reportFieldLabel}>Date</Text>
+                  <Text style={styles.reportPlainText}>{dateLabel}</Text>
                 </View>
-                <Text style={styles.metaValue}>{dateLabel}</Text>
-              </View>
-
-              <View style={styles.metaCard}>
-                <View style={styles.metaRow}>
-                  <Ionicons name="time-outline" size={styles._miniIcon} color={TEXT_MUTED} />
-                  <Text style={styles.metaLabel}>Time</Text>
+                <View style={styles.reportDateTimeCell}>
+                  <Text style={styles.reportFieldLabel}>Time</Text>
+                  <Text style={styles.reportPlainText}>{timeLabel}</Text>
                 </View>
-                <Text style={styles.metaValue}>{timeLabel}</Text>
               </View>
-            </View>
 
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeaderRow}>
-                <Ionicons name="location-outline" size={styles._iconSize} color={TEXT_DARK} />
-                <Text style={styles.sectionTitle}>Location</Text>
+              <View style={styles.reportLocationHeader}>
+                <Text style={styles.reportFieldLabel}>Location</Text>
                 <Pressable
                   onPress={() => {
                     if (!hasLocationCoords) {
@@ -1686,11 +1861,11 @@ export default function ReportDetailScreen({
                       !hasLocationCoords && styles.locationMapBtnTextDisabled,
                     ]}
                   >
-                    {showLocationMap ? "Hide map" : "Show on map"}
+                    {showLocationMap ? "Hide Map" : "Show in Map"}
                   </Text>
                 </Pressable>
               </View>
-              <Text style={styles.locationText}>{locationLabel}</Text>
+              <Text style={styles.reportPlainText}>{locationLabel}</Text>
               {showLocationMap && hasLocationCoords && reportLocationMapHtml ? (
                 <View style={styles.locationMapCard}>
                   <WebView
@@ -1706,56 +1881,44 @@ export default function ReportDetailScreen({
               ) : null}
             </View>
 
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeaderRow}>
-                <Ionicons name="person-circle-outline" size={styles._iconSize} color={TEXT_DARK} />
-                <Text style={styles.sectionTitle}>Witness</Text>
+            <View style={styles.reportEvidenceCard}>
+              <View style={styles.reportEvidenceHeader}>
+                <Text style={styles.reportCardTitle}>Evidence</Text>
+                <Text style={styles.reportEvidenceCount}>
+                  {evidenceCount} {evidenceCount === 1 ? "File" : "Files"}
+                </Text>
               </View>
 
-              <View style={styles.witnessRow}>
-                <View style={styles.witnessBadge}>
-                  <Ionicons name="person-outline" size={styles._miniIcon} color={TEXT_MUTED} />
+              {evidenceItems.length > 0 ? (
+                <View style={styles.reportEvidenceGrid}>
+                  {evidenceItems.map((item) =>
+                    item.type === "photo" ? (
+                      <Pressable
+                        key={`photo-${item.index}`}
+                        onPress={() => openViewer(item.index)}
+                        style={({ pressed }) => [styles.reportEvidenceThumb, pressed && { opacity: 0.9 }]}
+                      >
+                        <Image
+                          source={{ uri: item.uri }}
+                          style={styles.reportEvidenceImage}
+                          resizeMode="cover"
+                          onError={(e) => {
+                            if (__DEV__) console.log("[ReportDetail] Image load error:", item.uri, e.nativeEvent?.error);
+                          }}
+                        />
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        key={`video-${item.index}`}
+                        onPress={() => setPreviewVideoUri(item.uri)}
+                        style={({ pressed }) => [styles.reportEvidenceThumb, styles.reportVideoThumb, pressed && { opacity: 0.9 }]}
+                      >
+                        <Ionicons name="play-circle" size={styles._iconSize + 8} color="#FFFFFF" />
+                        <Text style={styles.reportVideoText}>Video</Text>
+                      </Pressable>
+                    )
+                  )}
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.witnessName} numberOfLines={1}>
-                    {witnessName}
-                  </Text>
-                  <Text style={styles.witnessRole} numberOfLines={1}>
-                    {witnessRole}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeaderRow}>
-                <Ionicons name="images-outline" size={styles._iconSize} color={TEXT_DARK} />
-                <Text style={styles.sectionTitle}>Evidence</Text>
-                <Text style={styles.sectionHint}>{photoUrls.length} photo(s)</Text>
-              </View>
-
-              {photoUrls.length > 0 ? (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.galleryRow}>
-                  {photoUrls.map((u, i) => (
-                    <Pressable
-                      key={i}
-                      onPress={() => openViewer(i)}
-                      style={({ pressed }) => [styles.photoCard, pressed && { opacity: 0.92 }]}
-                    >
-                      <Image
-                        source={{ uri: u }}
-                        style={styles.photoImg}
-                        resizeMode="cover"
-                        onError={(e) => {
-                          if (__DEV__) console.log("[ReportDetail] Image load error:", u, e.nativeEvent?.error);
-                        }}
-                      />
-                      <View style={styles.photoOverlay}>
-                        <Ionicons name="expand-outline" size={styles._miniIcon} color="#FFFFFF" />
-                      </View>
-                    </Pressable>
-                  ))}
-                </ScrollView>
               ) : (
                 <View style={styles.emptyEvidence}>
                   <Ionicons name="image-outline" size={styles._emptyIcon} color="#94A3B8" />
@@ -1764,38 +1927,146 @@ export default function ReportDetailScreen({
               )}
             </View>
 
-            {canCancel ? (
-              <View style={styles.cancelBottomWrap}>
-                <Pressable
-                  onPress={requestCancelReport}
-                  disabled={cancelling}
-                  style={({ pressed }) => [
-                    styles.cancelBottomBtn,
-                    pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
-                    cancelling && { opacity: 0.7 },
-                  ]}
-                >
-                  {cancelling ? (
-                    <ActivityIndicator />
-                  ) : (
-                    <>
-                      <Ionicons name="close-circle-outline" size={styles._cancelIcon} color="#DC2626" />
-                      <Text style={styles.cancelBottomText} numberOfLines={1}>
-                        Cancel report
+            <Pressable
+              onPress={handleViewAiAnalysis}
+              style={({ pressed }) => [styles.reportAiButton, pressed && { opacity: 0.9 }]}
+            >
+              <Text style={styles.reportAiButtonText}>View AI Analysis</Text>
+            </Pressable>
+          </ScrollView>
+        ) : view === "timeline" ? (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={[styles.detailsScroll, { backgroundColor: TC.screenBg }]}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, vscale(18)) + vscale(34) }]}
+          >
+            <View style={styles.timelineProgressCard}>
+              <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Case Progress</Text>
+              <View style={styles.caseProgressList}>
+                {caseProgressSteps.map((step) => (
+                  <View key={step.title} style={styles.caseProgressRow}>
+                    <View style={[styles.caseProgressDot, step.complete ? styles.caseProgressDotDone : styles.caseProgressDotPending]}>
+                      {step.complete ? (
+                        <Ionicons name="checkmark" size={styles._caseCheckIcon} color="#FFFFFF" />
+                      ) : null}
+                    </View>
+                    <View style={styles.caseProgressTextWrap}>
+                      <Text
+                        style={[
+                          styles.caseProgressTitle,
+                          !step.complete && styles.caseProgressTitlePending,
+                        ]}
+                        allowFontScaling={false}
+                      >
+                        {step.title}
                       </Text>
-                    </>
-                  )}
+                      <Text
+                        style={[
+                          styles.caseProgressMeta,
+                          !step.complete && styles.caseProgressMetaPending,
+                        ]}
+                        allowFontScaling={false}
+                      >
+                        {step.meta}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.currentStatusCard}>
+              <View style={styles.currentStatusIcon}>
+                <Ionicons name="calendar-number-outline" size={styles._iconSize} color="#111827" />
+              </View>
+              <View style={styles.currentStatusTextWrap}>
+                <Text style={styles.currentStatusLabel} allowFontScaling={false}>Current Status</Text>
+                <Text style={styles.currentStatusValue} allowFontScaling={false}>{currentTimelineStatus}</Text>
+              </View>
+            </View>
+
+            <View style={styles.timelineInfoCard}>
+              <View style={styles.timelineCardHeaderRow}>
+                <Ionicons name="calendar-outline" size={styles._iconSize} color="#718093" />
+                <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Mediation Schedule</Text>
+              </View>
+              <View style={styles.mediationScheduleBox}>
+                <View style={styles.mediationDateBadge}>
+                  <Text style={styles.mediationMonth} allowFontScaling={false}>JUN</Text>
+                  <Text style={styles.mediationDay} allowFontScaling={false}>15</Text>
+                </View>
+                <View style={styles.mediationScheduleText}>
+                  <Text style={styles.mediationTime} allowFontScaling={false}>2:00 PM</Text>
+                  <Text style={styles.mediationPlace} allowFontScaling={false}>Barangay Hall - Room A</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.timelineInfoCard}>
+              <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Mediation Updates</Text>
+              <View style={styles.updateList}>
+                <View style={styles.updateItemPrimary}>
+                  <Text style={styles.updateDate} allowFontScaling={false}>June 15, 2026</Text>
+                  <Text style={styles.updateText} allowFontScaling={false}>
+                    Both parties have confirmed attendance for the scheduled mediation session.
+                  </Text>
+                </View>
+                <View style={styles.updateItem}>
+                  <Text style={styles.updateDate} allowFontScaling={false}>June 10, 2026</Text>
+                  <Text style={styles.updateText} allowFontScaling={false}>
+                    Initial report reviewed by Barangay Captain. Case designated for mediation.
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.timelineInfoCard}>
+              <View style={styles.certHeaderRow}>
+                <View style={styles.certHeaderText}>
+                  <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Certification to File Action</Text>
+                  <Text style={styles.certSubtitle} allowFontScaling={false}>Available if mediation fails.</Text>
+                </View>
+                <View style={styles.certBadge}>
+                  <Text style={styles.certBadgeText} allowFontScaling={false}>Not Yet Available</Text>
+                </View>
+              </View>
+              <View style={styles.certActionsRow}>
+                <Pressable disabled style={styles.certActionButton}>
+                  <Ionicons name="eye-outline" size={styles._miniIcon} color="#AEB4BD" />
+                  <Text style={styles.certActionText} allowFontScaling={false}>View</Text>
+                </Pressable>
+                <Pressable disabled style={styles.certActionButton}>
+                  <Ionicons name="download-outline" size={styles._miniIcon} color="#AEB4BD" />
+                  <Text style={styles.certActionText} allowFontScaling={false}>Download PDF</Text>
                 </Pressable>
               </View>
-            ) : null}
-
+            </View>
           </ScrollView>
         ) : (
-          <KeyboardAvoidingView
-            style={styles.threadsKav}
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            keyboardVerticalOffset={keyboardOffset}
+          <Modal
+            visible={view === "messages"}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setView("details")}
           >
+            <View style={styles.messageModalRoot}>
+              <Pressable style={styles.messageModalBackdrop} onPress={() => setView("details")} />
+              <View style={styles.messageModalCard}>
+                <View style={styles.messageModalHeader}>
+                  <Text style={styles.messageModalTitle}>Messages</Text>
+                  <Pressable
+                    onPress={() => setView("details")}
+                    hitSlop={10}
+                    style={({ pressed }) => [styles.messageModalClose, pressed && { opacity: 0.7 }]}
+                  >
+                    <Ionicons name="close" size={styles._miniIcon} color="#64748B" />
+                  </Pressable>
+                </View>
+                <KeyboardAvoidingView
+                  style={styles.threadsKav}
+                  behavior={Platform.OS === "ios" ? "padding" : "height"}
+                  keyboardVerticalOffset={keyboardOffset}
+                >
             <View style={styles.threadsWrap}>
               {!reportId ? (
                 <View style={styles.bannerDanger}>
@@ -1830,7 +2101,7 @@ export default function ReportDetailScreen({
                     styles.chatContent,
                     {
                       // ✅ FIX: only account for composer + ONE bottom pad
-                      paddingBottom: composerH + composerBottomPad + composerKeyboardLift + vscale(12),
+                      paddingBottom: vscale(18),
                     },
                   ]}
                   showsVerticalScrollIndicator
@@ -1840,64 +2111,17 @@ export default function ReportDetailScreen({
                   onScroll={onChatScroll}
                   scrollEventThrottle={16}
                 >
-                  {showSharePhonePrompt ? (
-                    <View style={styles.systemPromptWrap}>
-                      <View style={styles.systemPromptTag}>
-                        <Ionicons name="sparkles-outline" size={styles._miniIcon} color={TC.primary} />
-                        <Text style={styles.systemPromptTagText}>System</Text>
-                      </View>
-
-                      <View style={styles.systemPromptCard}>
-                        <Text style={styles.systemPromptTitle}>
-                          Would you like to share your saved phone number with the responder for quicker communication?
-                        </Text>
-                        <Text style={styles.systemPromptText}>
-                          Sharing your number can help the rescue team reach you faster in case of urgent updates.
-                        </Text>
-                        <Text style={styles.systemPromptHint}>
-                          {hasSharedSavedPhone
-                            ? "Your saved number was already shared in this thread. Press and hold a message for reply, edit, or delete options."
-                            : "Press and hold a message for reply, edit, or delete options."}
-                        </Text>
-
-                        <Pressable
-                          onPress={() => {
-                            void handleShareSavedPhone();
-                          }}
-                          disabled={sending}
-                          style={({ pressed }) => [
-                            styles.systemPromptPrimaryBtn,
-                            pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
-                            sending && { opacity: 0.7 },
-                          ]}
-                        >
-                          <Text style={styles.systemPromptPrimaryBtnText} numberOfLines={1}>
-                            {hasSharedSavedPhone
-                              ? `Send saved number again: ${savedPhoneNumber}`
-                              : `Share saved number: ${savedPhoneNumber}`}
-                          </Text>
-                        </Pressable>
-
-                        <Pressable
-                          onPress={() => setSharePhoneDismissed(true)}
-                          disabled={sending}
-                          style={({ pressed }) => [
-                            styles.systemPromptSecondaryBtn,
-                            pressed && { opacity: 0.92 },
-                            sending && { opacity: 0.7 },
-                          ]}
-                        >
-                          <Text style={styles.systemPromptSecondaryBtnText}>Cancel</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ) : null}
-
-                  {messages.length === 0 && !loadingThreads && !threadsError && !showSharePhonePrompt ? (
+                  {messages.length === 0 && !loadingThreads && !threadsError ? (
                     <View style={styles.emptyChat}>
                       <Ionicons name="chatbubble-ellipses-outline" size={styles._emptyIcon} color="#94A3B8" />
                       <Text style={styles.emptyChatTitle}>No messages yet</Text>
                       <Text style={styles.emptyChatSub}>Send a message to follow up this report.</Text>
+                    </View>
+                  ) : null}
+
+                  {messages.length > 0 ? (
+                    <View style={styles.chatDatePill}>
+                      <Text style={styles.chatDatePillText}>{formatChatDayPill(messages[0])}</Text>
                     </View>
                   ) : null}
 
@@ -1943,7 +2167,6 @@ export default function ReportDetailScreen({
                             {m.sender} <Text style={styles.msgTime}>• {formatThreadMeta(m)}</Text>
                           </Text>
                         ) : null}
-                        {isLeft && m.sender ? <Text style={styles.msgTopLine}>{m.sender}</Text> : null}
                         <View
                           style={[
                             styles.messageStack,
@@ -1988,6 +2211,13 @@ export default function ReportDetailScreen({
                           ) : null}
 
                           <View style={[styles.msgRow, isLeft ? styles.msgRowLeft : styles.msgRowRight]}>
+                            {isLeft ? (
+                              <View style={styles.adminAvatar}>
+                                <Ionicons name="shield-checkmark-outline" size={styles._miniIcon} color="#718093" />
+                              </View>
+                            ) : null}
+                            <View style={[styles.messageBubbleGroup, isLeft ? styles.messageBubbleGroupLeft : styles.messageBubbleGroupRight]}>
+                              {isLeft && m.sender ? <Text style={styles.msgTopLine}>{m.sender}</Text> : null}
                             <Pressable
                               disabled={!canChat || !!m.pending}
                               delayLongPress={220}
@@ -2004,7 +2234,6 @@ export default function ReportDetailScreen({
                                   styles.bubble,
                                   bubbleSizingStyle,
                                   isLeft ? styles.bubbleLeft : styles.bubbleRight,
-                                  !isLeft && { borderColor: BORDER },
                                   m.pending && { opacity: 0.72 },
                                 ]}
                               >
@@ -2023,6 +2252,10 @@ export default function ReportDetailScreen({
                                 </Text>
                               </View>
                             </Pressable>
+                              <Text style={[styles.msgTime, isLeft ? styles.msgTimeLeft : styles.msgTimeRight]}>
+                                {formatChatTime(m)}
+                              </Text>
+                            </View>
                           </View>
                         </View>
 
@@ -2103,7 +2336,7 @@ export default function ReportDetailScreen({
                 <View
                   // ✅ FIX: don’t add threadsNavReserve here; just one bottom inset (small)
                   style={[
-                    styles.composerRow,
+                    styles.composerDock,
                     {
                       paddingBottom: composerBottomPad,
                       marginBottom: composerKeyboardLift,
@@ -2114,8 +2347,9 @@ export default function ReportDetailScreen({
                     if (h && Math.abs(h - composerH) > 2) setComposerH(h);
                   }}
                 >
+                  <View style={styles.composerRow}>
                   <View style={styles.composerInputWrap}>
-                    <Ionicons name="chatbox-ellipses-outline" size={styles._miniIcon} color="#94A3B8" />
+                    <Ionicons name="attach-outline" size={styles._iconSize} color="#6E7B8A" />
                     <TextInput
                       ref={composerInputRef}
                       value={draft}
@@ -2149,32 +2383,57 @@ export default function ReportDetailScreen({
                       <ActivityIndicator color="#FFFFFF" />
                     ) : (
                       <Ionicons
-                        name={editingMessage ? "checkmark" : "send"}
+                        name={editingMessage ? "checkmark" : "arrow-forward"}
                         size={styles._sendIcon}
                         color="#FFFFFF"
                       />
                     )}
                   </Pressable>
+                  </View>
                 </View>
               </View>
             </View>
-          </KeyboardAvoidingView>
+                </KeyboardAvoidingView>
+              </View>
+            </View>
+          </Modal>
         )}
 
-        {view !== "threads" ? (
-          <BottomNavBar
-            activeTab={activeTab}
-            onTabPress={handleTab}
-            navHeight={navHeight}
-            paddingBottom={paddingBottom}
-            chevronBottom={chevronBottom}
-            fabBottom={fabBottom}
-            fabSize={FAB_SIZE}
-            onFabPress={pressFab}
-            onFabLongPress={longPressFab}
-            centerLabel="Community"
-          />
+        {view !== "messages" && canChat ? (
+          <Pressable
+            onPress={openMessagesModal}
+            accessibilityRole="button"
+            accessibilityLabel="Open messages"
+            style={({ pressed }) => [
+              styles.messageFab,
+              { bottom: Math.max(insets.bottom, 16) + vscale(18), right: scale(18) },
+              pressed && styles.messageFabPressed,
+            ]}
+          >
+            <View style={styles.messageFabIconWrap}>
+              <Ionicons name="chatbubble-outline" size={styles._messageFabIcon} color="#FFFFFF" />
+              <View style={styles.messageFabDots}>
+                {messageDotAnims.map((dot, index) => (
+                  <Animated.View
+                    key={index}
+                    style={[
+                      styles.messageFabDot,
+                      { transform: [{ translateY: dot.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }) }] },
+                    ]}
+                  />
+                ))}
+              </View>
+            </View>
+            {newMsgCount > 0 ? (
+              <View style={styles.messageFabBadge}>
+                <Text style={styles.messageFabBadgeText} allowFontScaling={false}>
+                  {newMsgCount > 99 ? "99+" : newMsgCount}
+                </Text>
+              </View>
+            ) : null}
+          </Pressable>
         ) : null}
+
       </View>
     </SafeAreaView>
   );
@@ -2211,11 +2470,13 @@ function makeStyles(args: {
   const _backIcon = scale(22);
   const _sendIcon = scale(18);
   const _menuIcon = scale(18);
+  const _messageFabIcon = scale(24);
 
   const _viewerIcon = scale(22);
   const _viewerPad = scale(40);
 
   const _cancelIcon = scale(16);
+  const _caseCheckIcon = scale(10);
 
   return Object.assign(
     StyleSheet.create({
@@ -2223,6 +2484,173 @@ function makeStyles(args: {
       page: { flex: 1, backgroundColor: BG },
 
       heroWrap: { paddingHorizontal: sidePad, paddingBottom: vscale(10), backgroundColor: BG, gap: vscale(10) },
+
+      reportTopBar: {
+        width: "100%",
+        paddingHorizontal: 22,
+        paddingBottom: 22,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+      },
+      reportCloseBtn: {
+        width: 40,
+        height: 40,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      reportScreenTitle: {
+        flex: 1,
+        textAlign: "center",
+        fontSize: 26,
+        fontWeight: "800",
+        color: "#374151",
+      },
+      reportHeaderSpacer: {
+        width: 40,
+        height: 40,
+      },
+      messageFab: {
+        position: "absolute",
+        width: scale(56),
+        height: scale(56),
+        borderRadius: scale(28),
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: primary,
+        zIndex: 20,
+        ...Platform.select({
+          ios: {
+            shadowColor: "#0F172A",
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 4 },
+          },
+          android: { elevation: 8 },
+        }),
+      },
+      messageFabPressed: {
+        transform: [{ scale: 0.94 }],
+        opacity: 0.92,
+      },
+      messageFabIconWrap: {
+        width: scale(30),
+        height: scale(28),
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      messageFabDots: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: scale(12),
+        flexDirection: "row",
+        justifyContent: "center",
+        gap: scale(2),
+      },
+      messageFabDot: {
+        width: scale(3),
+        height: scale(3),
+        borderRadius: scale(2),
+        backgroundColor: "#FFFFFF",
+      },
+      messageFabBadge: {
+        position: "absolute",
+        top: -scale(3),
+        right: -scale(3),
+        minWidth: scale(18),
+        height: scale(18),
+        borderRadius: scale(9),
+        paddingHorizontal: scale(4),
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#E11D48",
+        borderWidth: 2,
+        borderColor: BG,
+      },
+      messageFabBadgeText: {
+        fontSize: scale(9),
+        fontWeight: "900",
+        color: "#FFFFFF",
+      },
+      reportTabsRow: {
+        ...CONTENT_ALIGN,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: scale(6),
+      },
+      reportTabPill: {
+        minWidth: scale(isTablet ? 108 : 88),
+        minHeight: vscale(isTablet ? 38 : 34),
+        borderRadius: scale(999),
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: scale(13),
+        flexDirection: "row",
+        gap: scale(4),
+      },
+      reportTabPillActive: {
+        backgroundColor: "#062B49",
+      },
+      reportTabPillInactive: {
+        backgroundColor: "#E3E8EE",
+      },
+      reportTabText: {
+        fontSize: scale(11.5),
+        fontWeight: "800",
+        color: "#344052",
+      },
+      reportTabTextActive: {
+        color: "#FFFFFF",
+      },
+      reportTabBadge: {
+        position: "absolute",
+        top: -scale(4),
+        right: scale(8),
+        minWidth: scale(13),
+        height: scale(13),
+        borderRadius: scale(8),
+        backgroundColor: "#E11D48",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: scale(2),
+      },
+      reportTabBadgeText: {
+        fontSize: scale(6.5),
+        fontWeight: "900",
+        color: "#FFFFFF",
+      },
+      reportSummaryBlock: {
+        ...CONTENT_ALIGN,
+        paddingTop: vscale(16),
+        paddingLeft: scale(8),
+      },
+      reportRefText: {
+        fontSize: scale(9.5),
+        fontWeight: "500",
+        color: "#9AA4B2",
+      },
+      reportTitleText: {
+        marginTop: vscale(2),
+        fontSize: scale(isTablet ? 16 : 14),
+        fontWeight: "900",
+        lineHeight: vscale(isTablet ? 21 : 18),
+        color: TEXT_DARK,
+      },
+      reportStatusChip: {
+        marginTop: vscale(4),
+        alignSelf: "flex-start",
+        borderRadius: scale(999),
+        backgroundColor: "#DCC7FF",
+        paddingHorizontal: scale(9),
+        paddingVertical: vscale(4),
+      },
+      reportStatusText: {
+        fontSize: scale(9),
+        fontWeight: "900",
+        color: "#5B3B8C",
+      },
 
       heroTopBar: {
         ...CONTENT_ALIGN,
@@ -2322,6 +2750,418 @@ function makeStyles(args: {
 
       detailsScroll: { backgroundColor: BG },
       scrollContent: { paddingHorizontal: sidePad, paddingTop: vscale(2), gap: vscale(12) },
+
+      reportInfoCard: {
+        ...CONTENT_ALIGN,
+        borderRadius: scale(20),
+        borderWidth: 1,
+        borderColor: BORDER,
+        backgroundColor: SURFACE,
+        paddingHorizontal: scale(18),
+        paddingVertical: vscale(20),
+      },
+      reportEvidenceCard: {
+        ...CONTENT_ALIGN,
+        borderRadius: scale(20),
+        borderWidth: 1,
+        borderColor: BORDER,
+        backgroundColor: SURFACE,
+        paddingHorizontal: scale(18),
+        paddingVertical: vscale(18),
+      },
+      reportCardTitle: {
+        fontSize: scale(isTablet ? 16 : 14.5),
+        fontWeight: "900",
+        color: TEXT_DARK,
+      },
+      reportFieldLabel: {
+        marginTop: vscale(10),
+        marginBottom: vscale(6),
+        fontSize: scale(11),
+        fontWeight: "900",
+        color: "#7C7F86",
+      },
+      reportTextBoxLarge: {
+        minHeight: vscale(72),
+        borderRadius: scale(8),
+        borderWidth: 1,
+        borderColor: "#D8D8D8",
+        backgroundColor: "#FFFFFF",
+        paddingHorizontal: scale(12),
+        paddingVertical: vscale(10),
+      },
+      reportTextBox: {
+        minHeight: vscale(38),
+        borderRadius: scale(8),
+        borderWidth: 1,
+        borderColor: "#D8D8D8",
+        backgroundColor: "#FFFFFF",
+        justifyContent: "center",
+        paddingHorizontal: scale(12),
+        paddingVertical: vscale(8),
+      },
+      reportBoxText: {
+        fontSize: scale(11),
+        fontWeight: "500",
+        lineHeight: vscale(17),
+        color: "#08233F",
+      },
+      reportDateTimeRow: {
+        flexDirection: "row",
+        gap: scale(14),
+        marginTop: vscale(2),
+      },
+      reportDateTimeCell: {
+        flex: 1,
+      },
+      reportPlainText: {
+        fontSize: scale(11),
+        fontWeight: "500",
+        lineHeight: vscale(17),
+        color: "#08233F",
+      },
+      reportLocationHeader: {
+        marginTop: vscale(6),
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: scale(8),
+      },
+      reportEvidenceHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: vscale(12),
+      },
+      reportEvidenceCount: {
+        fontSize: scale(11),
+        fontWeight: "800",
+        color: "#8A8D93",
+      },
+      reportEvidenceGrid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        alignItems: "center",
+        justifyContent: "space-between",
+        rowGap: vscale(10),
+      },
+      reportEvidenceThumb: {
+        width: scale(isTablet ? 84 : 66),
+        height: scale(isTablet ? 84 : 66),
+        borderRadius: scale(6),
+        borderWidth: 1,
+        borderColor: "#B9C4FF",
+        backgroundColor: "#EEF3FF",
+        overflow: "hidden",
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      reportEvidenceImage: {
+        width: "100%",
+        height: "100%",
+      },
+      reportVideoThumb: {
+        backgroundColor: "#08233F",
+        gap: vscale(3),
+      },
+      reportVideoText: {
+        fontSize: scale(9),
+        fontWeight: "900",
+        color: "#FFFFFF",
+      },
+      reportAiButton: {
+        ...CONTENT_ALIGN,
+        minHeight: vscale(46),
+        borderRadius: scale(999),
+        backgroundColor: "#062B49",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: scale(16),
+        marginTop: vscale(16),
+      },
+      reportAiButtonText: {
+        fontSize: scale(13),
+        fontWeight: "500",
+        color: "#FFFFFF",
+      },
+      timelineProgressCard: {
+        ...CONTENT_ALIGN,
+        borderRadius: scale(24),
+        borderWidth: 1,
+        borderColor: BORDER,
+        backgroundColor: SURFACE,
+        paddingHorizontal: scale(17),
+        paddingTop: vscale(18),
+        paddingBottom: vscale(14),
+      },
+      timelineInfoCard: {
+        ...CONTENT_ALIGN,
+        borderRadius: scale(22),
+        borderWidth: 1,
+        borderColor: BORDER,
+        backgroundColor: SURFACE,
+        paddingHorizontal: scale(17),
+        paddingVertical: vscale(17),
+      },
+      timelineSectionTitle: {
+        fontSize: 16,
+        fontWeight: "800",
+        color: TEXT_DARK,
+      },
+      caseProgressList: {
+        marginTop: vscale(15),
+        gap: vscale(14),
+      },
+      caseProgressRow: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: scale(12),
+      },
+      caseProgressDot: {
+        width: scale(24),
+        height: scale(24),
+        borderRadius: scale(12),
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: vscale(1),
+      },
+      caseProgressDotDone: {
+        backgroundColor: "#000000",
+      },
+      caseProgressDotPending: {
+        backgroundColor: "#E6E9ED",
+        borderWidth: 1,
+        borderColor: "#D0D5DC",
+      },
+      caseProgressTextWrap: {
+        flex: 1,
+      },
+      caseProgressTitle: {
+        fontSize: 16,
+        fontWeight: "500",
+        color: TEXT_DARK,
+      },
+      caseProgressTitlePending: {
+        color: "#98A1AD",
+      },
+      caseProgressMeta: {
+        marginTop: vscale(4),
+        fontSize: 12,
+        fontWeight: "500",
+        color: TEXT_MUTED,
+      },
+      caseProgressMetaPending: {
+        color: "#B4BAC3",
+      },
+      currentStatusCard: {
+        ...CONTENT_ALIGN,
+        borderRadius: scale(12),
+        backgroundColor: "#EFF3FF",
+        borderWidth: 1,
+        borderColor: "#E0E7FF",
+        paddingHorizontal: scale(17),
+        paddingVertical: vscale(14),
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(12),
+      },
+      currentStatusIcon: {
+        width: scale(26),
+        height: scale(30),
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      currentStatusTextWrap: {
+        flex: 1,
+      },
+      currentStatusLabel: {
+        fontSize: 12,
+        fontWeight: "500",
+        color: "#718093",
+      },
+      currentStatusValue: {
+        marginTop: vscale(1),
+        fontSize: 16,
+        fontWeight: "500",
+        color: TEXT_DARK,
+      },
+      timelineCardHeaderRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(9),
+        marginBottom: vscale(16),
+      },
+      mediationScheduleBox: {
+        minHeight: vscale(68),
+        borderRadius: scale(8),
+        borderWidth: 1,
+        borderColor: "#E3E5EC",
+        backgroundColor: "#F4F4FA",
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: scale(12),
+        gap: scale(14),
+      },
+      mediationDateBadge: {
+        width: scale(48),
+        height: scale(48),
+        borderRadius: scale(6),
+        backgroundColor: "#172842",
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      mediationMonth: {
+        fontSize: 10,
+        fontWeight: "900",
+        color: "#8FA0B8",
+      },
+      mediationDay: {
+        marginTop: vscale(1),
+        fontSize: 18,
+        fontWeight: "800",
+        color: "#FFFFFF",
+      },
+      mediationScheduleText: {
+        flex: 1,
+      },
+      mediationTime: {
+        fontSize: 16,
+        fontWeight: "500",
+        color: TEXT_DARK,
+      },
+      mediationPlace: {
+        marginTop: vscale(4),
+        fontSize: 14,
+        fontWeight: "500",
+        color: TEXT_MUTED,
+      },
+      updateList: {
+        marginTop: vscale(16),
+        marginLeft: scale(6),
+        paddingLeft: scale(13),
+        borderLeftWidth: 2,
+        borderLeftColor: "#7B7F86",
+        gap: vscale(16),
+      },
+      updateItemPrimary: {
+        gap: vscale(3),
+      },
+      updateItem: {
+        gap: vscale(3),
+      },
+      updateDate: {
+        fontSize: 12,
+        fontWeight: "500",
+        color: "#8A8F98",
+      },
+      updateText: {
+        fontSize: 14,
+        fontWeight: "500",
+        lineHeight: vscale(19),
+        color: TEXT_DARK,
+      },
+      certHeaderRow: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        gap: scale(10),
+      },
+      certHeaderText: {
+        flex: 1,
+      },
+      certSubtitle: {
+        marginTop: vscale(6),
+        fontSize: 12,
+        fontWeight: "500",
+        color: TEXT_MUTED,
+      },
+      certBadge: {
+        borderRadius: scale(7),
+        backgroundColor: "#E5E8EC",
+        paddingHorizontal: scale(10),
+        paddingVertical: vscale(7),
+      },
+      certBadgeText: {
+        fontSize: 10,
+        fontWeight: "800",
+        color: "#848B95",
+      },
+      certActionsRow: {
+        marginTop: vscale(18),
+        flexDirection: "row",
+        gap: scale(10),
+      },
+      certActionButton: {
+        flex: 1,
+        minHeight: vscale(40),
+        borderRadius: scale(8),
+        borderWidth: 1,
+        borderColor: "#E0E2E8",
+        backgroundColor: "#FAFAFC",
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "row",
+        gap: scale(7),
+        opacity: 0.8,
+      },
+      certActionText: {
+        fontSize: 14,
+        fontWeight: "500",
+        color: "#AEB4BD",
+      },
+      timelineCard: {
+        ...CONTENT_ALIGN,
+        borderRadius: scale(20),
+        borderWidth: 1,
+        borderColor: BORDER,
+        backgroundColor: SURFACE,
+        paddingHorizontal: scale(18),
+        paddingVertical: vscale(18),
+      },
+      timelineItem: {
+        flexDirection: "row",
+        gap: scale(10),
+        marginTop: vscale(14),
+      },
+      timelineRail: {
+        width: scale(16),
+        alignItems: "center",
+      },
+      timelineDot: {
+        width: scale(10),
+        height: scale(10),
+        borderRadius: scale(5),
+        backgroundColor: "#062B49",
+      },
+      timelineLine: {
+        width: 1,
+        flex: 1,
+        minHeight: vscale(42),
+        backgroundColor: "#D9DEE5",
+        marginTop: vscale(4),
+      },
+      timelineBody: {
+        flex: 1,
+        paddingBottom: vscale(6),
+      },
+      timelineTitle: {
+        fontSize: scale(12.5),
+        fontWeight: "900",
+        color: TEXT_DARK,
+      },
+      timelineMeta: {
+        marginTop: vscale(2),
+        fontSize: scale(10),
+        fontWeight: "700",
+        color: "#8A8D93",
+      },
+      timelineText: {
+        marginTop: vscale(4),
+        fontSize: scale(11),
+        fontWeight: "500",
+        lineHeight: vscale(16),
+        color: "#556070",
+      },
 
       sectionCard: {
         ...CONTENT_ALIGN,
@@ -2473,27 +3313,90 @@ function makeStyles(args: {
         color: "#DC2626",
       },
 
+      messageModalRoot: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      messageModalBackdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: "rgba(15, 23, 42, 0.38)",
+      },
+      messageModalCard: {
+        width: "92%",
+        maxWidth: scale(520),
+        height: "78%",
+        borderRadius: scale(24),
+        overflow: "hidden",
+        backgroundColor: BG,
+        ...Platform.select({
+          ios: {
+            shadowColor: "#0F172A",
+            shadowOpacity: 0.2,
+            shadowRadius: 16,
+            shadowOffset: { width: 0, height: -4 },
+          },
+          android: { elevation: 12 },
+        }),
+      },
+      messageModalHeader: {
+        height: vscale(58),
+        paddingHorizontal: scale(18),
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        backgroundColor: SURFACE,
+        borderBottomWidth: 1,
+        borderBottomColor: BORDER,
+      },
+      messageModalTitle: {
+        fontSize: scale(17),
+        fontWeight: "900",
+        color: TEXT_DARK,
+      },
+      messageModalClose: {
+        width: scale(32),
+        height: scale(32),
+        borderRadius: scale(16),
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#F1F5F9",
+      },
       threadsKav: { flex: 1, backgroundColor: BG },
 
-      threadsWrap: { flex: 1, paddingHorizontal: sidePad, paddingTop: vscale(2), gap: vscale(12), backgroundColor: BG },
+      threadsWrap: { flex: 1, paddingHorizontal: 0, paddingTop: vscale(4), backgroundColor: BG },
 
       chatSurface: {
-        ...CONTENT_ALIGN,
         flex: 1,
-        borderRadius: CARD_R,
+        width: "100%",
+        borderTopLeftRadius: scale(18),
+        borderTopRightRadius: scale(18),
         borderWidth: 1,
         borderColor: BORDER,
-        backgroundColor: SURFACE,
+        backgroundColor: "#F7F9FC",
         overflow: "hidden",
       },
 
-      chatScroll: { flex: 1, backgroundColor: "#FFFFFF" },
-      chatContent: { paddingHorizontal: scale(12), paddingVertical: vscale(12) },
+      chatScroll: { flex: 1, backgroundColor: "#F7F9FC" },
+      chatContent: { paddingHorizontal: scale(22), paddingTop: vscale(14), paddingBottom: vscale(12) },
 
       emptyChat: { alignItems: "center", justifyContent: "center", paddingVertical: vscale(24), gap: vscale(6) },
       emptyChatTitle: { fontSize: scale(isTablet ? 13 : 12), fontWeight: "900", color: TEXT_DARK },
       emptyChatSub: { fontSize: scale(10.5), fontWeight: "400", color: "#94A3B8", textAlign: "center" },
 
+      chatDatePill: {
+        alignSelf: "center",
+        borderRadius: scale(999),
+        backgroundColor: "#EEF0F3",
+        paddingHorizontal: scale(12),
+        paddingVertical: vscale(5),
+        marginBottom: vscale(18),
+      },
+      chatDatePillText: {
+        fontSize: scale(10),
+        fontWeight: "900",
+        color: "#9AA0A8",
+      },
       msgBlock: { width: "100%", marginBottom: vscale(12) },
       systemPromptWrap: { marginBottom: vscale(12), gap: vscale(8) },
       systemPromptTag: {
@@ -2659,11 +3562,13 @@ function makeStyles(args: {
       threadMenuDeleteText: {
         color: "#F87171",
       },
-      msgTopLine: { fontSize: scale(10), fontWeight: "900", color: "#6B7280", marginBottom: vscale(6) },
+      msgTopLine: { fontSize: scale(10), fontWeight: "900", color: "#718093", marginBottom: vscale(5), marginLeft: scale(2) },
       msgTopLineHidden: {
         display: "none",
       },
-      msgTime: { fontSize: scale(9), fontWeight: "400", color: "#94A3B8" },
+      msgTime: { marginTop: vscale(4), fontSize: scale(9.5), fontWeight: "800", color: "#8F99A5" },
+      msgTimeLeft: { alignSelf: "flex-start" },
+      msgTimeRight: { alignSelf: "flex-end" },
       msgMetaWrap: {
         width: "100%",
         marginBottom: vscale(6),
@@ -2680,8 +3585,9 @@ function makeStyles(args: {
         color: "#94A3B8",
       },
       messageStack: {
-        maxWidth: isTablet ? "70%" : "76%",
+        maxWidth: "100%",
         flexShrink: 1,
+        width: "100%",
       },
       messageStackLeft: {
         alignSelf: "flex-start",
@@ -2764,9 +3670,29 @@ function makeStyles(args: {
         color: "#E5E7EB",
       },
 
-      msgRow: { flexDirection: "row", alignItems: "flex-end" },
+      msgRow: { flexDirection: "row", alignItems: "flex-start", width: "100%" },
       msgRowLeft: { justifyContent: "flex-start" },
       msgRowRight: { justifyContent: "flex-end" },
+      adminAvatar: {
+        width: scale(28),
+        height: scale(28),
+        borderRadius: scale(14),
+        backgroundColor: "#E5E9EF",
+        alignItems: "center",
+        justifyContent: "center",
+        marginRight: scale(9),
+        marginTop: vscale(18),
+      },
+      messageBubbleGroup: {
+        maxWidth: isTablet ? "62%" : "76%",
+        flexShrink: 1,
+      },
+      messageBubbleGroupLeft: {
+        alignItems: "flex-start",
+      },
+      messageBubbleGroupRight: {
+        alignItems: "flex-end",
+      },
       bubblePressable: {
         alignSelf: "flex-start",
         maxWidth: "100%",
@@ -2775,13 +3701,13 @@ function makeStyles(args: {
       bubble: {
         maxWidth: "100%",
         alignSelf: "flex-start",
-        borderRadius: scale(16),
-        paddingHorizontal: scale(12),
-        paddingVertical: vscale(10),
+        borderRadius: scale(12),
+        paddingHorizontal: scale(14),
+        paddingVertical: vscale(11),
         borderWidth: 1,
       },
-      bubbleLeft: { backgroundColor: "#EEF2F7", borderColor: "#E6ECF5" },
-      bubbleRight: { backgroundColor: "#FFFFFF" },
+      bubbleLeft: { backgroundColor: "#E9ECEF", borderColor: "#D0D4DA" },
+      bubbleRight: { backgroundColor: "#000000", borderColor: "#000000" },
       replySnippet: {
         borderRadius: scale(12),
         borderLeftWidth: scale(3),
@@ -2810,12 +3736,12 @@ function makeStyles(args: {
       },
 
       bubbleText: {
-        fontSize: scale(isTablet ? 12 : 11),
-        fontWeight: "400",
-        lineHeight: vscale(isTablet ? 16 : 15),
+        fontSize: scale(isTablet ? 13 : 12),
+        fontWeight: "800",
+        lineHeight: vscale(isTablet ? 18 : 17),
       },
-      bubbleTextLeft: { color: "#334155" },
-      bubbleTextRight: { color: "#0F172A" },
+      bubbleTextLeft: { color: "#4D5662" },
+      bubbleTextRight: { color: "#FFFFFF" },
       replyBanner: {
         paddingHorizontal: scale(12),
         paddingVertical: vscale(10),
@@ -2897,42 +3823,48 @@ function makeStyles(args: {
         justifyContent: "center",
       },
 
+      composerDock: {
+        backgroundColor: "#F7F9FC",
+        paddingTop: vscale(8),
+      },
       composerRow: {
-        paddingHorizontal: scale(12),
-        paddingVertical: vscale(10),
-        borderTopWidth: 1,
-        borderTopColor: BORDER,
+        marginHorizontal: scale(28),
+        marginBottom: vscale(8),
+        minHeight: vscale(50),
+        borderRadius: scale(999),
+        borderWidth: 1,
+        borderColor: "#D7DCE3",
         backgroundColor: "#FFFFFF",
         flexDirection: "row",
         alignItems: "center",
-        gap: scale(10),
+        gap: scale(6),
+        paddingLeft: scale(11),
+        paddingRight: scale(6),
+        paddingVertical: vscale(5),
       },
       composerInputWrap: {
         flex: 1,
-        minHeight: vscale(42),
-        borderRadius: scale(999),
-        borderWidth: 1,
-        borderColor: BORDER,
-        backgroundColor: "#F8FAFC",
-        paddingHorizontal: scale(12),
+        minHeight: vscale(40),
+        backgroundColor: "#FFFFFF",
+        paddingHorizontal: scale(2),
         flexDirection: "row",
         alignItems: "center",
         gap: scale(8),
       },
       composerInput: {
         flex: 1,
-        height: vscale(42),
+        height: vscale(40),
         paddingVertical: 0,
-        fontSize: scale(isTablet ? 12 : 11),
-        fontWeight: "400",
+        fontSize: scale(isTablet ? 13 : 12),
+        fontWeight: "800",
         color: "#111827",
       },
 
       sendBtn: {
-        width: scale(44),
-        height: scale(44),
-        borderRadius: scale(22),
-        backgroundColor: primary,
+        width: scale(36),
+        height: scale(36),
+        borderRadius: scale(18),
+        backgroundColor: "#000000",
         alignItems: "center",
         justifyContent: "center",
       },
@@ -3057,9 +3989,11 @@ function makeStyles(args: {
       _backIcon,
       _sendIcon,
       _menuIcon,
+      _messageFabIcon,
       _viewerIcon,
       _viewerPad,
       _cancelIcon,
+      _caseCheckIcon,
     }
   ) as any;
 }

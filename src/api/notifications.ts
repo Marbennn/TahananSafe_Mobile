@@ -2,6 +2,7 @@
 import { DeviceEventEmitter, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAccessToken } from "../auth/session";
+import { getReportStatusMeta, normalizeReportStatus } from "../utils/reportStatus";
 
 export type NotifType = "alert" | "report" | "system" | "thread";
 
@@ -235,29 +236,11 @@ const NOTIFICATION_CHANGED_EVENT = "tahanan:notifChanged";
 type ReportStatusSnapshotItem = { id: string; status?: string };
 
 function normalizeStatusKey(s?: string) {
-  const x = String(s ?? "").trim().toLowerCase();
-  if (x === "submitted" || x === "pending") return "PENDING";
-  if (
-    x === "ongoing" ||
-    x === "on going" ||
-    x === "on-going" ||
-    x === "in_progress" ||
-    x === "in progress" ||
-    x === "reviewing"
-  )
-    return "ONGOING";
-  if (x === "cancelled" || x === "canceled") return "CANCELLED";
-  if (x === "resolved" || x === "done" || x === "completed") return "RESOLVED";
-  return String(s ?? "").trim().toUpperCase();
+  return normalizeReportStatus(s);
 }
 
 function statusLabel(s?: string) {
-  const x = normalizeStatusKey(s);
-  if (x === "PENDING") return "Pending";
-  if (x === "ONGOING") return "On going";
-  if (x === "CANCELLED") return "Cancelled";
-  if (x === "RESOLVED") return "Resolved";
-  return x || "Unknown";
+  return getReportStatusMeta(s).label;
 }
 
 async function readJsonSafe<T>(key: string, fallback: T): Promise<T> {
@@ -364,7 +347,7 @@ export async function syncLocalReportStatusNotifications(
 
       // Catch-up notification: if first seen state is already non-pending,
       // surface it once so users don't miss status changes.
-      if (newStatus !== "PENDING") {
+      if (newStatus !== "SUBMITTED") {
         const title = String((r as any)?.title ?? "Incident Report");
         const timeIso = new Date().toISOString();
         const notifId = `local-report-status-${reportId}-${timeIso}`;

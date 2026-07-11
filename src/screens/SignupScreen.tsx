@@ -26,7 +26,7 @@ import { registerSendOtp } from "../api/auth";
 type Props = {
   onGoLogin: () => void;
   onSignupSuccess: () => void;
-  progressActiveCount?: 1 | 2 | 3;
+  progressActiveCount?: 1 | 2 | 3 | 4;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -37,7 +37,7 @@ function clamp(n: number, min: number, max: number) {
  * ✅ Strict email rules (but ONLY 1 message shown when invalid):
  * - basic email format
  * - must end with .com
- * - domain must be gmail.com OR phinmaed.com
+ * - domain must be gmail.com, yahoo.com, OR phinmaed.com
  *
  * UI requirement: show only "Please enter a valid email."
  */
@@ -55,7 +55,7 @@ function getEmailError(email: string) {
   if (parts.length !== 2) return "Please enter a valid email.";
 
   const domain = parts[1];
-  const allowedDomains = ["gmail.com", "phinmaed.com"];
+  const allowedDomains = ["gmail.com", "yahoo.com", "phinmaed.com"];
   if (!allowedDomains.includes(domain)) return "Please enter a valid email.";
 
   return null;

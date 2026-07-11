@@ -2,7 +2,8 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors, useColors } from "../../theme/colors";
+import { useColors } from "../../theme/colors";
+import { getReportStatusMeta, type ReportStatus } from "../../utils/reportStatus";
 
 export type LogItem = {
   id: string;
@@ -13,6 +14,8 @@ export type LogItem = {
   dateRight: string;
   timeRight: string;
   updatedAt?: string;
+  status?: ReportStatus;
+  alertNo?: string;
 };
 
 type Props = {
@@ -20,25 +23,10 @@ type Props = {
   onPress?: () => void;
 };
 
-function formatUpdatedAt(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  const month = d.toLocaleString("en-US", { month: "long" });
-  const day = d.getDate();
-  const year = d.getFullYear();
-  const h = d.getHours();
-  const m = d.getMinutes();
-  const ampm = h >= 12 ? "PM" : "AM";
-  const hh = h % 12 === 0 ? 12 : h % 12;
-  const mm = String(m).padStart(2, "0");
-  return `${month} ${day}, ${year} at ${hh}:${mm} ${ampm}`;
-}
-
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-// simple scale (matches your “stable scale” approach)
 function makeScale(width: number, height: number) {
   const baseW = 375;
   const baseH = 812;
@@ -49,69 +37,83 @@ function makeScale(width: number, height: number) {
   return { s, fs };
 }
 
+function compactDate(value?: string) {
+  const d = new Date(String(value || ""));
+  if (Number.isNaN(d.getTime())) return value || "-";
+  const month = d.toLocaleString("en-US", { month: "short" });
+  return `${month} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
 export default function RecentLogCard({ item, onPress }: Props) {
   const TC = useColors();
   const { width, height } = useWindowDimensions();
   const { s, fs } = useMemo(() => makeScale(width, height), [width, height]);
-
   const styles = useMemo(() => makeStyles(s, fs, TC), [s, fs, TC]);
+  const status = getReportStatusMeta(item.status);
+  const dateLine = `${compactDate(item.dateLeft)}${item.timeLeft && item.timeLeft !== "-" ? ` • ${item.timeLeft}` : ""}`;
 
   return (
     <Pressable
       onPress={onPress}
       disabled={!onPress}
-      style={({ pressed }) => [styles.card, pressed && onPress ? { opacity: 0.92, transform: [{ scale: 0.995 }] } : null]}
+      style={({ pressed }) => [
+        styles.card,
+        pressed && onPress ? { opacity: 0.92, transform: [{ scale: 0.995 }] } : null,
+      ]}
       hitSlop={8}
     >
-      {/* left accent */}
-      <View style={styles.leftAccent} />
-
-      {/* content */}
       <View style={styles.body}>
-        <View style={styles.topRow}>
-          <Text style={styles.title} numberOfLines={1} allowFontScaling={false}>
-            {item.title || "Other"}
+        <View style={styles.metaRow}>
+          <Text style={styles.reportNo} numberOfLines={1} allowFontScaling={false}>
+            REP {item.alertNo || `#${item.id.slice(-6).toUpperCase()}`}
           </Text>
 
-          <Ionicons name="chevron-forward" size={clamp(Math.round(18 * fs), 16, 20)} color="#94A3B8" />
+          <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
+            <Text style={[styles.statusText, { color: status.color }]} numberOfLines={1} allowFontScaling={false}>
+              {status.shortLabel}
+            </Text>
+          </View>
         </View>
 
-        <Text style={styles.detail} numberOfLines={2} ellipsizeMode="tail" allowFontScaling={false}>
-          {item.detail || "—"}
+        <Text style={styles.title} numberOfLines={1} allowFontScaling={false}>
+          {item.title || "Other"}
         </Text>
 
-        {!!item.updatedAt && (
-          <Text style={styles.updatedAt} numberOfLines={1} allowFontScaling={false}>
-            Updated: {formatUpdatedAt(item.updatedAt)}
+        <Text style={styles.detail} numberOfLines={2} ellipsizeMode="tail" allowFontScaling={false}>
+          {item.detail || "-"}
+        </Text>
+
+        <View style={styles.bottomRow}>
+          <Text style={styles.dateText} numberOfLines={1} allowFontScaling={false}>
+            {dateLine}
           </Text>
-        )}
+
+          <View style={styles.viewDetailsRow}>
+            <Text style={styles.viewDetailsText} numberOfLines={1} allowFontScaling={false}>
+              View Details
+            </Text>
+            <Ionicons name="chevron-forward" size={clamp(Math.round(18 * fs), 16, 20)} color={TC.primary} />
+          </View>
+        </View>
       </View>
     </Pressable>
   );
 }
 
 function makeStyles(s: number, fs: number, TC: ReturnType<typeof useColors>) {
-  const R = clamp(Math.round(16 * s), 14, 18);
-  const PAD_X = clamp(Math.round(14 * s), 12, 16);
+  const R = clamp(Math.round(14 * s), 12, 16);
+  const PAD_X = clamp(Math.round(16 * s), 14, 18);
   const PAD_Y = clamp(Math.round(12 * s), 10, 14);
-
-  // ✅ Two-line reservation math
-  const detailFont = clamp(Math.round(12 * fs), 11, 13);
-  const detailLine = clamp(Math.round(16 * fs), 14, 18);
+  const detailFont = clamp(Math.round(14 * fs), 12, 15);
+  const detailLine = clamp(Math.round(21 * fs), 18, 23);
 
   return StyleSheet.create({
     card: {
-      flexDirection: "row",
-      alignItems: "stretch",
       borderRadius: R,
       backgroundColor: TC.surface,
       borderWidth: 1,
       borderColor: TC.divider,
-
-      // ✅ Make overall height consistent even if other parts vary slightly
-      minHeight: clamp(Math.round(96 * s), 90, 112),
-
-      // remove heavy shadows (your style preference)
+      minHeight: clamp(Math.round(136 * s), 126, 150),
       shadowColor: "#000",
       shadowOpacity: 0,
       shadowRadius: 0,
@@ -119,69 +121,81 @@ function makeStyles(s: number, fs: number, TC: ReturnType<typeof useColors>) {
       overflow: "hidden",
     },
 
-    leftAccent: {
-      width: clamp(Math.round(4 * s), 4, 6),
-      backgroundColor: Colors.primary,
-    },
-
     body: {
       flex: 1,
       paddingHorizontal: PAD_X,
       paddingVertical: PAD_Y,
-      justifyContent: "center",
     },
 
-    topRow: {
+    metaRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: clamp(Math.round(10 * s), 8, 12),
+      gap: clamp(Math.round(12 * s), 10, 14),
+      marginBottom: clamp(Math.round(6 * s), 4, 8),
+    },
+
+    reportNo: {
+      flex: 1,
+      fontSize: clamp(Math.round(10 * fs), 9, 11),
+      fontWeight: "500",
+      color: "#9CA3AF",
+    },
+
+    statusPill: {
+      borderRadius: 999,
+      paddingHorizontal: clamp(Math.round(12 * s), 10, 14),
+      paddingVertical: clamp(Math.round(6 * s), 5, 7),
+      maxWidth: clamp(Math.round(150 * s), 124, 170),
+    },
+
+    statusText: {
+      fontSize: clamp(Math.round(11 * fs), 10, 12),
+      fontWeight: "800",
+      color: "#374151",
     },
 
     title: {
-      flex: 1,
-      minWidth: 0,
-      fontSize: clamp(Math.round(14 * fs), 13, 16),
+      fontSize: clamp(Math.round(18 * fs), 16, 20),
       fontWeight: "900",
       color: "#0B2B45",
+      lineHeight: clamp(Math.round(22 * fs), 20, 24),
     },
 
     detail: {
-      marginTop: clamp(Math.round(4 * s), 3, 6),
+      marginTop: clamp(Math.round(2 * s), 1, 4),
       fontSize: detailFont,
       lineHeight: detailLine,
-      fontWeight: "600",
-      color: "#64748B",
-    },
-
-    updatedAt: {
-      marginTop: clamp(Math.round(18 * s), 14, 24),
-      fontSize: clamp(Math.round(10 * fs), 9, 11),
-      fontWeight: "600",
-      color: Colors.primary,
+      fontWeight: "400",
+      fontStyle: "italic",
+      color: "#8A8F98",
     },
 
     bottomRow: {
-      marginTop: clamp(Math.round(8 * s), 6, 10),
+      marginTop: clamp(Math.round(12 * s), 10, 14),
       flexDirection: "row",
-      alignItems: "flex-end",
+      alignItems: "center",
       justifyContent: "space-between",
-      gap: clamp(Math.round(10 * s), 8, 12),
+      gap: clamp(Math.round(12 * s), 10, 14),
     },
 
-    col: { flex: 1, minWidth: 0 },
-    colRight: { flex: 1, minWidth: 0, alignItems: "flex-end" },
-
-    metaLabel: {
-      fontSize: clamp(Math.round(10 * fs), 10, 12),
-      fontWeight: "700",
-      color: "#94A3B8",
+    dateText: {
+      flex: 1,
+      fontSize: clamp(Math.round(12 * fs), 11, 13),
+      fontWeight: "500",
+      color: "#9CA3AF",
     },
-    metaValue: {
-      marginTop: clamp(Math.round(2 * s), 1, 3),
+
+    viewDetailsRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: clamp(Math.round(4 * s), 3, 5),
+    },
+
+    viewDetailsText: {
       fontSize: clamp(Math.round(12 * fs), 11, 14),
       fontWeight: "900",
-      color: "#0B2B45",
+      color: TC.primary,
     },
   });
 }

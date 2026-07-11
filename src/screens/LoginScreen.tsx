@@ -1,5 +1,5 @@
 // src/screens/LoginScreen.tsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -47,7 +47,6 @@ import BiometricsEnabledModal from "../components/LoginScreen/BiometricsEnabledM
 import SignupErrorModal from "../components/SignupScreen/SignupErrorModal";
 
 // ✅ Session storage
-import { saveTokens, setLoggedIn } from "../auth/session";
 import { setupPushNotifications } from "../utils/pushNotifications";
 import { devLog, maskEmail } from "../utils/safeLog";
 
@@ -68,7 +67,6 @@ const API_URL = (process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000")
   .replace(/\/+$/, "");
 
 const LOGIN_PATH = "/api/mobile/v1/login";
-const REFRESH_PATH = "/api/mobile/v1/refresh-token";
 
 // ✅ Updated backend response shape
 type LoginCheckResponse = {
@@ -84,10 +82,6 @@ type LoginCheckResponse = {
 
 type LoginSendOtpResponse = { message?: string };
 
-
-function showServerUnavailable() {
-  Alert.alert("Server unavailable", "Please try again. (Tunnel/Server issue)");
-}
 
 function normalizeRole(role?: string) {
   return String(role || "").trim().toLowerCase();
@@ -278,45 +272,12 @@ async function loginSendOtpRequest(email: string, password: string) {
   return data as LoginSendOtpResponse;
 }
 
-class HttpError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
-
-async function refreshAccessToken(refreshToken: string) {
-  const url = `${API_URL}${REFRESH_PATH}`;
-  devLog(`${TAG} refresh URL:`, url);
-
-  const { res, data } = await postJson(url, { refreshToken });
-
-  devLog(`${TAG} refresh status:`, res.status);
-
-  if (!res.ok) {
-    const msg = data?.message || `Refresh failed (HTTP ${res.status})`;
-    throw new HttpError(res.status, msg);
-  }
-
-  if (!data?.accessToken) {
-    throw new HttpError(500, "Refresh did not return accessToken.");
-  }
-
-  return data.accessToken as string;
-}
-
 /** SecureStore keys must only contain: A-Z a-z 0-9 . - _ */
 function safeKeyPart(input: string) {
   return String(input || "")
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9._-]/g, "_");
-}
-
-/** Must match EnterVerificationModal.tsx */
-function refreshKeyForEmail(email: string) {
-  return `tahanansafe_refresh_${safeKeyPart(email)}`;
 }
 
 /** ✅ per-email biometrics opt-in key */
@@ -332,6 +293,18 @@ function bioSnoozeUntilKeyForEmail(email: string) {
 /** ✅ per-email prompt-shown key */
 function bioPromptShownKeyForEmail(email: string) {
   return `tahanansafe_bio_prompt_shown_${safeKeyPart(email)}`;
+}
+
+const BIO_LAST_EMAIL_KEY = "tahanansafe_bio_last_email";
+
+type BioCredentials = {
+  email: string;
+  password: string;
+  updatedAt: number;
+};
+
+function bioCredentialsKeyForEmail(email: string) {
+  return `tahanansafe_bio_credentials_${safeKeyPart(email)}`;
 }
 
 /** ✅ snooze duration (3 days) */
@@ -400,25 +373,68 @@ async function setBioPromptShown(email: string, shown: boolean) {
   }
 }
 
-async function getRefreshTokenForEmail(email: string): Promise<string | null> {
-  const key = refreshKeyForEmail(email);
+async function setBioCredentialsForEmail(email: string, password: string) {
+  const emailNorm = String(email || "").trim().toLowerCase();
+  if (!emailNorm || !password) return;
+
+  const credentials: BioCredentials = {
+    email: emailNorm,
+    password,
+    updatedAt: nowMs(),
+  };
+
   try {
-    const v = await SecureStore.getItemAsync(key);
-    devLog(`${TAG} SecureStore refresh lookup`, { key, found: !!v });
-    return v ?? null;
-  } catch (e: any) {
-    devLog(`${TAG} SecureStore get refresh failed:`, e?.message);
+    await SecureStore.setItemAsync(
+      bioCredentialsKeyForEmail(emailNorm),
+      JSON.stringify(credentials)
+    );
+    await SecureStore.setItemAsync(BIO_LAST_EMAIL_KEY, emailNorm);
+    devLog(`${TAG} biometric autofill credentials saved`, {
+      email: maskEmail(emailNorm),
+    });
+  } catch {
+    // ignore
+  }
+}
+
+async function getBioCredentialsForEmail(email: string): Promise<BioCredentials | null> {
+  const emailNorm = String(email || "").trim().toLowerCase();
+  if (!emailNorm) return null;
+
+  try {
+    const raw = await SecureStore.getItemAsync(bioCredentialsKeyForEmail(emailNorm));
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as BioCredentials;
+    if (
+      String(parsed?.email || "").trim().toLowerCase() !== emailNorm ||
+      !parsed?.password
+    ) {
+      return null;
+    }
+
+    return {
+      email: emailNorm,
+      password: String(parsed.password),
+      updatedAt: Number(parsed.updatedAt) || 0,
+    };
+  } catch {
     return null;
   }
 }
 
-async function deleteRefreshTokenForEmail(email: string) {
-  const key = refreshKeyForEmail(email);
+async function getLastBioCredentials(): Promise<BioCredentials | null> {
   try {
-    await SecureStore.deleteItemAsync(key);
-    devLog(`${TAG} SecureStore refresh deleted`, { key });
-  } catch (e: any) {
-    devLog(`${TAG} SecureStore delete refresh failed:`, e?.message);
+    const lastEmail = await SecureStore.getItemAsync(BIO_LAST_EMAIL_KEY);
+    const emailNorm = String(lastEmail || "").trim().toLowerCase();
+    if (!emailNorm) return null;
+
+    const enabled = await getBioOptInForEmail(emailNorm);
+    if (!enabled) return null;
+
+    return getBioCredentialsForEmail(emailNorm);
+  } catch {
+    return null;
   }
 }
 
@@ -519,6 +535,14 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const [credErrorVisible, setCredErrorVisible] = useState(false);
   const [bioEnabledVisible, setBioEnabledVisible] = useState(false);
   const [pendingRoleAfterBioEnabled, setPendingRoleAfterBioEnabled] = useState<string>("user");
+  const [loginAutofill, setLoginAutofill] = useState<{
+    email: string;
+    password: string;
+    nonce: number;
+  } | null>(null);
+  const [bioAutofillAvailable, setBioAutofillAvailable] = useState(false);
+  const [bioAutofilling, setBioAutofilling] = useState(false);
+  const bioAutofillPromptedRef = useRef(false);
 
   const goAfterLoginByRole = (role?: string) => {
     // Register push token for whichever user just logged in
@@ -613,6 +637,8 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         await setBioOptInForEmail(emailNorm, true);
         await setBioSnoozeUntilMs(emailNorm, 0);
         await setBioPromptShown(emailNorm, true);
+        await setBioCredentialsForEmail(emailNorm, verifyPassword);
+        setBioAutofillAvailable(true);
       }
     } catch {
       // ignore
@@ -624,6 +650,74 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       setBioEnabledVisible(true);
     }
   };
+
+  const handleBiometricAutofill = async (opts?: { quietCancel?: boolean }) => {
+    if (bioAutofilling) return;
+
+    try {
+      setBioAutofilling(true);
+
+      const credentials = await getLastBioCredentials();
+      if (!credentials) {
+        setBioAutofillAvailable(false);
+        if (!opts?.quietCancel) {
+          Alert.alert(
+            "Biometrics unavailable",
+            "Log in with your email and password once, then enable biometrics after OTP verification."
+          );
+        }
+        return;
+      }
+
+      const bio = await runBiometricsGate();
+      if (!bio.ok) {
+        if (!opts?.quietCancel && bio.reason !== "cancelled") {
+          Alert.alert("Biometrics failed", "Please try again or enter your login details manually.");
+        }
+        return;
+      }
+
+      setLoginAutofill({
+        email: credentials.email,
+        password: credentials.password,
+        nonce: nowMs(),
+      });
+      setBioAutofillAvailable(true);
+      devLog(`${TAG} biometrics SUCCESS -> login form autofilled`, {
+        email: maskEmail(credentials.email),
+      });
+    } finally {
+      setBioAutofilling(false);
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkAndPrompt = async () => {
+      const credentials = await getLastBioCredentials();
+      if (cancelled) return;
+
+      setBioAutofillAvailable(!!credentials);
+
+      if (credentials && !bioAutofillPromptedRef.current) {
+        bioAutofillPromptedRef.current = true;
+        setTimeout(() => {
+          if (!cancelled) {
+            void handleBiometricAutofill({ quietCancel: true });
+          }
+        }, 350);
+      }
+    };
+
+    void checkAndPrompt();
+
+    return () => {
+      cancelled = true;
+    };
+    // Run once when LoginScreen mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleBiometricsNotNow = async () => {
     const emailNorm = String(bioPromptEmail || "").trim().toLowerCase();
@@ -683,46 +777,8 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
 
       setPendingLoginRole(roleFromBackend);
 
-      // ✅ STEP 2: quick login only if refresh exists AND biometrics enabled
-      const storedRefresh = await getRefreshTokenForEmail(emailNorm);
-      const bioOptedIn = await getBioOptInForEmail(emailNorm);
-
-      if (storedRefresh && bioOptedIn) {
-        const bio = await runBiometricsGate();
-
-        if (bio.ok) {
-          devLog(`${TAG} biometrics SUCCESS -> refresh token login`);
-
-          try {
-            const newAccess = await refreshAccessToken(storedRefresh);
-
-            await saveTokens({ accessToken: newAccess });
-            await setLoggedIn(true);
-
-            devLog(`${TAG} refreshed access token saved -> route by role`);
-            goAfterLoginByRole(roleFromBackend);
-            return;
-          } catch (e: any) {
-            const status = e?.status;
-
-            devLog(`${TAG} refresh failed -> fallback to OTP`, { status });
-
-            if (status === 401) {
-              await deleteRefreshTokenForEmail(emailNorm);
-            }
-
-            if (status === 503) {
-              showServerUnavailable();
-            }
-          }
-        } else {
-          devLog(
-            `${TAG} biometrics not ok (${bio.reason}) -> send OTP fallback`
-          );
-        }
-      }
-
-      // ✅ STEP 3: send OTP
+      // ✅ STEP 2: always send OTP after credential validation.
+      // Biometrics only autofills this form; it must never bypass OTP.
       const otpHit = await hitWindowCounter(
         RL_KEYS.OTP_SENDS,
         RL.OTP_SEND_MAX,
@@ -804,6 +860,16 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const handleVerified = async (_code: string) => {
     setVerifyOpen(false);
 
+    const emailNorm = String(verifyEmail || "").trim().toLowerCase();
+    const password = String(verifyPassword || "");
+    if (emailNorm && password) {
+      const alreadyEnabled = await getBioOptInForEmail(emailNorm);
+      if (alreadyEnabled) {
+        await setBioCredentialsForEmail(emailNorm, password);
+        setBioAutofillAvailable(true);
+      }
+    }
+
     if (pendingFirstLoginBioPrompt && verifyEmail) {
       const opened = await maybeAskBiometricsOptIn(verifyEmail);
 
@@ -872,6 +938,10 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
               onGoSignup={onGoSignup}
               onForgotPassword={handleForgotPassword}
               loading={sendingOtp}
+              autofillValues={loginAutofill}
+              biometricAvailable={bioAutofillAvailable}
+              biometricLoading={bioAutofilling}
+              onBiometricAutofill={() => handleBiometricAutofill()}
             />
 
             <View style={styles.termsWrap}>

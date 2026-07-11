@@ -8,7 +8,6 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import IdleTimerWrapper from "./src/components/IdleTimerWrapper";
 
 // ✅ Auth
 import { AuthProvider, useAuth } from "./src/auth/AuthContext";
@@ -26,6 +25,7 @@ import AuthFlowShell from "./src/screens/AuthFlowShell";
 import OnboardingPagerScreen from "./src/screens/OnboardingPagerScreen";
 import PinScreen, { resetPinAttempts } from "./src/screens/PinScreen";
 import CreatePinScreen from "./src/screens/CreatePinScreen";
+import VerifyPinScreen from "./src/screens/VerifyPinScreen";
 
 
 import HomeScreen from "./src/screens/HomeScreen";
@@ -36,7 +36,6 @@ import SettingsScreen from "./src/screens/SettingsScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
 import AdminNotificationsScreen from "./src/screens/admin_mobile/AdminNotificationsScreen";
 import AppAlertProvider from "./src/components/AppAlertProvider";
-import LogoutModal from "./src/components/LogoutModal";
 
 import IncidentLogScreen from "./src/screens/IncidentLogScreen";
 import IncidentLogConfirmedScreen from "./src/screens/IncidentLogConfirmedScreen";
@@ -162,108 +161,13 @@ async function clearInvalidSession(auth: any) {
   } catch {}
 }
 
-async function refreshSessionBeforeIdleExit(auth: any) {
-  try {
-    await Promise.race([
-      Promise.resolve(auth?.ensureValidAccessToken?.()),
-      new Promise((resolve) => setTimeout(resolve, 4000, null)),
-    ]);
-  } catch {
-    // Ignore refresh failures here; PIN flow on reopen will handle them.
-  }
-}
-
-async function shouldRequirePinIdleLock(auth: any): Promise<boolean> {
-  const resolvedUser = auth?.user || (await getStoredUser().catch(() => null));
-  const sessionHasPin = await getHasPin().catch(() => false);
-  const userHasPin = resolvedUser?.hasPin === true;
-  const hasPin = sessionHasPin || userHasPin;
-
-  if (!hasPin) return false;
-
-  const email = String(resolvedUser?.email || "").trim().toLowerCase();
-  if (!email) return true;
-
-  return isPinEnabledLocally(email);
-}
-
-async function getIdleSessionTimeoutMode({
-  auth,
-}: {
-  auth: any;
-}) {
-  const shouldLockToPin = await shouldRequirePinIdleLock(auth);
-  return shouldLockToPin ? "pin" : "logout";
-}
-
-async function performIdleSessionTimeout({
-  auth,
-  navigation,
-  mode,
-}: {
-  auth: any;
-  navigation: any;
-  mode: "pin" | "logout";
-}) {
-  if (mode === "pin") {
-    await refreshSessionBeforeIdleExit(auth);
-    resetPinUnlockedThisRun();
-    await setAppLockRequired(true).catch(() => {});
-    navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
-    return;
-  }
-
-  resetPinUnlockedThisRun();
-  await clearInvalidSession(auth);
-  navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
-}
-
 function AuthenticatedIdleBoundary({
-  navigation,
   children,
 }: {
   navigation: any;
   children: React.ReactNode;
 }) {
-  const auth = useAuth() as any;
-  const [idleModalMode, setIdleModalMode] = React.useState<"pin" | "logout" | null>(null);
-
-  const handleIdleLock = useCallback(async () => {
-    const mode = await getIdleSessionTimeoutMode({ auth });
-    setIdleModalMode((current) => current ?? mode);
-  }, [auth]);
-
-  const handleIdleModalConfirm = useCallback(async () => {
-    const mode = idleModalMode;
-    setIdleModalMode(null);
-    if (!mode) return;
-
-    await performIdleSessionTimeout({ auth, navigation, mode });
-  }, [auth, idleModalMode, navigation]);
-
-  return (
-    <>
-      <IdleTimerWrapper onTimeout={handleIdleLock}>
-        {children}
-      </IdleTimerWrapper>
-
-      <LogoutModal
-        visible={!!idleModalMode}
-        onConfirm={() => {
-          void handleIdleModalConfirm();
-        }}
-        onCancel={() => {}}
-        hideCancel
-        title={idleModalMode === "pin" ? "Screen Idle" : "Logged Out"}
-        message={
-          idleModalMode === "pin"
-            ? "Screen idled for 15 mins. Please enter your PIN again."
-            : "You have been logged out after 15 mins of screen idle."
-        }
-        confirmLabel={idleModalMode === "pin" ? "Enter PIN" : "OK"}
-      />
-    </>
-  );
+  return <>{children}</>;
 }
 
 /* ===================== ROLE HELPERS ===================== */
@@ -543,7 +447,7 @@ function MainScreenWrapper({ navigation, route }: { navigation: any; route: any 
     navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
   };
 
-  // Idle timeout → close app; on reopen the splash flow sees PIN not unlocked → PinScreen
+  // PIN stays unlocked while this app process is alive; a fresh launch after process kill shows PinScreen.
   return (
     <AuthenticatedIdleBoundary navigation={navigation}>
       <MainShell
@@ -571,7 +475,7 @@ function AdminHomeWrapper({ navigation }: { navigation: any }) {
     navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
   };
 
-  // Idle timeout → close app; on reopen the splash flow sees PIN not unlocked → PinScreen
+  // PIN stays unlocked while this app process is alive; a fresh launch after process kill shows PinScreen.
   return (
     <AuthenticatedIdleBoundary navigation={navigation}>
       <AdminShell
@@ -752,19 +656,28 @@ function PinScreenWrapper({ navigation }: { navigation: any }) {
 function CreatePinWrapper({ navigation }: { navigation: any }) {
   const auth = useAuth() as any;
   const targetHome = getHomeRouteNameByRole(auth?.user?.role);
+  const [draftPin, setDraftPin] = useState<string | null>(null);
+
+  const finishPinFlow = () => {
+    setAppLockRequired(false).catch(() => {});
+    setPinUnlockedThisRun(true);
+    navigation.reset({ index: 0, routes: [{ name: targetHome }] });
+  };
+
+  if (draftPin !== null) {
+    return (
+      <VerifyPinScreen
+        expectedPin={draftPin}
+        onContinue={finishPinFlow}
+        onSkip={finishPinFlow}
+      />
+    );
+  }
 
   return (
     <CreatePinScreen
-      onContinue={() => {
-        setAppLockRequired(false).catch(() => {});
-        setPinUnlockedThisRun(true);
-        navigation.reset({ index: 0, routes: [{ name: targetHome }] });
-      }}
-      onSkip={() => {
-        setAppLockRequired(false).catch(() => {});
-        setPinUnlockedThisRun(true);
-        navigation.reset({ index: 0, routes: [{ name: targetHome }] });
-      }}
+      onContinue={(pin) => setDraftPin(pin)}
+      onSkip={finishPinFlow}
     />
   );
 }

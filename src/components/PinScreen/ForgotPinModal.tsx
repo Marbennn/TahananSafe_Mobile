@@ -18,10 +18,11 @@ import { Colors, useColors } from "../../theme/colors";
 import {
   forgotPinSendOtp,
   forgotPinVerifyOtp,
+  forgotPinVerifyPassword,
   forgotPinReset,
 } from "../../api/pin";
 
-type Step = "email" | "otp" | "newPin" | "success";
+type Step = "email" | "otp" | "password" | "newPin" | "success";
 
 type Props = {
   visible: boolean;
@@ -61,6 +62,7 @@ export default function ForgotPinModal({
   const [email, setEmail] = useState(prefillEmail || "");
   const [otp, setOtp] = useState("");
   const [resetToken, setResetToken] = useState("");
+  const [password, setPassword] = useState("");
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [loading, setLoading] = useState(false);
@@ -78,6 +80,7 @@ export default function ForgotPinModal({
       setEmail(prefillEmail || "");
       setOtp("");
       setResetToken("");
+      setPassword("");
       setNewPin("");
       setConfirmPin("");
       setError("");
@@ -136,10 +139,30 @@ export default function ForgotPinModal({
     try {
       const res = await forgotPinVerifyOtp(email, trimmed);
       setResetToken(res.resetToken);
+      setPassword("");
+      setStep("password");
+    } catch (err: any) {
+      setError(err.message || "Invalid OTP.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyPassword = async () => {
+    if (!password.trim()) {
+      setError("Please enter your account password.");
+      return;
+    }
+
+    setError("");
+    setLoading(true);
+    try {
+      await forgotPinVerifyPassword(email, resetToken, password);
+      setPassword("");
       setStep("newPin");
       setTimeout(() => pinRefs[0].current?.focus(), 300);
     } catch (err: any) {
-      setError(err.message || "Invalid OTP.");
+      setError(err.message || "Incorrect account password.");
     } finally {
       setLoading(false);
     }
@@ -345,6 +368,64 @@ export default function ForgotPinModal({
     </View>
   );
 
+  const renderPassword = () => (
+    <>
+      <View style={styles.iconCircle}>
+        <Ionicons name="shield-checkmark-outline" size={scale(30)} color={BLUE} />
+      </View>
+      <Text style={styles.title}>Confirm Your Password</Text>
+      <Text style={styles.sub}>
+        Before you create a new PIN, enter your account password to confirm it is you.
+      </Text>
+
+      <TextInput
+        style={styles.input}
+        placeholder="Account password"
+        placeholderTextColor={TC.placeholder}
+        value={password}
+        onChangeText={(t) => {
+          setPassword(t);
+          setError("");
+        }}
+        secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoFocus
+        editable={!loading}
+      />
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      <Pressable
+        onPress={handleVerifyPassword}
+        disabled={loading}
+        style={({ pressed }) => [
+          styles.primaryBtn,
+          pressed && { opacity: 0.85 },
+          loading && { opacity: 0.6 },
+        ]}
+      >
+        {loading ? (
+          <ActivityIndicator color="#FFF" size="small" />
+        ) : (
+          <Text style={styles.primaryBtnText}>Continue</Text>
+        )}
+      </Pressable>
+
+      <Pressable
+        onPress={() => {
+          setStep("otp");
+          setPassword("");
+          setError("");
+          setTimeout(() => otpRef.current?.focus(), 150);
+        }}
+        style={({ pressed }) => [styles.linkBtn, pressed && { opacity: 0.6 }]}
+      >
+        <Text style={styles.linkText}>Go back to verification code</Text>
+      </Pressable>
+    </>
+  );
+
   const renderNewPin = () => (
     <>
       <View style={styles.iconCircle}>
@@ -430,6 +511,7 @@ export default function ForgotPinModal({
 
             {step === "email" && renderEmail()}
             {step === "otp" && renderOtp()}
+            {step === "password" && renderPassword()}
             {step === "newPin" && renderNewPin()}
             {step === "success" && renderSuccess()}
           </Animated.View>

@@ -20,6 +20,7 @@ export type CreateIncidentPayload = {
 
   // URIs from Expo ImagePicker (result.assets[].uri)
   photos?: string[];
+  videos?: string[];
 
   // ✅ NEW: AI fields (match your AI API / README keys)
   ai_incident_type?: string;
@@ -45,6 +46,14 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/heif",
 ]);
 
+const ALLOWED_VIDEO_TYPES = new Set([
+  "video/mp4",
+  "video/quicktime",
+  "video/x-m4v",
+  "video/3gpp",
+  "video/webm",
+]);
+
 const MAX_PHOTO_SIZE_MB = 10;
 
 function guessMimeType(uri: string): string {
@@ -53,6 +62,11 @@ function guessMimeType(uri: string): string {
   if (lower.endsWith(".webp")) return "image/webp";
   if (lower.endsWith(".heic")) return "image/heic";
   if (lower.endsWith(".heif")) return "image/heif";
+  if (lower.endsWith(".mp4")) return "video/mp4";
+  if (lower.endsWith(".mov")) return "video/quicktime";
+  if (lower.endsWith(".m4v")) return "video/x-m4v";
+  if (lower.endsWith(".3gp") || lower.endsWith(".3gpp")) return "video/3gpp";
+  if (lower.endsWith(".webm")) return "video/webm";
   if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
   return "image/jpeg";
 }
@@ -64,11 +78,18 @@ function validateImageUri(uri: string): void {
   }
 }
 
-function fileNameFromUri(uri: string, index: number) {
+function validateVideoUri(uri: string): void {
+  const mime = guessMimeType(uri);
+  if (!ALLOWED_VIDEO_TYPES.has(mime)) {
+    throw new Error(`Unsupported video type: ${mime}. Only MP4, MOV, M4V, 3GP, and WebM are allowed.`);
+  }
+}
+
+function fileNameFromUri(uri: string, index: number, fallbackPrefix = "photo", fallbackExt = "jpg") {
   const clean = uri.split("?")[0];
   const parts = clean.split("/");
-  const last = parts[parts.length - 1] || `photo_${index}.jpg`;
-  if (!last.includes(".")) return `${last}.jpg`;
+  const last = parts[parts.length - 1] || `${fallbackPrefix}_${index}.${fallbackExt}`;
+  if (!last.includes(".")) return `${last}.${fallbackExt}`;
   return last;
 }
 
@@ -110,15 +131,29 @@ export async function submitIncident(payload: CreateIncidentPayload) {
   appendIfDefined(form, "ai_confidence_score", payload.ai_confidence_score);
 
   const uris = (payload.photos || []).slice(0, 3);
+  const videoUris = (payload.videos || []).slice(0, 1);
 
   // ✅ SECURITY: Validate each photo before uploading
   uris.forEach((uri, idx) => {
     validateImageUri(uri);
 
-    const name = fileNameFromUri(uri, idx);
+    const name = fileNameFromUri(uri, idx, "photo", "jpg");
     const type = guessMimeType(uri);
 
     form.append("photos", {
+      uri,
+      name,
+      type,
+    } as any);
+  });
+
+  videoUris.forEach((uri, idx) => {
+    validateVideoUri(uri);
+
+    const name = fileNameFromUri(uri, idx, "video", "mp4");
+    const type = guessMimeType(uri);
+
+    form.append("videos", {
       uri,
       name,
       type,

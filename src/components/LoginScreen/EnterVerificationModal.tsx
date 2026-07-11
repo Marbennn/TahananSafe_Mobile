@@ -213,7 +213,7 @@ export default function EnterVerificationModal({
         refreshToken: data.refreshToken,
       });
 
-      // ✅ 2.5) ALSO store refresh token in SecureStore for biometric quick-login
+      // Store refresh token in SecureStore for normal token refresh.
       if (data?.refreshToken) {
         const key = refreshKeyForEmail(e);
         try {

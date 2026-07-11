@@ -15,7 +15,6 @@ import {
   AppState,
   AppStateStatus,
   DeviceEventEmitter,
-  Linking,
   Alert,
   Easing,
   InteractionManager,
@@ -34,6 +33,9 @@ import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import LogoutModal from "../components/LogoutModal";
 
 import GreetingCard from "../components/HomeScreen/GreetingCard";
+import QuickActions from "../components/HomeScreen/QuickActions";
+import ChatbotModal from "../components/HomeScreen/ChatbotModal";
+import ServicesModal from "../components/HomeScreen/ServicesModal";
 import RecentLogCard, { LogItem } from "../components/HomeScreen/RecentLogCard";
 
 import HomeScreenLogo from "../../assets/HomeScreen/NewLogo.svg";
@@ -68,6 +70,7 @@ import {
 
 // âœ… FIX: Use requestJson with auth for auto token refresh
 import { requestJson } from "../api/http";
+import { normalizeReportStatus } from "../utils/reportStatus";
 
 // âœ… Location for SOS
 import * as Location from "expo-location";
@@ -84,6 +87,7 @@ type Props = {
 
 const BG = "#F5FAFE";
 const TEXT_DARK = "#0B2B45";
+const FAB_MENU_DIM = "rgba(0, 0, 0, 0.22)";
 
 // âœ… once-only tutorial key
 const FAB_TUTORIAL_SEEN_KEY = "tahanansafe_fab_tutorial_seen_v1";
@@ -177,22 +181,6 @@ function parseDateSmart(input?: string): Date | null {
   const d = new Date(input);
   if (Number.isNaN(d.getTime())) return null;
   return d;
-}
-
-function normalizeStatus(dbStatus?: string): ReportItem["status"] {
-  const s = String(dbStatus ?? "").trim().toLowerCase();
-  if (s === "submitted" || s === "pending") return "PENDING";
-  if (
-    s === "ongoing" ||
-    s === "on going" ||
-    s === "on-going" ||
-    s === "in_progress" ||
-    s === "in progress"
-  )
-    return "ONGOING";
-  if (s === "cancelled" || s === "canceled") return "CANCELLED";
-  if (s === "resolved" || s === "done" || s === "completed") return "RESOLVED";
-  return "PENDING";
 }
 
 function normalizePhoto(p: any): string {
@@ -348,7 +336,7 @@ export default function HomeScreen({
   }, [user]);
 
   const NAV_BASE_HEIGHT = 78;
-  const FAB_SIZE = 62;
+  const FAB_SIZE = 68;
 
   const bottomPad = Math.max(insets.bottom, 10);
   const navHeight = NAV_BASE_HEIGHT + bottomPad;
@@ -368,47 +356,6 @@ export default function HomeScreen({
     },
     [onTabChange]
   );
-
-  // =========================
-  // âœ… Emergency Call Buttons (911 / 117)
-  // =========================
-  const callEmergency = useCallback(async (num: "911" | "117") => {
-    try {
-      const url = `tel:${num}`;
-      const supported = await Linking.canOpenURL(url);
-      if (!supported) {
-        Alert.alert("Calling not supported", "This device cannot place phone calls.");
-        return;
-      }
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert("Call failed", "Unable to start the call on this device.");
-    }
-  }, []);
-
-  // âœ… Emergency button animations (press bounce)
-  const em911Scale = useRef(new Animated.Value(1)).current;
-  const em117Scale = useRef(new Animated.Value(1)).current;
-
-  const pressInEmergency = useCallback((v: Animated.Value) => {
-    v.stopAnimation();
-    Animated.spring(v, {
-      toValue: 0.97,
-      useNativeDriver: true,
-      speed: 22,
-      bounciness: 0,
-    }).start();
-  }, []);
-
-  const pressOutEmergency = useCallback((v: Animated.Value) => {
-    v.stopAnimation();
-    Animated.spring(v, {
-      toValue: 1,
-      useNativeDriver: true,
-      speed: 16,
-      bounciness: 8,
-    }).start();
-  }, []);
 
   // =========================
   // âœ… Notifications badge logic (UPDATED to auto-refresh)
@@ -433,7 +380,7 @@ export default function HomeScreen({
         rawList.map((doc: any) => ({
           id: String(doc?._id ?? doc?.id ?? "").trim(),
           title: String(doc?.incidentType ?? "Incident Report"),
-          status: normalizeStatus(doc?.status),
+          status: normalizeReportStatus(doc?.status),
           createdAt: doc?.createdAt ? String(doc.createdAt) : undefined,
           updatedAt: doc?.updatedAt ? String(doc.updatedAt) : undefined,
         }))
@@ -592,14 +539,9 @@ export default function HomeScreen({
               })()}`
             : "â€”";
 
-        const detailLine =
-          leftDate && leftTime && leftDate !== "â€”" && leftTime !== "â€”"
-            ? `On ${leftDate}, at approximately ${leftTime},`
-            : details
-            ? details
-            : "â€”";
+        const detailLine = details || offenderName || "No details provided.";
 
-        const statusNorm = normalizeStatus(doc?.status);
+        const statusNorm = normalizeReportStatus(doc?.status);
 
         const photos: string[] = Array.isArray(doc?.photos)
           ? doc.photos.map((p: any) => normalizePhoto(p)).filter(Boolean)
@@ -662,6 +604,8 @@ export default function HomeScreen({
       dateRight: r.dateRight,
       timeRight: r.timeRight,
       updatedAt: r.updatedAt,
+      status: r.status,
+      alertNo: r.alertNo,
     }));
   }, [recentReports]);
 
@@ -687,6 +631,8 @@ export default function HomeScreen({
   const fabMenuAnim = useRef(new Animated.Value(0)).current;
   const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [chatbotModalVisible, setChatbotModalVisible] = useState(false);
+  const [servicesModalVisible, setServicesModalVisible] = useState(false);
   const [sosModalVisible, setSosModalVisible] = useState(false);
   const [sendingSos, setSendingSos] = useState(false);
   const [sosDragging, setSosDragging] = useState(false);
@@ -921,6 +867,10 @@ export default function HomeScreen({
     setSosModalVisible(true);
   }, [closeFabMenu, resetSosSlider]);
 
+  const handleQuickSchedule = useCallback(() => {
+    Alert.alert("Schedule", "Scheduling is coming soon.");
+  }, []);
+
   const sosPanResponder = useMemo(
     () =>
       PanResponder.create({
@@ -974,6 +924,29 @@ export default function HomeScreen({
     closeFabMenu();
     navigateToTab("Incident");
   }, [closeFabMenu, navigateToTab]);
+
+  const handleFabServices = useCallback(() => {
+    closeFabMenu();
+    setServicesModalVisible(true);
+  }, [closeFabMenu]);
+
+  const closeServicesModal = useCallback(() => {
+    setServicesModalVisible(false);
+  }, []);
+
+  const handleSelectService = useCallback((serviceId: string) => {
+    setServicesModalVisible(false);
+    // TODO: navigate to the selected service screen
+  }, []);
+
+  const handleFabChatbot = useCallback(() => {
+    closeFabMenu();
+    setChatbotModalVisible(true);
+  }, [closeFabMenu]);
+
+  const closeChatbotModal = useCallback(() => {
+    setChatbotModalVisible(false);
+  }, []);
 
   const handleSharedSignOut = useCallback(
     async () => {
@@ -1040,26 +1013,12 @@ export default function HomeScreen({
         icon: "add-circle-outline" as const,
         iconColor: "#7C3AED",
         title: "How to Use Quick Actions",
-        description: "View the shortcut guide for Incident Log, Alert, Hide App, and Sign Out.",
+        description: "View the shortcut guide for Incident Log, S.O.S, Services, Chatbot, Hide App, and Sign Out.",
         onPress: () => openTutorialByKey("quick_actions"),
       },
     ],
     [openTutorialByKey]
   );
-
-  const fabRotate = fabMenuAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "135deg"],
-  });
-  const fabActionsOpacity = fabMenuAnim;
-  const fabActionsTranslateY = fabMenuAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [10, 0],
-  });
-  const fabActionsScale = fabMenuAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.96, 1],
-  });
 
   useEffect(() => {
     if (isFocused) return;
@@ -1074,6 +1033,11 @@ export default function HomeScreen({
       StyleSheet.create({
         safe: { flex: 1, backgroundColor: BG },
         page: { flex: 1, backgroundColor: BG, position: "relative" },
+        fabMenuBackdrop: {
+          ...StyleSheet.absoluteFillObject,
+          backgroundColor: FAB_MENU_DIM,
+          zIndex: 18,
+        },
 
         topBar: {
           paddingHorizontal: PAD,
@@ -1136,58 +1100,53 @@ export default function HomeScreen({
         logsWrap: { paddingHorizontal: PAD, paddingTop: clamp(Math.round(10 * s), 8, 12) },
         logsGap: { height: GAP },
 
-        // Emergency buttons
-        emergencyWrap: {
-          paddingHorizontal: PAD,
-          paddingTop: clamp(Math.round(6 * s), 4, 8),
+        quickActionsWrap: {
+          paddingHorizontal: clamp(Math.round(26 * s), 20, 32),
+          paddingTop: clamp(Math.round(8 * s), 6, 10),
         },
-        emergencyRow: {
+        quickActionsRow: {
           flexDirection: "row",
-          gap: clamp(Math.round(10 * s), 8, 12),
+          gap: clamp(Math.round(12 * s), 10, 14),
         },
-        emergencyBtnOuter: {
+        quickActionCard: {
           flex: 1,
-        },
-        emergencyBtnCard: {
-          width: "100%",
-          borderRadius: 20,
-          paddingVertical: clamp(Math.round(14 * s), 12, 17),
-          paddingHorizontal: clamp(Math.round(14 * s), 12, 16),
-          overflow: "hidden",
-        },
-        emergencyIconRow: {
-          flexDirection: "row",
-          alignItems: "center",
-          gap: clamp(Math.round(10 * s), 8, 12),
-          marginBottom: clamp(Math.round(6 * s), 4, 8),
-        },
-        emergencyCircle: {
-          width: clamp(Math.round(34 * s), 30, 40),
-          height: clamp(Math.round(34 * s), 30, 40),
-          borderRadius: 999,
-          backgroundColor: "rgba(255,255,255,0.2)",
+          height: clamp(Math.round(102 * s), 92, 110),
+          borderRadius: clamp(Math.round(16 * s), 14, 18),
+          borderWidth: 1,
           alignItems: "center",
           justifyContent: "center",
+          gap: clamp(Math.round(8 * s), 6, 10),
+          ...Platform.select({
+            ios: {
+              shadowColor: "#0F172A",
+              shadowOpacity: 0.06,
+              shadowRadius: 6,
+              shadowOffset: { width: 0, height: 3 },
+            },
+            android: { elevation: 2 },
+          }),
         },
-        emergencyTextGroup: {
-          flex: 1,
+        quickActionSos: {
+          borderColor: "#C81024",
+          backgroundColor: "#D20A20",
         },
-        emergencyNum: {
-          fontSize: clamp(Math.round(26 * fs), 22, 30),
-          fontWeight: "900",
+        quickActionPressed: {
+          transform: [{ scale: 0.97 }],
+        },
+        quickActionSosIcon: {
           color: "#FFFFFF",
-          letterSpacing: 0.5,
-          lineHeight: clamp(Math.round(28 * fs), 24, 32),
+          fontSize: clamp(Math.round(34 * fs), 30, 38),
+          fontWeight: "900",
+          lineHeight: clamp(Math.round(28 * fs), 25, 32),
         },
-        emergencyLabel: {
-          fontSize: clamp(Math.round(11 * fs), 10, 12),
-          fontWeight: "600",
-          color: "rgba(255,255,255,0.85)",
+        quickActionSosLabel: {
+          color: "#FFFFFF",
+          fontSize: clamp(Math.round(13 * fs), 12, 15),
+          fontWeight: "900",
         },
-        emergencySub: {
-          fontSize: clamp(Math.round(10 * fs), 9, 11),
-          fontWeight: "600",
-          color: "rgba(255,255,255,0.65)",
+        quickActionLabel: {
+          fontSize: clamp(Math.round(13 * fs), 12, 15),
+          fontWeight: "800",
         },
 
         // Safety status chips
@@ -1297,11 +1256,6 @@ export default function HomeScreen({
           fontWeight: "800",
           color: "#64748B",
           textAlign: "center",
-        },
-        fabBackdrop: {
-          ...StyleSheet.absoluteFillObject,
-          backgroundColor: "rgba(11, 43, 69, 0.12)",
-          zIndex: 18,
         },
         sosModalRoot: {
           flex: 1,
@@ -1444,44 +1398,6 @@ export default function HomeScreen({
             android: { elevation: 1 },
           }),
         },
-        fabActionList: {
-          position: "absolute",
-          right: 0,
-          bottom: FAB_SIZE + clamp(Math.round(14 * s), 12, 18),
-          gap: clamp(Math.round(10 * s), 8, 12),
-          alignItems: "flex-end",
-        },
-        fabActionBtn: {
-          minWidth: clamp(Math.round(182 * s), 168, 196),
-          borderRadius: 999,
-          borderWidth: 1,
-          paddingVertical: clamp(Math.round(10 * s), 9, 12),
-          paddingHorizontal: clamp(Math.round(12 * s), 10, 14),
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "flex-start",
-          ...Platform.select({
-            ios: {
-              shadowColor: "#0F172A",
-              shadowOpacity: 0.14,
-              shadowRadius: 10,
-              shadowOffset: { width: 0, height: 6 },
-            },
-            android: { elevation: 6 },
-          }),
-        },
-        fabActionIconWrap: {
-          width: clamp(Math.round(34 * s), 30, 36),
-          height: clamp(Math.round(34 * s), 30, 36),
-          borderRadius: 999,
-          alignItems: "center",
-          justifyContent: "center",
-          marginRight: clamp(Math.round(10 * s), 8, 12),
-        },
-        fabActionText: {
-          fontSize: clamp(Math.round(13 * fs), 12, 14),
-          fontWeight: "800",
-        },
       }),
     [
       PAD,
@@ -1562,7 +1478,7 @@ export default function HomeScreen({
 
             <Pressable onPress={() => onTabChange?.("Reports")} hitSlop={10}>
               <Text style={[styles.seeMore, { color: TC.primary }]} allowFontScaling={false}>
-                See more
+                View all
               </Text>
             </Pressable>
           </View>
@@ -1602,75 +1518,43 @@ export default function HomeScreen({
             )}
           </View>
 
-          {/* Emergency Contacts */}
+          {/* Quick actions */}
           <View style={styles.sectionRow}>
             <View style={styles.sectionTitleRow}>
               <Text style={[styles.sectionTitle, { color: TC.textDark }]} allowFontScaling={false}>
-                Emergency Contacts
+                Quick Actions
               </Text>
             </View>
           </View>
 
-          <View style={styles.emergencyWrap}>
-            <View style={styles.emergencyRow}>
+          <View style={styles.quickActionsWrap}>
+            <View style={styles.quickActionsRow}>
               <Pressable
-                onPress={() => callEmergency("911")}
-                onPressIn={() => pressInEmergency(em911Scale)}
-                onPressOut={() => pressOutEmergency(em911Scale)}
-                hitSlop={8}
-                style={styles.emergencyBtnOuter}
+                onPress={handleAlertAction}
+                style={({ pressed }) => [styles.quickActionCard, styles.quickActionSos, pressed && styles.quickActionPressed]}
               >
-                <Animated.View style={{ transform: [{ scale: em911Scale }], width: "100%" }}>
-                  <LinearGradient
-                    colors={["#DC2626", "#991B1B"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.emergencyBtnCard}
-                  >
-                    <View style={styles.emergencyIconRow}>
-                      <View style={styles.emergencyCircle}>
-                        <Ionicons name="call" size={16} color="#fff" />
-                      </View>
-                      <Text style={styles.emergencyNum} allowFontScaling={false}>911</Text>
-                    </View>
-                    <Text style={styles.emergencyLabel} allowFontScaling={false}>Emergency Hotline</Text>
-                  </LinearGradient>
-                </Animated.View>
+                <Text style={styles.quickActionSosIcon} allowFontScaling={false}>*</Text>
+                <Text style={styles.quickActionSosLabel} allowFontScaling={false}>SOS</Text>
               </Pressable>
 
               <Pressable
-                onPress={() => callEmergency("117")}
-                onPressIn={() => pressInEmergency(em117Scale)}
-                onPressOut={() => pressOutEmergency(em117Scale)}
-                hitSlop={8}
-                style={styles.emergencyBtnOuter}
+                onPress={handleQuickSchedule}
+                style={({ pressed }) => [styles.quickActionCard, { backgroundColor: TC.surface, borderColor: TC.divider }, pressed && styles.quickActionPressed]}
               >
-                <Animated.View style={{ transform: [{ scale: em117Scale }], width: "100%" }}>
-                  <LinearGradient
-                    colors={["#D97706", "#92400E"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.emergencyBtnCard}
-                  >
-                    <View style={styles.emergencyIconRow}>
-                      <View style={styles.emergencyCircle}>
-                        <Ionicons name="call" size={16} color="#fff" />
-                      </View>
-                      <Text style={styles.emergencyNum} allowFontScaling={false}>117</Text>
-                    </View>
-                    <Text style={styles.emergencyLabel} allowFontScaling={false}>Police Assistance</Text>
-                  </LinearGradient>
-                </Animated.View>
+                <Ionicons name="calendar-outline" size={25} color="#159D9A" />
+                <Text style={[styles.quickActionLabel, { color: TC.textDark }]} allowFontScaling={false}>Schedule</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => navigateToTab("Inbox")}
+                style={({ pressed }) => [styles.quickActionCard, { backgroundColor: TC.surface, borderColor: TC.divider }, pressed && styles.quickActionPressed]}
+              >
+                <Ionicons name="document-text-outline" size={25} color={TC.textDark} />
+                <Text style={[styles.quickActionLabel, { color: TC.textDark }]} allowFontScaling={false}>Hotlines</Text>
               </Pressable>
             </View>
           </View>
         </ScrollView>
-
-        {fabMenuOpen ? (
-          <Animated.View style={[styles.fabBackdrop, { opacity: fabActionsOpacity }]}>
-            <Pressable style={StyleSheet.absoluteFillObject} onPress={closeFabMenu} />
-          </Animated.View>
-        ) : null}
 
         <Modal visible={sosModalVisible} transparent animationType="fade" onRequestClose={closeSosModal}>
           <View style={styles.sosModalRoot}>
@@ -1822,145 +1706,49 @@ export default function HomeScreen({
           hideCancel
         />
 
+        <ChatbotModal
+          visible={chatbotModalVisible}
+          onClose={closeChatbotModal}
+        />
+
+        <ServicesModal
+          visible={servicesModalVisible}
+          onClose={closeServicesModal}
+          onSelectService={handleSelectService}
+        />
+
         <BottomNavBar
           activeTab={activeTab}
           onTabPress={navigateToTab}
           navHeight={navHeight}
           paddingBottom={bottomPad}
           chevronBottom={chevronBottom}
-          centerLabel="Community"
+          centerLabel="Services"
+          centerLabelActive={fabMenuOpen}
         />
 
-        {/* âœ… Floating FAB â€” bottom-right, above Settings tab */}
-        <View
-          pointerEvents="box-none"
-          style={{
-            position: "absolute",
-            bottom: navHeight + 28,
-            right: 16,
-            zIndex: 20,
-          }}
-        >
-          {fabMenuOpen ? (
-            <Animated.View
-              style={[
-                styles.fabActionList,
-                {
-                  opacity: fabActionsOpacity,
-                  transform: [{ translateY: fabActionsTranslateY }, { scale: fabActionsScale }],
-                },
-              ]}
-            >
-              <Pressable
-                onPress={handleFabIncidentLog}
-                style={({ pressed }) => [
-                  styles.fabActionBtn,
-                  {
-                    backgroundColor: TC.surface,
-                    borderColor: TC.divider,
-                  },
-                  pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
-                ]}
-              >
-                <View style={[styles.fabActionIconWrap, { backgroundColor: TC.chipBg }]}>
-                  <Ionicons name="document-text-outline" size={18} color={TC.primary} />
-                </View>
-                <Text style={[styles.fabActionText, { color: TC.textDark }]} allowFontScaling={false}>
-                  Incident Log
-                </Text>
-              </Pressable>
+        {fabMenuOpen ? (
+          <Animated.View style={[styles.fabMenuBackdrop, { opacity: fabMenuAnim }]}>
+            <Pressable style={StyleSheet.absoluteFillObject} onPress={closeFabMenu} />
+          </Animated.View>
+        ) : null}
 
-              <Pressable
-                onPress={handleAlertAction}
-                style={({ pressed }) => [
-                  styles.fabActionBtn,
-                  {
-                    backgroundColor: TC.surface,
-                    borderColor: TC.divider,
-                  },
-                  pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
-                ]}
-              >
-                <View style={[styles.fabActionIconWrap, { backgroundColor: TC.chipBg }]}>
-                  <Ionicons name="warning-outline" size={18} color={TC.primary} />
-                </View>
-                <Text style={[styles.fabActionText, { color: TC.textDark }]} allowFontScaling={false}>
-                  Alert
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={handleFabHideApp}
-                style={({ pressed }) => [
-                  styles.fabActionBtn,
-                  {
-                    backgroundColor: TC.surface,
-                    borderColor: TC.divider,
-                  },
-                  pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
-                ]}
-              >
-                <View style={[styles.fabActionIconWrap, { backgroundColor: TC.chipBg }]}>
-                  <Ionicons name="eye-off-outline" size={18} color={TC.primary} />
-                </View>
-                <Text style={[styles.fabActionText, { color: TC.textDark }]} allowFontScaling={false}>
-                  Hide App
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={handleFabSignOut}
-                style={({ pressed }) => [
-                  styles.fabActionBtn,
-                  {
-                    backgroundColor: TC.surface,
-                    borderColor: TC.divider,
-                  },
-                  pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
-                ]}
-              >
-                <View style={[styles.fabActionIconWrap, { backgroundColor: TC.chipBg }]}>
-                  <Ionicons name="log-out-outline" size={18} color={TC.primary} />
-                </View>
-                <Text style={[styles.fabActionText, { color: TC.textDark }]} allowFontScaling={false}>
-                  Sign Out
-                </Text>
-              </Pressable>
-            </Animated.View>
-          ) : null}
-
-          <Pressable
-            onPress={toggleFabMenu}
-            style={({ pressed }) => ({
-              width: FAB_SIZE,
-              height: FAB_SIZE,
-              borderRadius: FAB_SIZE / 2,
-              overflow: "hidden",
-              alignItems: "center",
-              justifyContent: "center",
-              ...(pressed ? { transform: [{ scale: 0.95 }] } : {}),
-              ...Platform.select({
-                ios: {
-                  shadowColor: "#000",
-                  shadowOpacity: 0.18,
-                  shadowRadius: 14,
-                  shadowOffset: { width: 0, height: 8 },
-                },
-                android: { elevation: 10 },
-              }),
-            })}
-          >
-            <LinearGradient
-              colors={TC.gradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFillObject}
-            />
-            <Animated.View style={{ transform: [{ rotate: fabRotate }] }}>
-              <Ionicons name="add" size={30} color="#FFFFFF" />
-            </Animated.View>
-          </Pressable>
-        </View>
+        <QuickActions
+          isOpen={fabMenuOpen}
+          animation={fabMenuAnim}
+          navHeight={navHeight}
+          fabBottom={fabBottom}
+          fabSize={FAB_SIZE}
+          s={s}
+          fs={fs}
+          onToggle={toggleFabMenu}
+          onIncidentLog={handleFabIncidentLog}
+          onSos={handleAlertAction}
+          onServices={handleFabServices}
+          onChatbot={handleFabChatbot}
+          onHideApp={handleFabHideApp}
+          onSignOut={handleFabSignOut}
+        />
 
         {/* âœ… Fab tutorial overlay */}
         <FabTutorialOverlay
@@ -1970,10 +1758,9 @@ export default function HomeScreen({
           s={s}
           fabSize={FAB_SIZE}
           fabBottom={fabBottom}
-          fabRight={16}
           navHeight={navHeight}
           title="Open Quick Actions"
-          message="Tap the + button to open Incident Log, Alert, Hide App, and Sign Out shortcuts."
+          message="Tap the + button to open Incident Log, S.O.S, Services, Chatbot, Hide App, and Sign Out shortcuts."
         />
 
         <TutorialPickerModal

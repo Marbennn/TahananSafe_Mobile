@@ -90,7 +90,7 @@ export default function BiometricsEnabledModal({ visible, onClose }: Props) {
 
           <Text style={[styles.sub, { color: TC.muted }]}>
             {biometricLabel} has been set up successfully.{"\n"}
-            You can use it to log in on your next visit.
+            You can use it to fill your saved login details next time.
           </Text>
 
           <Pressable

@@ -93,7 +93,7 @@ export default function HotlinesScreen({
 
   // ✅ MATCH HomeScreen nav sizing exactly
   const NAV_BASE_HEIGHT = 78;
-  const FAB_SIZE = 62;
+  const FAB_SIZE = 68;
 
   const bottomPad = Math.max(insets.bottom, 10);
   const navHeight = NAV_BASE_HEIGHT + bottomPad;
@@ -234,10 +234,10 @@ export default function HotlinesScreen({
           navHeight={navHeight}
           paddingBottom={bottomPad}
           chevronBottom={chevronBottom}
+          centerLabel="Services"
           fabBottom={fabBottom}
           fabSize={FAB_SIZE}
           onFabPress={() => handleTab("Incident")}
-          centerLabel="Community"
         />
       </View>
     </SafeAreaView>

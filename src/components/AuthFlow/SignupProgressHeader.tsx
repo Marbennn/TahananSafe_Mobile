@@ -5,7 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 type Props = {
   onBack?: () => void;
-  progressActiveCount?: 1 | 2 | 3;
+  progressActiveCount?: 1 | 2 | 3 | 4;
 
   // same responsiveness helpers from screens
   scale: (n: number) => number;
@@ -17,6 +17,7 @@ type Props = {
 
 const DEFAULT_ACTIVE = "#1D4ED8";
 const DEFAULT_IDLE = "#E5E7EB";
+const STEP_COUNT = 4;
 
 export default function AuthProgressHeader({
   onBack,
@@ -36,9 +37,9 @@ export default function AuthProgressHeader({
   const GAP = scale(8);
 
   const STEP = SEG_W + GAP;
-  const WRAP_W = SEG_W * 3 + GAP * 2;
+  const WRAP_W = SEG_W * STEP_COUNT + GAP * (STEP_COUNT - 1);
 
-  const idx = Math.max(0, Math.min(2, (progressActiveCount ?? 1) - 1));
+  const idx = Math.max(0, Math.min(STEP_COUNT - 1, (progressActiveCount ?? 1) - 1));
   const translateX = useRef(new Animated.Value(idx * STEP)).current;
 
   useEffect(() => {
@@ -74,7 +75,7 @@ export default function AuthProgressHeader({
           ]}
         >
           <View style={[styles.baseRow, { gap: GAP }]}>
-            {[0, 1, 2].map((i) => (
+            {Array.from({ length: STEP_COUNT }).map((_, i) => (
               <View
                 key={i}
                 style={{

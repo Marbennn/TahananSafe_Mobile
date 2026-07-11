@@ -1,5 +1,5 @@
 // src/components/LoginScreen/LoginCard.tsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -22,6 +22,10 @@ type Props = {
 
   // ✅ Optional: so LoginScreen can disable UI while requesting
   loading?: boolean;
+  autofillValues?: { email: string; password: string; nonce: number } | null;
+  biometricAvailable?: boolean;
+  biometricLoading?: boolean;
+  onBiometricAutofill?: () => void | Promise<void>;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -33,6 +37,10 @@ export default function LoginCard({
   onGoSignup,
   onForgotPassword,
   loading = false,
+  autofillValues = null,
+  biometricAvailable = false,
+  biometricLoading = false,
+  onBiometricAutofill,
 }: Props) {
   const TC = useColors();
   const { width, height } = useWindowDimensions();
@@ -53,6 +61,14 @@ export default function LoginCard({
   const [passwordFocused, setPasswordFocused] = useState(false);
 
   const canLogin = email.trim().length > 0 && password.trim().length > 0 && !loading;
+  const canUseBiometrics = biometricAvailable && !!onBiometricAutofill && !loading && !biometricLoading;
+
+  useEffect(() => {
+    if (!autofillValues) return;
+    setEmail(autofillValues.email);
+    setPassword(autofillValues.password);
+    setRememberMe(true);
+  }, [autofillValues?.nonce]);
 
   const handleLogin = async () => {
     if (!canLogin) return;
@@ -143,6 +159,32 @@ export default function LoginCard({
       </View>
 
       {/* ✅ LOGIN BUTTON (EXACT SAME AS SIGNUP UI) */}
+      {biometricAvailable ? (
+        <Pressable
+          onPress={onBiometricAutofill}
+          disabled={!canUseBiometrics}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.bioAutofillBtn,
+            { borderColor: TC.border, backgroundColor: TC.inputBg },
+            (!canUseBiometrics || pressed) && { opacity: canUseBiometrics ? 0.75 : 0.55 },
+          ]}
+        >
+          {biometricLoading ? (
+            <ActivityIndicator size="small" color={TC.primary} />
+          ) : (
+            <Ionicons
+              name={Platform.OS === "ios" ? "scan-outline" : "finger-print-outline"}
+              size={scale(17)}
+              color={TC.primary}
+            />
+          )}
+          <Text style={[styles.bioAutofillText, { color: TC.primary }]}>
+            {biometricLoading ? "Checking biometrics..." : "Fill saved login with biometrics"}
+          </Text>
+        </Pressable>
+      ) : null}
+
       <Pressable
         onPress={handleLogin}
         disabled={!canLogin}
@@ -273,6 +315,23 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     /* ✅ BUTTON STYLES (MATCH SIGNUP) */
+    bioAutofillBtn: {
+      minHeight: vscale(44),
+      borderRadius: scale(14),
+      borderWidth: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: scale(8),
+      marginBottom: vscale(14),
+      paddingHorizontal: scale(12),
+    },
+
+    bioAutofillText: {
+      fontSize: scale(12),
+      fontWeight: "800",
+    },
+
     ctaOuter: {
       marginTop: vscale(4),
       borderRadius: scale(14),

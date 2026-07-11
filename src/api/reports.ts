@@ -40,6 +40,7 @@ export type ReportDetailDto = {
   longitude?: number | null;
   status?: string; // "submitted" | "reviewing" | "resolved"
   photos?: any[]; // [{ fileId, url, fileName, mimeType, size }]
+  videos?: any[]; // [{ fileId, url, fileName, mimeType, size }]
   createdAt?: string;
   updatedAt?: string;
 };

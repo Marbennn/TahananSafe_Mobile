@@ -34,7 +34,7 @@ type Props = {
   initialValues?: Partial<SubmitPayload>;
   onBack?: () => void;
   onSubmit?: (payload: SubmitPayload) => void;
-  progressActiveCount?: 1 | 2 | 3;
+  progressActiveCount?: 1 | 2 | 3 | 4;
 };
 
 function clamp(n: number, min: number, max: number) {

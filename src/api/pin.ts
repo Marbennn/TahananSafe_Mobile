@@ -91,6 +91,7 @@ type ForgotPinVerifyOtpResponse = {
   resetToken: string;
   expiresInSeconds: number;
 };
+type ForgotPinVerifyPasswordResponse = { message: string };
 type ForgotPinResetResponse = { message: string };
 
 export async function forgotPinSendOtp(email: string): Promise<ForgotPinSendOtpResponse> {
@@ -109,6 +110,18 @@ export async function forgotPinVerifyOtp(
     method: "POST",
     path: "/api/mobile/v1/forgot-pin/verify-otp",
     body: { email, otp },
+  });
+}
+
+export async function forgotPinVerifyPassword(
+  email: string,
+  resetToken: string,
+  password: string,
+): Promise<ForgotPinVerifyPasswordResponse> {
+  return requestJson<ForgotPinVerifyPasswordResponse>({
+    method: "POST",
+    path: "/api/mobile/v1/forgot-pin/verify-password",
+    body: { email, resetToken, password },
   });
 }
 

@@ -1,4 +1,4 @@
-// src/screens/CreatePinScreen.tsx
+// src/screens/VerifyPinScreen.tsx
 import React, { useMemo, useState } from "react";
 import {
   View,
@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useColors } from "../theme/colors";
+import SavedModal from "../components/SavedModal";
 
 import {
   getAccessToken,
@@ -22,11 +23,11 @@ import {
   setPinSkippedForUser,
 } from "../auth/session";
 
-import { getMeApi } from "../api/pin";
+import { setPinApi, getMeApi } from "../api/pin";
 
 type Props = {
+  expectedPin: string;
   onContinue: (pin: string) => void;
-  onBack?: () => void;
   onSkip?: () => void;
   progressActiveCount?: 1 | 2 | 3 | 4;
 };
@@ -35,9 +36,9 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-const TAG = "[CreatePinScreen]";
+const TAG = "[VerifyPinScreen]";
 
-export default function CreatePinScreen({ onContinue, onSkip }: Props) {
+export default function VerifyPinScreen({ expectedPin, onContinue, onSkip }: Props) {
   const TC = useColors();
   const { width, height } = useWindowDimensions();
 
@@ -54,6 +55,8 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
   const PIN_LENGTH = 4;
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
+  const [savedVisible, setSavedVisible] = useState(false);
+  const [savedPin, setSavedPin] = useState("");
 
   const dots = useMemo(
     () => Array.from({ length: PIN_LENGTH }).map((_, i) => i < pin.length),
@@ -74,13 +77,47 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
     setPin((p) => p.slice(0, -1));
   };
 
-  const handleSubmit = () => {
-    console.log(`${TAG} Continue pressed. pin length:`, pin.length);
+  const handleSubmit = async () => {
+    console.log(`${TAG} Signup pressed. pin length:`, pin.length);
     if (loading) return;
     if (pin.length !== PIN_LENGTH) return;
 
-    onContinue(pin);
-    setPin("");
+    if (pin !== expectedPin) {
+      setPin("");
+      Alert.alert("PINs Do Not Match", "Please enter the same 4-digit PIN you created.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const accessToken = await getAccessToken();
+      console.log(`${TAG} accessToken exists?`, Boolean(accessToken));
+      if (!accessToken) throw new Error("Session missing. Please login again.");
+
+      await setPinApi({ pin: String(pin) });
+      console.log(`${TAG} setPinApi success`);
+
+      await setHasPin(true);
+
+      try {
+        const me = await getMeApi();
+        const userId = String(me.user._id);
+        await setPinSkippedForUser(userId, false);
+      } catch {
+        // ignore
+      }
+
+      await setLoggedIn(true);
+      setPinUnlockedThisRun(true);
+      setSavedPin(pin);
+      setSavedVisible(true);
+    } catch (err: any) {
+      console.log(`${TAG} ERROR:`, err?.message || err);
+      Alert.alert("PIN Setup Failed", err?.message || "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSkip = async () => {
@@ -112,9 +149,17 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
 
   return (
     <View style={[styles.safe, { backgroundColor: TC.surface }]}>
+      <SavedModal
+        visible={savedVisible}
+        title="PIN Created!"
+        message={"Your 4-digit PIN has been set.\nYou can use it to quickly access your account."}
+        buttonLabel="Continue"
+        onClose={() => {
+          setSavedVisible(false);
+          onContinue(savedPin);
+        }}
+      />
       <View style={styles.container}>
-
-        {/* ── TOP: icon · title · subtitle · dots ── */}
         <View style={styles.topSection}>
           <View style={styles.iconWrap}>
             <LinearGradient
@@ -127,9 +172,9 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
             </LinearGradient>
           </View>
 
-          <Text style={[styles.screenTitle, { color: TC.textDark }]}>Create Your PIN</Text>
+          <Text style={[styles.screenTitle, { color: TC.textDark }]}>Verify Your Pin</Text>
           <Text style={[styles.screenSub, { color: TC.muted }]}>
-            Set a 4-digit PIN to quickly and securely{"\n"}access your account.
+            Verify your PIN to protect your access and keep{"\n"}your information private.
           </Text>
 
           <View style={styles.dotsCard}>
@@ -142,7 +187,6 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
           </View>
         </View>
 
-        {/* ── KEYPAD ── */}
         <View style={styles.keypadSection}>
           <View style={styles.keypadGrid}>
             {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
@@ -185,7 +229,6 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
           </View>
         </View>
 
-        {/* ── BOTTOM: continue · skip ── */}
         <View style={styles.bottomArea}>
           <Pressable
             onPress={handleSubmit}
@@ -207,7 +250,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
                 {loading ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.ctaText}>Continue</Text>
+                  <Text style={styles.ctaText}>Signup</Text>
                 )}
               </LinearGradient>
             </View>
@@ -223,18 +266,14 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
               pressed && !loading ? { opacity: 0.6 } : null,
             ]}
           >
-            <Text style={styles.skipText}>Skip for now</Text>
+            <Text style={styles.skipText}>Skip</Text>
           </Pressable>
         </View>
-
       </View>
     </View>
   );
 }
 
-// ─────────────────────────────────────────────
-// Key button
-// ─────────────────────────────────────────────
 function KeyButton({
   label,
   onPress,
@@ -264,9 +303,6 @@ function KeyButton({
   );
 }
 
-// ─────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────
 function createStyles(
   scale: (n: number) => number,
   vscale: (n: number) => number,
@@ -276,12 +312,10 @@ function createStyles(
   const hPad = scale(24);
   const keyGap = scale(16);
 
-  // Responsive key size — constrained by both screen width and height
   const availW = width - hPad * 2;
   const keySizeW = Math.floor((availW - keyGap * 2) / 3);
   const keySizeH = Math.floor((height * 0.44 - keyGap * 3) / 4);
   const keySize = clamp(Math.min(keySizeW, keySizeH), 64, 80);
-  // Grid width = exactly 3 buttons + 2 gaps so the grid centers inside keypadSection
   const fixedGridW = keySize * 3 + keyGap * 2;
 
   const dotSize = clamp(scale(22), 18, 28);
@@ -295,7 +329,6 @@ function createStyles(
       paddingTop: vscale(6),
     },
 
-    // ── Top ──────────────────────────────────
     topSection: {
       flex: 1,
       justifyContent: "center",
@@ -366,7 +399,6 @@ function createStyles(
       backgroundColor: "#07519C",
     },
 
-    // ── Keypad ───────────────────────────────
     keypadSection: {
       alignItems: "center",
       paddingBottom: vscale(8),
@@ -414,7 +446,6 @@ function createStyles(
       justifyContent: "center",
     },
 
-    // ── Bottom ───────────────────────────────
     bottomArea: {
       paddingTop: vscale(16),
       paddingBottom: vscale(12),

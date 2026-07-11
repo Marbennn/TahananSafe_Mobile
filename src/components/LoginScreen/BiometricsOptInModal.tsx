@@ -35,8 +35,8 @@ export default function BiometricsOptInModal({
   const title = "Enable Biometrics?";
   const description =
     Platform.OS === "ios"
-      ? "Use Face ID for a faster and more secure login next time."
-      : "Use fingerprint for a faster and more secure login next time.";
+      ? "Use Face ID to fill your saved login details next time. OTP verification will still be required."
+      : "Use fingerprint to fill your saved login details next time. OTP verification will still be required.";
 
   const iconName = Platform.OS === "ios" ? "scan-outline" : "finger-print-outline";
 

@@ -23,6 +23,12 @@ import { LinearGradient } from "expo-linear-gradient";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { Colors, useColors } from "../theme/colors";
 import { useAuth } from "../auth/AuthContext";
+import {
+  getReportStatusMeta,
+  isActiveReportStatus,
+  normalizeReportStatus,
+  type ReportStatus,
+} from "../utils/reportStatus";
 
 // ✅ FIX: Use requestJson with auth for auto token refresh (replaces raw fetch + getAccessToken)
 import { requestJson } from "../api/http";
@@ -30,7 +36,7 @@ import { requestJson } from "../api/http";
 // ✅ NEW: local status-change notifications
 import { syncLocalReportStatusNotifications } from "../api/notifications";
 
-type FilterKey = "Pending" | "On going" | "Cancelled" | "Resolved";
+type FilterKey = "Active" | "Resolved" | "Archived";
 
 export type ReportItem = {
   id: string;
@@ -43,7 +49,7 @@ export type ReportItem = {
   timeRight: string;
   groupLabel?: string;
 
-  status?: "PENDING" | "ONGOING" | "CANCELLED" | "RESOLVED";
+  status?: ReportStatus;
   witnessName?: string;
   witnessType?: string;
   location?: string;
@@ -126,65 +132,25 @@ function formatGroupDate(d: Date) {
   return `${toShortMonthName(d.getMonth())} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
-function normalizeStatus(dbStatus?: string): ReportItem["status"] {
-  const s = String(dbStatus ?? "").trim().toLowerCase();
-  if (s === "submitted" || s === "pending") return "PENDING";
-  if (s === "ongoing" || s === "on going" || s === "on-going" || s === "in_progress" || s === "in progress")
-    return "ONGOING";
-  if (s === "cancelled" || s === "canceled") return "CANCELLED";
-  if (s === "resolved" || s === "done" || s === "completed") return "RESOLVED";
-  return "PENDING";
-}
-
-function filterToStatus(filter: FilterKey): ReportItem["status"] {
-  if (filter === "Pending") return "PENDING";
-  if (filter === "On going") return "ONGOING";
-  if (filter === "Cancelled") return "CANCELLED";
-  return "RESOLVED";
-}
-
 function isAbortError(err: any) {
   const name = err?.name || "";
   const msg = String(err?.message || "");
   return name === "AbortError" || msg.toLowerCase().includes("aborted");
 }
 
-function statusLabel(s?: ReportItem["status"]) {
-  if (s === "ONGOING") return "On going";
-  if (s === "CANCELLED") return "Cancelled";
-  if (s === "RESOLVED") return "Resolved";
-  return "Pending";
-}
-
-function statusAccent(s?: ReportItem["status"]) {
-  if (s === "RESOLVED") return "#16A34A";
-  if (s === "CANCELLED") return "#DC2626";
-  if (s === "ONGOING") return "#2563EB";
-  return "#EAB308";
-}
-
-function statusIcon(s?: ReportItem["status"]) {
-  if (s === "RESOLVED") return "checkmark-circle-outline" as const;
-  if (s === "CANCELLED") return "close-circle-outline" as const;
-  if (s === "ONGOING") return "sync-circle-outline" as const;
-  return "time-outline" as const;
-}
-
 function countByStatus(items: ReportItem[]) {
-  let pending = 0;
-  let ongoing = 0;
-  let cancelled = 0;
+  let active = 0;
   let resolved = 0;
+  let archived = 0;
 
   for (const it of items) {
-    const s = (it.status ?? "PENDING") as ReportItem["status"];
-    if (s === "PENDING") pending++;
-    else if (s === "ONGOING") ongoing++;
-    else if (s === "CANCELLED") cancelled++;
-    else if (s === "RESOLVED") resolved++;
+    const s = normalizeReportStatus(it.status);
+    if (s === "RESOLVED") resolved++;
+    else if (s === "ARCHIVED") archived++;
+    else active++;
   }
 
-  return { pending, ongoing, cancelled, resolved };
+  return { active, resolved, archived };
 }
 
 function ReportStatusSegment({
@@ -198,28 +164,24 @@ function ReportStatusSegment({
   styles: ReturnType<typeof makeStyles>;
   TC: ReturnType<typeof useColors>;
 }) {
-  const options: FilterKey[] = ["Pending", "On going", "Cancelled", "Resolved"];
+  const options: FilterKey[] = ["Active", "Resolved", "Archived"];
   return (
-    <View style={[styles.segmentWrap, { borderColor: TC.divider, backgroundColor: TC.isDark ? TC.surface : "#F3F8FF" }]}>
+    <View style={styles.segmentWrap}>
       {options.map((k) => {
         const active = k === value;
-        const accent = statusAccent(filterToStatus(k));
         return (
           <Pressable
             key={k}
             onPress={() => onChange(k)}
             style={({ pressed }) => [
               styles.segmentBtn,
-              active ? { backgroundColor: TC.surface, borderColor: "transparent" } : { backgroundColor: "transparent" },
+              active ? styles.segmentBtnActive : styles.segmentBtnIdle,
               pressed && { opacity: 0.95 },
             ]}
           >
-            <View style={styles.segmentInner}>
-              <View style={[styles.segmentDot, { backgroundColor: active ? accent : "#CBD5E1" }]} />
-              <Text style={[styles.segmentText, { color: active ? TC.textDark : TC.muted }]} numberOfLines={1}>
-                {k}
-              </Text>
-            </View>
+            <Text style={[styles.segmentText, active ? styles.segmentTextActive : styles.segmentTextIdle]} numberOfLines={1}>
+              {k}
+            </Text>
           </Pressable>
         );
       })}
@@ -238,54 +200,39 @@ function ReportCard({
   styles: ReturnType<typeof makeStyles>;
   TC: ReturnType<typeof useColors>;
 }) {
-  const accent = statusAccent(item.status);
-  const icon = statusIcon(item.status);
+  const status = getReportStatusMeta(item.status);
+  const cardDate = parseDateSmart(item.dateLeft) ? formatGroupDate(parseDateSmart(item.dateLeft)!) : item.dateLeft || "-";
+  const dateLine = `${cardDate}${item.timeLeft && item.timeLeft !== "—" && item.timeLeft !== "-" ? ` • ${item.timeLeft}` : ""}`;
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.card, { borderColor: TC.divider, backgroundColor: TC.card }, pressed && { opacity: 0.98 }]}>
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.card, { borderColor: TC.divider, backgroundColor: TC.card }, pressed && { opacity: 0.96 }]}>
       <View style={styles.cardInner}>
-        <View style={[styles.accentEdge, { backgroundColor: accent }]} />
+        <View style={styles.cardMetaRow}>
+          <Text style={[styles.reportNo, { color: TC.muted }]} numberOfLines={1}>
+            REP {item.alertNo || `#${item.id.slice(-6).toUpperCase()}`}
+          </Text>
 
-        <View style={styles.cardTopRow}>
-          <View style={[styles.leadingIconWrap, { backgroundColor: TC.chipBg, borderColor: TC.divider }]}>
-            <Ionicons name={icon} size={styles._iconSize} color={accent} />
+          <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
+            <Text style={[styles.statusPillText, { color: status.color }]} numberOfLines={1}>{status.shortLabel}</Text>
           </View>
-
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <View style={styles.titleRow}>
-              <Text style={[styles.cardTitle, { color: TC.textDark }]} numberOfLines={1}>
-                {item.title}
-              </Text>
-
-              {!!item.alertNo && (
-                <View style={[styles.alertTag, { borderColor: TC.divider, backgroundColor: TC.surface }]}>
-                  <Ionicons name="alert-circle-outline" size={styles._miniIcon} color={TC.muted} />
-                  <Text style={[styles.alertTagText, { color: TC.muted }]} numberOfLines={1}>
-                    {item.alertNo}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            <Text style={[styles.cardDetail, { color: TC.muted }]} numberOfLines={2}>
-              {item.detail}
-            </Text>
-          </View>
-
-          <Ionicons name="chevron-forward" size={styles._chevron} color={TC.muted} />
         </View>
 
-        <View style={styles.cardBottomRow}>
-          <View style={[styles.statusPill, { borderColor: TC.divider, backgroundColor: TC.isDark ? TC.surface : "#F3F8FF" }]}>
-            <View style={[styles.statusDot, { backgroundColor: accent }]} />
-            <Text style={[styles.statusPillText, { color: accent }]}>{statusLabel(item.status)}</Text>
-          </View>
+        <Text style={[styles.cardTitle, { color: TC.textDark }]} numberOfLines={1}>
+          {item.title}
+        </Text>
 
-          <View style={styles.metaRow}>
-            <Ionicons name="time-outline" size={styles._miniIcon} color={TC.muted} />
-            <Text style={[styles.metaText, { color: TC.muted }]} numberOfLines={1}>
-              Updated {item.timeRight}
-            </Text>
+        <Text style={[styles.cardDetail, { color: TC.muted }]} numberOfLines={2}>
+          {item.detail}
+        </Text>
+
+        <View style={styles.cardBottomRow}>
+          <Text style={[styles.metaText, { color: TC.muted }]} numberOfLines={1}>
+            {dateLine}
+          </Text>
+
+          <View style={styles.viewDetailsRow}>
+            <Text style={[styles.viewDetailsText, { color: TC.primary }]} numberOfLines={1}>View Details</Text>
+            <Ionicons name="chevron-forward" size={styles._chevron} color={TC.primary} />
           </View>
         </View>
       </View>
@@ -330,7 +277,7 @@ export default function ReportScreen({
   const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab ?? "Reports");
-  const [filter, setFilter] = useState<FilterKey>("Pending");
+  const [filter, setFilter] = useState<FilterKey>("Active");
   const [query, setQuery] = useState<string>("");
 
   const [items, setItems] = useState<ReportItem[]>([]);
@@ -339,7 +286,7 @@ export default function ReportScreen({
   const [errorMsg, setErrorMsg] = useState<string>("");
 
   const NAV_BASE_HEIGHT = 78;
-  const FAB_SIZE = 62;
+  const FAB_SIZE = 68;
 
   const bottomPad = Math.max(insets.bottom, 10);
   const navHeight = NAV_BASE_HEIGHT + bottomPad;
@@ -408,20 +355,13 @@ export default function ReportScreen({
 
       const groupLabel = dateObj && isSameDay(dateObj, today) ? "Today" : dateObj ? formatGroupDate(dateObj) : "";
 
-      const detailLine =
-        leftDate && leftTime && leftDate !== "—" && leftTime !== "—"
-          ? `On ${leftDate}, at approximately ${leftTime},`
-          : details
-          ? details
-          : "—";
-
-      const statusNorm = normalizeStatus(doc?.status);
+      const statusNorm = normalizeReportStatus(doc?.status);
 
       return {
         id,
         groupLabel,
         title: incidentType || "Incident Report",
-        detail: detailLine,
+        detail: details || offenderName || "No details provided.",
         dateLeft: leftDate,
         timeLeft: leftTime,
         dateRight: rightDate,
@@ -542,8 +482,12 @@ export default function ReportScreen({
   }, [fetchMyReports, userId]);
 
   const filtered = useMemo(() => {
-    const want = filterToStatus(filter);
-    const base = items.filter((x) => (x.status ?? "PENDING") === want);
+    const base = items.filter((x) => {
+      const status = normalizeReportStatus(x.status);
+      if (filter === "Resolved") return status === "RESOLVED";
+      if (filter === "Archived") return status === "ARCHIVED";
+      return isActiveReportStatus(status);
+    });
 
     const q = query.trim().toLowerCase();
     if (!q) return base;
@@ -699,11 +643,11 @@ export default function ReportScreen({
           navHeight={navHeight}
           paddingBottom={bottomPad}
           chevronBottom={chevronBottom}
+          centerLabel="Services"
           fabBottom={fabBottom}
           fabSize={FAB_SIZE}
           onFabPress={() => handleTab("Incident")}
           onFabLongPress={longPressFab}
-          centerLabel="Community"
         />
       </View>
     </View>
@@ -732,7 +676,7 @@ function MiniStat({
 }
 
 function makeStyles(scale: (n: number) => number, vscale: (n: number) => number) {
-  const CARD_R = scale(20);
+  const CARD_R = scale(14);
 
   const _iconSize = scale(18);
   const _miniIcon = scale(14);
@@ -860,30 +804,38 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       segmentWrap: {
         marginTop: vscale(12),
         flexDirection: "row",
-        borderWidth: 1,
-        borderColor: "#EAF2FF",
-        backgroundColor: "#F3F8FF",
-        borderRadius: scale(16),
-        padding: scale(4),
-        gap: scale(6),
+        alignItems: "center",
+        gap: scale(12),
       },
 
       segmentBtn: {
-        flex: 1,
-        height: vscale(38),
-        borderRadius: scale(12),
-        borderWidth: 1,
-        borderColor: "transparent",
+        minWidth: scale(100),
+        height: vscale(42),
+        borderRadius: scale(999),
         alignItems: "center",
         justifyContent: "center",
+        paddingHorizontal: scale(18),
       },
 
-      segmentInner: { flexDirection: "row", alignItems: "center", gap: scale(6) },
-      segmentDot: { width: scale(8), height: scale(8), borderRadius: scale(99) },
+      segmentBtnActive: {
+        backgroundColor: "#06223F",
+      },
+
+      segmentBtnIdle: {
+        backgroundColor: "#E5E9EF",
+      },
 
       segmentText: {
-        fontSize: scale(11),
-        fontWeight: "600",
+        fontSize: scale(14),
+        fontWeight: "800",
+      },
+
+      segmentTextActive: {
+        color: "#FFFFFF",
+      },
+
+      segmentTextIdle: {
+        color: "#4B5563",
       },
 
       // List
@@ -916,7 +868,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       card: {
         borderRadius: CARD_R,
         borderWidth: 1,
-        borderColor: "#EAF2FF",
+        borderColor: "#D9DEE7",
         backgroundColor: "#FFFFFF",
 
         shadowColor: "transparent",
@@ -929,73 +881,43 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       cardInner: {
         borderRadius: CARD_R,
         overflow: "hidden",
-        paddingHorizontal: scale(12),
+        paddingHorizontal: scale(16),
         paddingVertical: vscale(12),
       },
 
-      accentEdge: {
-        position: "absolute",
-        left: 0,
-        top: 0,
-        bottom: 0,
-        width: scale(5),
-        opacity: 0.9,
-      },
-
-      cardTopRow: {
-        flexDirection: "row",
-        alignItems: "flex-start",
-        gap: scale(10),
-      },
-
-      leadingIconWrap: {
-        width: vscale(42),
-        height: vscale(42),
-        borderRadius: vscale(14),
-        alignItems: "center",
-        justifyContent: "center",
-        borderWidth: 1,
-      },
-
-      titleRow: {
+      cardMetaRow: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        gap: scale(10),
+        gap: scale(12),
+        marginBottom: vscale(6),
+      },
+
+      reportNo: {
+        flex: 1,
+        fontSize: scale(10),
+        fontWeight: "500",
+        color: "#9CA3AF",
       },
 
       cardTitle: {
-        flex: 1,
-        fontSize: scale(16),
+        fontSize: scale(18),
         fontWeight: "900",
         color: TEXT_DARK,
-        letterSpacing: -0.1,
+        lineHeight: vscale(22),
       },
-
-      alertTag: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: scale(6),
-        borderWidth: 1,
-        borderColor: "#EEF4FF",
-        backgroundColor: "#FFFFFF",
-        borderRadius: vscale(999),
-        paddingHorizontal: scale(8),
-        paddingVertical: vscale(4),
-      },
-
-      alertTagText: { fontSize: scale(10), fontWeight: "900", color: "#64748B" },
 
       cardDetail: {
-        marginTop: vscale(4),
-        fontSize: scale(12),
+        marginTop: vscale(2),
+        fontSize: scale(14),
+        fontStyle: "italic",
         fontWeight: "400",
         color: MUTED,
-        lineHeight: vscale(16),
+        lineHeight: vscale(21),
       },
 
       cardBottomRow: {
-        marginTop: vscale(10),
+        marginTop: vscale(12),
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
@@ -1004,21 +926,35 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       },
 
       statusPill: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: scale(6),
-        borderWidth: 1,
         borderRadius: vscale(999),
-        paddingHorizontal: scale(10),
+        paddingHorizontal: scale(12),
         paddingVertical: vscale(6),
+        maxWidth: scale(150),
       },
 
-      statusDot: { width: scale(8), height: scale(8), borderRadius: scale(99) },
+      statusPillText: {
+        fontSize: scale(11),
+        fontWeight: "800",
+        color: "#374151",
+      },
 
-      statusPillText: { fontSize: scale(11), fontWeight: "900" },
+      metaText: {
+        flex: 1,
+        fontSize: scale(12),
+        fontWeight: "500",
+        color: "#9CA3AF",
+      },
 
-      metaRow: { flexDirection: "row", alignItems: "center", gap: scale(6) },
-      metaText: { fontSize: scale(10), fontWeight: "400", color: "#94A3B8" },
+      viewDetailsRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(4),
+      },
+
+      viewDetailsText: {
+        fontSize: scale(12),
+        fontWeight: "900",
+      },
 
       // Center states
       centerBox: {

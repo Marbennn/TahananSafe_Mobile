@@ -14,6 +14,7 @@ import AuthProgressHeader from "../components/AuthFlow/SignupProgressHeader";
 import SignupScreen from "./SignupScreen";
 import PersonalDetailsScreen from "./PersonalDetailsScreen";
 import CreatePinScreen from "./CreatePinScreen";
+import VerifyPinScreen from "./VerifyPinScreen";
 
 // ✅ IMPORTANT: unlock pin for THIS RUN so App.tsx won't force PinScreen right away
 import { setPinUnlockedThisRun } from "../auth/session";
@@ -26,6 +27,7 @@ type AuthStackParamList = {
   Signup: undefined;
   PersonalDetails: undefined;
   CreatePin: undefined;
+  VerifyPin: { pin: string };
 };
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
@@ -52,10 +54,11 @@ export default function AuthFlowShell({
   const [routeName, setRouteName] =
     useState<keyof AuthStackParamList>("Signup");
 
-  const progressActiveCount = useMemo<1 | 2 | 3>(() => {
+  const progressActiveCount = useMemo<1 | 2 | 3 | 4>(() => {
     if (routeName === "Signup") return 1;
     if (routeName === "PersonalDetails") return 2;
-    return 3;
+    if (routeName === "CreatePin") return 3;
+    return 4;
   }, [routeName]);
 
   const handleStateChange = useCallback(() => {
@@ -71,8 +74,15 @@ export default function AuthFlowShell({
   }, [navRef, onExitToOnboarding]);
 
   const goTo = useCallback(
-    (name: keyof AuthStackParamList) => {
+    (name: Exclude<keyof AuthStackParamList, "VerifyPin">) => {
       if (navRef.isReady()) navRef.navigate(name);
+    },
+    [navRef]
+  );
+
+  const goToVerifyPin = useCallback(
+    (pin: string) => {
+      if (navRef.isReady()) navRef.navigate("VerifyPin", { pin });
     },
     [navRef]
   );
@@ -130,9 +140,20 @@ export default function AuthFlowShell({
                 {() => (
                   <CreatePinScreen
                     onBack={handleBack}
-                    onContinue={() => finishAuth()}
+                    onContinue={(pin) => goToVerifyPin(pin)}
                     onSkip={() => finishAuth()}
                     progressActiveCount={3}
+                  />
+                )}
+              </Stack.Screen>
+
+              <Stack.Screen name="VerifyPin">
+                {({ route }) => (
+                  <VerifyPinScreen
+                    expectedPin={route.params.pin}
+                    onContinue={() => finishAuth()}
+                    onSkip={() => finishAuth()}
+                    progressActiveCount={4}
                   />
                 )}
               </Stack.Screen>

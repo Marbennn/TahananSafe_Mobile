@@ -22,6 +22,8 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
+import * as Device from "expo-device";
+import * as Location from "expo-location";
 
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { Colors } from "../theme/colors";
@@ -39,7 +41,6 @@ import { setPinApi, getMeApi } from "../api/pin";
 import { saveProfileSettings } from "../api/user";
 
 // ✅ NEW: Verify Account card component
-import VerifyAccountCard from "../components/Settings/VerifyAccountCard";
 import LogoutModal from "../components/LogoutModal";
 
 type Props = {
@@ -60,14 +61,6 @@ type Props = {
   onFabPress?: () => void;
 };
 
-type SettingItem = {
-  key: string;
-  label: string;
-  subtitle?: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  onPress?: () => void;
-};
-
 const BG = "#F5FAFE";
 
 /** SecureStore keys must only contain: A-Z a-z 0-9 . - _ */
@@ -80,6 +73,12 @@ function safeKeyPart(input: string) {
 
 function bioOptInKeyForEmail(email: string) {
   return `tahanansafe_bio_optin_${safeKeyPart(email)}`;
+}
+
+const BIO_LAST_EMAIL_KEY = "tahanansafe_bio_last_email";
+
+function bioCredentialsKeyForEmail(email: string) {
+  return `tahanansafe_bio_credentials_${safeKeyPart(email)}`;
 }
 
 function pinEnabledKeyForEmail(email: string) {
@@ -108,6 +107,18 @@ async function getBioOptInForEmail(email: string): Promise<boolean> {
 async function setBioOptInForEmail(email: string, enabled: boolean) {
   try {
     await SecureStore.setItemAsync(bioOptInKeyForEmail(email), enabled ? "1" : "0");
+  } catch {
+    // ignore
+  }
+}
+
+async function deleteBioCredentialsForEmail(email: string) {
+  try {
+    await SecureStore.deleteItemAsync(bioCredentialsKeyForEmail(email));
+    const lastEmail = await SecureStore.getItemAsync(BIO_LAST_EMAIL_KEY);
+    if (String(lastEmail || "").trim().toLowerCase() === String(email || "").trim().toLowerCase()) {
+      await SecureStore.deleteItemAsync(BIO_LAST_EMAIL_KEY);
+    }
   } catch {
     // ignore
   }
@@ -206,6 +217,47 @@ function getStoredProfilePhone(user: any) {
   ).trim();
 }
 
+function formatSettingsPhone(value: string) {
+  const digits = digitsOnly(value);
+  let local = "";
+
+  if (digits.startsWith("63")) local = `0${digits.slice(2, 12)}`;
+  else if (digits.startsWith("9")) local = `0${digits.slice(0, 10)}`;
+  else if (digits.startsWith("09")) local = digits.slice(0, 11);
+
+  if (/^09\d{9}$/.test(local)) {
+    return `${local.slice(0, 4)}-${local.slice(4, 7)}-${local.slice(7)}`;
+  }
+
+  return String(value || "").trim();
+}
+
+function getSettingsBarangay(user: any) {
+  return (
+    String(
+      user?.barangay ||
+        user?.barangayName ||
+        user?.profile?.barangay ||
+        user?.personalInfo?.barangay ||
+        user?.address?.barangay ||
+        ""
+    ).trim() || "Barangay 742"
+  );
+}
+
+function getSettingsCitizenId(user: any) {
+  return (
+    String(
+      user?.citizenshipId ||
+        user?.residentId ||
+        user?.residentNumber ||
+        user?.profile?.citizenshipId ||
+        user?.personalInfo?.citizenshipId ||
+        ""
+    ).trim() || "BC-742-2023-8891"
+  );
+}
+
 function getUserInitials(user: any) {
   const first = String(user?.firstName || "").trim();
   const last = String(user?.lastName || "").trim();
@@ -217,6 +269,36 @@ function sanitizeAvatarUri(value: any) {
   if (!clean) return "";
   if (clean === "null" || clean === "undefined") return "";
   return clean;
+}
+
+function decodeJwtPayload(token: string | null) {
+  try {
+    const parts = String(token || "").split(".");
+    if (parts.length < 2) return null;
+
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+
+    if (typeof globalThis.atob !== "function") return null;
+    return JSON.parse(globalThis.atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+function formatSessionDate(value: number | null) {
+  if (!value) return "Unknown";
+  try {
+    return new Date(value).toLocaleString("en-PH", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return "Unknown";
+  }
 }
 
 export default function SettingsScreen({
@@ -250,20 +332,23 @@ export default function SettingsScreen({
 
   const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
   const C = Colors as any;
-
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
-
-  // ✅ MATCH Hotlines/Reports sizing
   const NAV_BASE_HEIGHT = 78;
+  const FAB_SIZE = 68;
   const bottomPad = Math.max(insets.bottom, 10);
   const navHeight = NAV_BASE_HEIGHT + bottomPad;
-
   const chevronBottom = navHeight + 90;
+  const fabBottom = navHeight - FAB_SIZE / 2 - 10;
 
-  // ✅ More scrollable (extra breathing room at bottom)
-  const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + vscale(40);
 
-  const screenBg = isDark ? "#0F172A" : (C.screenBg ?? C.background ?? BG);
+
+
+
+
+
+
+
+  const screenBg = isDark ? "#0F172A" : "#F6F9FC";
   const surface = isDark ? "#1E293B" : (C.surface ?? C.card ?? "#FFFFFF");
   const textDark = isDark ? "#F1F5F9" : "#0F172A";
   const muted = isDark ? "#94A3B8" : (C.mutedText ?? C.muted ?? "#64748B");
@@ -278,16 +363,113 @@ export default function SettingsScreen({
     onTabChange?.(tab);
   };
 
+
+
   // ==========================
   // ✅ Per-account security UI
   // ==========================
-  const { user, refreshMe, setUser } = useAuth() as any;
+  const { user, refreshMe, setUser, logout: authLogout, ensureValidAccessToken } = useAuth() as any;
   const userEmail: string = (user?.email ? String(user.email) : "").trim().toLowerCase();
+  const [settingsSearch, setSettingsSearch] = useState("");
+  const [caseUpdatesEnabled, setCaseUpdatesEnabled] = useState(true);
+  const [emergencyAlertsEnabled, setEmergencyAlertsEnabled] = useState(true);
+  const [locationServicesEnabled, setLocationServicesEnabled] = useState(true);
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [settingsAvatarLoadFailed, setSettingsAvatarLoadFailed] = useState(false);
+
+  const settingsSearchQuery = settingsSearch.trim().toLowerCase();
+  const matchesSettingsSearch = useCallback(
+    (...terms: string[]) => {
+      if (!settingsSearchQuery) return true;
+      return terms.join(" ").toLowerCase().includes(settingsSearchQuery);
+    },
+    [settingsSearchQuery]
+  );
+
+  const saveSettingsPreference = useCallback(
+    async (suffix: string, enabled: boolean) => {
+      try {
+        await AsyncStorage.setItem(prefKey(userEmail, suffix), enabled ? "1" : "0");
+      } catch {
+        // ignore local preference write failures
+      }
+    },
+    [userEmail]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const [casePref, emergencyPref, locationPref] = await Promise.all([
+          AsyncStorage.getItem(prefKey(userEmail, "case_updates")),
+          AsyncStorage.getItem(prefKey(userEmail, "emergency_alerts")),
+          AsyncStorage.getItem(prefKey(userEmail, "location_services")),
+        ]);
+
+        if (cancelled) return;
+
+        setCaseUpdatesEnabled(casePref !== "0");
+        setEmergencyAlertsEnabled(emergencyPref !== "0");
+        setLocationServicesEnabled(locationPref !== "0");
+      } catch {
+        // keep defaults
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userEmail]);
+
+  const onToggleCaseUpdates = useCallback(
+    async (next: boolean) => {
+      setCaseUpdatesEnabled(next);
+      await saveSettingsPreference("case_updates", next);
+    },
+    [saveSettingsPreference]
+  );
+
+  const onToggleEmergencyAlerts = useCallback(
+    async (next: boolean) => {
+      setEmergencyAlertsEnabled(next);
+      await saveSettingsPreference("emergency_alerts", next);
+    },
+    [saveSettingsPreference]
+  );
+
+  const onToggleLocationServices = useCallback(
+    async (next: boolean) => {
+      if (!next) {
+        setLocationServicesEnabled(false);
+        await saveSettingsPreference("location_services", false);
+        return;
+      }
+
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        setLocationServicesEnabled(false);
+        await saveSettingsPreference("location_services", false);
+        Alert.alert("Location disabled", "Allow location access to use location services in TahananSafe.");
+        return;
+      }
+
+      setLocationServicesEnabled(true);
+      await saveSettingsPreference("location_services", true);
+    },
+    [saveSettingsPreference]
+  );
 
   // ✅ Account modal
   const [accountModalVisible, setAccountModalVisible] = useState(false);
   const openAccountModal = () => setAccountModalVisible(true);
   const closeAccountModal = () => setAccountModalVisible(false);
+  const [sessionsModalVisible, setSessionsModalVisible] = useState(false);
+  const [sessionTokenLoading, setSessionTokenLoading] = useState(false);
+  const [sessionIssuedAt, setSessionIssuedAt] = useState<number | null>(null);
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<number | null>(null);
 
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
@@ -349,10 +531,92 @@ export default function SettingsScreen({
     () => getUserInitials({ firstName: user?.firstName, lastName: user?.lastName }),
     [user?.firstName, user?.lastName]
   );
+  const settingsProfileName = savedProfileHeroName === "Your profile" ? "Ricardo San Juan" : savedProfileHeroName;
+  const settingsPhoneNumber = formatSettingsPhone(getStoredProfilePhone(user)) || "0917-555-0123";
+  const settingsBarangay = getSettingsBarangay(user);
+  const settingsCitizenId = getSettingsCitizenId(user);
+  const settingsAvatarUri = useMemo(() => sanitizeAvatarUri(user?.profileImage), [user?.profileImage]);
+
+  useEffect(() => {
+    setSettingsAvatarLoadFailed(false);
+  }, [settingsAvatarUri]);
+
+  const openCitizenshipDetails = useCallback(() => {
+    Alert.alert("Citizenship Details", `${settingsBarangay}\nID: ${settingsCitizenId}\nStatus: Verified`);
+  }, [settingsBarangay, settingsCitizenId]);
+
+  const openPrivacyPolicy = useCallback(() => {
+    Alert.alert(
+      "Privacy Policy",
+      "TahananSafe uses account, location, report, and evidence data to support verified barangay safety workflows."
+    );
+  }, []);
+
+  const openAiTransparencyNotice = useCallback(() => {
+    Alert.alert(
+      "AI Transparency Notice",
+      "Insights are generated by AI to support review. Official decisions remain with barangay authorities."
+    );
+  }, []);
+
+  const onSendFeedback = useCallback(() => {
+    setFeedbackText("");
+    setFeedbackRating(0);
+    Alert.alert("Feedback", "Feedback submission is temporarily mocked.");
+  }, []);
 
   useEffect(() => {
     setProfileAvatarLoadFailed(false);
   }, [safeProfileImageUri]);
+
+  useEffect(() => {
+    if (!sessionsModalVisible) return;
+
+    let cancelled = false;
+
+    (async () => {
+      setSessionTokenLoading(true);
+      try {
+        const token =
+          (await ensureValidAccessToken?.().catch(() => null)) ||
+          (await getAccessToken().catch(() => null));
+        const payload = decodeJwtPayload(token);
+
+        if (cancelled) return;
+
+        const issuedAt = Number(payload?.iat);
+        const expiresAt = Number(payload?.exp);
+
+        setSessionIssuedAt(Number.isFinite(issuedAt) && issuedAt > 0 ? issuedAt * 1000 : null);
+        setSessionExpiresAt(Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt * 1000 : null);
+      } finally {
+        if (!cancelled) setSessionTokenLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ensureValidAccessToken, sessionsModalVisible]);
+
+  const sessionDeviceName = useMemo(() => {
+    const name = String(Device.deviceName || "").trim();
+    const model = String(Device.modelName || "").trim();
+    return name || model || (Platform.OS === "android" ? "Android device" : "iPhone");
+  }, []);
+
+  const sessionPlatformLabel = useMemo(() => {
+    const osName =
+      String(Device.osName || "").trim() || (Platform.OS === "android" ? "Android" : "iOS");
+    const osVersion = String(Device.osVersion || Platform.Version || "").trim();
+    return osVersion ? `${osName} ${osVersion}` : osName;
+  }, []);
+
+  const sessionHardwareLabel = useMemo(() => {
+    const brand = String(Device.brand || "").trim();
+    const model = String(Device.modelName || "").trim();
+    return [brand, model].filter(Boolean).join(" ") || sessionDeviceName;
+  }, [sessionDeviceName]);
 
   useEffect(() => {
     if (!profileModalVisible) {
@@ -395,10 +659,30 @@ export default function SettingsScreen({
     setTimeout(() => setProfileModalVisible(true), 140);
   }, [hydrateProfileForm]);
 
+  const openSessionsModal = useCallback(() => {
+    closeAccountModal();
+    setTimeout(() => setSessionsModalVisible(true), 140);
+  }, []);
+
+  const closeSessionsModal = useCallback(() => {
+    setSessionsModalVisible(false);
+  }, []);
+
   const closeProfileModal = useCallback(() => {
     if (profileSaving) return;
     setProfileModalVisible(false);
   }, [profileSaving]);
+
+  const handleSignOutCurrentSession = useCallback(async () => {
+    setSessionsModalVisible(false);
+
+    if (onLogout) {
+      onLogout();
+      return;
+    }
+
+    await authLogout?.().catch(() => {});
+  }, [authLogout, onLogout]);
 
   const requestProfileCameraPermission = useCallback(async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -546,7 +830,8 @@ export default function SettingsScreen({
     await setBioOptInForEmail(userEmail, next);
 
     if (!next) {
-      Alert.alert("Biometrics disabled", "Biometrics login is turned off for this account on this device.");
+      await deleteBioCredentialsForEmail(userEmail);
+      Alert.alert("Biometrics disabled", "Biometric login autofill is turned off for this account on this device.");
     }
   };
 
@@ -771,7 +1056,7 @@ export default function SettingsScreen({
   // ==========================
   // ✅ Main list rows (General)
   // ==========================
-  const mainItems: SettingItem[] = useMemo(
+  const mainItems = useMemo(
     () => [
       {
         key: "account",
@@ -816,6 +1101,33 @@ export default function SettingsScreen({
   const canManageSecurity = !!userEmail;
   const currentStatusLabel = userEmail ? "Active" : "Guest";
   const currentStatusIcon = userEmail ? "checkmark-circle-outline" : "alert-circle-outline";
+  const showProfileCard = matchesSettingsSearch("profile", "account", settingsProfileName, settingsBarangay, userEmail);
+  const showPersonalInfo = matchesSettingsSearch("personal information", "phone", settingsPhoneNumber, settingsProfileName);
+  const showCitizenship = matchesSettingsSearch("citizenship details", "resident id", settingsCitizenId, settingsBarangay);
+  const showPasswordSecurity = matchesSettingsSearch("password security pin", "privacy", "security");
+  const showBiometrics = matchesSettingsSearch("biometric login", "fingerprint", "face id");
+  const showLocationServices = matchesSettingsSearch("location services", "location");
+  const showPrivacyPolicy = matchesSettingsSearch("privacy policy", "policy");
+  const showCaseUpdates = matchesSettingsSearch("case updates", "notifications");
+  const showEmergencyAlerts = matchesSettingsSearch("emergency alerts", "alert");
+  const showTutorials = matchesSettingsSearch("tutorials", "help");
+  const showFaqs = matchesSettingsSearch("faqs", "questions", "help");
+  const showAiNotice = matchesSettingsSearch("ai transparency notice", "ai", "transparency");
+  const showFeedback = matchesSettingsSearch("feedback", "rate", "suggestions");
+  const showSignOut = matchesSettingsSearch("sign out", "logout", "log out");
+  const showAccountSection = showPersonalInfo || showCitizenship;
+  const showSecuritySection = showPasswordSecurity || showBiometrics || showLocationServices || showPrivacyPolicy;
+  const showPreferencesSection = showCaseUpdates || showEmergencyAlerts;
+  const showHelpSection = showTutorials || showFaqs;
+  const hasSettingsResult =
+    showProfileCard ||
+    showAccountSection ||
+    showSecuritySection ||
+    showPreferencesSection ||
+    showHelpSection ||
+    showAiNotice ||
+    showFeedback ||
+    showSignOut;
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: screenBg }]} edges={["top"]}>
@@ -853,7 +1165,7 @@ export default function SettingsScreen({
               </Pressable>
 
               <Pressable
-                onPress={() => Alert.alert("Sessions", "Wire this to your Sessions screen.")}
+                onPress={openSessionsModal}
                 android_ripple={{ color: "rgba(0,0,0,0.06)" }}
                 style={styles.accountModalItem}
               >
@@ -868,6 +1180,113 @@ export default function SettingsScreen({
                 </View>
                 <Ionicons name="chevron-forward" size={iconSize} color={primary} />
               </Pressable>
+
+              <View style={{ height: vscale(12) }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={sessionsModalVisible} transparent animationType="slide" onRequestClose={closeSessionsModal}>
+        <View style={styles.accountModalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeSessionsModal} />
+          <View style={[styles.accountModalSheet, { backgroundColor: surface, borderColor: divider }]}>
+            <View style={styles.accountModalHeader}>
+              <Text style={[styles.accountModalTitle, { color: textDark }]}>Sessions</Text>
+
+              <Pressable onPress={closeSessionsModal} hitSlop={10} style={styles.accountModalClose}>
+                <Ionicons name="close" size={iconSize} color={muted} />
+              </Pressable>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountModalContent}>
+              <View style={[styles.sessionCard, { backgroundColor: cardBg, borderColor: divider }]}>
+                <View style={styles.sessionTopRow}>
+                  <View style={styles.settingLeft}>
+                    <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
+                      <Ionicons
+                        name={Platform.OS === "android" ? "phone-portrait-outline" : "phone-portrait-outline"}
+                        size={iconSize}
+                        color={primary}
+                      />
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.settingTitleInner, { color: textDark }]}>This device</Text>
+                      <Text style={[styles.settingSub, { color: muted }]}>{sessionDeviceName}</Text>
+                    </View>
+                  </View>
+
+                  <View style={[styles.sessionBadge, { backgroundColor: chipBg }]}>
+                    <Text style={[styles.sessionBadgeText, { color: primary }]}>Current</Text>
+                  </View>
+                </View>
+
+                <View style={styles.sessionDetails}>
+                  <View style={styles.sessionDetailRow}>
+                    <Text style={[styles.sessionDetailLabel, { color: muted }]}>Device</Text>
+                    <Text style={[styles.sessionDetailValue, { color: textDark }]}>{sessionHardwareLabel}</Text>
+                  </View>
+
+                  <View style={styles.sessionDetailRow}>
+                    <Text style={[styles.sessionDetailLabel, { color: muted }]}>Platform</Text>
+                    <Text style={[styles.sessionDetailValue, { color: textDark }]}>{sessionPlatformLabel}</Text>
+                  </View>
+
+                  <View style={styles.sessionDetailRow}>
+                    <Text style={[styles.sessionDetailLabel, { color: muted }]}>Account</Text>
+                    <Text style={[styles.sessionDetailValue, { color: textDark }]}>
+                      {userEmail ? maskEmail(userEmail) : "Guest"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.sessionDetailRow}>
+                    <Text style={[styles.sessionDetailLabel, { color: muted }]}>Signed in</Text>
+                    <Text style={[styles.sessionDetailValue, { color: textDark }]}>
+                      {sessionTokenLoading ? "Checking..." : formatSessionDate(sessionIssuedAt)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.sessionDetailRow}>
+                    <Text style={[styles.sessionDetailLabel, { color: muted }]}>Access token</Text>
+                    <Text style={[styles.sessionDetailValue, { color: textDark }]}>
+                      {sessionTokenLoading ? "Checking..." : formatSessionDate(sessionExpiresAt)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={[styles.sessionHintCard, { backgroundColor: cardBg, borderColor: divider }]}>
+                <Text style={[styles.sessionHintTitle, { color: textDark }]}>About mobile sessions</Text>
+                <Text style={[styles.sessionHintText, { color: muted }]}>
+                  This mobile app currently keeps one active session per account on this device. Signing out here will
+                  log out this device.
+                </Text>
+              </View>
+
+              <View style={styles.profileModalActions}>
+                <Pressable
+                  onPress={closeSessionsModal}
+                  style={({ pressed }) => [
+                    styles.profileActionBtn,
+                    { backgroundColor: "#F3F4F6" },
+                    pressed && { opacity: 0.8 },
+                  ]}
+                >
+                  <Text style={[styles.profileActionBtnText, { color: textDark }]}>Close</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => void handleSignOutCurrentSession()}
+                  style={({ pressed }) => [
+                    styles.profileActionBtn,
+                    { backgroundColor: primary },
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <Text style={styles.profileActionPrimaryText}>Sign out</Text>
+                </Pressable>
+              </View>
 
               <View style={{ height: vscale(12) }} />
             </ScrollView>
@@ -1085,7 +1504,7 @@ export default function SettingsScreen({
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.settingTitleInner, { color: textDark }]}>Biometrics</Text>
-                      <Text style={[styles.settingSub, { color: muted }]}>Face ID / fingerprint quick login</Text>
+                      <Text style={[styles.settingSub, { color: muted }]}>Face ID / fingerprint login autofill</Text>
                     </View>
                   </View>
 
@@ -1108,9 +1527,9 @@ export default function SettingsScreen({
                 ) : (
                   <View style={styles.toggleWrap}>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.toggleTitle, { color: textDark }]}>Use biometrics to login</Text>
+                      <Text style={[styles.toggleTitle, { color: textDark }]}>Use biometrics to autofill login</Text>
                       <Text style={[styles.toggleSub, { color: muted }]}>
-                        Enables biometric login for this account on this device.
+                        Fills your saved login details on this device. OTP is still required.
                       </Text>
                     </View>
 
@@ -1548,7 +1967,6 @@ export default function SettingsScreen({
       </Modal>
 
       <View style={[styles.page, { backgroundColor: screenBg }]}>
-        {/* Header */}
         <View style={styles.headerWrap}>
           <View style={styles.headerTopRow}>
             <View style={{ flex: 1 }}>
@@ -1559,66 +1977,318 @@ export default function SettingsScreen({
         </View>
 
         <ScrollView
-          contentContainerStyle={[styles.content, { paddingBottom: CONTENT_BOTTOM_PAD }]}
+          contentContainerStyle={[styles.settingsContent, { paddingBottom: navHeight + vscale(28) }]}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           bounces
-          alwaysBounceVertical
         >
-          {/* ✅ Verify Account Card */}
-          <VerifyAccountCard
-            primary={primary}
-            divider={divider}
-            surface={surface}
-            scale={scale}
-            vscale={vscale}
-            user={user}
-            userEmail={userEmail}
-            bioEnabled={bioEnabled}
-            pinEnabled={pinEnabled}
-            onOpenAccount={openAccountModal}
-            onOpenPrivacySecurity={openPrivacySecurity}
-            onOpenPinSetup={openPinSetup}
-          />
+          <View style={styles.settingsSearchRow}>
+            <View style={[styles.settingsSearchBox, { backgroundColor: surface, borderColor: divider }]}>
+              <Ionicons name="search-outline" size={smallIcon} color={muted} />
+              <TextInput
+                value={settingsSearch}
+                onChangeText={setSettingsSearch}
+                placeholder="Search"
+                placeholderTextColor="#A0A8B3"
+                style={[styles.settingsSearchInput, { color: textDark }]}
+              />
+              {!!settingsSearch && (
+                <Pressable onPress={() => setSettingsSearch("")} hitSlop={8}>
+                  <Ionicons name="close-circle" size={smallIcon} color={muted} />
+                </Pressable>
+              )}
+            </View>
 
-          {/* ✅ ONE continuous card list */}
-          <View style={[styles.oneCard, { backgroundColor: surface, borderColor: divider }]}>
-            {mainItems.map((item, idx) => (
-              <React.Fragment key={item.key}>
-                <SettingRow
-                  label={item.label}
-                  subtitle={item.subtitle}
-                  icon={item.icon}
-                  onPress={item.onPress}
-                  primary={primary}
-                  muted={muted}
-                  textDark={textDark}
-                  divider={divider}
-                  iconSize={iconSize}
-                  styles={styles}
-                  isDark={isDark}
-                  chipBg={chipBg}
-                />
-                {idx !== mainItems.length - 1 && <View style={[styles.line, { backgroundColor: divider }]} />}
-              </React.Fragment>
-            ))}
-          </View>
-
-          {/* ✅ Logout card */}
-          <View style={[styles.logoutCard, { backgroundColor: surface, borderColor: divider }]}>
-            <Pressable onPress={() => setLogoutModalVisible(true)} android_ripple={{ color: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }} style={styles.settingRow}>
-              <View style={styles.settingLeft}>
-                <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
-                  <Ionicons name="log-out-outline" size={iconSize} color={primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.settingTitleInner, { color: textDark }]}>Log out</Text>
-                </View>
-              </View>
-              <Ionicons name="chevron-forward" size={iconSize} color={primary} />
+            <Pressable
+              onPress={openPersonalizationModal}
+              style={({ pressed }) => [
+                styles.settingsFilterButton,
+                { backgroundColor: surface, borderColor: divider },
+                pressed && { opacity: 0.75 },
+              ]}
+            >
+              <Ionicons name="options-outline" size={scale(22)} color={muted} />
             </Pressable>
           </View>
 
-          <View style={{ height: vscale(26) }} />
+          {!hasSettingsResult ? (
+            <View style={[styles.settingsEmptyCard, { backgroundColor: surface, borderColor: divider }]}>
+              <Ionicons name="search-outline" size={iconSize} color={muted} />
+              <Text style={[styles.settingsEmptyText, { color: muted }]}>No settings found.</Text>
+            </View>
+          ) : null}
+
+          {showProfileCard ? (
+            <Pressable
+              onPress={openAccountModal}
+              style={({ pressed }) => [
+                styles.settingsProfileCard,
+                { backgroundColor: surface, borderColor: divider },
+                pressed && { opacity: 0.84 },
+              ]}
+            >
+              <View style={styles.settingsAvatarWrap}>
+                {settingsAvatarUri && !settingsAvatarLoadFailed ? (
+                  <Image
+                    source={{ uri: settingsAvatarUri }}
+                    style={styles.settingsAvatarImage}
+                    onError={() => setSettingsAvatarLoadFailed(true)}
+                  />
+                ) : (
+                  <View style={styles.settingsAvatarFallback}>
+                    <Text style={styles.settingsAvatarInitials}>{savedProfileHeroInitials}</Text>
+                  </View>
+                )}
+                <View style={styles.settingsVerifiedBadge}>
+                  <Ionicons name="checkmark" size={scale(10)} color="#FFFFFF" />
+                </View>
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsProfileName, { color: textDark }]}>{settingsProfileName}</Text>
+                <Text style={[styles.settingsProfileMeta, { color: muted }]}>{settingsBarangay} - Verified</Text>
+              </View>
+
+              <Ionicons name="chevron-forward" size={iconSize} color={muted} />
+            </Pressable>
+          ) : null}
+
+          {showAccountSection ? (
+            <>
+              <Text style={[styles.settingsSectionLabel, { color: muted }]}>ACCOUNT</Text>
+              <View style={[styles.settingsCard, { backgroundColor: surface, borderColor: divider }]}>
+                {showPersonalInfo ? (
+                  <Pressable onPress={openProfileModal} style={styles.settingsRow}>
+                    <View style={styles.settingsRowLeft}>
+                      <Ionicons name="person-outline" size={smallIcon} color={muted} style={styles.settingsRowIcon} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.settingsRowTitle, { color: textDark }]}>Personal Information</Text>
+                        <Text style={[styles.settingsRowSubtitle, { color: muted }]}>{settingsPhoneNumber}</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="pencil-outline" size={smallIcon} color={muted} />
+                  </Pressable>
+                ) : null}
+
+                {showPersonalInfo && showCitizenship ? <View style={[styles.settingsDivider, { backgroundColor: divider }]} /> : null}
+
+                {showCitizenship ? (
+                  <Pressable onPress={openCitizenshipDetails} style={styles.settingsRow}>
+                    <View style={styles.settingsRowLeft}>
+                      <Ionicons name="id-card-outline" size={smallIcon} color={muted} style={styles.settingsRowIcon} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.settingsRowTitle, { color: textDark }]}>Citizenship Details</Text>
+                        <Text style={[styles.settingsRowSubtitle, { color: muted }]}>ID: {settingsCitizenId}</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={smallIcon} color={muted} />
+                  </Pressable>
+                ) : null}
+              </View>
+            </>
+          ) : null}
+
+          {showSecuritySection ? (
+            <>
+              <Text style={[styles.settingsSectionLabel, { color: muted }]}>SECURITY & PRIVACY</Text>
+              <View style={[styles.settingsCard, { backgroundColor: surface, borderColor: divider }]}>
+                {showPasswordSecurity ? (
+                  <Pressable onPress={openPrivacySecurity} style={styles.settingsRow}>
+                    <View style={styles.settingsRowLeft}>
+                      <Ionicons name="lock-closed-outline" size={smallIcon} color={muted} style={styles.settingsRowIcon} />
+                      <Text style={[styles.settingsRowTitle, { color: textDark }]}>Password & Security PIN</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={smallIcon} color={muted} />
+                  </Pressable>
+                ) : null}
+
+                {showPasswordSecurity && (showBiometrics || showLocationServices || showPrivacyPolicy) ? (
+                  <View style={[styles.settingsDivider, { backgroundColor: divider }]} />
+                ) : null}
+
+                {showBiometrics ? (
+                  <View style={styles.settingsRow}>
+                    <View style={styles.settingsRowLeft}>
+                      <Ionicons name="finger-print-outline" size={smallIcon} color={muted} style={styles.settingsRowIcon} />
+                      <Text style={[styles.settingsRowTitle, { color: textDark }]}>Biometric Login</Text>
+                    </View>
+                    <Switch
+                      value={bioEnabled}
+                      onValueChange={onToggleBiometrics}
+                      disabled={bioLoading || !canManageSecurity}
+                      trackColor={{ false: "#D8DEE7", true: "#111827" }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                ) : null}
+
+                {showBiometrics && (showLocationServices || showPrivacyPolicy) ? (
+                  <View style={[styles.settingsDivider, { backgroundColor: divider }]} />
+                ) : null}
+
+                {showLocationServices ? (
+                  <View style={styles.settingsRow}>
+                    <Text style={[styles.settingsRowTitle, { color: textDark }]}>Location Services</Text>
+                    <Switch
+                      value={locationServicesEnabled}
+                      onValueChange={(next) => void onToggleLocationServices(next)}
+                      trackColor={{ false: "#D8DEE7", true: "#111827" }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                ) : null}
+
+                {showLocationServices && showPrivacyPolicy ? (
+                  <View style={[styles.settingsDivider, { backgroundColor: divider }]} />
+                ) : null}
+
+                {showPrivacyPolicy ? (
+                  <Pressable onPress={openPrivacyPolicy} style={styles.settingsRow}>
+                    <Text style={[styles.settingsRowTitle, { color: textDark }]}>Privacy Policy</Text>
+                    <Ionicons name="open-outline" size={smallIcon} color={muted} />
+                  </Pressable>
+                ) : null}
+              </View>
+            </>
+          ) : null}
+
+          {showPreferencesSection ? (
+            <>
+              <Text style={[styles.settingsSectionLabel, { color: muted }]}>PREFERENCES</Text>
+              <View style={[styles.settingsCard, { backgroundColor: surface, borderColor: divider }]}>
+                {showCaseUpdates ? (
+                  <View style={styles.settingsRow}>
+                    <View style={styles.settingsRowLeft}>
+                      <Ionicons name="notifications-outline" size={smallIcon} color={muted} style={styles.settingsRowIcon} />
+                      <Text style={[styles.settingsRowTitle, { color: textDark }]}>Case Updates</Text>
+                    </View>
+                    <Switch
+                      value={caseUpdatesEnabled}
+                      onValueChange={(next) => void onToggleCaseUpdates(next)}
+                      trackColor={{ false: "#D8DEE7", true: "#111827" }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                ) : null}
+
+                {showCaseUpdates && showEmergencyAlerts ? <View style={[styles.settingsDivider, { backgroundColor: divider }]} /> : null}
+
+                {showEmergencyAlerts ? (
+                  <View style={styles.settingsRow}>
+                    <View style={styles.settingsRowLeft}>
+                      <Ionicons name="warning-outline" size={smallIcon} color="#EF4444" style={styles.settingsRowIcon} />
+                      <Text style={[styles.settingsRowTitle, { color: textDark }]}>Emergency Alerts</Text>
+                    </View>
+                    <Switch
+                      value={emergencyAlertsEnabled}
+                      onValueChange={(next) => void onToggleEmergencyAlerts(next)}
+                      trackColor={{ false: "#D8DEE7", true: "#EF4444" }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                ) : null}
+              </View>
+            </>
+          ) : null}
+
+          {showHelpSection ? (
+            <>
+              <Text style={[styles.settingsSectionLabel, { color: muted }]}>HELP & LEGAL</Text>
+              <View style={styles.settingsHelpGrid}>
+                {showTutorials ? (
+                  <Pressable
+                    onPress={openHelpModal}
+                    style={({ pressed }) => [
+                      styles.settingsHelpButton,
+                      { backgroundColor: surface, borderColor: divider },
+                      pressed && { opacity: 0.78 },
+                    ]}
+                  >
+                    <Ionicons name="school-outline" size={smallIcon} color={textDark} />
+                    <Text style={[styles.settingsHelpText, { color: textDark }]}>Tutorials</Text>
+                  </Pressable>
+                ) : null}
+
+                {showFaqs ? (
+                  <Pressable
+                    onPress={openHelpModal}
+                    style={({ pressed }) => [
+                      styles.settingsHelpButton,
+                      { backgroundColor: surface, borderColor: divider },
+                      pressed && { opacity: 0.78 },
+                    ]}
+                  >
+                    <Ionicons name="help-circle-outline" size={smallIcon} color={textDark} />
+                    <Text style={[styles.settingsHelpText, { color: textDark }]}>FAQs</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </>
+          ) : null}
+
+          {showAiNotice ? (
+            <Pressable onPress={openAiTransparencyNotice} style={styles.settingsAiCard}>
+              <View style={styles.settingsAiHeader}>
+                <Ionicons name="bulb-outline" size={smallIcon} color="#67E8F9" />
+                <Text style={styles.settingsAiTitle}>AI Transparency Notice</Text>
+              </View>
+              <Text style={styles.settingsAiBody}>
+                Insights are generated by AI. Official decisions remain with barangay authorities.
+              </Text>
+            </Pressable>
+          ) : null}
+
+          {showFeedback ? (
+            <>
+              <Text style={[styles.settingsSectionLabel, { color: muted }]}>FEEDBACK</Text>
+              <View style={[styles.settingsFeedbackCard, { backgroundColor: surface, borderColor: divider }]}>
+                <View style={styles.settingsFeedbackHeader}>
+                  <Text style={[styles.settingsFeedbackTitle, { color: textDark }]}>Rate your experience</Text>
+                  <View style={styles.settingsStars}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Pressable key={star} onPress={() => setFeedbackRating(star)} hitSlop={6}>
+                        <Ionicons
+                          name={feedbackRating >= star ? "star" : "star-outline"}
+                          size={iconSize}
+                          color={feedbackRating >= star ? "#F59E0B" : "#C8CED8"}
+                        />
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+
+                <TextInput
+                  value={feedbackText}
+                  onChangeText={setFeedbackText}
+                  placeholder="Any suggestions for us?"
+                  placeholderTextColor="#8B93A1"
+                  multiline
+                  style={[styles.settingsFeedbackInput, { color: textDark, borderColor: divider }]}
+                  textAlignVertical="top"
+                />
+
+                <Pressable
+                  onPress={onSendFeedback}
+                  style={({ pressed }) => [styles.settingsFeedbackButton, pressed && { opacity: 0.82 }]}
+                >
+                  <Text style={styles.settingsFeedbackButtonText}>Send Feedback</Text>
+                </Pressable>
+              </View>
+            </>
+          ) : null}
+
+          {showSignOut ? (
+            <Pressable
+              onPress={() => setLogoutModalVisible(true)}
+              style={({ pressed }) => [styles.settingsSignOutButton, pressed && { opacity: 0.72 }]}
+            >
+              <Ionicons name="log-out-outline" size={smallIcon} color="#EF4444" />
+              <Text style={styles.settingsSignOutText}>Sign Out</Text>
+            </Pressable>
+          ) : null}
+          {/* ✅ Verify Account Card */}
+          {/* ✅ ONE continuous card list */}
+          {/* ✅ Logout card */}
         </ScrollView>
 
         {/* ✅ PIN setup modal (unchanged) */}
@@ -1697,14 +2367,16 @@ export default function SettingsScreen({
           </View>
         </Modal>
 
-        {/* Bottom nav */}
         <BottomNavBar
           activeTab={activeTab}
           onTabPress={handleTab}
           navHeight={navHeight}
           paddingBottom={bottomPad}
           chevronBottom={chevronBottom}
-          centerLabel="Community"
+          centerLabel="Services"
+          fabBottom={fabBottom}
+          fabSize={FAB_SIZE}
+          onFabPress={onFabPress ?? (() => handleTab("Incident"))}
         />
       </View>
 
@@ -1713,7 +2385,7 @@ export default function SettingsScreen({
         onCancel={() => setLogoutModalVisible(false)}
         onConfirm={() => {
           setLogoutModalVisible(false);
-          onLogout?.();
+          void handleSignOutCurrentSession();
         }}
       />
     </SafeAreaView>
@@ -1771,17 +2443,303 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: BG },
     page: { flex: 1, backgroundColor: BG },
-    headerWrap: {
-      paddingHorizontal: scale(16),
-      paddingTop: vscale(6),
-      paddingBottom: vscale(8),
-      zIndex: 30,
+    settingsContent: {
+      paddingHorizontal: scale(18),
+      paddingTop: vscale(2),
+      gap: vscale(10),
     },
-    headerTopRow: {
+    settingsTitle: {
+      fontSize: scale(22),
+      fontWeight: "800",
+      lineHeight: scale(28),
+      marginBottom: vscale(6),
+    },
+    settingsSearchRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(8),
+      marginBottom: vscale(4),
+    },
+    settingsSearchBox: {
+      flex: 1,
+      minHeight: vscale(36),
+      borderRadius: scale(18),
+      borderWidth: 1,
+      paddingHorizontal: scale(14),
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(8),
+    },
+    settingsSearchInput: {
+      flex: 1,
+      paddingVertical: 0,
+      fontSize: scale(14),
+      fontWeight: "400",
+    },
+    settingsFilterButton: {
+      width: vscale(38),
+      height: vscale(38),
+      borderRadius: vscale(19),
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    settingsEmptyCard: {
+      minHeight: vscale(74),
+      borderRadius: scale(10),
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: vscale(6),
+    },
+    settingsEmptyText: {
+      fontSize: scale(13),
+      fontWeight: "600",
+    },
+    settingsProfileCard: {
+      minHeight: vscale(78),
+      borderRadius: scale(10),
+      borderWidth: 1,
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(12),
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(12),
+      shadowColor: "#0F172A",
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    },
+    settingsAvatarWrap: {
+      width: scale(54),
+      height: scale(54),
+      borderRadius: scale(14),
+      position: "relative",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    settingsAvatarImage: {
+      width: "100%",
+      height: "100%",
+      borderRadius: scale(14),
+      backgroundColor: "#E5E7EB",
+    },
+    settingsAvatarFallback: {
+      width: "100%",
+      height: "100%",
+      borderRadius: scale(14),
+      backgroundColor: "#E5EEF7",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    settingsAvatarInitials: {
+      color: "#0B4F7A",
+      fontSize: scale(18),
+      fontWeight: "900",
+    },
+    settingsVerifiedBadge: {
+      position: "absolute",
+      right: -scale(4),
+      bottom: scale(5),
+      width: scale(18),
+      height: scale(24),
+      borderRadius: scale(9),
+      backgroundColor: "#18A999",
+      borderWidth: 2,
+      borderColor: "#FFFFFF",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    settingsProfileName: {
+      fontSize: scale(16),
+      fontWeight: "800",
+      lineHeight: scale(21),
+    },
+    settingsProfileMeta: {
+      marginTop: vscale(2),
+      fontSize: scale(12),
+      fontWeight: "700",
+      lineHeight: scale(16),
+    },
+    settingsSectionLabel: {
+      marginTop: vscale(2),
+      marginLeft: scale(4),
+      fontSize: scale(11),
+      fontWeight: "900",
+      lineHeight: scale(15),
+    },
+    settingsCard: {
+      borderRadius: scale(10),
+      borderWidth: 1,
+      overflow: "hidden",
+      shadowColor: "#0F172A",
+      shadowOpacity: 0.05,
+      shadowRadius: 7,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 1,
+    },
+    settingsRow: {
+      minHeight: vscale(64),
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(10),
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
       gap: scale(12),
+    },
+    settingsRowLeft: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(12),
+    },
+    settingsRowIcon: {
+      width: scale(22),
+      textAlign: "center",
+    },
+    settingsRowTitle: {
+      flexShrink: 1,
+      fontSize: scale(14),
+      fontWeight: "700",
+      lineHeight: scale(19),
+    },
+    settingsRowSubtitle: {
+      marginTop: vscale(2),
+      fontSize: scale(13),
+      fontWeight: "500",
+      lineHeight: scale(17),
+    },
+    settingsDivider: {
+      height: StyleSheet.hairlineWidth,
+      marginLeft: scale(50),
+    },
+    settingsHelpGrid: {
+      flexDirection: "row",
+      gap: scale(10),
+    },
+    settingsHelpButton: {
+      flex: 1,
+      minHeight: vscale(46),
+      borderRadius: scale(8),
+      borderWidth: 1,
+      paddingHorizontal: scale(12),
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: scale(8),
+    },
+    settingsHelpText: {
+      fontSize: scale(13),
+      fontWeight: "700",
+      lineHeight: scale(18),
+    },
+    settingsAiCard: {
+      borderRadius: scale(8),
+      backgroundColor: "#111827",
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(14),
+      gap: vscale(8),
+    },
+    settingsAiHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(8),
+    },
+    settingsAiTitle: {
+      color: "#E5F4FF",
+      fontSize: scale(14),
+      fontWeight: "800",
+      lineHeight: scale(19),
+    },
+    settingsAiBody: {
+      color: "#B9C5D3",
+      fontSize: scale(11),
+      fontWeight: "700",
+      lineHeight: scale(16),
+    },
+    settingsFeedbackCard: {
+      borderRadius: scale(10),
+      borderWidth: 1,
+      paddingHorizontal: scale(12),
+      paddingVertical: vscale(12),
+      gap: vscale(10),
+      shadowColor: "#0F172A",
+      shadowOpacity: 0.05,
+      shadowRadius: 7,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 1,
+    },
+    settingsFeedbackHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: scale(8),
+    },
+    settingsFeedbackTitle: {
+      flex: 1,
+      fontSize: scale(14),
+      fontWeight: "700",
+      lineHeight: scale(18),
+    },
+    settingsStars: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(3),
+    },
+    settingsFeedbackInput: {
+      minHeight: vscale(68),
+      borderWidth: 1,
+      borderRadius: scale(7),
+      backgroundColor: "#F1F3F6",
+      paddingHorizontal: scale(12),
+      paddingVertical: vscale(10),
+      fontSize: scale(13),
+      fontWeight: "500",
+      lineHeight: scale(18),
+    },
+    settingsFeedbackButton: {
+      minHeight: vscale(44),
+      borderRadius: scale(6),
+      backgroundColor: "#000000",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: scale(14),
+    },
+    settingsFeedbackButtonText: {
+      color: "#FFFFFF",
+      fontSize: scale(14),
+      fontWeight: "800",
+      lineHeight: scale(18),
+    },
+    settingsSignOutButton: {
+      minHeight: vscale(48),
+      borderRadius: scale(8),
+      borderWidth: 1,
+      borderColor: "#F3A8A8",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: scale(8),
+      marginTop: vscale(4),
+    },
+    settingsSignOutText: {
+      color: "#EF4444",
+      fontSize: scale(14),
+      fontWeight: "800",
+      lineHeight: scale(18),
+    },
+    headerWrap: {
+      paddingHorizontal: scale(16),
+      paddingTop: vscale(8),
+      paddingBottom: vscale(10),
+      zIndex: 30,
+    },
+    headerTopRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: scale(10),
     },
     // ✅ CHANGED: from scale(30) -> scale(28) to match Hotlines + Reports
     title: { fontSize: scale(28), fontWeight: "900" },
@@ -1789,7 +2747,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     subtitle: {
       marginTop: vscale(4),
       fontSize: scale(12),
-      fontWeight: "500",
+      fontWeight: "400",
       lineHeight: scale(16),
     },
 
@@ -2201,6 +3159,66 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       fontSize: scale(13),
       fontWeight: "900",
       color: "#FFFFFF",
+    },
+    sessionCard: {
+      borderRadius: CARD_R,
+      borderWidth: 1,
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(14),
+      gap: vscale(12),
+    },
+    sessionTopRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: scale(10),
+    },
+    sessionBadge: {
+      paddingHorizontal: scale(10),
+      paddingVertical: vscale(6),
+      borderRadius: vscale(14),
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    sessionBadgeText: {
+      fontSize: scale(12),
+      fontWeight: "900",
+    },
+    sessionDetails: {
+      gap: vscale(8),
+    },
+    sessionDetailRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: scale(12),
+    },
+    sessionDetailLabel: {
+      flex: 0.9,
+      fontSize: scale(12),
+      fontWeight: "700",
+    },
+    sessionDetailValue: {
+      flex: 1.2,
+      fontSize: scale(12),
+      fontWeight: "600",
+      textAlign: "right",
+    },
+    sessionHintCard: {
+      borderRadius: CARD_R,
+      borderWidth: 1,
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(14),
+      gap: vscale(6),
+    },
+    sessionHintTitle: {
+      fontSize: scale(13),
+      fontWeight: "800",
+    },
+    sessionHintText: {
+      fontSize: scale(12),
+      fontWeight: "500",
+      lineHeight: scale(17),
     },
     helpIntroCard: {
       borderRadius: CARD_R,
