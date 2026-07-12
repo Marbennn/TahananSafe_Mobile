@@ -304,7 +304,7 @@ export default function QuickActions({
       useNativeDriver: true,
     }).start(({ finished }) => {
       if (!finished) return;
-      hintTimerRef.current = setTimeout(() => hideLongPressHint(), 3200);
+      hintTimerRef.current = setTimeout(() => hideLongPressHint(), 10000);
     });
   }, [clearHintTimer, hideLongPressHint, hintOpacity, reduceMotion]);
 

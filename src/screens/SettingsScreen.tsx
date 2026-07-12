@@ -1129,31 +1129,65 @@ export default function SettingsScreen({
     showFeedback ||
     showSignOut;
 
+  const renderModalHeader = (
+    title: string,
+    subtitle: string,
+    icon: React.ComponentProps<typeof Ionicons>["name"],
+    onClose: () => void
+  ) => (
+    <View style={[styles.accountModalHeader, { borderBottomColor: divider }]}>
+      <View style={styles.accountModalHeaderLead}>
+        <View style={[styles.accountModalHeaderIcon, { backgroundColor: chipBg }]}>
+          <Ionicons name={icon} size={scale(21)} color={primary} />
+        </View>
+        <View style={styles.accountModalHeaderCopy}>
+          <Text style={[styles.accountModalTitle, { color: textDark }]}>{title}</Text>
+          <Text style={[styles.accountModalSubtitle, { color: muted }]} numberOfLines={2}>
+            {subtitle}
+          </Text>
+        </View>
+      </View>
+
+      <Pressable
+        onPress={onClose}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel={`Close ${title}`}
+        style={({ pressed }) => [
+          styles.accountModalClose,
+          { backgroundColor: chipBg },
+          pressed && styles.modalPressed,
+        ]}
+      >
+        <Ionicons name="close" size={scale(20)} color={muted} />
+      </Pressable>
+    </View>
+  );
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: screenBg }]} edges={["top"]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* ✅ Account Modal */}
-      <Modal visible={accountModalVisible} transparent animationType="slide" onRequestClose={closeAccountModal}>
+      <Modal visible={accountModalVisible} transparent animationType="fade" onRequestClose={closeAccountModal}>
         <View style={styles.accountModalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeAccountModal} />
           <View style={[styles.accountModalSheet, { backgroundColor: surface, borderColor: divider }]}>
-            <View style={styles.accountModalHeader}>
-              <Text style={[styles.accountModalTitle, { color: textDark }]}>Account</Text>
-
-              <Pressable onPress={closeAccountModal} hitSlop={10} style={styles.accountModalClose}>
-                <Ionicons name="close" size={iconSize} color={muted} />
-              </Pressable>
-            </View>
+            {renderModalHeader(
+              "Account",
+              "Manage your profile and active sessions",
+              "person-circle-outline",
+              closeAccountModal
+            )}
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountModalContent}>
               <Pressable
                 onPress={openProfileModal}
                 android_ripple={{ color: "rgba(0,0,0,0.06)" }}
-                style={styles.accountModalItem}
+                style={[styles.accountModalItem, { backgroundColor: cardBg, borderColor: cardBorder }]}
               >
                 <View style={styles.settingLeft}>
-                  <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                  <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
                     <Ionicons name="person-outline" size={iconSize} color={primary} />
                   </View>
                   <View style={{ flex: 1 }}>
@@ -1167,10 +1201,10 @@ export default function SettingsScreen({
               <Pressable
                 onPress={openSessionsModal}
                 android_ripple={{ color: "rgba(0,0,0,0.06)" }}
-                style={styles.accountModalItem}
+                style={[styles.accountModalItem, { backgroundColor: cardBg, borderColor: cardBorder }]}
               >
                 <View style={styles.settingLeft}>
-                  <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                  <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
                     <Ionicons name="shield-checkmark-outline" size={iconSize} color={primary} />
                   </View>
                   <View style={{ flex: 1 }}>
@@ -1187,17 +1221,16 @@ export default function SettingsScreen({
         </View>
       </Modal>
 
-      <Modal visible={sessionsModalVisible} transparent animationType="slide" onRequestClose={closeSessionsModal}>
+      <Modal visible={sessionsModalVisible} transparent animationType="fade" onRequestClose={closeSessionsModal}>
         <View style={styles.accountModalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeSessionsModal} />
           <View style={[styles.accountModalSheet, { backgroundColor: surface, borderColor: divider }]}>
-            <View style={styles.accountModalHeader}>
-              <Text style={[styles.accountModalTitle, { color: textDark }]}>Sessions</Text>
-
-              <Pressable onPress={closeSessionsModal} hitSlop={10} style={styles.accountModalClose}>
-                <Ionicons name="close" size={iconSize} color={muted} />
-              </Pressable>
-            </View>
+            {renderModalHeader(
+              "Sessions",
+              "Review this device and sign-in details",
+              "phone-portrait-outline",
+              closeSessionsModal
+            )}
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountModalContent}>
               <View style={[styles.sessionCard, { backgroundColor: cardBg, borderColor: divider }]}>
@@ -1294,7 +1327,7 @@ export default function SettingsScreen({
         </View>
       </Modal>
 
-      <Modal visible={profileModalVisible} transparent animationType="slide" onRequestClose={closeProfileModal}>
+      <Modal visible={profileModalVisible} transparent animationType="fade" onRequestClose={closeProfileModal}>
         <View style={styles.accountModalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeProfileModal} />
           <KeyboardAvoidingView
@@ -1303,13 +1336,12 @@ export default function SettingsScreen({
             keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
           >
             <View style={[styles.profileModalSheet, { backgroundColor: surface, borderColor: divider }]}>
-              <View style={styles.accountModalHeader}>
-                <Text style={[styles.accountModalTitle, { color: textDark }]}>Profile</Text>
-
-                <Pressable onPress={closeProfileModal} hitSlop={10} style={styles.accountModalClose}>
-                  <Ionicons name="close" size={iconSize} color={muted} />
-                </Pressable>
-              </View>
+              {renderModalHeader(
+                "Profile",
+                "Update your personal information",
+                "person-outline",
+                closeProfileModal
+              )}
 
               <ScrollView
                 ref={profileScrollRef}
@@ -1482,24 +1514,29 @@ export default function SettingsScreen({
       </Modal>
 
       {/* ✅ Privacy & Security Modal */}
-      <Modal visible={psModalVisible} transparent animationType="slide" onRequestClose={closePrivacySecurity}>
+      <Modal visible={psModalVisible} transparent animationType="fade" onRequestClose={closePrivacySecurity}>
         <View style={styles.accountModalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closePrivacySecurity} />
           <View style={[styles.psModalSheet, { backgroundColor: surface, borderColor: divider }]}>
-            <View style={styles.accountModalHeader}>
-              <Text style={[styles.accountModalTitle, { color: textDark }]}>Privacy and Security</Text>
-
-              <Pressable onPress={closePrivacySecurity} hitSlop={10} style={styles.accountModalClose}>
-                <Ionicons name="close" size={iconSize} color={muted} />
-              </Pressable>
-            </View>
+            {renderModalHeader(
+              "Privacy and Security",
+              "Protect access to your account",
+              "shield-checkmark-outline",
+              closePrivacySecurity
+            )}
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountModalContent}>
               {/* Biometrics */}
-              <View style={[styles.accountModalItem, styles.psExpandedCard]}>
+              <View
+                style={[
+                  styles.accountModalItem,
+                  styles.psExpandedCard,
+                  { backgroundColor: cardBg, borderColor: cardBorder },
+                ]}
+              >
                 <View style={styles.psTopRow}>
                   <View style={styles.settingLeft}>
-                    <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                    <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
                       <Ionicons name="finger-print-outline" size={iconSize} color={primary} />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -1545,10 +1582,16 @@ export default function SettingsScreen({
               </View>
 
               {/* PIN */}
-              <View style={[styles.accountModalItem, styles.psExpandedCard]}>
+              <View
+                style={[
+                  styles.accountModalItem,
+                  styles.psExpandedCard,
+                  { backgroundColor: cardBg, borderColor: cardBorder },
+                ]}
+              >
                 <View style={styles.psTopRow}>
                   <View style={styles.settingLeft}>
-                    <View style={[styles.settingIconWrap, { backgroundColor: "#EEF6FF" }]}>
+                    <View style={[styles.settingIconWrap, { backgroundColor: chipBg }]}>
                       <Ionicons name="keypad-outline" size={iconSize} color={primary} />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -1600,17 +1643,16 @@ export default function SettingsScreen({
       </Modal>
 
       {/* ✅ Personalization Modal (NEW - behaves like Account modal) */}
-      <Modal visible={persModalVisible} transparent animationType="slide" onRequestClose={closePersonalizationModal}>
+      <Modal visible={persModalVisible} transparent animationType="fade" onRequestClose={closePersonalizationModal}>
         <View style={styles.accountModalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closePersonalizationModal} />
           <View style={[styles.persModalSheet, { backgroundColor: surface, borderColor: divider }]}>
-            <View style={styles.accountModalHeader}>
-              <Text style={[styles.accountModalTitle, { color: textDark }]}>Personalization</Text>
-
-              <Pressable onPress={closePersonalizationModal} hitSlop={10} style={styles.accountModalClose}>
-                <Ionicons name="close" size={iconSize} color={muted} />
-              </Pressable>
-            </View>
+            {renderModalHeader(
+              "Personalization",
+              "Choose how TahananSafe looks and feels",
+              "color-palette-outline",
+              closePersonalizationModal
+            )}
 
             <View style={[styles.currentAccountRow, { borderColor: divider }]}>
               <View style={[styles.currentAvatar, { backgroundColor: chipBg }]}>
@@ -1786,17 +1828,16 @@ export default function SettingsScreen({
         </View>
       </Modal>
 
-      <Modal visible={helpModalVisible} transparent animationType="slide" onRequestClose={closeHelpModal}>
+      <Modal visible={helpModalVisible} transparent animationType="fade" onRequestClose={closeHelpModal}>
         <View style={styles.accountModalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeHelpModal} />
           <View style={[styles.accountModalSheet, { backgroundColor: surface, borderColor: divider }]}>
-            <View style={styles.accountModalHeader}>
-              <Text style={[styles.accountModalTitle, { color: textDark }]}>Help and Support</Text>
-
-              <Pressable onPress={closeHelpModal} hitSlop={10} style={styles.accountModalClose}>
-                <Ionicons name="close" size={iconSize} color={muted} />
-              </Pressable>
-            </View>
+            {renderModalHeader(
+              "Help and Support",
+              "Quick guidance and support",
+              "help-buoy-outline",
+              closeHelpModal
+            )}
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountModalContent}>
               <View style={[styles.helpIntroCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
@@ -1876,17 +1917,16 @@ export default function SettingsScreen({
         </View>
       </Modal>
 
-      <Modal visible={termsModalVisible} transparent animationType="slide" onRequestClose={closeTermsModal}>
+      <Modal visible={termsModalVisible} transparent animationType="fade" onRequestClose={closeTermsModal}>
         <View style={styles.accountModalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeTermsModal} />
           <View style={[styles.accountModalSheet, { backgroundColor: surface, borderColor: divider }]}>
-            <View style={styles.accountModalHeader}>
-              <Text style={[styles.accountModalTitle, { color: textDark }]}>Terms and Conditions</Text>
-
-              <Pressable onPress={closeTermsModal} hitSlop={10} style={styles.accountModalClose}>
-                <Ionicons name="close" size={iconSize} color={muted} />
-              </Pressable>
-            </View>
+            {renderModalHeader(
+              "Terms and Conditions",
+              "Important information about using the app",
+              "document-text-outline",
+              closeTermsModal
+            )}
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountModalContent}>
               <View style={[styles.helpIntroCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
@@ -2306,7 +2346,17 @@ export default function SettingsScreen({
                   </View>
                 </View>
 
-                <Pressable onPress={closePinSetup} hitSlop={10} style={styles.modalCloseBtn}>
+                <Pressable
+                  onPress={closePinSetup}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close PIN setup"
+                  style={({ pressed }) => [
+                    styles.modalCloseBtn,
+                    { backgroundColor: chipBg },
+                    pressed && styles.modalPressed,
+                  ]}
+                >
                   <Ionicons name="close" size={iconSize} color={muted} />
                 </Pressable>
               </View>
@@ -2321,7 +2371,10 @@ export default function SettingsScreen({
                   maxLength={4}
                   placeholder="Enter PIN"
                   placeholderTextColor={muted}
-                  style={[styles.modalInput, { borderColor: divider, color: textDark }]}
+                  style={[
+                    styles.modalInput,
+                    { borderColor: divider, color: textDark, backgroundColor: cardBg },
+                  ]}
                 />
               </View>
 
@@ -2335,7 +2388,10 @@ export default function SettingsScreen({
                   maxLength={4}
                   placeholder="Confirm PIN"
                   placeholderTextColor={muted}
-                  style={[styles.modalInput, { borderColor: divider, color: textDark }]}
+                  style={[
+                    styles.modalInput,
+                    { borderColor: divider, color: textDark, backgroundColor: cardBg },
+                  ]}
                 />
               </View>
 
@@ -2850,17 +2906,23 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     // PIN Modal
     modalOverlay: {
       flex: 1,
-      backgroundColor: "rgba(15, 23, 42, 0.35)",
+      backgroundColor: "rgba(2, 15, 32, 0.56)",
       alignItems: "center",
       justifyContent: "center",
-      paddingHorizontal: scale(16),
+      paddingHorizontal: scale(20),
+      paddingVertical: vscale(24),
     },
     modalCard: {
       width: "100%",
-      maxWidth: 520,
-      borderRadius: CARD_R,
+      maxWidth: 480,
+      borderRadius: scale(24),
       borderWidth: 1,
-      padding: scale(14),
+      padding: scale(18),
+      shadowColor: "#020F20",
+      shadowOpacity: 0.2,
+      shadowRadius: 20,
+      shadowOffset: { width: 0, height: 10 },
+      elevation: 12,
     },
     modalHeader: {
       flexDirection: "row",
@@ -2876,21 +2938,21 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       alignItems: "center",
       justifyContent: "center",
     },
-    modalTitle: { fontSize: scale(16), fontWeight: "900" },
-    modalHint: { marginTop: vscale(2), fontSize: scale(11), fontWeight: "500", lineHeight: scale(15) },
+    modalTitle: { fontSize: scale(17), fontWeight: "900" },
+    modalHint: { marginTop: vscale(3), fontSize: scale(11), fontWeight: "500", lineHeight: scale(16) },
     modalCloseBtn: {
-      width: vscale(36),
-      height: vscale(36),
-      borderRadius: vscale(18),
+      width: scale(40),
+      height: scale(40),
+      borderRadius: scale(14),
       alignItems: "center",
       justifyContent: "center",
     },
     modalField: { marginTop: vscale(12) },
     modalLabel: { fontSize: scale(12), fontWeight: "900", marginBottom: vscale(6) },
     modalInput: {
-      height: vscale(44),
+      height: vscale(48),
       borderWidth: 1,
-      borderRadius: vscale(12),
+      borderRadius: scale(12),
       paddingHorizontal: scale(12),
       fontSize: scale(16),
       fontWeight: "600",
@@ -2904,8 +2966,8 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
     modalBtn: {
       minWidth: scale(110),
-      height: vscale(42),
-      borderRadius: vscale(21),
+      height: vscale(46),
+      borderRadius: scale(12),
       borderWidth: 1,
       alignItems: "center",
       justifyContent: "center",
@@ -2921,73 +2983,124 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
     modalFootText: { fontSize: scale(11), fontWeight: "500" },
 
-    // Account Modal Bottom Sheet
+    // Centered settings dialogs
     accountModalOverlay: {
       flex: 1,
-      backgroundColor: "rgba(15, 23, 42, 0.35)",
-      justifyContent: "flex-end",
+      backgroundColor: "rgba(2, 15, 32, 0.56)",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: scale(20),
+      paddingVertical: vscale(24),
     },
     accountModalSheet: {
-      borderTopLeftRadius: CARD_R,
-      borderTopRightRadius: CARD_R,
+      width: "100%",
+      maxWidth: 480,
+      borderRadius: scale(24),
       borderWidth: 1,
       overflow: "hidden",
       paddingBottom: Platform.OS === "ios" ? vscale(12) : vscale(10),
-      maxHeight: "82%",
+      maxHeight: "84%",
+      shadowColor: "#020F20",
+      shadowOpacity: 0.22,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 12 },
+      elevation: 14,
     },
     psModalSheet: {
-      borderTopLeftRadius: CARD_R,
-      borderTopRightRadius: CARD_R,
+      width: "100%",
+      maxWidth: 480,
+      borderRadius: scale(24),
       borderWidth: 1,
       overflow: "hidden",
       paddingBottom: Platform.OS === "ios" ? vscale(12) : vscale(10),
-      maxHeight: "86%",
+      maxHeight: "88%",
+      shadowColor: "#020F20",
+      shadowOpacity: 0.22,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 12 },
+      elevation: 14,
     },
     // ✅ NEW: Personalization modal sizing
     persModalSheet: {
-      borderTopLeftRadius: CARD_R,
-      borderTopRightRadius: CARD_R,
+      width: "100%",
+      maxWidth: 480,
+      borderRadius: scale(24),
       borderWidth: 1,
       overflow: "hidden",
       paddingBottom: Platform.OS === "ios" ? vscale(12) : vscale(10),
-      maxHeight: "86%",
+      maxHeight: "88%",
+      shadowColor: "#020F20",
+      shadowOpacity: 0.22,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 12 },
+      elevation: 14,
     },
     profileModalKeyboard: {
       flex: 1,
-      justifyContent: "flex-end",
+      alignItems: "center",
+      justifyContent: "center",
       width: "100%",
     },
     profileModalSheet: {
-      borderTopLeftRadius: CARD_R,
-      borderTopRightRadius: CARD_R,
+      borderRadius: scale(24),
       borderWidth: 1,
       overflow: "hidden",
       width: "100%",
+      maxWidth: 480,
       paddingBottom: 0,
       maxHeight: "88%",
+      shadowColor: "#020F20",
+      shadowOpacity: 0.22,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 12 },
+      elevation: 14,
     },
 
     accountModalHeader: {
-      paddingHorizontal: scale(14),
-      paddingVertical: vscale(12),
+      minHeight: vscale(76),
+      paddingHorizontal: scale(18),
+      paddingVertical: vscale(14),
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: scale(10),
+      gap: scale(12),
+      borderBottomWidth: StyleSheet.hairlineWidth,
     },
-    accountModalTitle: { fontSize: scale(16), fontWeight: "900" },
-    accountModalClose: {
-      width: vscale(36),
-      height: vscale(36),
-      borderRadius: vscale(18),
+    accountModalHeaderLead: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(12),
+    },
+    accountModalHeaderIcon: {
+      width: scale(44),
+      height: scale(44),
+      borderRadius: scale(14),
       alignItems: "center",
       justifyContent: "center",
     },
+    accountModalHeaderCopy: { flex: 1 },
+    accountModalTitle: { fontSize: scale(17), fontWeight: "900", lineHeight: scale(21) },
+    accountModalSubtitle: {
+      marginTop: vscale(3),
+      fontSize: scale(11),
+      fontWeight: "500",
+      lineHeight: scale(15),
+    },
+    accountModalClose: {
+      width: scale(40),
+      height: scale(40),
+      borderRadius: scale(14),
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modalPressed: { opacity: 0.72, transform: [{ scale: 0.96 }] },
 
     currentAccountRow: {
       marginHorizontal: scale(14),
+      marginTop: vscale(14),
       marginBottom: vscale(10),
-      borderRadius: CARD_R,
+      borderRadius: scale(16),
       borderWidth: 1,
       paddingHorizontal: scale(12),
       paddingVertical: vscale(12),
@@ -3016,53 +3129,60 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     currentPillText: { fontSize: scale(12), fontWeight: "900" },
 
     accountModalContent: {
-      paddingHorizontal: scale(14),
-      paddingBottom: vscale(16),
-      gap: vscale(10),
+      paddingHorizontal: scale(16),
+      paddingTop: vscale(16),
+      paddingBottom: vscale(18),
+      gap: vscale(12),
     },
     profileModalContent: {
-      paddingHorizontal: scale(14),
-      paddingBottom: vscale(10),
+      paddingHorizontal: scale(16),
+      paddingTop: vscale(16),
+      paddingBottom: vscale(14),
     },
     profileModalSections: {
-      gap: vscale(8),
+      gap: vscale(12),
     },
     accountModalItem: {
-      borderRadius: CARD_R,
+      borderRadius: scale(16),
       borderWidth: 1,
       borderColor: "#E7EEF7",
       backgroundColor: "#FFFFFF",
       paddingHorizontal: scale(14),
-      paddingVertical: vscale(12),
+      paddingVertical: vscale(14),
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
       gap: scale(12),
       overflow: "hidden",
+      shadowColor: "#0A2848",
+      shadowOpacity: 0.045,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 1,
     },
     profileHeroCard: {
-      borderRadius: CARD_R,
+      borderRadius: scale(18),
       borderWidth: 1,
       paddingHorizontal: scale(14),
       paddingVertical: vscale(16),
       alignItems: "center",
     },
     profileAvatarWrap: {
-      width: scale(92),
-      height: scale(92),
-      borderRadius: scale(46),
+      width: scale(82),
+      height: scale(82),
+      borderRadius: scale(41),
       overflow: "hidden",
       marginBottom: vscale(12),
     },
     profileAvatarImage: {
       width: "100%",
       height: "100%",
-      borderRadius: scale(46),
+      borderRadius: scale(41),
     },
     profileAvatarFallback: {
       width: "100%",
       height: "100%",
-      borderRadius: scale(46),
+      borderRadius: scale(41),
       alignItems: "center",
       justifyContent: "center",
     },
@@ -3097,7 +3217,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       fontWeight: "800",
     },
     profileFormCard: {
-      borderRadius: CARD_R,
+      borderRadius: scale(18),
       borderWidth: 1,
       paddingHorizontal: scale(14),
       paddingVertical: vscale(14),
@@ -3111,9 +3231,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       fontWeight: "900",
     },
     profileInput: {
-      minHeight: vscale(44),
+      minHeight: vscale(48),
       borderWidth: 1,
-      borderRadius: scale(14),
+      borderRadius: scale(12),
       paddingHorizontal: scale(12),
       fontSize: scale(14),
       fontWeight: "600",
@@ -3147,8 +3267,8 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
     profileActionBtn: {
       flex: 1,
-      minHeight: vscale(46),
-      borderRadius: scale(14),
+      minHeight: vscale(48),
+      borderRadius: scale(12),
       alignItems: "center",
       justifyContent: "center",
       paddingHorizontal: scale(14),
@@ -3163,7 +3283,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       color: "#FFFFFF",
     },
     sessionCard: {
-      borderRadius: CARD_R,
+      borderRadius: scale(18),
       borderWidth: 1,
       paddingHorizontal: scale(14),
       paddingVertical: vscale(14),
@@ -3207,7 +3327,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       textAlign: "right",
     },
     sessionHintCard: {
-      borderRadius: CARD_R,
+      borderRadius: scale(18),
       borderWidth: 1,
       paddingHorizontal: scale(14),
       paddingVertical: vscale(14),
@@ -3223,7 +3343,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       lineHeight: scale(17),
     },
     helpIntroCard: {
-      borderRadius: CARD_R,
+      borderRadius: scale(18),
       borderWidth: 1,
       paddingHorizontal: scale(14),
       paddingVertical: vscale(14),
@@ -3249,12 +3369,12 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       fontWeight: "500",
     },
     helpInfoCard: {
-      borderRadius: CARD_R,
+      borderRadius: scale(16),
       borderWidth: 1,
       borderColor: "#E7EEF7",
       backgroundColor: "#FFFFFF",
       paddingHorizontal: scale(14),
-      paddingVertical: vscale(12),
+      paddingVertical: vscale(14),
       flexDirection: "row",
       alignItems: "flex-start",
       gap: scale(12),

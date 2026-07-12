@@ -2660,15 +2660,15 @@ function makeStyles(args: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        gap: scale(6),
+        gap: scale(9),
       },
       reportTabPill: {
-        minWidth: scale(isTablet ? 108 : 88),
-        minHeight: vscale(isTablet ? 38 : 34),
+        minWidth: scale(isTablet ? 120 : 100),
+        minHeight: vscale(isTablet ? 44 : 40),
         borderRadius: scale(999),
         alignItems: "center",
         justifyContent: "center",
-        paddingHorizontal: scale(13),
+        paddingHorizontal: scale(17),
         flexDirection: "row",
         gap: scale(4),
       },
@@ -2679,7 +2679,7 @@ function makeStyles(args: {
         backgroundColor: "#E3E8EE",
       },
       reportTabText: {
-        fontSize: scale(11.5),
+        fontSize: scale(isTablet ? 14 : 13),
         fontWeight: "800",
         color: "#344052",
       },
@@ -2709,15 +2709,15 @@ function makeStyles(args: {
         paddingLeft: scale(8),
       },
       reportRefText: {
-        fontSize: scale(9.5),
+        fontSize: scale(11),
         fontWeight: "500",
         color: "#9AA4B2",
       },
       reportTitleText: {
         marginTop: vscale(2),
-        fontSize: scale(isTablet ? 16 : 14),
+        fontSize: scale(isTablet ? 17 : 16),
         fontWeight: "900",
-        lineHeight: vscale(isTablet ? 21 : 18),
+        lineHeight: vscale(isTablet ? 22 : 21),
         color: TEXT_DARK,
       },
       reportStatusChip: {
@@ -2729,7 +2729,7 @@ function makeStyles(args: {
         paddingVertical: vscale(4),
       },
       reportStatusText: {
-        fontSize: scale(9),
+        fontSize: scale(10.5),
         fontWeight: "900",
         color: "#5B3B8C",
       },
@@ -2852,14 +2852,14 @@ function makeStyles(args: {
         paddingVertical: vscale(18),
       },
       reportCardTitle: {
-        fontSize: scale(isTablet ? 16 : 14.5),
+        fontSize: scale(isTablet ? 17.5 : 16),
         fontWeight: "900",
         color: TEXT_DARK,
       },
       reportFieldLabel: {
         marginTop: vscale(10),
         marginBottom: vscale(6),
-        fontSize: scale(11),
+        fontSize: scale(12.5),
         fontWeight: "900",
         color: "#7C7F86",
       },
@@ -2883,9 +2883,9 @@ function makeStyles(args: {
         paddingVertical: vscale(8),
       },
       reportBoxText: {
-        fontSize: scale(11),
+        fontSize: scale(13),
         fontWeight: "500",
-        lineHeight: vscale(17),
+        lineHeight: vscale(19),
         color: "#08233F",
       },
       reportDateTimeRow: {
@@ -2897,9 +2897,9 @@ function makeStyles(args: {
         flex: 1,
       },
       reportPlainText: {
-        fontSize: scale(11),
+        fontSize: scale(13),
         fontWeight: "500",
-        lineHeight: vscale(17),
+        lineHeight: vscale(19),
         color: "#08233F",
       },
       reportLocationHeader: {
@@ -2916,7 +2916,7 @@ function makeStyles(args: {
         marginBottom: vscale(12),
       },
       reportEvidenceCount: {
-        fontSize: scale(11),
+        fontSize: scale(12),
         fontWeight: "800",
         color: "#8A8D93",
       },
@@ -2947,7 +2947,7 @@ function makeStyles(args: {
         gap: vscale(3),
       },
       reportVideoText: {
-        fontSize: scale(9),
+        fontSize: scale(10.5),
         fontWeight: "900",
         color: "#FFFFFF",
       },
@@ -2962,7 +2962,7 @@ function makeStyles(args: {
         marginTop: vscale(16),
       },
       reportAiButtonText: {
-        fontSize: scale(13),
+        fontSize: scale(14),
         fontWeight: "500",
         color: "#FFFFFF",
       },
@@ -2986,7 +2986,7 @@ function makeStyles(args: {
         paddingVertical: vscale(17),
       },
       timelineSectionTitle: {
-        fontSize: 16,
+        fontSize: scale(17),
         fontWeight: "800",
         color: TEXT_DARK,
       },
@@ -3019,7 +3019,7 @@ function makeStyles(args: {
         flex: 1,
       },
       caseProgressTitle: {
-        fontSize: 16,
+        fontSize: scale(16.5),
         fontWeight: "500",
         color: TEXT_DARK,
       },
@@ -3028,7 +3028,7 @@ function makeStyles(args: {
       },
       caseProgressMeta: {
         marginTop: vscale(4),
-        fontSize: 12,
+        fontSize: scale(13),
         fontWeight: "500",
         color: TEXT_MUTED,
       },
@@ -3057,13 +3057,13 @@ function makeStyles(args: {
         flex: 1,
       },
       currentStatusLabel: {
-        fontSize: 12,
+        fontSize: scale(13),
         fontWeight: "500",
         color: "#718093",
       },
       currentStatusValue: {
         marginTop: vscale(1),
-        fontSize: 16,
+        fontSize: scale(17),
         fontWeight: "500",
         color: TEXT_DARK,
       },
@@ -3093,13 +3093,13 @@ function makeStyles(args: {
         justifyContent: "center",
       },
       mediationMonth: {
-        fontSize: 10,
+        fontSize: scale(11),
         fontWeight: "900",
         color: "#8FA0B8",
       },
       mediationDay: {
         marginTop: vscale(1),
-        fontSize: 18,
+        fontSize: scale(19),
         fontWeight: "800",
         color: "#FFFFFF",
       },
@@ -3107,13 +3107,13 @@ function makeStyles(args: {
         flex: 1,
       },
       mediationTime: {
-        fontSize: 16,
+        fontSize: scale(17),
         fontWeight: "500",
         color: TEXT_DARK,
       },
       mediationPlace: {
         marginTop: vscale(4),
-        fontSize: 14,
+        fontSize: scale(15),
         fontWeight: "500",
         color: TEXT_MUTED,
       },
@@ -3132,14 +3132,14 @@ function makeStyles(args: {
         gap: vscale(3),
       },
       updateDate: {
-        fontSize: 12,
+        fontSize: scale(13),
         fontWeight: "500",
         color: "#8A8F98",
       },
       updateText: {
-        fontSize: 14,
+        fontSize: scale(15),
         fontWeight: "500",
-        lineHeight: vscale(19),
+        lineHeight: vscale(21),
         color: TEXT_DARK,
       },
       certHeaderRow: {
@@ -3153,7 +3153,7 @@ function makeStyles(args: {
       },
       certSubtitle: {
         marginTop: vscale(6),
-        fontSize: 12,
+        fontSize: scale(13),
         fontWeight: "500",
         color: TEXT_MUTED,
       },
@@ -3164,7 +3164,7 @@ function makeStyles(args: {
         paddingVertical: vscale(7),
       },
       certBadgeText: {
-        fontSize: 10,
+        fontSize: scale(11),
         fontWeight: "800",
         color: "#848B95",
       },
@@ -3187,7 +3187,7 @@ function makeStyles(args: {
         opacity: 0.8,
       },
       certActionText: {
-        fontSize: 14,
+        fontSize: scale(15),
         fontWeight: "500",
         color: "#AEB4BD",
       },
@@ -3227,21 +3227,21 @@ function makeStyles(args: {
         paddingBottom: vscale(6),
       },
       timelineTitle: {
-        fontSize: scale(12.5),
+        fontSize: scale(14),
         fontWeight: "900",
         color: TEXT_DARK,
       },
       timelineMeta: {
         marginTop: vscale(2),
-        fontSize: scale(10),
+        fontSize: scale(11.5),
         fontWeight: "700",
         color: "#8A8D93",
       },
       timelineText: {
         marginTop: vscale(4),
-        fontSize: scale(11),
+        fontSize: scale(12.5),
         fontWeight: "500",
-        lineHeight: vscale(16),
+        lineHeight: vscale(18),
         color: "#556070",
       },
 
@@ -3274,7 +3274,7 @@ function makeStyles(args: {
         opacity: 0.7,
       },
       locationMapBtnText: {
-        fontSize: scale(10.25),
+        fontSize: scale(11.5),
         fontWeight: "900",
         color: primary,
       },
@@ -3373,7 +3373,7 @@ function makeStyles(args: {
         borderColor: BORDER,
         backgroundColor: "#FFFFFF",
       },
-      emptyEvidenceText: { fontSize: scale(11), fontWeight: "400", color: "#94A3B8" },
+      emptyEvidenceText: { fontSize: scale(12.5), fontWeight: "400", color: "#94A3B8" },
 
       cancelBottomWrap: { ...CONTENT_ALIGN, marginTop: vscale(2) },
       cancelBottomBtn: {

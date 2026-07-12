@@ -247,15 +247,11 @@ export default function GreetingCard({ greeting, dateLine, userName = "User" }: 
     return clamp(px, Math.round(86 * s), Math.round(150 * s));
   }, [cardWApprox, s]);
 
-  const indicatorSegmentW = useMemo(() => clamp(Math.round(13 * s), 10, 16), [s]);
-  const indicatorGap = useMemo(() => clamp(Math.round(5 * s), 3, 6), [s]);
-  const indicatorTrackH = useMemo(() => clamp(Math.round(4 * s), 3, 5), [s]);
-  const indicatorThumbW = useMemo(() => Math.max(indicatorSegmentW, indicatorTrackH * 2), [
-    indicatorSegmentW,
-    indicatorTrackH,
-  ]);
-  const indicatorStep = indicatorSegmentW + indicatorGap;
-  const indicatorRailW = indicatorSegmentW * SLIDE_COUNT + indicatorGap * (SLIDE_COUNT - 1);
+  const indicatorDotSize = useMemo(() => clamp(Math.round(6 * s), 5, 7), [s]);
+  const indicatorPillW = useMemo(() => clamp(Math.round(14 * s), 12, 17), [s]);
+  const indicatorGap = useMemo(() => clamp(Math.round(4 * s), 3, 6), [s]);
+  const indicatorStep = indicatorPillW / 2 + indicatorGap + indicatorDotSize / 2;
+  const indicatorRailW = indicatorPillW + indicatorStep * (SLIDE_COUNT - 1);
 
   const indicatorTranslateX = useMemo(
     () =>
@@ -265,6 +261,16 @@ export default function GreetingCard({ greeting, dateLine, userName = "User" }: 
         extrapolate: "clamp",
       }),
     [indicatorStep, translateX, w]
+  );
+
+  const indicatorScaleX = useMemo(
+    () =>
+      translateX.interpolate({
+        inputRange: [-w, -w * 0.5, 0],
+        outputRange: [1, 0.72, 1],
+        extrapolate: "clamp",
+      }),
+    [translateX, w]
   );
 
   const styles = useMemo(
@@ -341,28 +347,48 @@ export default function GreetingCard({ greeting, dateLine, userName = "User" }: 
 
         indicatorRail: {
           width: indicatorRailW,
-          height: indicatorTrackH,
+          height: indicatorDotSize,
           position: "relative",
         },
-        indicatorSegmentsRow: {
+        indicatorDotsRow: {
           ...StyleSheet.absoluteFillObject,
-          flexDirection: "row",
         },
-        indicatorSegment: {
-          height: indicatorTrackH,
-          borderRadius: 999,
-          backgroundColor: "rgba(255,255,255,0.25)",
+        indicatorDotSlot: {
+          position: "absolute",
+          top: 0,
+          width: indicatorDotSize,
+          height: indicatorDotSize,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        indicatorDot: {
+          width: indicatorDotSize,
+          height: indicatorDotSize,
+          borderRadius: indicatorDotSize / 2,
+          backgroundColor: "rgba(255,255,255,0.82)",
         },
         indicatorThumb: {
           position: "absolute",
           left: 0,
           top: 0,
-          height: indicatorTrackH,
+          width: indicatorPillW,
+          height: indicatorDotSize,
           borderRadius: 999,
-          backgroundColor: "rgba(255,255,255,0.96)",
+          backgroundColor: "#FFFFFF",
         },
       }),
-    [s, fs, CARD_H, MH, R, rightCropPad, indicatorRailW, indicatorTrackH]
+    [
+      s,
+      fs,
+      CARD_H,
+      MH,
+      R,
+      rightCropPad,
+      indicatorRailW,
+      indicatorDotSize,
+      indicatorStep,
+      indicatorPillW,
+    ]
   );
 
   const trackW = size.w * SLIDE_COUNT;
@@ -415,26 +441,24 @@ export default function GreetingCard({ greeting, dateLine, userName = "User" }: 
 
           <View style={styles.indicatorRow} pointerEvents="none">
             <View style={styles.indicatorRail}>
-              <View style={styles.indicatorSegmentsRow}>
+              <View style={styles.indicatorDotsRow}>
                 {Array.from({ length: SLIDE_COUNT }).map((_, i) => (
                   <View
                     key={i}
                     style={[
-                      styles.indicatorSegment,
-                      {
-                        width: indicatorSegmentW,
-                        marginRight: i === SLIDE_COUNT - 1 ? 0 : indicatorGap,
-                      },
+                      styles.indicatorDotSlot,
+                      { left: indicatorPillW / 2 + i * indicatorStep - indicatorDotSize / 2 },
                     ]}
-                  />
+                  >
+                    <View style={styles.indicatorDot} />
+                  </View>
                 ))}
               </View>
               <Animated.View
                 style={[
                   styles.indicatorThumb,
                   {
-                    width: indicatorThumbW,
-                    transform: [{ translateX: indicatorTranslateX }],
+                    transform: [{ translateX: indicatorTranslateX }, { scaleX: indicatorScaleX }],
                   },
                 ]}
               />
