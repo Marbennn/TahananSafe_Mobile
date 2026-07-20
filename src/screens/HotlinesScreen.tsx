@@ -1,5 +1,5 @@
 // src/screens/HotlinesScreen.tsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -12,15 +12,20 @@ import {
   Platform,
   StatusBar,
   useWindowDimensions,
+  Modal,
+  KeyboardAvoidingView,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { Colors, useColors } from "../theme/colors";
 
 type Hotline = {
+  id?: string;
   number: string;
   label: string;
+  custom?: boolean;
 };
 
 type HotlineSection = {
@@ -65,6 +70,7 @@ const TEXT = "#111827";
 const MUTED = "#6B7280";
 const SUBTLE = "#9AA4B2";
 const ACCENT_SOFT = "#F2F6FF";
+const CUSTOM_HOTLINES_KEY = "@tahanansafe_custom_hotlines_v1";
 
 export default function HotlinesScreen({
   onTabChange,
@@ -91,6 +97,77 @@ export default function HotlinesScreen({
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [query, setQuery] = useState("");
+  const [customHotlines, setCustomHotlines] = useState<Hotline[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [contactLabel, setContactLabel] = useState("");
+  const [contactNumber, setContactNumber] = useState("");
+
+  useEffect(() => {
+    AsyncStorage.getItem(CUSTOM_HOTLINES_KEY)
+      .then((value) => {
+        if (!value) return;
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) setCustomHotlines(parsed);
+      })
+      .catch(() => {
+        Alert.alert("Unable to load contacts", "Your saved emergency contacts could not be loaded.");
+      });
+  }, []);
+
+  const saveCustomHotlines = async (next: Hotline[]) => {
+    await AsyncStorage.setItem(CUSTOM_HOTLINES_KEY, JSON.stringify(next));
+    setCustomHotlines(next);
+  };
+
+  const closeAddModal = () => {
+    setShowAddModal(false);
+    setContactLabel("");
+    setContactNumber("");
+  };
+
+  const addCustomHotline = async () => {
+    const label = contactLabel.trim();
+    const number = contactNumber.trim();
+    const cleaned = cleanTel(number);
+
+    if (!label || !number) {
+      Alert.alert("Missing information", "Enter a contact name and phone number.");
+      return;
+    }
+    if (!/^\+?\d{3,15}$/.test(cleaned)) {
+      Alert.alert("Invalid phone number", "Enter a valid phone number with 3 to 15 digits.");
+      return;
+    }
+
+    const next = [
+      ...customHotlines,
+      { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, label, number, custom: true },
+    ];
+
+    try {
+      await saveCustomHotlines(next);
+      closeAddModal();
+    } catch {
+      Alert.alert("Unable to save", "Please try adding the emergency contact again.");
+    }
+  };
+
+  const removeCustomHotline = (hotline: Hotline) => {
+    Alert.alert("Delete emergency contact?", `${hotline.label} will be removed from this device.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await saveCustomHotlines(customHotlines.filter((item) => item.id !== hotline.id));
+          } catch {
+            Alert.alert("Unable to delete", "Please try again.");
+          }
+        },
+      },
+    ]);
+  };
 
   // ✅ MATCH HomeScreen nav sizing exactly
   const NAV_BASE_HEIGHT = 78;
@@ -106,6 +183,9 @@ export default function HotlinesScreen({
 
   const sections: HotlineSection[] = useMemo(
     () => [
+      ...(customHotlines.length
+        ? [{ title: "My Emergency Contacts", items: customHotlines }]
+        : []),
       {
         title: "Philippine Emergency",
         items: [
@@ -131,7 +211,7 @@ export default function HotlinesScreen({
         ],
       },
     ],
-    []
+    [customHotlines]
   );
 
   const filteredSections = useMemo(() => {
@@ -158,8 +238,21 @@ export default function HotlinesScreen({
       <View style={[styles.page, { backgroundColor: TC.screenBg }]}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.title, { color: TC.textDark }]}>Hotlines</Text>
-          <Text style={[styles.subtitle, { color: TC.muted }]}>Quick-dial emergency and local contacts</Text>
+          <View style={styles.headerRow}>
+            <View style={styles.headerCopy}>
+              <Text style={[styles.title, { color: TC.textDark }]}>Hotlines</Text>
+              <Text style={[styles.subtitle, { color: TC.muted }]}>Quick-dial emergency and local contacts</Text>
+            </View>
+            <Pressable
+              onPress={() => setShowAddModal(true)}
+              style={({ pressed }) => [styles.addButton, { backgroundColor: TC.primary }, pressed && { opacity: 0.85 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Add emergency contact"
+            >
+              <Ionicons name="add" size={scale(20)} color="#FFFFFF" />
+              <Text style={styles.addButtonText}>Add</Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* Search row */}
@@ -213,6 +306,18 @@ export default function HotlinesScreen({
                     <Ionicons name="call" size={callIconSize} color={TC.primary} />
                     <Text style={[styles.callText, { color: TC.primary }]}>Call</Text>
                   </Pressable>
+
+                  {h.custom ? (
+                    <Pressable
+                      onPress={() => removeCustomHotline(h)}
+                      style={({ pressed }) => [styles.deleteButton, pressed && { opacity: 0.6 }]}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete ${h.label}`}
+                    >
+                      <Ionicons name="trash-outline" size={scale(19)} color="#DC2626" />
+                    </Pressable>
+                  ) : null}
                 </View>
               ))}
             </View>
@@ -227,6 +332,48 @@ export default function HotlinesScreen({
             </View>
           )}
         </ScrollView>
+
+        <Modal visible={showAddModal} transparent animationType="fade" onRequestClose={closeAddModal}>
+          <KeyboardAvoidingView
+            style={styles.modalBackdrop}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+          >
+            <Pressable style={StyleSheet.absoluteFill} onPress={closeAddModal} />
+            <View style={[styles.modalCard, { backgroundColor: TC.surface }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: TC.textDark }]}>Add emergency contact</Text>
+                <Pressable onPress={closeAddModal} hitSlop={10}>
+                  <Ionicons name="close" size={scale(24)} color={TC.muted} />
+                </Pressable>
+              </View>
+              <Text style={[styles.inputLabel, { color: TC.muted }]}>Contact name</Text>
+              <TextInput
+                value={contactLabel}
+                onChangeText={setContactLabel}
+                placeholder="e.g. Mom, Barangay Office"
+                placeholderTextColor={TC.placeholder}
+                style={[styles.modalInput, { color: TC.textDark, borderColor: TC.divider }]}
+                maxLength={50}
+              />
+              <Text style={[styles.inputLabel, { color: TC.muted }]}>Phone number</Text>
+              <TextInput
+                value={contactNumber}
+                onChangeText={setContactNumber}
+                placeholder="e.g. 09171234567"
+                placeholderTextColor={TC.placeholder}
+                style={[styles.modalInput, { color: TC.textDark, borderColor: TC.divider }]}
+                keyboardType="phone-pad"
+                maxLength={24}
+              />
+              <Pressable
+                onPress={addCustomHotline}
+                style={({ pressed }) => [styles.saveButton, { backgroundColor: TC.primary }, pressed && { opacity: 0.85 }]}
+              >
+                <Text style={styles.saveButtonText}>Save contact</Text>
+              </Pressable>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
 
         {/* Bottom nav */}
         <BottomNavBar
@@ -262,6 +409,27 @@ function makeStyles(
       paddingHorizontal: scale(16),
       paddingTop: vscale(8),
       paddingBottom: vscale(6),
+    },
+    headerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: scale(12),
+    },
+    headerCopy: { flex: 1 },
+    addButton: {
+      height: scale(38),
+      paddingHorizontal: scale(13),
+      borderRadius: scale(12),
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: scale(4),
+    },
+    addButtonText: {
+      color: "#FFFFFF",
+      fontSize: scale(13),
+      fontWeight: "800",
     },
     title: {
       fontSize: scale(28),
@@ -392,6 +560,65 @@ function makeStyles(
       fontWeight: "900",
       color: Colors.primary,
       letterSpacing: 0.2,
+    },
+    deleteButton: {
+      width: scale(30),
+      height: scale(36),
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    modalBackdrop: {
+      flex: 1,
+      justifyContent: "center",
+      paddingHorizontal: scale(20),
+      backgroundColor: "rgba(3, 20, 35, 0.48)",
+    },
+    modalCard: {
+      borderRadius: scale(18),
+      paddingHorizontal: scale(18),
+      paddingVertical: vscale(18),
+      elevation: 8,
+      shadowColor: "#000000",
+      shadowOpacity: 0.18,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 8 },
+    },
+    modalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: vscale(16),
+    },
+    modalTitle: {
+      flex: 1,
+      fontSize: scale(19),
+      fontWeight: "900",
+    },
+    inputLabel: {
+      marginBottom: vscale(6),
+      fontSize: scale(12),
+      fontWeight: "700",
+    },
+    modalInput: {
+      height: vscale(46),
+      borderWidth: 1,
+      borderRadius: scale(12),
+      paddingHorizontal: scale(13),
+      marginBottom: vscale(14),
+      fontSize: scale(15),
+    },
+    saveButton: {
+      height: vscale(46),
+      borderRadius: scale(12),
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: vscale(2),
+    },
+    saveButtonText: {
+      color: "#FFFFFF",
+      fontSize: scale(14),
+      fontWeight: "900",
     },
 
     emptyWrap: {

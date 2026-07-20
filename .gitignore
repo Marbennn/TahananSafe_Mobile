@@ -69,6 +69,7 @@ dist/
 
 # ✅ SECURITY: Firebase config contains API keys
 google-services.json
+!android/app/google-services.json
 GoogleService-Info.plist
 
 # OS

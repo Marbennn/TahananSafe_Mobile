@@ -183,6 +183,32 @@ function parseDateSmart(input?: string): Date | null {
   return d;
 }
 
+function getIncidentTimestamp(doc: any): number {
+  const incidentDate = parseDateSmart(String(doc?.dateStr ?? ""));
+
+  if (incidentDate) {
+    const time = String(doc?.timeStr ?? "").trim();
+    const match = time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+
+    if (match) {
+      let hours = Number(match[1]);
+      const minutes = Number(match[2]);
+      const meridiem = match[3]?.toUpperCase();
+
+      if (meridiem === "AM") hours = hours === 12 ? 0 : hours;
+      if (meridiem === "PM") hours = hours === 12 ? 12 : hours + 12;
+
+      if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+        incidentDate.setHours(hours, minutes, 0, 0);
+      }
+    }
+
+    return incidentDate.getTime();
+  }
+
+  return parseDateSmart(String(doc?.createdAt ?? ""))?.getTime() ?? 0;
+}
+
 function normalizePhoto(p: any): string {
   if (!p) return "";
   if (typeof p === "string") return p;
@@ -503,9 +529,7 @@ export default function HomeScreen({
       const rawList = Array.isArray(json) ? json : json?.incidents ?? [];
       const topReportsRaw = [...rawList]
         .sort((a: any, b: any) => {
-          const ta = new Date(String(a?.createdAt ?? 0)).getTime();
-          const tb = new Date(String(b?.createdAt ?? 0)).getTime();
-          return (tb || 0) - (ta || 0);
+          return getIncidentTimestamp(b) - getIncidentTimestamp(a);
         })
         .slice(0, 2);
 

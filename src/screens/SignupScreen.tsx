@@ -76,11 +76,10 @@ function hasNumber(p: string) {
 // Explicit, comprehensive list — covers all printable non-alphanumeric ASCII
 // plus common extras: . > / { } [ ] @ # $ % ^ & * ( ) _ + = - ! ? , ; : ' " \ | ~ `
 function hasSpecialChar(p: string) {
-  return /[^A-Za-z0-9\s]/.test(p);
+  return /[^A-Za-z0-9]/.test(p);
 }
 function getPasswordError(p: string) {
-  // spaces are removed in the input, but keep this safe anyway
-  const pass = p.replace(/\s/g, "").trim();
+  const pass = p;
   if (pass.length === 0) return null;
 
   if (pass.length < 8) return "Password must be at least 8 characters.";
@@ -127,8 +126,8 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
   const passwordError = useMemo(() => getPasswordError(password), [password]);
 
   const confirmError = useMemo(() => {
-    const p = password.replace(/\s/g, "").trim();
-    const c = confirmPassword.replace(/\s/g, "").trim();
+    const p = password;
+    const c = confirmPassword;
 
     if (c.length === 0) return null;
     if (p.length === 0) return null;
@@ -139,8 +138,8 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
 
   const canContinue = useMemo(() => {
     const e = email.replace(/\s/g, "").trim();
-    const p = password.replace(/\s/g, "").trim();
-    const c = confirmPassword.replace(/\s/g, "").trim();
+    const p = password;
+    const c = confirmPassword;
 
     return (
       e.length > 0 &&
@@ -155,7 +154,7 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
 
   const handleContinue = async () => {
     const e = email.replace(/\s/g, "").trim();
-    const p = password.replace(/\s/g, "").trim();
+    const p = password;
 
     log("[SIGNUP] handleContinue()", {
       email: e,
@@ -197,7 +196,7 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
 
   const handleResend = async () => {
     const e = email.replace(/\s/g, "").trim();
-    const p = password.replace(/\s/g, "").trim();
+    const p = password;
 
     log("[RESEND] handleResend()", { email: e, passwordLen: p.length });
 

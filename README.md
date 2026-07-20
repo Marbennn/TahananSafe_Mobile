@@ -2,6 +2,11 @@
 
 A React Native mobile application built with Expo for reporting and managing domestic safety incidents. Features include incident logging with AI analysis, real-time push notifications, biometric authentication, PIN security, emergency hotlines, and blockchain-backed report integrity.
 
+
+## Build Apk command
+
+npx eas-cli build --platform android --profile preview
+
 ## Prerequisites
 
 - **Node.js** >= 18.x (recommended: v24+)

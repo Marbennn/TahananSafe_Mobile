@@ -706,7 +706,7 @@ export default function ReportDetailScreen({
   }, [reportId]);
 
   const hasMessageNotification = newMsgCount > 0;
-  const hasMessageIndicator = hasMessageNotification || adminTyping || sending;
+  const hasMessageIndicator = hasMessageNotification || adminTyping;
   useEffect(() => {
     if (!hasMessageIndicator) {
       messageDotAnims.forEach((dot) => dot.setValue(0));
@@ -2397,7 +2397,7 @@ export default function ReportDetailScreen({
                     </Pressable>
                   </View>
                 ) : null}
-                {adminTyping || sending ? (
+                {adminTyping ? (
                   <View style={styles.typingIndicatorWrap} pointerEvents="none">
                     <View style={styles.typingIndicatorBubble}>
                       <View style={styles.typingIndicatorDots}>
@@ -2465,7 +2465,7 @@ export default function ReportDetailScreen({
                       <ActivityIndicator color="#FFFFFF" />
                     ) : (
                       <Ionicons
-                        name={editingMessage ? "checkmark" : "arrow-forward"}
+                        name={editingMessage ? "checkmark" : "paper-plane"}
                         size={styles._sendIcon}
                         color="#FFFFFF"
                       />
@@ -3972,7 +3972,7 @@ function makeStyles(args: {
         width: scale(36),
         height: scale(36),
         borderRadius: scale(18),
-        backgroundColor: "#000000",
+        backgroundColor: "#32AFE6",
         alignItems: "center",
         justifyContent: "center",
       },

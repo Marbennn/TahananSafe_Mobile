@@ -627,41 +627,6 @@ export default function IncidentLogScreen({
     });
   };
 
-  const pickFromGallery = async () => {
-    if (submitting || aiLoading) return;
-
-    if (!canAddMorePhotos()) {
-      Alert.alert("Max reached", `You can only add up to ${MAX_PHOTOS} photos.`);
-      return;
-    }
-
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    log("MediaLibrary permission result", perm);
-
-    if (perm.status !== "granted") {
-      Alert.alert("Permission needed", "Please allow photo access so you can upload images.");
-      return;
-    }
-
-    const remaining = MAX_PHOTOS - photos.length;
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      quality: 0.8,
-      allowsMultipleSelection: true,
-      selectionLimit: remaining,
-    });
-
-    log("ImagePicker gallery canceled", result.canceled);
-    if (result.canceled) return;
-
-    const newUris = (result.assets ?? []).map((a) => a.uri).filter(Boolean);
-    log("Picked gallery photo URIs count", newUris.length);
-
-    mergeAndLimitPhotos(newUris);
-  };
-
   const takePhoto = async () => {
     if (submitting || aiLoading) return;
 
@@ -691,26 +656,6 @@ export default function IncidentLogScreen({
     if (!uri) return;
 
     mergeAndLimitPhotos([uri]);
-  };
-
-  const onAddPhoto = async () => {
-    try {
-      if (submitting || aiLoading) return;
-
-      if (!canAddMorePhotos()) {
-        Alert.alert("Max reached", `You can only add up to ${MAX_PHOTOS} photos.`);
-        return;
-      }
-
-      Alert.alert("Add Photo", "Choose a source:", [
-        { text: "Take a Picture", onPress: () => void takePhoto() },
-        { text: "Upload from Gallery", onPress: () => void pickFromGallery() },
-        { text: "Cancel", style: "cancel" },
-      ]);
-    } catch (e) {
-      log("onAddPhoto ERROR", e);
-      Alert.alert("Error", "Could not open photo options. Please try again.");
-    }
   };
 
   const removePhotoAt = (index: number) => {
@@ -744,37 +689,6 @@ export default function IncidentLogScreen({
     });
   };
 
-  const pickVideoFromGallery = async () => {
-    if (submitting || aiLoading) return;
-
-    if (!canAddMoreVideos()) {
-      Alert.alert("Max reached", `You can only add up to ${MAX_VIDEOS} video.`);
-      return;
-    }
-
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (perm.status !== "granted") {
-      Alert.alert("Permission needed", "Please allow video access so you can upload evidence.");
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["videos"],
-      allowsEditing: false,
-      allowsMultipleSelection: false,
-      videoMaxDuration: 60,
-      quality: 0.7,
-    });
-
-    if (result.canceled) return;
-
-    const asset = result.assets?.[0];
-    if (!isVideoWithinSizeLimit(asset)) return;
-
-    const uri = asset?.uri;
-    if (uri) addVideoUris([uri]);
-  };
-
   const recordVideo = async () => {
     if (submitting || aiLoading) return;
 
@@ -805,23 +719,151 @@ export default function IncidentLogScreen({
     if (uri) addVideoUris([uri]);
   };
 
-  const onAddVideo = async () => {
+  const getAttachmentType = (
+    asset: ImagePicker.ImagePickerAsset
+  ): "image" | "video" | null => {
+    const assetType = String(asset.type || "").toLowerCase();
+    const mimeType = String(asset.mimeType || "").toLowerCase();
+    const sourceName = `${asset.fileName || ""} ${asset.uri || ""}`.toLowerCase();
+
+    if (
+      assetType.includes("video") ||
+      mimeType.startsWith("video/") ||
+      /\.(mp4|mov|m4v|3gp|webm|mkv|avi)(?:\?|$)/i.test(sourceName)
+    ) {
+      return "video";
+    }
+
+    if (
+      assetType === "image" ||
+      assetType === "livephoto" ||
+      mimeType.startsWith("image/") ||
+      /\.(jpe?g|png|gif|webp|bmp|heic|heif|dng)(?:\?|$)/i.test(sourceName)
+    ) {
+      return "image";
+    }
+
+    return null;
+  };
+
+  const pickAttachmentsFromGallery = async () => {
+    if (submitting || aiLoading) return;
+
+    const remainingPhotoSlots = MAX_PHOTOS - photos.length;
+    const remainingVideoSlots = MAX_VIDEOS - videos.length;
+    const remainingAttachmentSlots = remainingPhotoSlots + remainingVideoSlots;
+
+    if (remainingAttachmentSlots <= 0) {
+      Alert.alert(
+        "Max reached",
+        `You can only add up to ${MAX_PHOTOS} images and ${MAX_VIDEOS} video.`
+      );
+      return;
+    }
+
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    log("MediaLibrary permission result", perm);
+
+    if (perm.status !== "granted") {
+      Alert.alert(
+        "Permission needed",
+        "Please allow photo and video access so you can upload attachments."
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images", "videos"],
+      allowsEditing: false,
+      quality: 0.8,
+      allowsMultipleSelection: remainingAttachmentSlots > 1,
+      selectionLimit: remainingAttachmentSlots,
+      videoMaxDuration: 60,
+    });
+
+    if (result.canceled) return;
+
+    const newPhotoUris: string[] = [];
+    const newVideoUris: string[] = [];
+    let availablePhotoSlots = remainingPhotoSlots;
+    let availableVideoSlots = remainingVideoSlots;
+    let skippedForLimit = false;
+    let skippedUnsupported = false;
+
+    for (const asset of result.assets ?? []) {
+      const uri = asset.uri;
+      if (!uri) continue;
+
+      const attachmentType = getAttachmentType(asset);
+      if (!attachmentType) {
+        skippedUnsupported = true;
+        continue;
+      }
+
+      if (attachmentType === "video") {
+        if (videos.includes(uri) || newVideoUris.includes(uri)) continue;
+        if (availableVideoSlots <= 0) {
+          skippedForLimit = true;
+          continue;
+        }
+        if (!isVideoWithinSizeLimit(asset)) continue;
+
+        newVideoUris.push(uri);
+        availableVideoSlots -= 1;
+        continue;
+      }
+
+      if (photos.includes(uri) || newPhotoUris.includes(uri)) continue;
+      if (availablePhotoSlots <= 0) {
+        skippedForLimit = true;
+        continue;
+      }
+
+      newPhotoUris.push(uri);
+      availablePhotoSlots -= 1;
+    }
+
+    mergeAndLimitPhotos(newPhotoUris);
+    addVideoUris(newVideoUris);
+
+    if (skippedUnsupported) {
+      Alert.alert("Unsupported attachment", "Only images and videos can be attached.");
+    } else if (skippedForLimit) {
+      Alert.alert(
+        "Attachment limit",
+        `Some files were not added. You can attach up to ${MAX_PHOTOS} images and ${MAX_VIDEOS} video.`
+      );
+    }
+  };
+
+  const showCameraAttachmentOptions = () => {
+    Alert.alert("Use Camera", "Choose an attachment type:", [
+      { text: "Take Photo", onPress: () => void takePhoto() },
+      { text: "Record Video", onPress: () => void recordVideo() },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const onAddAttachment = async () => {
     try {
       if (submitting || aiLoading) return;
 
-      if (!canAddMoreVideos()) {
-        Alert.alert("Max reached", `You can only add up to ${MAX_VIDEOS} video.`);
+      if (!canAddMorePhotos() && !canAddMoreVideos()) {
+        Alert.alert(
+          "Max reached",
+          `You can only add up to ${MAX_PHOTOS} images and ${MAX_VIDEOS} video.`
+        );
         return;
       }
 
-      Alert.alert("Add Video", "Choose a source:", [
-        { text: "Record Video", onPress: () => void recordVideo() },
-        { text: "Upload from Gallery", onPress: () => void pickVideoFromGallery() },
+      Alert.alert("Add Attachment", "Choose a source:", [
+        { text: "Use Camera", onPress: showCameraAttachmentOptions },
+        { text: "Upload from Gallery", onPress: () => void pickAttachmentsFromGallery() },
         { text: "Cancel", style: "cancel" },
       ]);
     } catch (e) {
-      log("onAddVideo ERROR", e);
-      Alert.alert("Error", "Could not open video options. Please try again.");
+      log("onAddAttachment ERROR", e);
+      Alert.alert("Error", "Could not open attachment options. Please try again.");
     }
   };
 
@@ -1128,20 +1170,11 @@ export default function IncidentLogScreen({
             <View style={styles.evidenceRow}>
               <Pressable
                 disabled={submitting || aiLoading}
-                onPress={onAddPhoto}
+                onPress={onAddAttachment}
                 style={({ pressed }) => [styles.evidenceTile, pressed && { opacity: 0.8 }]}
               >
-                <Ionicons name="image-outline" size={24} color="#344052" />
-                <Text style={styles.evidenceText} allowFontScaling={false}>Add Photo</Text>
-              </Pressable>
-
-              <Pressable
-                disabled={submitting || aiLoading}
-                onPress={onAddVideo}
-                style={({ pressed }) => [styles.evidenceTile, pressed && { opacity: 0.8 }]}
-              >
-                <Ionicons name="videocam-outline" size={25} color="#344052" />
-                <Text style={styles.evidenceText} allowFontScaling={false}>Add Video</Text>
+                <Ionicons name="attach-outline" size={25} color="#344052" />
+                <Text style={styles.evidenceText} allowFontScaling={false}>Add Attachment</Text>
               </Pressable>
             </View>
 

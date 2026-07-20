@@ -68,7 +68,7 @@ export default function SignupCard({
   confirmError,
 }: Props) {
   const TC = useColors();
-  const confirmTyped = confirmPassword.trim().length > 0;
+  const confirmTyped = confirmPassword.length > 0;
 
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
@@ -110,12 +110,14 @@ export default function SignupCard({
           <View style={styles.inputWrap}>
             <TextInput
               value={password}
-              onChangeText={(t) => setPassword(removeSpaces(t))}
+              onChangeText={setPassword}
               placeholder="********"
               placeholderTextColor={Colors.placeholder}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
               autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
               maxLength={16}
               style={[styles.input, { paddingRight: scale(44) }, passwordFocused && { borderColor: "#1D4ED8" }]}
               onFocus={() => setPasswordFocused(true)}
@@ -138,12 +140,14 @@ export default function SignupCard({
           <View style={styles.inputWrap}>
             <TextInput
               value={confirmPassword}
-              onChangeText={(t) => setConfirmPassword(removeSpaces(t))}
+              onChangeText={setConfirmPassword}
               placeholder="********"
               placeholderTextColor={Colors.placeholder}
               secureTextEntry={!showConfirm}
               autoCapitalize="none"
               autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
               maxLength={16}
               style={[styles.input, { paddingRight: scale(44) }, confirmFocused && { borderColor: "#1D4ED8" }]}
               onFocus={() => setConfirmFocused(true)}
