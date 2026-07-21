@@ -5,8 +5,11 @@ import {
   StyleSheet,
   Text,
   View,
+  ScrollView,
+  useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type TutorialOption = {
   key: string;
@@ -24,12 +27,16 @@ type Props = {
 };
 
 export default function TutorialPickerModal({ visible, onClose, options }: Props) {
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const maxCardHeight = Math.max(height - insets.top - insets.bottom - 32, 1);
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
-        <View style={styles.card}>
+        <View style={[styles.card, { maxHeight: maxCardHeight }]}>
           <View style={styles.header}>
             <View>
               <Text style={styles.title}>Tutorials</Text>
@@ -41,7 +48,11 @@ export default function TutorialPickerModal({ visible, onClose, options }: Props
             </Pressable>
           </View>
 
-          <View style={styles.optionList}>
+          <ScrollView
+            contentContainerStyle={styles.optionList}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
             {options.map((option) => (
               <Pressable
                 key={option.key}
@@ -60,7 +71,7 @@ export default function TutorialPickerModal({ visible, onClose, options }: Props
                 <Ionicons name="chevron-forward" size={18} color="#1A3C6E" />
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
         </View>
       </View>
     </Modal>

@@ -64,6 +64,7 @@ export default function IncidentPreviewCard({ data }: Props) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [expandedUri, setExpandedUri] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(false);
+  const contentWidth = Math.min(Math.max(screenWidth - 34, 0), 680);
 
   const photos = Array.isArray(data.photos) ? data.photos.filter(Boolean).slice(0, 3) : [];
   const videos = Array.isArray(data.videos) ? data.videos.filter(Boolean).slice(0, 1) : [];
@@ -79,8 +80,8 @@ export default function IncidentPreviewCard({ data }: Props) {
   }, [data.latitude, data.longitude]);
 
   const thumbSize = useMemo(
-    () => Math.round(clamp((screenWidth - 150) / 3, 70, 82)),
-    [screenWidth]
+    () => Math.round(clamp((contentWidth - 70) / 3, 64, 190)),
+    [contentWidth]
   );
 
   const evidenceSlots = useMemo(() => {
@@ -271,6 +272,9 @@ const TEXT_MUTED = "#818181";
 
 const styles = StyleSheet.create({
   infoCard: {
+    width: "100%",
+    maxWidth: 680,
+    alignSelf: "center",
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: BORDER,
@@ -280,6 +284,9 @@ const styles = StyleSheet.create({
     paddingBottom: 46,
   },
   evidenceCard: {
+    width: "100%",
+    maxWidth: 680,
+    alignSelf: "center",
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: BORDER,
@@ -399,7 +406,9 @@ const styles = StyleSheet.create({
   evidenceRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
+    flexWrap: "wrap",
+    gap: 12,
   },
   thumbBox: {
     borderWidth: 1,

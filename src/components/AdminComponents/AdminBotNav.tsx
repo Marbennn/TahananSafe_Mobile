@@ -63,6 +63,7 @@ export default function AdminBotNav({
   const TC = useColors();
   const { width } = useWindowDimensions();
   const { s } = useMemo(() => makeScale(width), [width]);
+  const compact = width < 340;
 
   const EXTRA_BAR_HEIGHT = useMemo(
     () => clamp(Math.round(12 * s), 10, 18),
@@ -70,13 +71,16 @@ export default function AdminBotNav({
   );
 
   const iconSize = useMemo(() => clamp(Math.round(22 * s), 19, 26), [s]);
-  const labelFont = useMemo(() => clamp(Math.round(10 * s), 9, 12), [s]);
+  const labelFont = useMemo(
+    () => clamp(Math.round(10 * s), compact ? 8 : 9, 12),
+    [s, compact]
+  );
   const labelMarginTop = useMemo(() => clamp(Math.round(3 * s), 2, 4), [s]);
 
   const navPaddingTop = useMemo(() => clamp(Math.round(12 * s), 10, 16), [s]);
   const navPaddingHorizontal = useMemo(
-    () => clamp(Math.round(8 * s), 6, 14),
-    [s]
+    () => clamp(Math.round(8 * s), compact ? 3 : 6, 14),
+    [s, compact]
   );
   const itemPaddingBottom = useMemo(
     () => clamp(Math.round(12 * s), 10, 16),
@@ -146,11 +150,19 @@ export default function AdminBotNav({
           paddingBottom,
           backgroundColor: NAV_BG,
           borderTopWidth: 0,
-          flexDirection: "row",
           alignItems: "flex-end",
+          justifyContent: "center",
           paddingTop: navPaddingTop + EXTRA_BAR_HEIGHT * 0.25,
           paddingHorizontal: navPaddingHorizontal,
           zIndex: 1,
+        },
+
+        itemsRow: {
+          width: "100%",
+          maxWidth: 840,
+          flexDirection: "row",
+          alignItems: "flex-end",
+          alignSelf: "center",
         },
 
         item: {
@@ -192,6 +204,7 @@ export default function AdminBotNav({
 
   return (
     <View style={[styles.navWrap, { backgroundColor: TC.surface }]}>
+      <View style={styles.itemsRow}>
       <NavItem
         icon="home-outline"
         activeIcon="home"
@@ -281,6 +294,7 @@ export default function AdminBotNav({
         scaleAnim={tabScalesRef.current.Settings}
         pressInScale={pressInScale}
       />
+      </View>
     </View>
   );
 }

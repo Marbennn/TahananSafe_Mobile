@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
   ActivityIndicator,
   Alert,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -42,8 +43,8 @@ export default function VerifyPinScreen({ expectedPin, onContinue, onSkip }: Pro
   const TC = useColors();
   const { width, height } = useWindowDimensions();
 
-  const s = clamp(width / 375, 0.95, 1.45);
-  const vs = clamp(height / 812, 0.95, 1.25);
+  const s = clamp(Math.min(width, 480) / 375, 0.84, 1.12);
+  const vs = clamp(height / 812, 0.76, 1.08);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
@@ -159,7 +160,11 @@ export default function VerifyPinScreen({ expectedPin, onContinue, onSkip }: Pro
           onContinue(savedPin);
         }}
       />
-      <View style={styles.container}>
+      <ScrollView
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.container}
+      >
         <View style={styles.topSection}>
           <View style={styles.iconWrap}>
             <LinearGradient
@@ -174,7 +179,7 @@ export default function VerifyPinScreen({ expectedPin, onContinue, onSkip }: Pro
 
           <Text style={[styles.screenTitle, { color: TC.textDark }]}>Verify Your Pin</Text>
           <Text style={[styles.screenSub, { color: TC.muted }]}>
-            Verify your PIN to protect your access and keep{"\n"}your information private.
+            Verify your PIN to protect your access and keep your information private.
           </Text>
 
           <View style={styles.dotsCard}>
@@ -269,7 +274,7 @@ export default function VerifyPinScreen({ expectedPin, onContinue, onSkip }: Pro
             <Text style={styles.skipText}>Skip</Text>
           </Pressable>
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -309,13 +314,14 @@ function createStyles(
   width: number,
   height: number
 ) {
+  const contentWidth = Math.min(width, 480);
   const hPad = scale(24);
-  const keyGap = scale(16);
+  const keyGap = clamp(scale(16), 10, 18);
 
-  const availW = width - hPad * 2;
+  const availW = contentWidth - hPad * 2;
   const keySizeW = Math.floor((availW - keyGap * 2) / 3);
-  const keySizeH = Math.floor((height * 0.44 - keyGap * 3) / 4);
-  const keySize = clamp(Math.min(keySizeW, keySizeH), 64, 80);
+  const keySizeH = Math.floor((height * 0.38 - keyGap * 3) / 4);
+  const keySize = clamp(Math.min(keySizeW, keySizeH), 48, 80);
   const fixedGridW = keySize * 3 + keyGap * 2;
 
   const dotSize = clamp(scale(22), 18, 28);
@@ -324,13 +330,18 @@ function createStyles(
     safe: { flex: 1, backgroundColor: "#FFFFFF" },
 
     container: {
-      flex: 1,
+      flexGrow: 1,
+      width: "100%",
+      maxWidth: 480,
+      alignSelf: "center",
       paddingHorizontal: hPad,
       paddingTop: vscale(6),
+      paddingBottom: vscale(8),
     },
 
     topSection: {
-      flex: 1,
+      flexGrow: 1,
+      minHeight: vscale(190),
       justifyContent: "center",
       alignItems: "center",
     },
@@ -367,6 +378,7 @@ function createStyles(
     },
 
     screenSub: {
+      maxWidth: scale(320),
       fontSize: scale(13),
       lineHeight: scale(20),
       color: "#6B7280",
@@ -473,7 +485,7 @@ function createStyles(
     },
 
     ctaGradient: {
-      height: vscale(52),
+      minHeight: Math.max(46, vscale(52)),
       alignItems: "center",
       justifyContent: "center",
     },

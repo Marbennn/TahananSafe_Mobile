@@ -19,7 +19,7 @@ import {
   Keyboard,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import * as Device from "expo-device";
@@ -317,28 +317,30 @@ export default function SettingsScreen({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
-  // ===== Responsive scaling helpers =====
-  const wScale = Math.min(Math.max(width / 375, 0.9), 1.25);
-  const hScale = Math.min(Math.max(height / 812, 0.9), 1.2);
+  const compactHeight = height < 500;
+  const designWidth = Math.min(width, compactHeight ? 390 : 430);
+  const wScale = Math.min(Math.max(designWidth / 375, 0.9), 1.12);
+  const hScale = Math.min(Math.max(height / 812, 0.9), compactHeight ? 1 : 1.12);
 
   const scale = (n: number) => Math.round(n * wScale);
   const vscale = (n: number) => Math.round(n * hScale);
+  const compactScale = (n: number) => Math.min(scale(n), vscale(n));
 
-  // icon sizes (numbers kept OUTSIDE styles)
-  const iconSize = scale(20);
-  const smallIcon = scale(16);
+  const iconSize = compactScale(20);
+  const smallIcon = compactScale(16);
 
   const { mode: themeMode, isDark, setMode: setThemeMode } = useTheme();
 
-  const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
+  const styles = useMemo(() => makeStyles(scale, vscale, compactScale, compactHeight), [width, height]);
   const C = Colors as any;
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
-  const NAV_BASE_HEIGHT = 78;
-  const FAB_SIZE = 68;
+  const NAV_BASE_HEIGHT = compactHeight ? 66 : 78;
+  const FAB_SIZE = compactHeight ? 60 : 68;
   const bottomPad = Math.max(insets.bottom, 10);
   const navHeight = NAV_BASE_HEIGHT + bottomPad;
-  const chevronBottom = navHeight + 90;
-  const fabBottom = navHeight - FAB_SIZE / 2 - 10;
+  const chevronBottom = navHeight + (compactHeight ? 70 : 90);
+  const fabBottom = navHeight - FAB_SIZE / 2 - (compactHeight ? 6 : 10);
+  const settingsBottomClearance = navHeight + FAB_SIZE / 2 + vscale(compactHeight ? 20 : 28);
 
 
 
@@ -348,7 +350,7 @@ export default function SettingsScreen({
 
 
 
-  const screenBg = isDark ? "#0F172A" : "#F6F9FC";
+  const screenBg = isDark ? "#0F172A" : (C.screenBg ?? "#F5FAFE");
   const surface = isDark ? "#1E293B" : (C.surface ?? C.card ?? "#FFFFFF");
   const textDark = isDark ? "#F1F5F9" : "#0F172A";
   const muted = isDark ? "#94A3B8" : (C.mutedText ?? C.muted ?? "#64748B");
@@ -1166,7 +1168,7 @@ export default function SettingsScreen({
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: screenBg }]} edges={["top"]}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
 
       {/* ✅ Account Modal */}
       <Modal visible={accountModalVisible} transparent animationType="fade" onRequestClose={closeAccountModal}>
@@ -1302,7 +1304,7 @@ export default function SettingsScreen({
                   onPress={closeSessionsModal}
                   style={({ pressed }) => [
                     styles.profileActionBtn,
-                    { backgroundColor: "#F3F4F6" },
+                    { backgroundColor: isDark ? "#334155" : "#F3F4F6" },
                     pressed && { opacity: 0.8 },
                   ]}
                 >
@@ -1332,7 +1334,7 @@ export default function SettingsScreen({
           <Pressable style={StyleSheet.absoluteFill} onPress={closeProfileModal} />
           <KeyboardAvoidingView
             style={styles.profileModalKeyboard}
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
             keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
           >
             <View style={[styles.profileModalSheet, { backgroundColor: surface, borderColor: divider }]}>
@@ -1483,7 +1485,7 @@ export default function SettingsScreen({
                       disabled={profileSaving}
                       style={({ pressed }) => [
                         styles.profileActionBtn,
-                        { backgroundColor: "#F3F4F6" },
+                        { backgroundColor: isDark ? "#334155" : "#F3F4F6" },
                         pressed && !profileSaving && { opacity: 0.8 },
                       ]}
                     >
@@ -2009,19 +2011,9 @@ export default function SettingsScreen({
       <View style={[styles.page, { backgroundColor: screenBg }]}>
         <View style={styles.headerWrap}>
           <View style={styles.headerTopRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.title, { color: textDark }]}>Settings</Text>
-              <Text style={[styles.subtitle, { color: muted }]}>Manage account, security, and app preferences</Text>
-            </View>
+            <Text style={[styles.title, { color: isDark ? textDark : (C.heading ?? "#374151") }]}>Settings</Text>
           </View>
-        </View>
 
-        <ScrollView
-          contentContainerStyle={[styles.settingsContent, { paddingBottom: navHeight + vscale(28) }]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          bounces
-        >
           <View style={styles.settingsSearchRow}>
             <View style={[styles.settingsSearchBox, { backgroundColor: surface, borderColor: divider }]}>
               <Ionicons name="search-outline" size={smallIcon} color={muted} />
@@ -2029,12 +2021,20 @@ export default function SettingsScreen({
                 value={settingsSearch}
                 onChangeText={setSettingsSearch}
                 placeholder="Search"
-                placeholderTextColor="#A0A8B3"
+                placeholderTextColor={muted}
                 style={[styles.settingsSearchInput, { color: textDark }]}
+                autoCorrect={false}
+                autoCapitalize="none"
+                returnKeyType="search"
               />
               {!!settingsSearch && (
-                <Pressable onPress={() => setSettingsSearch("")} hitSlop={8}>
-                  <Ionicons name="close-circle" size={smallIcon} color={muted} />
+                <Pressable
+                  onPress={() => setSettingsSearch("")}
+                  style={({ pressed }) => [styles.settingsSearchClear, pressed && { opacity: 0.65 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear settings search"
+                >
+                  <Ionicons name="close" size={smallIcon} color={muted} />
                 </Pressable>
               )}
             </View>
@@ -2044,13 +2044,25 @@ export default function SettingsScreen({
               style={({ pressed }) => [
                 styles.settingsFilterButton,
                 { backgroundColor: surface, borderColor: divider },
-                pressed && { opacity: 0.75 },
+                pressed && { opacity: 0.75, transform: [{ scale: 0.97 }] },
               ]}
+              accessibilityRole="button"
+              accessibilityLabel="Open personalization settings"
             >
-              <Ionicons name="options-outline" size={scale(22)} color={muted} />
+              <Ionicons name="options-outline" size={compactScale(21)} color={muted} />
             </Pressable>
           </View>
+        </View>
 
+        <ScrollView
+          contentContainerStyle={[styles.settingsContent, { paddingBottom: settingsBottomClearance }]}
+          scrollIndicatorInsets={{ bottom: settingsBottomClearance }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+          bounces
+        >
           {!hasSettingsResult ? (
             <View style={[styles.settingsEmptyCard, { backgroundColor: surface, borderColor: divider }]}>
               <Ionicons name="search-outline" size={iconSize} color={muted} />
@@ -2086,7 +2098,7 @@ export default function SettingsScreen({
 
               <View style={{ flex: 1 }}>
                 <Text style={[styles.settingsProfileName, { color: textDark }]}>{settingsProfileName}</Text>
-                <Text style={[styles.settingsProfileMeta, { color: muted }]}>{settingsBarangay} - Verified</Text>
+                <Text style={[styles.settingsProfileMeta, { color: muted }]}>{settingsBarangay} • Verified</Text>
               </View>
 
               <Ionicons name="chevron-forward" size={iconSize} color={muted} />
@@ -2098,7 +2110,7 @@ export default function SettingsScreen({
               <Text style={[styles.settingsSectionLabel, { color: muted }]}>ACCOUNT</Text>
               <View style={[styles.settingsCard, { backgroundColor: surface, borderColor: divider }]}>
                 {showPersonalInfo ? (
-                  <Pressable onPress={openProfileModal} style={styles.settingsRow}>
+                  <Pressable onPress={openProfileModal} style={[styles.settingsRow, styles.settingsRowDetailed]}>
                     <View style={styles.settingsRowLeft}>
                       <Ionicons name="person-outline" size={smallIcon} color={muted} style={styles.settingsRowIcon} />
                       <View style={{ flex: 1 }}>
@@ -2113,7 +2125,7 @@ export default function SettingsScreen({
                 {showPersonalInfo && showCitizenship ? <View style={[styles.settingsDivider, { backgroundColor: divider }]} /> : null}
 
                 {showCitizenship ? (
-                  <Pressable onPress={openCitizenshipDetails} style={styles.settingsRow}>
+                  <Pressable onPress={openCitizenshipDetails} style={[styles.settingsRow, styles.settingsRowDetailed]}>
                     <View style={styles.settingsRowLeft}>
                       <Ionicons name="id-card-outline" size={smallIcon} color={muted} style={styles.settingsRowIcon} />
                       <View style={{ flex: 1 }}>
@@ -2167,7 +2179,7 @@ export default function SettingsScreen({
                 ) : null}
 
                 {showLocationServices ? (
-                  <View style={styles.settingsRow}>
+                  <View style={[styles.settingsRow, styles.settingsRowCompact]}>
                     <Text style={[styles.settingsRowTitle, { color: textDark }]}>Location Services</Text>
                     <Switch
                       value={locationServicesEnabled}
@@ -2183,7 +2195,7 @@ export default function SettingsScreen({
                 ) : null}
 
                 {showPrivacyPolicy ? (
-                  <Pressable onPress={openPrivacyPolicy} style={styles.settingsRow}>
+                  <Pressable onPress={openPrivacyPolicy} style={[styles.settingsRow, styles.settingsRowCompact]}>
                     <Text style={[styles.settingsRowTitle, { color: textDark }]}>Privacy Policy</Text>
                     <Ionicons name="open-outline" size={smallIcon} color={muted} />
                   </Pressable>
@@ -2216,8 +2228,13 @@ export default function SettingsScreen({
                 {showEmergencyAlerts ? (
                   <View style={styles.settingsRow}>
                     <View style={styles.settingsRowLeft}>
-                      <Ionicons name="warning-outline" size={smallIcon} color="#EF4444" style={styles.settingsRowIcon} />
-                      <Text style={[styles.settingsRowTitle, { color: textDark }]}>Emergency Alerts</Text>
+                      <MaterialCommunityIcons
+                        name="alert-rhombus-outline"
+                        size={smallIcon}
+                        color="#EF4444"
+                        style={styles.settingsRowIcon}
+                      />
+                      <Text style={[styles.settingsRowTitle, { color: textDark, fontWeight: "700" }]}>Emergency Alerts</Text>
                     </View>
                     <Switch
                       value={emergencyAlertsEnabled}
@@ -2258,7 +2275,7 @@ export default function SettingsScreen({
                       pressed && { opacity: 0.78 },
                     ]}
                   >
-                    <Ionicons name="help-circle-outline" size={smallIcon} color={textDark} />
+                    <Ionicons name="documents-outline" size={smallIcon} color={textDark} />
                     <Text style={[styles.settingsHelpText, { color: textDark }]}>FAQs</Text>
                   </Pressable>
                 ) : null}
@@ -2301,9 +2318,12 @@ export default function SettingsScreen({
                   value={feedbackText}
                   onChangeText={setFeedbackText}
                   placeholder="Any suggestions for us?"
-                  placeholderTextColor="#8B93A1"
+                  placeholderTextColor={muted}
                   multiline
-                  style={[styles.settingsFeedbackInput, { color: textDark, borderColor: divider }]}
+                  style={[
+                    styles.settingsFeedbackInput,
+                    { color: textDark, borderColor: divider, backgroundColor: isDark ? "#0F172A" : "#F1F3F6" },
+                  ]}
                   textAlignVertical="top"
                 />
 
@@ -2333,8 +2353,16 @@ export default function SettingsScreen({
 
         {/* ✅ PIN setup modal (unchanged) */}
         <Modal visible={pinModalVisible} transparent animationType="fade" onRequestClose={closePinSetup}>
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalCard, { backgroundColor: surface, borderColor: divider }]}>
+          <KeyboardAvoidingView
+            style={styles.modalOverlay}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+          >
+            <ScrollView
+              style={[styles.modalCard, { backgroundColor: surface, borderColor: divider }]}
+              contentContainerStyle={styles.modalCardContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               <View style={styles.modalHeader}>
                 <View style={styles.modalHeaderLeft}>
                   <View style={[styles.modalBadge, { backgroundColor: chipBg }]}>
@@ -2419,8 +2447,8 @@ export default function SettingsScreen({
                   <Text style={[styles.modalFootText, { color: muted }]}>Account: {userEmail}</Text>
                 </View>
               )}
-            </View>
-          </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
         </Modal>
 
         <BottomNavBar
@@ -2495,33 +2523,36 @@ function SettingRow({
   );
 }
 
-function makeStyles(scale: (n: number) => number, vscale: (n: number) => number) {
-  const CARD_R = scale(18);
+function makeStyles(
+  scale: (n: number) => number,
+  vscale: (n: number) => number,
+  compactScale: (n: number) => number,
+  compactHeight: boolean
+) {
+  const CARD_R = compactScale(14);
+  const SEARCH_CONTROL_SIZE = compactScale(40);
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: BG },
     page: { flex: 1, backgroundColor: BG },
     settingsContent: {
+      width: "100%",
+      maxWidth: 720,
+      alignSelf: "center",
       paddingHorizontal: scale(18),
-      paddingTop: vscale(2),
+      paddingTop: vscale(6),
       gap: vscale(10),
-    },
-    settingsTitle: {
-      fontSize: scale(22),
-      fontWeight: "800",
-      lineHeight: scale(28),
-      marginBottom: vscale(6),
     },
     settingsSearchRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: scale(8),
-      marginBottom: vscale(4),
+      gap: scale(9),
     },
     settingsSearchBox: {
       flex: 1,
-      minHeight: vscale(36),
-      borderRadius: scale(18),
+      minWidth: 0,
+      height: SEARCH_CONTROL_SIZE,
+      borderRadius: SEARCH_CONTROL_SIZE / 2,
       borderWidth: 1,
       paddingHorizontal: scale(14),
       flexDirection: "row",
@@ -2530,21 +2561,34 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
     settingsSearchInput: {
       flex: 1,
+      minWidth: 0,
       paddingVertical: 0,
       fontSize: scale(14),
       fontWeight: "400",
     },
-    settingsFilterButton: {
-      width: vscale(38),
-      height: vscale(38),
-      borderRadius: vscale(19),
-      borderWidth: 1,
+    settingsSearchClear: {
+      width: compactScale(28),
+      height: compactScale(28),
+      borderRadius: compactScale(14),
       alignItems: "center",
       justifyContent: "center",
     },
+    settingsFilterButton: {
+      width: SEARCH_CONTROL_SIZE,
+      height: SEARCH_CONTROL_SIZE,
+      borderRadius: SEARCH_CONTROL_SIZE / 2,
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: "#64748B",
+      shadowOpacity: 0.13,
+      shadowRadius: scale(5),
+      shadowOffset: { width: 0, height: vscale(2) },
+      elevation: 2,
+    },
     settingsEmptyCard: {
       minHeight: vscale(74),
-      borderRadius: scale(10),
+      borderRadius: compactScale(13),
       borderWidth: 1,
       alignItems: "center",
       justifyContent: "center",
@@ -2555,23 +2599,23 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       fontWeight: "600",
     },
     settingsProfileCard: {
-      minHeight: vscale(78),
-      borderRadius: scale(10),
+      minHeight: vscale(88),
+      borderRadius: compactScale(12),
       borderWidth: 1,
       paddingHorizontal: scale(14),
-      paddingVertical: vscale(12),
+      paddingVertical: vscale(14),
       flexDirection: "row",
       alignItems: "center",
       gap: scale(12),
-      shadowColor: "#0F172A",
-      shadowOpacity: 0.08,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 2,
+      shadowColor: "transparent",
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 0,
     },
     settingsAvatarWrap: {
-      width: scale(54),
-      height: scale(54),
+      width: compactScale(52),
+      height: compactScale(52),
       borderRadius: scale(14),
       position: "relative",
       justifyContent: "center",
@@ -2600,9 +2644,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       position: "absolute",
       right: -scale(4),
       bottom: scale(5),
-      width: scale(18),
-      height: scale(24),
-      borderRadius: scale(9),
+      width: compactScale(18),
+      height: compactScale(18),
+      borderRadius: compactScale(9),
       backgroundColor: "#18A999",
       borderWidth: 2,
       borderColor: "#FFFFFF",
@@ -2611,7 +2655,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
     settingsProfileName: {
       fontSize: scale(16),
-      fontWeight: "800",
+      fontWeight: "600",
       lineHeight: scale(21),
     },
     settingsProfileMeta: {
@@ -2624,27 +2668,35 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       marginTop: vscale(2),
       marginLeft: scale(4),
       fontSize: scale(11),
-      fontWeight: "900",
+      fontWeight: "500",
       lineHeight: scale(15),
+      letterSpacing: 0.7,
     },
     settingsCard: {
-      borderRadius: scale(10),
+      borderRadius: compactScale(12),
       borderWidth: 1,
       overflow: "hidden",
-      shadowColor: "#0F172A",
-      shadowOpacity: 0.05,
-      shadowRadius: 7,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 1,
+      shadowColor: "transparent",
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 0,
     },
     settingsRow: {
-      minHeight: vscale(64),
+      minHeight: vscale(56),
       paddingHorizontal: scale(14),
       paddingVertical: vscale(10),
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
       gap: scale(12),
+    },
+    settingsRowDetailed: {
+      minHeight: vscale(78),
+    },
+    settingsRowCompact: {
+      minHeight: vscale(46),
+      paddingVertical: vscale(8),
     },
     settingsRowLeft: {
       flex: 1,
@@ -2659,27 +2711,29 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     settingsRowTitle: {
       flexShrink: 1,
       fontSize: scale(14),
-      fontWeight: "700",
+      fontWeight: "500",
       lineHeight: scale(19),
     },
     settingsRowSubtitle: {
       marginTop: vscale(2),
       fontSize: scale(13),
-      fontWeight: "500",
+      fontWeight: "400",
       lineHeight: scale(17),
     },
     settingsDivider: {
       height: StyleSheet.hairlineWidth,
-      marginLeft: scale(50),
+      marginLeft: 0,
     },
     settingsHelpGrid: {
       flexDirection: "row",
-      gap: scale(10),
+      flexWrap: "wrap",
+      gap: scale(14),
     },
     settingsHelpButton: {
       flex: 1,
+      minWidth: scale(130),
       minHeight: vscale(46),
-      borderRadius: scale(8),
+      borderRadius: compactScale(12),
       borderWidth: 1,
       paddingHorizontal: scale(12),
       flexDirection: "row",
@@ -2689,15 +2743,17 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
     settingsHelpText: {
       fontSize: scale(13),
-      fontWeight: "700",
+      fontWeight: "500",
       lineHeight: scale(18),
     },
     settingsAiCard: {
-      borderRadius: scale(8),
+      minHeight: vscale(98),
+      borderRadius: compactScale(12),
       backgroundColor: "#111827",
       paddingHorizontal: scale(14),
       paddingVertical: vscale(14),
       gap: vscale(8),
+      justifyContent: "center",
     },
     settingsAiHeader: {
       flexDirection: "row",
@@ -2706,30 +2762,32 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
     settingsAiTitle: {
       color: "#E5F4FF",
-      fontSize: scale(14),
-      fontWeight: "800",
+      fontSize: scale(15),
+      fontWeight: "600",
       lineHeight: scale(19),
     },
     settingsAiBody: {
       color: "#B9C5D3",
       fontSize: scale(11),
-      fontWeight: "700",
+      fontWeight: "400",
       lineHeight: scale(16),
     },
     settingsFeedbackCard: {
-      borderRadius: scale(10),
+      minHeight: vscale(210),
+      borderRadius: compactScale(12),
       borderWidth: 1,
-      paddingHorizontal: scale(12),
-      paddingVertical: vscale(12),
-      gap: vscale(10),
-      shadowColor: "#0F172A",
-      shadowOpacity: 0.05,
-      shadowRadius: 7,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 1,
+      paddingHorizontal: scale(14),
+      paddingVertical: vscale(16),
+      gap: vscale(16),
+      shadowColor: "transparent",
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 0,
     },
     settingsFeedbackHeader: {
       flexDirection: "row",
+      flexWrap: "wrap",
       alignItems: "center",
       justifyContent: "space-between",
       gap: scale(8),
@@ -2737,7 +2795,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     settingsFeedbackTitle: {
       flex: 1,
       fontSize: scale(14),
-      fontWeight: "700",
+      fontWeight: "500",
       lineHeight: scale(18),
     },
     settingsStars: {
@@ -2746,19 +2804,19 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       gap: scale(3),
     },
     settingsFeedbackInput: {
-      minHeight: vscale(68),
+      minHeight: vscale(76),
       borderWidth: 1,
-      borderRadius: scale(7),
+      borderRadius: compactScale(10),
       backgroundColor: "#F1F3F6",
       paddingHorizontal: scale(12),
       paddingVertical: vscale(10),
       fontSize: scale(13),
-      fontWeight: "500",
+      fontWeight: "400",
       lineHeight: scale(18),
     },
     settingsFeedbackButton: {
       minHeight: vscale(44),
-      borderRadius: scale(6),
+      borderRadius: compactScale(8),
       backgroundColor: "#000000",
       alignItems: "center",
       justifyContent: "center",
@@ -2767,12 +2825,12 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     settingsFeedbackButtonText: {
       color: "#FFFFFF",
       fontSize: scale(14),
-      fontWeight: "800",
+      fontWeight: "600",
       lineHeight: scale(18),
     },
     settingsSignOutButton: {
       minHeight: vscale(48),
-      borderRadius: scale(8),
+      borderRadius: compactScale(11),
       borderWidth: 1,
       borderColor: "#F3A8A8",
       flexDirection: "row",
@@ -2780,17 +2838,21 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       justifyContent: "center",
       gap: scale(8),
       marginTop: vscale(4),
+      marginHorizontal: scale(4),
     },
     settingsSignOutText: {
       color: "#EF4444",
       fontSize: scale(14),
-      fontWeight: "800",
+      fontWeight: "500",
       lineHeight: scale(18),
     },
     headerWrap: {
-      paddingHorizontal: scale(16),
-      paddingTop: vscale(8),
-      paddingBottom: vscale(10),
+      width: "100%",
+      maxWidth: 720,
+      alignSelf: "center",
+      paddingHorizontal: scale(18),
+      paddingTop: vscale(compactHeight ? 10 : 18),
+      paddingBottom: vscale(compactHeight ? 7 : 10),
       zIndex: 30,
     },
     headerTopRow: {
@@ -2798,16 +2860,11 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       alignItems: "flex-start",
       justifyContent: "space-between",
       gap: scale(10),
+      paddingHorizontal: scale(6),
+      marginBottom: vscale(compactHeight ? 12 : 16),
     },
     // ✅ CHANGED: from scale(30) -> scale(28) to match Hotlines + Reports
-    title: { fontSize: scale(28), fontWeight: "900" },
-
-    subtitle: {
-      marginTop: vscale(4),
-      fontSize: scale(12),
-      fontWeight: "400",
-      lineHeight: scale(16),
-    },
+    title: { fontSize: scale(28), fontWeight: "700", letterSpacing: -0.2 },
 
     content: {
       paddingHorizontal: scale(16),
@@ -2915,14 +2972,17 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     modalCard: {
       width: "100%",
       maxWidth: 480,
+      maxHeight: "92%",
       borderRadius: scale(24),
       borderWidth: 1,
-      padding: scale(18),
       shadowColor: "#020F20",
       shadowOpacity: 0.2,
       shadowRadius: 20,
       shadowOffset: { width: 0, height: 10 },
       elevation: 12,
+    },
+    modalCardContent: {
+      padding: scale(18),
     },
     modalHeader: {
       flexDirection: "row",

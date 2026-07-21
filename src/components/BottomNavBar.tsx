@@ -12,8 +12,10 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import Svg, { Path } from "react-native-svg";
 
 import { Colors, useColors } from "../theme/colors";
+import { closeAndRemoveFromRecents } from "../utils/hideApp";
 import QuickActions from "./HomeScreen/QuickActions";
 
 export type TabKey =
@@ -97,62 +99,135 @@ export default function BottomNavBar({
   const iconSize = useMemo(() => clamp(Math.round(22 * s), 19, 26), [s]);
   const labelFont = useMemo(() => clamp(Math.round(10 * s), 9, 12), [s]);
   const labelMarginTop = useMemo(() => clamp(Math.round(3 * s), 2, 4), [s]);
+  const centerLabelDrop = useMemo(
+    () => clamp(Math.round(4 * s), 3, 5),
+    [s]
+  );
 
   const navPaddingTop = useMemo(() => clamp(Math.round(12 * s), 10, 16), [s]);
   const navPaddingHorizontal = useMemo(
     () => clamp(Math.round(8 * s), 6, 14),
     [s]
   );
+  const navSideRadius = useMemo(
+    () => clamp(Math.round(18 * s), 16, 22),
+    [s]
+  );
   const itemPaddingBottom = useMemo(
     () => clamp(Math.round(12 * s), 10, 16),
     [s]
   );
+  const navTopLowering = useMemo(
+    () => clamp(Math.round(12 * s), 10, 14),
+    [s]
+  );
 
   const effectiveNavHeight = useMemo(
-    () => navHeight + EXTRA_BAR_HEIGHT,
-    [navHeight, EXTRA_BAR_HEIGHT]
+    () => navHeight + EXTRA_BAR_HEIGHT - navTopLowering,
+    [navHeight, EXTRA_BAR_HEIGHT, navTopLowering]
   );
-  const centerFabBottom = useMemo(
+  const baseCenterFabBottom = useMemo(
     () => fabBottom ?? navHeight - fabSize / 2 - 10,
     [fabBottom, fabSize, navHeight]
   );
+  const fabCradleLift = useMemo(
+    () => clamp(Math.round(5 * s), 4, 6),
+    [s]
+  );
+  const centerFabBottom = baseCenterFabBottom + fabCradleLift;
   const centerFabIconSize = useMemo(
     () => clamp(Math.round(30 * s), 26, 34),
     [s]
   );
-  const quickActionsFs = useMemo(() => clamp(s * 1.06, 0.95, 1.3), [s]);
+  const hasCenterFab = Boolean(centerLabel || onFabPress);
+  const fabCenterYWithinBar =
+    effectiveNavHeight - (centerFabBottom + fabSize / 2);
+  const fabBottomWithinBar = fabCenterYWithinBar + fabSize / 2;
+  const cradleHalfWidth =
+    fabSize / 2 + clamp(Math.round(28 * s), 24, 32);
+  const cradleShoulderWidth = clamp(Math.round(24 * s), 20, 28);
+  const minimumCradleDepth = Math.max(
+    0,
+    Math.round(
+      fabBottomWithinBar + clamp(Math.round(9 * s), 8, 11)
+    )
+  );
+  const maximumCradleDepth = Math.max(
+    minimumCradleDepth,
+    effectiveNavHeight -
+      (paddingBottom + itemPaddingBottom + labelFont + labelMarginTop + 6)
+  );
+  const cradleDepth = clamp(
+    Math.round(
+      fabBottomWithinBar + clamp(Math.round(12 * s), 10, 14)
+    ),
+    minimumCradleDepth,
+    maximumCradleDepth
+  );
+  const cradleCenterX = width / 2;
+  const cradleStartX = cradleCenterX - cradleHalfWidth;
+  const cradleEndX = cradleCenterX + cradleHalfWidth;
+  const cradleShoulderDepth = cradleDepth * 0.34;
+  const cradleLeftSideX = cradleStartX + cradleShoulderWidth;
+  const cradleRightSideX = cradleEndX - cradleShoulderWidth;
+  const quarterEllipseKappa = 0.5522847498;
+  const cradleBottomControlX =
+    (cradleCenterX - cradleLeftSideX) * quarterEllipseKappa;
+  const cradleBottomControlY =
+    (cradleDepth - cradleShoulderDepth) * quarterEllipseKappa;
+  const cradlePath = [
+    `M 0 ${navSideRadius}`,
+    `Q 0 0 ${navSideRadius} 0`,
+    `H ${cradleStartX}`,
+    `C ${cradleStartX + cradleShoulderWidth * 0.55} 0 ${
+      cradleLeftSideX
+    } ${cradleDepth * 0.08} ${cradleLeftSideX} ${cradleShoulderDepth}`,
+    `C ${cradleLeftSideX} ${
+      cradleShoulderDepth + cradleBottomControlY
+    } ${cradleCenterX - cradleBottomControlX} ${cradleDepth} ${
+      cradleCenterX
+    } ${cradleDepth}`,
+    `C ${cradleCenterX + cradleBottomControlX} ${cradleDepth} ${
+      cradleRightSideX
+    } ${cradleShoulderDepth + cradleBottomControlY} ${cradleRightSideX} ${
+      cradleShoulderDepth
+    }`,
+    `C ${cradleRightSideX} ${cradleDepth * 0.08} ${
+      cradleEndX - cradleShoulderWidth * 0.55
+    } 0 ${cradleEndX} 0`,
+    `H ${width - navSideRadius}`,
+    `Q ${width} 0 ${width} ${navSideRadius}`,
+    `V ${effectiveNavHeight}`,
+    `H 0`,
+    `Z`,
+  ].join(" ");
 
   const toggleQuickActions = useCallback(() => {
     if (quickActionsOpen) {
+      quickActionsAnim.stopAnimation();
       Animated.timing(quickActionsAnim, {
         toValue: 0,
-        duration: 180,
+        duration: 200,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
-      }).start(() => setQuickActionsOpen(false));
+      }).start(({ finished }) => {
+        if (finished) setQuickActionsOpen(false);
+      });
       return;
     }
 
+    quickActionsAnim.stopAnimation();
     setQuickActionsOpen(true);
-    Animated.sequence([
-      Animated.timing(quickActionsAnim, {
-        toValue: 0.92,
-        duration: 400,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.spring(quickActionsAnim, {
-        toValue: 1,
-        useNativeDriver: true,
-        friction: 7,
-        tension: 150,
-      }),
-    ]).start();
+    Animated.spring(quickActionsAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      stiffness: 190,
+      damping: 20,
+      mass: 0.85,
+      restDisplacementThreshold: 0.001,
+      restSpeedThreshold: 0.001,
+    }).start();
   }, [quickActionsAnim, quickActionsOpen]);
-  const fabArchSize = useMemo(
-    () => clamp(Math.round(fabSize + 34 * s), fabSize + 28, fabSize + 44),
-    [fabSize, s]
-  );
-
   /* ===================== TAB CLICK ANIMATIONS ===================== */
   const tabScalesRef = useRef<Record<TabKey, Animated.Value>>({
     Home: new Animated.Value(1),
@@ -215,14 +290,25 @@ export default function BottomNavBar({
           right: 0,
           bottom: 0,
           height: effectiveNavHeight,
-          paddingBottom,
-          backgroundColor: NAV_BG,
+          backgroundColor: hasCenterFab ? "transparent" : navBg,
           borderTopWidth: 0,
+          borderTopLeftRadius: navSideRadius,
+          borderTopRightRadius: navSideRadius,
+          zIndex: 1,
+        },
+
+        navContent: {
+          ...StyleSheet.absoluteFillObject,
+          paddingBottom,
           flexDirection: "row",
           alignItems: "flex-end",
           paddingTop: navPaddingTop + EXTRA_BAR_HEIGHT * 0.25,
           paddingHorizontal: navPaddingHorizontal,
-          zIndex: 1,
+          zIndex: 2,
+        },
+
+        navBackground: {
+          ...StyleSheet.absoluteFillObject,
         },
 
         item: {
@@ -271,23 +357,6 @@ export default function BottomNavBar({
           }),
         },
 
-        centerFabArchClip: {
-          position: "absolute",
-          bottom: fabSize / 2,
-          width: fabArchSize,
-          height: fabArchSize / 2,
-          overflow: "hidden",
-          alignItems: "center",
-          zIndex: 1,
-        },
-
-        centerFabArch: {
-          width: fabArchSize,
-          height: fabArchSize,
-          borderRadius: fabArchSize / 2,
-          backgroundColor: navBg,
-        },
-
         label: {
           marginTop: labelMarginTop,
           fontSize: labelFont,
@@ -304,6 +373,7 @@ export default function BottomNavBar({
           fontSize: labelFont,
           fontWeight: "600",
           includeFontPadding: false,
+          transform: [{ translateY: centerLabelDrop }],
         },
       }),
     [
@@ -311,12 +381,13 @@ export default function BottomNavBar({
       paddingBottom,
       navPaddingTop,
       navPaddingHorizontal,
+      navSideRadius,
       itemPaddingBottom,
       labelMarginTop,
       labelFont,
+      centerLabelDrop,
       EXTRA_BAR_HEIGHT,
-      fabArchSize,
-      fabSize,
+      hasCenterFab,
       navBg,
     ]
   );
@@ -335,7 +406,21 @@ export default function BottomNavBar({
         </View>
       ) : null}
 
-      <View style={[styles.navWrap, { backgroundColor: navBg }]}>
+      <View style={styles.navWrap}>
+        {hasCenterFab ? (
+          <Svg
+            pointerEvents="none"
+            style={styles.navBackground}
+            width="100%"
+            height="100%"
+            viewBox={`0 0 ${width} ${effectiveNavHeight}`}
+            preserveAspectRatio="none"
+          >
+            <Path d={cradlePath} fill={navBg} />
+          </Svg>
+        ) : null}
+
+        <View style={styles.navContent}>
         <NavItem
           icon="home-outline"
           activeIcon="home"
@@ -417,34 +502,25 @@ export default function BottomNavBar({
           activeColor={activePrimary}
           inactiveColor={inactive}
         />
+        </View>
       </View>
-
-      {onFabPress && fabQuickActions && quickActionsOpen ? (
-        <Animated.View
-          pointerEvents="box-none"
-          style={[StyleSheet.absoluteFillObject, { zIndex: 10, opacity: quickActionsAnim }]}
-        >
-          <Pressable
-            style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.22)" }]}
-            onPress={toggleQuickActions}
-          />
-        </Animated.View>
-      ) : null}
 
       {onFabPress && fabQuickActions ? (
         <QuickActions
           isOpen={quickActionsOpen}
           animation={quickActionsAnim}
           navHeight={navHeight}
+          navPaddingBottom={paddingBottom}
           fabBottom={centerFabBottom}
           fabSize={fabSize}
-          s={s}
-          fs={quickActionsFs}
           onToggle={toggleQuickActions}
+          onFabLongPress={onFabLongPress}
           onIncidentLog={onFabPress}
           onSos={() => onTabPress("Home")}
           onServices={() => onTabPress("Home")}
-          onHideApp={() => onQuickExit?.()}
+          onHideApp={() => {
+            void closeAndRemoveFromRecents();
+          }}
           onSignOut={() => onQuickExit?.()}
         />
       ) : onFabPress ? (
@@ -452,10 +528,6 @@ export default function BottomNavBar({
           style={[styles.centerFabWrap, { bottom: centerFabBottom }]}
           pointerEvents="box-none"
         >
-          <View pointerEvents="none" style={styles.centerFabArchClip}>
-            <View style={styles.centerFabArch} />
-          </View>
-
           <Pressable
             onPress={onFabPress}
             onLongPress={onFabLongPress}

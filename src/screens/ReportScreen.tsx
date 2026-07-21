@@ -12,13 +12,12 @@ import {
   Platform,
   Animated,
   TextInput,
-  SectionList,
-  SectionListData,
+  FlatList,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
 
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { Colors, useColors } from "../theme/colors";
@@ -71,6 +70,16 @@ const CARD = "#FFFFFF";
 
 // ✅ IMPORTANT: force this to be a normal string (fixes TS literal type error)
 const PRIMARY: string = String((Colors as any).primary ?? "#1E63D0");
+
+const REPORT_SCREEN_STATUS_COLORS: Record<ReportStatus, { backgroundColor: string; textColor: string }> = {
+  SUBMITTED: { backgroundColor: "#AFCDF8", textColor: "#40536B" },
+  UNDER_REVIEW: { backgroundColor: "#FDE7A6", textColor: "#72551C" },
+  MEDIATION_SCHEDULED: { backgroundColor: "#DDC7F7", textColor: "#7652C8" },
+  ONGOING_ASSISTANCE: { backgroundColor: "#F8BB96", textColor: "#4B5563" },
+  RESOLVED: { backgroundColor: "#C7F2D8", textColor: "#18723A" },
+  CERTIFICATION_ISSUED: { backgroundColor: "#F2B0B6", textColor: "#70414C" },
+  ARCHIVED: { backgroundColor: "#DDE2E8", textColor: "#4B5563" },
+};
 
 // ---------------------------
 // Helpers
@@ -201,6 +210,7 @@ function ReportCard({
   TC: ReturnType<typeof useColors>;
 }) {
   const status = getReportStatusMeta(item.status);
+  const statusColors = REPORT_SCREEN_STATUS_COLORS[normalizeReportStatus(item.status)];
   const cardDate = parseDateSmart(item.dateLeft) ? formatGroupDate(parseDateSmart(item.dateLeft)!) : item.dateLeft || "-";
   const dateLine = `${cardDate}${item.timeLeft && item.timeLeft !== "—" && item.timeLeft !== "-" ? ` • ${item.timeLeft}` : ""}`;
 
@@ -212,8 +222,8 @@ function ReportCard({
             REP {item.alertNo || `#${item.id.slice(-6).toUpperCase()}`}
           </Text>
 
-          <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
-            <Text style={[styles.statusPillText, { color: status.color }]} numberOfLines={1}>{status.shortLabel}</Text>
+          <View style={[styles.statusPill, { backgroundColor: statusColors.backgroundColor }]}>
+            <Text style={[styles.statusPillText, { color: statusColors.textColor }]} numberOfLines={1}>{status.shortLabel}</Text>
           </View>
         </View>
 
@@ -240,11 +250,6 @@ function ReportCard({
   );
 }
 
-type ReportSection = {
-  title: string;
-  data: ReportItem[];
-};
-
 export default function ReportScreen({
   onQuickExit,
   onTabChange,
@@ -268,13 +273,15 @@ export default function ReportScreen({
     return String(u?.id ?? u?._id ?? u?.userId ?? u?.email ?? "").trim();
   }, [user]);
 
-  const wScale = Math.min(Math.max(width / 375, 0.9), 1.25);
-  const hScale = Math.min(Math.max(height / 812, 0.9), 1.2);
+  const compactHeight = height < 500;
+  const designWidth = Math.min(width, compactHeight ? 390 : 430);
+  const wScale = Math.min(Math.max(designWidth / 375, 0.9), 1.12);
+  const hScale = Math.min(Math.max(height / 812, 0.9), compactHeight ? 1 : 1.12);
 
   const scale = (n: number) => Math.round(n * wScale);
   const vscale = (n: number) => Math.round(n * hScale);
 
-  const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
+  const styles = useMemo(() => makeStyles(scale, vscale, compactHeight), [width, height]);
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab ?? "Reports");
   const [filter, setFilter] = useState<FilterKey>("Active");
@@ -285,14 +292,14 @@ export default function ReportScreen({
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
 
-  const NAV_BASE_HEIGHT = 78;
-  const FAB_SIZE = 68;
+  const NAV_BASE_HEIGHT = compactHeight ? 66 : 78;
+  const FAB_SIZE = compactHeight ? 60 : 68;
 
   const bottomPad = Math.max(insets.bottom, 10);
   const navHeight = NAV_BASE_HEIGHT + bottomPad;
 
-  const chevronBottom = navHeight + 90;
-  const fabBottom = navHeight - FAB_SIZE / 2 - 10;
+  const chevronBottom = navHeight + (compactHeight ? 70 : 90);
+  const fabBottom = navHeight - FAB_SIZE / 2 - (compactHeight ? 6 : 10);
 
   const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + vscale(64);
 
@@ -498,24 +505,6 @@ export default function ReportScreen({
     });
   }, [items, filter, query]);
 
-  const sections = useMemo<ReportSection[]>(() => {
-    const map = new Map<string, ReportItem[]>();
-    for (const it of filtered) {
-      const key = String(it.groupLabel ?? "").trim() || "—";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(it);
-    }
-
-    const keys = Array.from(map.keys());
-    keys.sort((a, b) => {
-      if (a === "Today" && b !== "Today") return -1;
-      if (b === "Today" && a !== "Today") return 1;
-      return 0;
-    });
-
-    return keys.map((k) => ({ title: k, data: map.get(k)! }));
-  }, [filtered]);
-
   // ✅ Simple list fade/slide when filter changes
   const tabAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -543,34 +532,35 @@ export default function ReportScreen({
     [filter, tabAnim]
   );
 
+  const openFilterMenu = useCallback(() => {
+    Alert.alert("Filter reports", "Choose which reports to display.", [
+      { text: "Active", onPress: () => setFilterAnimated("Active") },
+      { text: "Resolved", onPress: () => setFilterAnimated("Resolved") },
+      { text: "Archived", onPress: () => setFilterAnimated("Archived") },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }, [setFilterAnimated]);
+
   return (
     <View style={[styles.safe, { backgroundColor: TC.screenBg }]}>
       <StatusBar barStyle={TC.statusBar} translucent backgroundColor="transparent" />
 
       <View style={[styles.page, { backgroundColor: TC.screenBg }]}>
-        {/* ===== Gradient header backdrop — extends behind status bar ===== */}
-        <LinearGradient
-          colors={TC.isDark ? [TC.surface, TC.screenBg] : ["#EAF3FF", "#F5FAFE"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.headerBg}
-        />
-
         {/* ===== Top header ===== */}
-        <View style={[styles.headerWrap, { paddingTop: insets.top + vscale(8) }]}>
+        <View style={[styles.headerWrap, { paddingTop: insets.top + vscale(compactHeight ? 10 : 18) }]}>
           <View style={styles.headerTopRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.headerTitle, { color: TC.textDark }]}>Reports</Text>
-              <Text style={[styles.headerSub, { color: TC.muted }]}>Track your incident progress by status</Text>
+              <Text style={[styles.headerTitle, { color: TC.heading }]}>My Reports</Text>
             </View>
           </View>
 
-          <View style={[styles.searchWrap, { borderColor: TC.divider, backgroundColor: TC.isDark ? TC.surface : "#F8FBFF" }]}>
+          <View style={styles.searchRow}>
+            <View style={[styles.searchWrap, { borderColor: TC.divider, backgroundColor: TC.surface }]}>
               <Ionicons name="search-outline" size={styles._iconSize} color={TC.muted} />
               <TextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Search reports…"
+                placeholder="Search"
                 placeholderTextColor={TC.muted}
                 style={[styles.searchInput, { color: TC.textDark }]}
                 autoCorrect={false}
@@ -585,6 +575,20 @@ export default function ReportScreen({
                   <Ionicons name="close" size={styles._iconSize} color={TC.muted} />
                 </Pressable>
               )}
+            </View>
+
+            <Pressable
+              onPress={openFilterMenu}
+              accessibilityRole="button"
+              accessibilityLabel="Filter reports"
+              style={({ pressed }) => [
+                styles.filterButton,
+                { backgroundColor: TC.surface, borderColor: TC.divider },
+                pressed && { opacity: 0.75, transform: [{ scale: 0.97 }] },
+              ]}
+            >
+              <Ionicons name="options-outline" size={styles._filterIcon} color={TC.muted} />
+            </Pressable>
           </View>
 
           <View style={styles.statusWrap}>
@@ -614,21 +618,14 @@ export default function ReportScreen({
           </Animated.View>
         ) : (
           <Animated.View style={[{ flex: 1 }, listAnimStyle]}>
-            <SectionList
-              sections={sections as SectionListData<ReportItem, ReportSection>[]}
+            <FlatList
+              data={filtered}
               keyExtractor={(it) => it.id}
               showsVerticalScrollIndicator={false}
-              stickySectionHeadersEnabled={false}
+              keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+              keyboardShouldPersistTaps="handled"
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
               contentContainerStyle={[styles.listContent, { paddingBottom: CONTENT_BOTTOM_PAD }]}
-              renderSectionHeader={({ section }) => (
-                <View style={styles.sectionHeaderWrap}>
-                  <View style={[styles.sectionPill, { borderColor: TC.divider, backgroundColor: TC.surface }]}>
-                    <Ionicons name="calendar-outline" size={styles._miniIcon} color={TC.muted} />
-                    <Text style={[styles.sectionPillText, { color: TC.muted }]}>{section.title}</Text>
-                  </View>
-                </View>
-              )}
               renderItem={({ item }) => (
                 <ReportCard item={item} onPress={() => onOpenReport?.(item)} styles={styles} TC={TC} />
               )}
@@ -656,52 +653,28 @@ export default function ReportScreen({
   );
 }
 
-function MiniStat({
-  label,
-  value,
-  color,
-  styles,
-}: {
-  label: string;
-  value: number;
-  color: string;
-  styles: ReturnType<typeof makeStyles>;
-}) {
-  return (
-    <View style={styles.miniStat}>
-      <Text style={[styles.miniStatValue, { color }]}>{value}</Text>
-      <Text style={styles.miniStatLabel} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  );
-}
+function makeStyles(scale: (n: number) => number, vscale: (n: number) => number, compactHeight: boolean) {
+  const compactScale = (n: number) => Math.min(scale(n), vscale(n));
+  const CARD_R = compactScale(14);
+  const SEARCH_CONTROL_SIZE = compactScale(40);
+  const SEGMENT_HEIGHT = compactScale(32);
 
-function makeStyles(scale: (n: number) => number, vscale: (n: number) => number) {
-  const CARD_R = scale(14);
-
-  const _iconSize = scale(18);
-  const _miniIcon = scale(14);
-  const _emptyIcon = scale(44);
-  const _chevron = scale(20);
+  const _iconSize = compactScale(18);
+  const _filterIcon = compactScale(21);
+  const _emptyIcon = compactScale(44);
+  const _chevron = compactScale(17);
 
   return Object.assign(
     StyleSheet.create({
       safe: { flex: 1, backgroundColor: BG },
       page: { flex: 1, backgroundColor: BG },
 
-      headerBg: {
-        position: "absolute",
-        top: 0,
-        left: 0,
-        right: 0,
-        height: vscale(220),
-      },
-
       headerWrap: {
-        paddingHorizontal: scale(16),
-        paddingTop: vscale(8),
-        paddingBottom: vscale(10),
+        width: "100%",
+        maxWidth: 720,
+        alignSelf: "center",
+        paddingHorizontal: scale(20),
+        paddingBottom: vscale(compactHeight ? 7 : 10),
       },
 
       // ✅ NO SHADOWS AT ALL (super-flat iOS feel)
@@ -710,113 +683,90 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
         alignItems: "flex-start",
         justifyContent: "space-between",
         gap: scale(10),
-        marginBottom: vscale(10),
+        marginBottom: vscale(compactHeight ? 12 : 16),
       },
 
       headerTitle: {
         fontSize: scale(28),
-        fontWeight: "900",
+        fontWeight: "700",
         color: TEXT_DARK,
         letterSpacing: -0.2,
       },
 
-      headerSub: {
-        marginTop: vscale(4),
-        fontSize: scale(12),
-        fontWeight: "400",
-        color: MUTED,
-        lineHeight: scale(16),
-      },
-
-      headerBadge: {
+      searchRow: {
         flexDirection: "row",
         alignItems: "center",
-        gap: scale(6),
-        borderWidth: 1,
-        borderRadius: scale(999),
-        paddingHorizontal: scale(10),
-        paddingVertical: vscale(6),
-        backgroundColor: "#F3F8FF",
+        gap: scale(9),
       },
-
-      headerBadgeText: {
-        fontSize: scale(11),
-        fontWeight: "900",
-      },
-
-      statsRow: {
-        marginTop: vscale(12),
-        flexDirection: "row",
-        alignItems: "center",
-        borderWidth: 1,
-        borderColor: "#EEF4FF",
-        backgroundColor: "#F7FAFF",
-        borderRadius: scale(16),
-        paddingVertical: vscale(10),
-        paddingHorizontal: scale(10),
-      },
-
-      statDivider: {
-        width: 1,
-        alignSelf: "stretch",
-        backgroundColor: "#E6EEFF",
-        marginHorizontal: scale(10),
-      },
-
-      miniStat: { flex: 1, alignItems: "center", justifyContent: "center" },
-      miniStatValue: { fontSize: scale(16), fontWeight: "900" },
-      miniStatLabel: { marginTop: vscale(2), fontSize: scale(10), fontWeight: "700", color: "#64748B" },
 
       searchWrap: {
-        marginTop: vscale(12),
+        flex: 1,
+        minWidth: 0,
         flexDirection: "row",
         alignItems: "center",
         gap: scale(10),
         borderWidth: 1,
-        borderColor: "#EEF4FF",
-        backgroundColor: "#F8FBFF",
-        borderRadius: scale(16),
-        paddingHorizontal: scale(12),
-        height: vscale(44),
+        borderColor: "#D7DCE2",
+        backgroundColor: "#FFFFFF",
+        borderRadius: scale(999),
+        paddingHorizontal: scale(14),
+        height: SEARCH_CONTROL_SIZE,
+      },
+
+      filterButton: {
+        width: SEARCH_CONTROL_SIZE,
+        height: SEARCH_CONTROL_SIZE,
+        flexShrink: 0,
+        borderRadius: SEARCH_CONTROL_SIZE / 2,
+        borderWidth: 1,
+        borderColor: "#E1E5EA",
+        backgroundColor: "#FFFFFF",
+        alignItems: "center",
+        justifyContent: "center",
+        shadowColor: "#64748B",
+        shadowOpacity: 0.13,
+        shadowRadius: scale(5),
+        shadowOffset: { width: 0, height: vscale(2) },
+        elevation: 2,
       },
 
       statusWrap: {
-        marginTop: vscale(12),
+        marginTop: vscale(compactHeight ? 12 : 16),
       },
 
       searchInput: {
         flex: 1,
-        fontSize: scale(12),
+        minWidth: 0,
+        paddingVertical: 0,
+        fontSize: scale(14),
         color: TEXT_DARK,
         fontWeight: "400",
       },
 
       clearBtn: {
-        width: vscale(30),
-        height: vscale(30),
-        borderRadius: vscale(999),
+        width: compactScale(28),
+        height: compactScale(28),
+        borderRadius: compactScale(14),
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: "#FFFFFF",
-        borderWidth: 1,
-        borderColor: "#EEF4FF",
       },
 
       // Segmented control
       segmentWrap: {
-        marginTop: vscale(12),
         flexDirection: "row",
         alignItems: "center",
-        gap: scale(12),
+        gap: scale(10),
       },
 
       segmentBtn: {
-        minWidth: scale(100),
-        height: vscale(42),
+        flexShrink: 1,
+        minWidth: compactScale(90),
+        height: SEGMENT_HEIGHT,
         borderRadius: scale(999),
         alignItems: "center",
         justifyContent: "center",
-        paddingHorizontal: scale(18),
+        paddingHorizontal: scale(22),
       },
 
       segmentBtnActive: {
@@ -824,12 +774,12 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       },
 
       segmentBtnIdle: {
-        backgroundColor: "#E5E9EF",
+        backgroundColor: "#E2E6EC",
       },
 
       segmentText: {
-        fontSize: scale(14),
-        fontWeight: "800",
+        fontSize: scale(12.5),
+        fontWeight: "700",
       },
 
       segmentTextActive: {
@@ -842,29 +792,12 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
 
       // List
       listContent: {
-        paddingHorizontal: scale(16),
+        width: "100%",
+        maxWidth: 720,
+        alignSelf: "center",
+        paddingHorizontal: scale(14),
         paddingTop: vscale(6),
       },
-
-      sectionHeaderWrap: {
-        paddingTop: vscale(10),
-        paddingBottom: vscale(8),
-      },
-
-      sectionPill: {
-        alignSelf: "flex-start",
-        flexDirection: "row",
-        alignItems: "center",
-        gap: scale(6),
-        borderWidth: 1,
-        borderColor: "#EEF4FF",
-        backgroundColor: "#FFFFFF",
-        paddingHorizontal: scale(10),
-        paddingVertical: vscale(6),
-        borderRadius: vscale(999),
-      },
-
-      sectionPillText: { fontSize: scale(11), fontWeight: "900", color: "#94A3B8" },
 
       // ✅ NO SHADOWS AT ALL
       card: {
@@ -884,78 +817,79 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
         borderRadius: CARD_R,
         overflow: "hidden",
         paddingHorizontal: scale(16),
-        paddingVertical: vscale(12),
+        paddingVertical: vscale(compactHeight ? 10 : 12),
       },
 
       cardMetaRow: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        gap: scale(12),
-        marginBottom: vscale(6),
+        gap: scale(10),
+        marginBottom: vscale(4),
       },
 
       reportNo: {
         flex: 1,
-        fontSize: scale(10),
+        fontSize: scale(9.5),
         fontWeight: "500",
         color: "#9CA3AF",
       },
 
       cardTitle: {
-        fontSize: scale(18),
-        fontWeight: "900",
+        fontSize: scale(16.5),
+        fontWeight: "700",
         color: TEXT_DARK,
-        lineHeight: vscale(22),
+        lineHeight: compactScale(20),
       },
 
       cardDetail: {
-        marginTop: vscale(2),
-        fontSize: scale(14),
+        marginTop: 0,
+        fontSize: scale(13.25),
         fontStyle: "italic",
         fontWeight: "400",
         color: MUTED,
-        lineHeight: vscale(21),
+        lineHeight: compactScale(19.5),
       },
 
       cardBottomRow: {
-        marginTop: vscale(12),
+        marginTop: vscale(8),
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
         gap: scale(10),
-        flexWrap: "wrap",
       },
 
       statusPill: {
         borderRadius: vscale(999),
-        paddingHorizontal: scale(12),
-        paddingVertical: vscale(6),
-        maxWidth: scale(150),
+        paddingHorizontal: scale(9),
+        paddingVertical: vscale(5),
+        maxWidth: scale(145),
       },
 
       statusPillText: {
-        fontSize: scale(11),
-        fontWeight: "800",
+        fontSize: scale(10),
+        fontWeight: "700",
         color: "#374151",
       },
 
       metaText: {
         flex: 1,
-        fontSize: scale(12),
-        fontWeight: "500",
+        minWidth: 0,
+        fontSize: scale(11),
+        fontWeight: "400",
         color: "#9CA3AF",
       },
 
       viewDetailsRow: {
+        flexShrink: 0,
         flexDirection: "row",
         alignItems: "center",
         gap: scale(4),
       },
 
       viewDetailsText: {
-        fontSize: scale(12),
-        fontWeight: "900",
+        fontSize: scale(11.5),
+        fontWeight: "700",
       },
 
       // Center states
@@ -1004,6 +938,6 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
         fontSize: scale(12),
       },
     }),
-    { _iconSize, _miniIcon, _emptyIcon, _chevron }
+    { _iconSize, _filterIcon, _emptyIcon, _chevron }
   ) as any;
 }

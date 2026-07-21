@@ -209,6 +209,7 @@ export default function IncidentLogScreen({
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const s = useMemo(() => clamp(screenWidth / 375, 0.9, 1.2), [screenWidth]);
+  const isCompact = screenWidth < 360;
 
   const [mode, setMode] = useState<Mode>("complain");
   const [incidentType, setIncidentType] = useState<IncidentTypeValue>("Other");
@@ -511,8 +512,7 @@ export default function IncidentLogScreen({
     else await startVoiceInput();
   };
 
-  const FOOTER_H = 72 * s;
-  const CONTENT_BOTTOM_PAD = Math.max(insets.bottom, 10) + FOOTER_H + 16;
+  const CONTENT_BOTTOM_PAD = 16 * s;
 
   const requestAndSetCurrentLocation = async (
     opts?: { silent?: boolean }
@@ -1063,12 +1063,12 @@ export default function IncidentLogScreen({
 
       <KeyboardAvoidingView
         style={styles.page}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
       >
         <View style={styles.statusBand} />
 
-        <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 14) }]}>
+        <View style={styles.topBar}>
           <Pressable
             disabled={submitting || aiLoading}
             onPress={onBack ?? (() => Alert.alert("Back", "Wire onBack() to navigation"))}
@@ -1085,6 +1085,7 @@ export default function IncidentLogScreen({
         <ScrollView
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           contentContainerStyle={[styles.scrollContent, { paddingBottom: CONTENT_BOTTOM_PAD }]}
         >
           <View style={styles.stepHeader}>
@@ -1179,7 +1180,7 @@ export default function IncidentLogScreen({
             </View>
 
             {(photos.length > 0 || videos.length > 0) && (
-              <View style={styles.attachmentWrap}>
+              <View style={[styles.attachmentWrap, isCompact && styles.attachmentWrapCompact]}>
                 {photos.map((uri, idx) => (
                   <Pressable
                     key={`${uri}-${idx}`}
@@ -1372,7 +1373,11 @@ const styles = StyleSheet.create({
   },
 
   topBar: {
+    width: "100%",
+    maxWidth: 720,
+    alignSelf: "center",
     paddingHorizontal: 22,
+    paddingTop: 14,
     paddingBottom: 22,
     flexDirection: "row",
     alignItems: "center",
@@ -1406,9 +1411,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 10,
     gap: 16,
+    alignItems: "center",
   },
 
   card: {
+    width: "100%",
+    maxWidth: 680,
     backgroundColor: CARD_BG,
     borderRadius: 24,
     borderWidth: 1,
@@ -1435,6 +1443,8 @@ const styles = StyleSheet.create({
     color: TEXT_DARK,
   },
   stepHeader: {
+    width: "100%",
+    maxWidth: 680,
     paddingHorizontal: 12,
   },
   stepEyebrow: {
@@ -1703,6 +1713,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 21,
     paddingTop: 14,
   },
+  attachmentWrapCompact: {
+    columnGap: 8,
+    paddingHorizontal: 8,
+  },
   photoPreview: {
     width: "29.8%",
     height: 58,
@@ -1826,6 +1840,8 @@ const styles = StyleSheet.create({
     color: "#52677A",
   },
   cardCompact: {
+    width: "100%",
+    maxWidth: 680,
     backgroundColor: CARD_BG,
     borderRadius: 22,
     borderWidth: 1,
@@ -1900,6 +1916,8 @@ const styles = StyleSheet.create({
     marginTop: -4,
   },
   draftedText: {
+    width: "100%",
+    maxWidth: 680,
     marginTop: -6,
     textAlign: "center",
     fontSize: 14,
@@ -1910,6 +1928,7 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: 29,
     paddingTop: 8,
+    alignItems: "center",
     backgroundColor: BG,
     borderTopWidth: 0,
     borderTopColor: "rgba(227,232,239,0.9)",
@@ -1924,6 +1943,8 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   submitBtn: {
+    width: "100%",
+    maxWidth: 680,
     minHeight: 56,
     borderRadius: 28,
     alignItems: "center",

@@ -39,13 +39,23 @@ export default function IncidentSubmitTutorialOverlay({
   const ringPad = clamp(Math.round(10 * s), 8, 14);
 
   // Highlight frame around the target
-  const frameX = Math.max(8, targetX - ringPad);
+  const frameX = clamp(
+    targetX - ringPad,
+    8,
+    Math.max(screenWidth - 9, 8)
+  );
   const frameY = Math.max(8, targetY - ringPad);
-  const frameW = Math.min(screenWidth - 16, targetW + ringPad * 2);
+  const frameW = Math.max(
+    1,
+    Math.min(screenWidth - frameX - 8, targetW + ringPad * 2)
+  );
   const frameH = targetH + ringPad * 2;
 
   const arrowSize = clamp(Math.round(28 * s), 24, 32);
-  const tooltipMaxW = clamp(Math.round(screenWidth * 0.84), 270, 360);
+  const tooltipMaxW = Math.min(
+    clamp(Math.round(screenWidth * 0.84), 270, 360),
+    Math.max(screenWidth - 24, 1)
+  );
 
   // Tooltip position (prefer above if there's space)
   const preferAbove = frameY > 140;

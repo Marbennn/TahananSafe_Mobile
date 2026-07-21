@@ -46,8 +46,8 @@ export default function LoginCard({
   const { width, height } = useWindowDimensions();
 
   // ✅ Responsive scaling (same logic as Signup)
-  const s = clamp(width / 375, 0.95, 1.45);
-  const vs = clamp(height / 812, 0.95, 1.25);
+  const s = clamp(Math.min(width, 480) / 375, 0.84, 1.12);
+  const vs = clamp(height / 812, 0.78, 1.08);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
@@ -80,8 +80,7 @@ export default function LoginCard({
       {/* HEADER */}
       <Text style={[styles.title, { color: TC.text }]}>Login</Text>
       <Text style={[styles.subtitle, { color: TC.muted }]}>
-        Welcome back! Log in to securely access your{"\n"}
-        account and continue using the app.
+        Welcome back! Log in to securely access your account and continue using the app.
       </Text>
 
       {/* Email */}
@@ -255,7 +254,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     inputWrap: { position: "relative" },
 
     input: {
-      height: vscale(50),
+      minHeight: Math.max(44, vscale(50)),
       borderRadius: scale(14),
       paddingHorizontal: scale(14),
       borderWidth: 1,
@@ -269,7 +268,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       position: "absolute",
       right: scale(10),
       top: 0,
-      height: vscale(50),
+      minHeight: Math.max(44, vscale(50)),
       width: scale(34),
       alignItems: "center",
       justifyContent: "center",
@@ -279,12 +278,15 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
+      flexWrap: "wrap",
+      gap: scale(10),
       marginBottom: vscale(18),
     },
 
     rememberWrap: {
       flexDirection: "row",
       alignItems: "center",
+      flexShrink: 1,
       gap: scale(8),
     },
 
@@ -316,7 +318,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
 
     /* ✅ BUTTON STYLES (MATCH SIGNUP) */
     bioAutofillBtn: {
-      minHeight: vscale(44),
+      minHeight: Math.max(44, vscale(44)),
       borderRadius: scale(14),
       borderWidth: 1,
       flexDirection: "row",
@@ -328,6 +330,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     bioAutofillText: {
+      flexShrink: 1,
+      textAlign: "center",
       fontSize: scale(12),
       fontWeight: "800",
     },
@@ -352,7 +356,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     ctaGradient: {
-      height: vscale(52),
+      minHeight: Math.max(46, vscale(52)),
       alignItems: "center",
       justifyContent: "center",
     },

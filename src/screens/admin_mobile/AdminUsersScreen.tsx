@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -65,6 +66,13 @@ const ROLE_FILTERS: RoleFilter[] = ["All", "Resident", "Barangay Official", "Sta
 export default function AdminUsersScreen({ onBack }: Props) {
   const TC = useColors();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const boundedWidth = Math.min(width, 900);
+  const listInnerWidth = Math.max(0, boundedWidth - 40);
+  const listColumns = width >= 720 ? 2 : 1;
+  const userCardWidth =
+    listColumns === 2 ? (listInnerWidth - 10) / 2 : listInnerWidth;
+  const railPadding = Math.max(20, (width - 900) / 2 + 20);
 
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,7 +160,7 @@ export default function AdminUsersScreen({ onBack }: Props) {
       <StatusBar barStyle={TC.statusBar} backgroundColor={TC.screenBg} />
 
       {/* Header */}
-      <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>
+      <View style={[styles.header, styles.bounded, { paddingTop: Math.max(insets.top, 8) }]}>
         <Pressable onPress={onBack} style={[styles.backBtn, { backgroundColor: TC.surface, borderColor: TC.divider }]} hitSlop={10}>
           <Ionicons name="arrow-back" size={22} color={TC.primary} />
         </Pressable>
@@ -169,7 +177,7 @@ export default function AdminUsersScreen({ onBack }: Props) {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.summaryRow}
+        contentContainerStyle={[styles.summaryRow, { paddingHorizontal: railPadding }]}
         style={styles.summaryScroll}
       >
         <View style={[styles.summaryCard, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
@@ -197,7 +205,16 @@ export default function AdminUsersScreen({ onBack }: Props) {
       </ScrollView>
 
       {/* Search */}
-      <View style={[styles.searchWrap, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
+      <View
+        style={[
+          styles.searchWrap,
+          {
+            width: Math.max(0, Math.min(width - 40, 860)),
+            backgroundColor: TC.surface,
+            borderColor: TC.divider,
+          },
+        ]}
+      >
         <Ionicons name="search-outline" size={16} color={TC.muted} />
         <TextInput
           style={styles.searchInput}
@@ -219,7 +236,7 @@ export default function AdminUsersScreen({ onBack }: Props) {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filtersRow}
+        contentContainerStyle={[styles.filtersRow, { paddingHorizontal: railPadding }]}
         style={styles.filtersScroll}
       >
         {ROLE_FILTERS.map((f) => {
@@ -259,6 +276,8 @@ export default function AdminUsersScreen({ onBack }: Props) {
             { paddingBottom: insets.bottom + 24 },
           ]}
           showsVerticalScrollIndicator={false}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -286,7 +305,17 @@ export default function AdminUsersScreen({ onBack }: Props) {
               const role = normalizeRole(user.role);
 
               return (
-                <View key={user._id} style={[styles.userCard, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
+                <View
+                  key={user._id}
+                  style={[
+                    styles.userCard,
+                    {
+                      width: userCardWidth,
+                      backgroundColor: TC.surface,
+                      borderColor: TC.divider,
+                    },
+                  ]}
+                >
                   <View style={[styles.avatar, { backgroundColor: `${avatarColor}20` }]}>
                     <Text style={[styles.avatarText, { color: avatarColor }]}>
                       {initials}
@@ -336,6 +365,11 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: "#EEF3F8",
+  },
+  bounded: {
+    width: "100%",
+    maxWidth: 900,
+    alignSelf: "center",
   },
   header: {
     flexDirection: "row",
@@ -405,7 +439,7 @@ const styles = StyleSheet.create({
   searchWrap: {
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 20,
+    alignSelf: "center",
     marginBottom: 12,
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
@@ -417,6 +451,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
+    minWidth: 0,
     fontSize: 14,
     color: "#1E2E3E",
     padding: 0,
@@ -479,11 +514,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   list: {
+    width: "100%",
+    maxWidth: 900,
+    alignSelf: "center",
     paddingHorizontal: 20,
     gap: 10,
     paddingTop: 4,
+    flexDirection: "row",
+    flexWrap: "wrap",
   },
   emptyWrap: {
+    width: "100%",
     alignItems: "center",
     paddingTop: 60,
     gap: 10,
@@ -524,6 +565,7 @@ const styles = StyleSheet.create({
   },
   userInfo: {
     flex: 1,
+    minWidth: 0,
     gap: 4,
   },
   userTopRow: {
@@ -547,6 +589,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginTop: 4,
+    flexWrap: "wrap",
+    gap: 6,
   },
   rolePill: {
     backgroundColor: "#EAF3FF",

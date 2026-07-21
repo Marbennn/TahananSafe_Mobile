@@ -418,7 +418,8 @@ export default function ReportDetailScreen({
   const { width, height } = useWindowDimensions();
 
   const shortSide = Math.min(width, height);
-  const isTablet = shortSide >= 768;
+  const isTablet = shortSide >= 600;
+  const isWideLayout = width >= 600;
   const isNarrow = width < 360;
 
   const wScale = clamp(width / 375, 0.92, isTablet ? 1.08 : 1.18);
@@ -429,7 +430,7 @@ export default function ReportDetailScreen({
 
   const PRIMARY: string = String((Colors as any).primary ?? "#0B5AA7");
 
-  const CONTENT_MAX_W = isTablet ? Math.min(720, Math.round(width * 0.92)) : width;
+  const CONTENT_MAX_W = isWideLayout ? Math.min(720, Math.round(width * 0.92)) : width;
   const CONTENT_SIDE_PAD = isTablet ? scale(18) : scale(14);
 
   const thumbW = clamp(
@@ -2568,16 +2569,16 @@ function makeStyles(args: {
       heroWrap: { paddingHorizontal: sidePad, paddingBottom: vscale(10), backgroundColor: BG, gap: vscale(10) },
 
       reportTopBar: {
-        width: "100%",
-        paddingHorizontal: 22,
-        paddingBottom: 22,
+        ...CONTENT_ALIGN,
+        paddingHorizontal: scale(22),
+        paddingBottom: vscale(22),
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
       },
       reportCloseBtn: {
-        width: 40,
-        height: 40,
+        width: scale(40),
+        height: scale(40),
         alignItems: "center",
         justifyContent: "center",
       },

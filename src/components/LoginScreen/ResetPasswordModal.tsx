@@ -9,6 +9,8 @@ import {
   TextInput,
   Platform,
   Alert,
+  KeyboardAvoidingView,
+  ScrollView,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -422,6 +424,10 @@ export default function ResetPasswordModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
       <View style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
@@ -437,14 +443,23 @@ export default function ResetPasswordModal({
             </Pressable>
           ) : null}
 
+          <ScrollView
+            style={styles.cardScroll}
+            contentContainerStyle={styles.cardContent}
+            bounces={false}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
           <Text style={[styles.title, { color: TC.textDark }]}>Reset Password</Text>
 
           {step === "email" ? renderEmailStep() : null}
           {step === "otp" ? renderOtpStep() : null}
           {step === "newpass" ? renderNewPassStep() : null}
           {step === "success" ? renderSuccessStep() : null}
+          </ScrollView>
         </View>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -469,6 +484,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     card: {
       width: "100%",
       maxWidth: cardW,
+      maxHeight: "92%",
       backgroundColor: "#FFFFFF",
       borderRadius: radius,
       paddingHorizontal: clamp(scale(18), 14, 22),
@@ -485,6 +501,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
         android: { elevation: 8 },
       }),
     },
+    cardScroll: { width: "100%", flexShrink: 1 },
+    cardContent: { paddingTop: vscale(2), paddingBottom: vscale(2) },
 
     closeBtn: {
       position: "absolute",

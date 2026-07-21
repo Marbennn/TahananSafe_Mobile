@@ -79,14 +79,14 @@ export default function AdminSettingsScreen({
   const { width, height } = useWindowDimensions();
   const { user, logout } = useAuth() as any;
 
-  const wScale = Math.min(Math.max(width / 375, 0.9), 1.25);
-  const hScale = Math.min(Math.max(height / 812, 0.9), 1.2);
+  const wScale = Math.min(Math.max(Math.min(width / 375, height / 700), 0.86), 1.2);
+  const hScale = Math.min(Math.max(height / 812, 0.76), 1.12);
   const scale  = (n: number) => Math.round(n * wScale);
   const vscale = (n: number) => Math.round(n * hScale);
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  const NAV_BASE_HEIGHT    = 78;
+  const NAV_BASE_HEIGHT    = height < 500 ? 66 : 78;
   const FAB_SIZE           = 62;
   const bottomPad          = Math.max(insets.bottom, 10);
   const navHeight          = NAV_BASE_HEIGHT + bottomPad;
@@ -158,7 +158,10 @@ export default function AdminSettingsScreen({
 
   const handleTab = (key: TabKey) => { setActiveTab(key); onTabChange?.(key); };
 
-  const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
+  const styles = useMemo(
+    () => makeStyles(scale, vscale, height),
+    [width, height]
+  );
 
   // ── Shared current-account pill ───────────────────────────────────────────
   const accountPill = email ? "Active" : "Guest";
@@ -542,7 +545,11 @@ function ToggleCard({ icon, label, subtitle, value, onToggle, iconSize, scale, v
 }
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
-function makeStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+function makeStyles(
+  scale: (n: number) => number,
+  vscale: (n: number) => number,
+  height: number
+) {
   const CARD_R = scale(18);
 
   return StyleSheet.create({
@@ -550,6 +557,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     page: { flex: 1, backgroundColor: BG },
 
     headerWrap: {
+      width: "100%",
+      maxWidth: 720,
+      alignSelf: "center",
       paddingHorizontal: scale(16),
       paddingTop: vscale(6),
       paddingBottom: vscale(8),
@@ -557,7 +567,13 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     title: { fontSize: scale(28), fontWeight: "900", color: TEXT },
     subtitle: { marginTop: vscale(4), fontSize: scale(12), fontWeight: "500", color: "#6B7280", lineHeight: scale(16) },
 
-    content: { paddingHorizontal: scale(16), paddingTop: vscale(6) },
+    content: {
+      width: "100%",
+      maxWidth: 720,
+      alignSelf: "center",
+      paddingHorizontal: scale(16),
+      paddingTop: vscale(6),
+    },
 
     // Profile card
     profileCard: {
@@ -612,16 +628,22 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     // Modal overlay + sheets
     overlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.35)", justifyContent: "flex-end" },
     sheet: {
+      width: "100%",
+      maxWidth: 720,
+      alignSelf: "center",
       borderTopLeftRadius: CARD_R, borderTopRightRadius: CARD_R,
       borderWidth: 1, overflow: "hidden",
       paddingBottom: Platform.OS === "ios" ? vscale(12) : vscale(10),
-      maxHeight: "82%", backgroundColor: SURFACE,
+      maxHeight: height * 0.82, backgroundColor: SURFACE,
     },
     sheetTall: {
+      width: "100%",
+      maxWidth: 720,
+      alignSelf: "center",
       borderTopLeftRadius: CARD_R, borderTopRightRadius: CARD_R,
       borderWidth: 1, overflow: "hidden",
       paddingBottom: Platform.OS === "ios" ? vscale(12) : vscale(10),
-      maxHeight: "88%", backgroundColor: SURFACE,
+      maxHeight: height * 0.88, backgroundColor: SURFACE,
     },
     sheetHeader: {
       paddingHorizontal: scale(14), paddingVertical: vscale(12),

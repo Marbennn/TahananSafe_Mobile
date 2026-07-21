@@ -89,8 +89,8 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
-  const s = clamp(width / 375, 0.95, 1.45);
-  const vs = clamp(height / 812, 0.95, 1.25);
+  const s = clamp(Math.min(width, 480) / 375, 0.84, 1.12);
+  const vs = clamp(height / 812, 0.78, 1.08);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
@@ -188,14 +188,14 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
           onSubmit?.(pendingPayload!);
         }}
       />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <View style={styles.body}>
           <ScrollView bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scrollContent}>
             <View style={styles.page}>
               <View style={styles.titleBlock}>
                 <Text style={styles.screenTitle}>Enter Your Details</Text>
                 <Text style={styles.screenSub}>
-                  Enter your personal information. This will be kept{"\n"}private and secure.
+                  Enter your personal information. This will be kept private and secure.
                 </Text>
               </View>
 
@@ -266,7 +266,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingBottom: vscale(14),
     },
 
-    page: { flexGrow: 1 },
+    page: {
+      flexGrow: 1,
+      width: "100%",
+      maxWidth: 480,
+      alignSelf: "center",
+    },
 
     titleBlock: { marginTop: vscale(18), marginBottom: vscale(22) },
 
@@ -286,7 +291,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     label: { marginBottom: vscale(8), fontSize: scale(13), fontWeight: "700", color: Colors.text },
 
     input: {
-      height: vscale(50),
+      minHeight: Math.max(44, vscale(50)),
       borderRadius: scale(14),
       paddingHorizontal: scale(14),
       borderWidth: 1.4,
@@ -308,7 +313,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     select: {
-      height: vscale(50),
+      minHeight: Math.max(44, vscale(50)),
       borderRadius: scale(14),
       paddingHorizontal: scale(14),
       borderWidth: 1.4,
@@ -340,7 +345,14 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       justifyContent: "center",
     },
 
-    bottomBar: { paddingHorizontal: scale(22), paddingTop: vscale(10), backgroundColor: "#FFFFFF" },
+    bottomBar: {
+      width: "100%",
+      maxWidth: 524,
+      alignSelf: "center",
+      paddingHorizontal: scale(22),
+      paddingTop: vscale(10),
+      backgroundColor: "#FFFFFF",
+    },
 
     ctaOuter: {
       marginTop: vscale(4),
@@ -353,7 +365,11 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
 
     ctaInnerClip: { borderRadius: scale(14), overflow: "hidden" },
 
-    ctaGradient: { height: vscale(52), alignItems: "center", justifyContent: "center" },
+    ctaGradient: {
+      minHeight: Math.max(46, vscale(52)),
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
     ctaText: { color: "#FFFFFF", fontSize: scale(14), fontWeight: "800" },
 
@@ -361,6 +377,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     loadingText: { color: "#FFFFFF", fontSize: scale(14), fontWeight: "800" },
 
     genderSheet: {
+      width: "100%",
+      maxWidth: 600,
+      alignSelf: "center",
       backgroundColor: "#FFFFFF",
       borderTopLeftRadius: scale(28),
       borderTopRightRadius: scale(28),

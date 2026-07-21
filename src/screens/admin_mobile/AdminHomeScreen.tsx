@@ -309,7 +309,7 @@ const AdminHomeScreen: React.FC<Props> = ({
   }, [logout, onLogout]);
 
   // ── Nav sizing ────────────────────────────────────────────────────
-  const NAV_BASE_HEIGHT = 78;
+  const NAV_BASE_HEIGHT = height < 500 ? 66 : 78;
   const FAB_SIZE = 62;
   const bottomPad = Math.max(insets.bottom, 10);
   const navHeight = NAV_BASE_HEIGHT + bottomPad;
@@ -321,7 +321,13 @@ const AdminHomeScreen: React.FC<Props> = ({
   }, [navHeight]);
 
   // ── Sheet animation ───────────────────────────────────────────────
-  const SHEET_HEIGHT = useMemo(() => clamp(Math.round(height * 0.34), 250, 340), [height]);
+  const SHEET_HEIGHT = useMemo(() => {
+    const target = height < 500 ? height * 0.62 : height * 0.34;
+    return Math.min(
+      clamp(Math.round(target), 180, 340),
+      Math.max(1, height - bottomPad - 24)
+    );
+  }, [height, bottomPad]);
   const SHEET_TOTAL_HEIGHT = useMemo(() => SHEET_HEIGHT + bottomPad, [SHEET_HEIGHT, bottomPad]);
 
   const sheetY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
@@ -536,18 +542,23 @@ const AdminHomeScreen: React.FC<Props> = ({
   // ── Sizing ────────────────────────────────────────────────────────
   const PAD = useMemo(() => clamp(Math.round(16 * s), 12, 20), [s]);
   const GAP = useMemo(() => clamp(Math.round(16 * s), 12, 18), [s]);
-  const logoW = clamp(Math.round(width * 0.48), 140, 230);
-  const logoH = clamp(Math.round(36 * s), 28, 42);
   const iconBtnSize = clamp(Math.round(38 * s), 34, 44);
   const notifIconSize = clamp(Math.round(20 * s), 18, 24);
   const helpIconSize = clamp(Math.round(22 * s), 20, 26);
   const HEADER_TOP_PAD = useMemo(() => clamp(Math.round(6 * s), 2, 10), [s]);
   const ACTION_GAP = useMemo(() => clamp(Math.round(14 * s), 10, 16), [s]);
+  const logoW = clamp(
+    Math.round(width * 0.48),
+    110,
+    Math.max(110, Math.min(230, width - PAD * 2 - iconBtnSize * 2 - ACTION_GAP - 8))
+  );
+  const logoH = clamp(Math.round(36 * s), 28, 42);
+  const boundedContentWidth = Math.min(width, 840);
 
   const statCardWidth = useMemo(() => {
     const gap = 12;
-    return (width - PAD * 2 - gap) / 2;
-  }, [width, PAD]);
+    return Math.max(0, (boundedContentWidth - PAD * 2 - gap) / 2);
+  }, [boundedContentWidth, PAD]);
 
   // ── Notification badge count ──────────────────────────────────────
   const [notifCount, setNotifCount] = useState(0);
@@ -703,6 +714,9 @@ const AdminHomeScreen: React.FC<Props> = ({
         page: { flex: 1, backgroundColor: BG, position: "relative" },
 
         topBar: {
+          width: "100%",
+          maxWidth: 840,
+          alignSelf: "center",
           paddingHorizontal: PAD,
           paddingTop: HEADER_TOP_PAD,
           paddingBottom: clamp(Math.round(10 * s), 6, 14),
@@ -746,6 +760,11 @@ const AdminHomeScreen: React.FC<Props> = ({
         scrollContent: {
           paddingTop: clamp(Math.round(10 * s), 8, 12),
           paddingBottom: CONTENT_BOTTOM_PAD,
+          alignItems: "center",
+        },
+        contentColumn: {
+          width: "100%",
+          maxWidth: 840,
         },
 
         sectionRow: {
@@ -941,8 +960,11 @@ const AdminHomeScreen: React.FC<Props> = ({
           bottom: 0,
           height: SHEET_TOTAL_HEIGHT,
           justifyContent: "flex-end",
+          alignItems: "center",
         },
         sheetCard: {
+          width: "100%",
+          maxWidth: 680,
           height: SHEET_TOTAL_HEIGHT,
           borderTopLeftRadius: 28,
           borderTopRightRadius: 28,
@@ -993,6 +1015,34 @@ const AdminHomeScreen: React.FC<Props> = ({
           fontWeight: "600" as const,
           color: "#94A3B8",
         },
+        modalHeader: {
+          width: "100%",
+          maxWidth: 900,
+          alignSelf: "center",
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: PAD,
+          paddingVertical: clamp(Math.round(12 * s), 9, 14),
+          backgroundColor: Colors.primary,
+        },
+        modalBottomSafe: {
+          backgroundColor: "#FFFFFF",
+        },
+        modalInfoScroll: {
+          width: "100%",
+          maxWidth: 720,
+          maxHeight: Math.max(1, Math.min(320, height * 0.48)),
+          alignSelf: "center",
+          marginTop: -20,
+          backgroundColor: "#FFFFFF",
+          borderTopLeftRadius: 20,
+          borderTopRightRadius: 20,
+        },
+        modalInfoContent: {
+          paddingHorizontal: clamp(Math.round(20 * s), 14, 22),
+          paddingTop: clamp(Math.round(16 * s), 12, 18),
+          paddingBottom: clamp(Math.round(8 * s), 6, 10),
+        },
       }),
     [
       PAD,
@@ -1008,6 +1058,7 @@ const AdminHomeScreen: React.FC<Props> = ({
       SHEET_TOTAL_HEIGHT,
       bottomPad,
       CONTENT_BOTTOM_PAD,
+      height,
     ]
   );
 
@@ -1057,6 +1108,7 @@ const AdminHomeScreen: React.FC<Props> = ({
           scrollIndicatorInsets={{ bottom: CONTENT_BOTTOM_PAD }}
           contentContainerStyle={styles.scrollContent}
         >
+          <View style={styles.contentColumn}>
           <GreetingCard greeting={greeting} dateLine={dateLine} userName="Admin" />
 
           {/* System Overview */}
@@ -1145,6 +1197,7 @@ const AdminHomeScreen: React.FC<Props> = ({
             )}
           </View>
 
+          </View>
         </ScrollView>
 
         {/* ── Chevron handle (closed state) ── */}
@@ -1206,7 +1259,7 @@ const AdminHomeScreen: React.FC<Props> = ({
           <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)" }}>
             {/* Top bar */}
             <SafeAreaView edges={["top"]} style={{ backgroundColor: Colors.primary }}>
-              <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, backgroundColor: Colors.primary }}>
+              <View style={styles.modalHeader}>
                 <Pressable onPress={() => setSelectedAlert(null)} hitSlop={12} style={{ marginRight: 12 }}>
                   <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
                 </Pressable>
@@ -1239,21 +1292,13 @@ const AdminHomeScreen: React.FC<Props> = ({
             </View>
 
             {/* Bottom info card */}
-            <SafeAreaView edges={["bottom"]} style={{ backgroundColor: "#FFFFFF" }}>
-              <View style={{
-                backgroundColor: "#FFFFFF",
-                paddingHorizontal: 20,
-                paddingTop: 16,
-                paddingBottom: 8,
-                borderTopLeftRadius: 20,
-                borderTopRightRadius: 20,
-                marginTop: -20,
-                shadowColor: "#000",
-                shadowOpacity: 0.1,
-                shadowRadius: 10,
-                shadowOffset: { width: 0, height: -4 },
-                elevation: 10,
-              }}>
+            <SafeAreaView edges={["bottom"]} style={styles.modalBottomSafe}>
+              <ScrollView
+                style={styles.modalInfoScroll}
+                contentContainerStyle={styles.modalInfoContent}
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+              >
                 {/* Alert info */}
                 <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 10 }}>
                   <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: "#FEE2E2", alignItems: "center", justifyContent: "center" }}>
@@ -1263,7 +1308,10 @@ const AdminHomeScreen: React.FC<Props> = ({
                     <Text style={{ fontSize: 14, fontWeight: "800", color: TEXT_DARK }} allowFontScaling={false} numberOfLines={1}>
                       {selectedAlert?.senderName ?? "Unknown Sender"}
                     </Text>
-                    <Text style={{ fontSize: 12, fontWeight: "500", color: "#64748B", marginTop: 2 }} allowFontScaling={false}>
+                    <Text
+                      style={{ fontSize: 12, fontWeight: "500", color: "#64748B", marginTop: 2 }}
+                      allowFontScaling={false}
+                    >
                       {selectedAlert?.subtitle ?? ""}
                     </Text>
                   </View>
@@ -1304,7 +1352,7 @@ const AdminHomeScreen: React.FC<Props> = ({
                     Dismiss
                   </Text>
                 </Pressable>
-              </View>
+              </ScrollView>
             </SafeAreaView>
           </View>
         </Modal>

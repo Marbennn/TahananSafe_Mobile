@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
   ActivityIndicator,
   Alert,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -41,8 +42,8 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
   const TC = useColors();
   const { width, height } = useWindowDimensions();
 
-  const s = clamp(width / 375, 0.95, 1.45);
-  const vs = clamp(height / 812, 0.95, 1.25);
+  const s = clamp(Math.min(width, 480) / 375, 0.84, 1.12);
+  const vs = clamp(height / 812, 0.76, 1.08);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
@@ -112,7 +113,11 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
 
   return (
     <View style={[styles.safe, { backgroundColor: TC.surface }]}>
-      <View style={styles.container}>
+      <ScrollView
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.container}
+      >
 
         {/* ── TOP: icon · title · subtitle · dots ── */}
         <View style={styles.topSection}>
@@ -129,7 +134,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
 
           <Text style={[styles.screenTitle, { color: TC.textDark }]}>Create Your PIN</Text>
           <Text style={[styles.screenSub, { color: TC.muted }]}>
-            Set a 4-digit PIN to quickly and securely{"\n"}access your account.
+            Set a 4-digit PIN to quickly and securely access your account.
           </Text>
 
           <View style={styles.dotsCard}>
@@ -227,7 +232,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
           </Pressable>
         </View>
 
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -273,14 +278,15 @@ function createStyles(
   width: number,
   height: number
 ) {
+  const contentWidth = Math.min(width, 480);
   const hPad = scale(24);
-  const keyGap = scale(16);
+  const keyGap = clamp(scale(16), 10, 18);
 
   // Responsive key size — constrained by both screen width and height
-  const availW = width - hPad * 2;
+  const availW = contentWidth - hPad * 2;
   const keySizeW = Math.floor((availW - keyGap * 2) / 3);
-  const keySizeH = Math.floor((height * 0.44 - keyGap * 3) / 4);
-  const keySize = clamp(Math.min(keySizeW, keySizeH), 64, 80);
+  const keySizeH = Math.floor((height * 0.38 - keyGap * 3) / 4);
+  const keySize = clamp(Math.min(keySizeW, keySizeH), 48, 80);
   // Grid width = exactly 3 buttons + 2 gaps so the grid centers inside keypadSection
   const fixedGridW = keySize * 3 + keyGap * 2;
 
@@ -290,14 +296,19 @@ function createStyles(
     safe: { flex: 1, backgroundColor: "#FFFFFF" },
 
     container: {
-      flex: 1,
+      flexGrow: 1,
+      width: "100%",
+      maxWidth: 480,
+      alignSelf: "center",
       paddingHorizontal: hPad,
       paddingTop: vscale(6),
+      paddingBottom: vscale(8),
     },
 
     // ── Top ──────────────────────────────────
     topSection: {
-      flex: 1,
+      flexGrow: 1,
+      minHeight: vscale(190),
       justifyContent: "center",
       alignItems: "center",
     },
@@ -334,6 +345,7 @@ function createStyles(
     },
 
     screenSub: {
+      maxWidth: scale(320),
       fontSize: scale(13),
       lineHeight: scale(20),
       color: "#6B7280",
@@ -442,7 +454,7 @@ function createStyles(
     },
 
     ctaGradient: {
-      height: vscale(52),
+      minHeight: Math.max(46, vscale(52)),
       alignItems: "center",
       justifyContent: "center",
     },

@@ -8,6 +8,8 @@ import {
   TextInput,
   ScrollView,
   Platform,
+  KeyboardAvoidingView,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -62,6 +64,8 @@ export default function EmergencyScreen({
 }: Props) {
   const TC = useColors();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isCompact = width < 350;
   const now = useMemo(() => new Date(), []);
 
   const [detail, setDetail] = useState("");
@@ -85,9 +89,16 @@ export default function EmergencyScreen({
     <SafeAreaView style={[styles.safe, { backgroundColor: TC.surface }]} edges={["top"]}>
       <StatusBar barStyle={TC.statusBar} />
 
-      <View style={[styles.page, { paddingBottom: Math.max(insets.bottom, 12), backgroundColor: TC.surface }]}>
+      <KeyboardAvoidingView
+        style={[
+          styles.page,
+          isCompact && styles.pageCompact,
+          { paddingBottom: Math.max(insets.bottom, 12), backgroundColor: TC.surface },
+        ]}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
         {/* Header */}
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>
+        <View style={styles.header}>
           <Pressable
             onPress={onBack ?? (() => {})}
             hitSlop={10}
@@ -144,6 +155,7 @@ export default function EmergencyScreen({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
         >
           {/* Emergency detail card */}
           <View style={[styles.card, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
@@ -235,7 +247,7 @@ export default function EmergencyScreen({
 
           <View style={{ height: 8 }} />
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -251,10 +263,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: "#FFFFFF",
   },
+  pageCompact: {
+    paddingHorizontal: 12,
+  },
 
   header: {
+    width: "100%",
+    maxWidth: 560,
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
+    paddingTop: 8,
     paddingBottom: 10,
   },
   backBtn: {
@@ -317,6 +336,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 18,
     alignItems: "center",
+    width: "100%",
   },
 
   card: {

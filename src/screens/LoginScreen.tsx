@@ -497,8 +497,10 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   const TC = useColors();
   const { width, height } = useWindowDimensions();
 
-  const s = clamp(width / 375, 0.95, 1.45);
-  const vs = clamp(height / 812, 0.95, 1.25);
+  // Keep the phone design at its original size, but allow compact devices to
+  // shrink and stop tablet layouts from becoming excessively wide/large.
+  const s = clamp(Math.min(width, 480) / 375, 0.84, 1.12);
+  const vs = clamp(height / 812, 0.78, 1.08);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
@@ -925,7 +927,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView
           bounces={false}
@@ -1045,6 +1047,9 @@ function createStyles(
     safe: { flex: 1, backgroundColor: "#FFFFFF" },
 
     header: {
+      width: "100%",
+      maxWidth: 480,
+      alignSelf: "center",
       paddingHorizontal: scale(18),
       paddingTop: vscale(6),
     },
@@ -1063,7 +1068,12 @@ function createStyles(
       paddingBottom: vscale(14),
     },
 
-    page: { flexGrow: 1 },
+    page: {
+      flexGrow: 1,
+      width: "100%",
+      maxWidth: 480,
+      alignSelf: "center",
+    },
 
     termsWrap: {
       marginTop: "auto",
@@ -1082,6 +1092,8 @@ function createStyles(
     termsRow: {
       flexDirection: "row",
       alignItems: "center",
+      justifyContent: "center",
+      flexWrap: "wrap",
       marginTop: vscale(2),
     },
 

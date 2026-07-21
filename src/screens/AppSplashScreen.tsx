@@ -1,14 +1,17 @@
 // src/screens/AppSplashScreen.tsx
 import React from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View, useWindowDimensions } from "react-native";
 import NewLogo from "../../assets/NewLogo.svg";
 
 export default function AppSplashScreen() {
+  const { width, height } = useWindowDimensions();
+  const logoWidth = Math.max(180, Math.min(280, Math.round(width * 0.62)));
+
   return (
     <View style={styles.root}>
       <View style={styles.content}>
         {/* Put the SVG inside a box, then scale it to fit */}
-        <View style={styles.logoBox}>
+        <View style={[styles.logoBox, { width: logoWidth, height: Math.round(logoWidth * 0.31) }]}>
           <NewLogo
             width="100%"
             height="100%"
@@ -19,7 +22,7 @@ export default function AppSplashScreen() {
         <ActivityIndicator
           size="large"
           color="#0B4D8C"
-          style={styles.spinner}
+          style={[styles.spinner, { marginTop: Math.max(24, Math.min(38, height * 0.045)) }]}
         />
       </View>
     </View>
@@ -35,20 +38,17 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    transform: [{ translateY: -20 }],
+    paddingHorizontal: 24,
   },
 
   // ✅ adjust these to match your screenshot
   logoBox: {
-    width: 230,
-    height: 70,
     overflow: "visible",
     alignItems: "center",
     justifyContent: "center",
   },
 
   spinner: {
-    marginTop: 38,
     transform: [{ scale: 1.1 }],
   },
 });

@@ -14,6 +14,7 @@ import {
   Alert,
   SectionList,
   Modal,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -216,13 +217,16 @@ export default function AdminNotificationsScreen({ onBack, onOpenReport }: Props
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
-  const wScale = Math.min(Math.max(width / 375, 0.9), 1.25);
-  const hScale = Math.min(Math.max(height / 812, 0.9), 1.2);
+  const wScale = Math.min(Math.max(Math.min(width / 375, height / 700), 0.86), 1.2);
+  const hScale = Math.min(Math.max(height / 812, 0.76), 1.12);
 
   const scale = (n: number) => Math.round(n * wScale);
   const vscale = (n: number) => Math.round(n * hScale);
 
-  const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
+  const styles = useMemo(
+    () => makeStyles(scale, vscale, height),
+    [width, height]
+  );
 
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<NotifVM[]>([]);
@@ -506,7 +510,7 @@ export default function AdminNotificationsScreen({ onBack, onOpenReport }: Props
             <Ionicons name="chevron-back" size={scale(22)} color={Colors.primary} />
           </Pressable>
 
-          <View style={{ flex: 1 }}>
+          <View style={styles.topBarCopy}>
             <View style={styles.titleRowTop}>
               <Text style={styles.topTitle}>Notifications</Text>
               {unreadCount > 0 ? (
@@ -594,6 +598,8 @@ export default function AdminNotificationsScreen({ onBack, onOpenReport }: Props
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             contentContainerStyle={[styles.content, { paddingBottom: CONTENT_BOTTOM_PAD }]}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
               listEmpty ? (
                 <View style={styles.emptyCard}>
@@ -666,6 +672,11 @@ export default function AdminNotificationsScreen({ onBack, onOpenReport }: Props
         <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
           <Pressable style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
             <Pressable style={styles.menuSheet} onPress={() => {}}>
+              <ScrollView
+                bounces={false}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.menuSheetContent}
+              >
               <View style={styles.menuHandle} />
               <Text style={styles.menuTitle}>Quick actions</Text>
 
@@ -689,6 +700,7 @@ export default function AdminNotificationsScreen({ onBack, onOpenReport }: Props
               </Pressable>
 
               <View style={{ height: Math.max(insets.bottom, vscale(10)) }} />
+              </ScrollView>
             </Pressable>
           </Pressable>
         </Modal>
@@ -697,6 +709,11 @@ export default function AdminNotificationsScreen({ onBack, onOpenReport }: Props
         <Modal visible={itemMenuOpen} transparent animationType="fade" onRequestClose={closeItemMenu}>
           <Pressable style={styles.menuOverlay} onPress={closeItemMenu}>
             <Pressable style={styles.menuSheet} onPress={() => {}}>
+              <ScrollView
+                bounces={false}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.menuSheetContent}
+              >
               <View style={styles.menuHandle} />
               <Text style={styles.menuTitle}>Notification actions</Text>
 
@@ -745,6 +762,7 @@ export default function AdminNotificationsScreen({ onBack, onOpenReport }: Props
               </Pressable>
 
               <View style={{ height: Math.max(insets.bottom, vscale(10)) }} />
+              </ScrollView>
             </Pressable>
           </Pressable>
         </Modal>
@@ -753,7 +771,11 @@ export default function AdminNotificationsScreen({ onBack, onOpenReport }: Props
   );
 }
 
-function makeStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+function makeStyles(
+  scale: (n: number) => number,
+  vscale: (n: number) => number,
+  height: number
+) {
   const SEARCH_H = vscale(40);
 
   return StyleSheet.create({
@@ -761,6 +783,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     page: { flex: 1, backgroundColor: BG },
 
     topBar: {
+      width: "100%",
+      maxWidth: 880,
+      alignSelf: "center",
       paddingHorizontal: scale(14),
       paddingTop: vscale(14),
       paddingBottom: vscale(18),
@@ -774,6 +799,10 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       borderRadius: scale(12),
       alignItems: "center",
       justifyContent: "center",
+    },
+    topBarCopy: {
+      flex: 1,
+      minWidth: 0,
     },
 
     titleRowTop: {
@@ -837,6 +866,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
 
     searchRow: {
+      width: "100%",
+      maxWidth: 880,
+      alignSelf: "center",
       paddingHorizontal: scale(14),
       paddingTop: vscale(2),
       paddingBottom: vscale(8),
@@ -854,6 +886,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
     searchInput: {
       flex: 1,
+      minWidth: 0,
       fontSize: scale(13),
       color: "#111827",
       paddingVertical: 0,
@@ -865,6 +898,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
 
     filtersRow: {
+      width: "100%",
+      maxWidth: 880,
+      alignSelf: "center",
       paddingHorizontal: scale(14),
       paddingBottom: vscale(10),
       flexDirection: "row",
@@ -893,6 +929,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
 
     content: {
+      width: "100%",
+      maxWidth: 880,
+      alignSelf: "center",
       paddingHorizontal: scale(14),
       paddingTop: vscale(2),
       gap: vscale(10),
@@ -1028,6 +1067,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
 
     centerBox: {
       flex: 1,
+      width: "100%",
+      maxWidth: 880,
+      alignSelf: "center",
       alignItems: "center",
       justifyContent: "center",
       paddingHorizontal: scale(20),
@@ -1070,6 +1112,10 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       justifyContent: "flex-end",
     },
     menuSheet: {
+      width: "100%",
+      maxWidth: 600,
+      maxHeight: height * 0.9,
+      alignSelf: "center",
       backgroundColor: "#FFFFFF",
       borderTopLeftRadius: scale(18),
       borderTopRightRadius: scale(18),
@@ -1077,6 +1123,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       borderColor: BORDER,
       paddingHorizontal: scale(14),
       paddingTop: vscale(10),
+    },
+    menuSheetContent: {
+      flexGrow: 1,
     },
     menuHandle: {
       alignSelf: "center",

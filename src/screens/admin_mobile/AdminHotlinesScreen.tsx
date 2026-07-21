@@ -76,8 +76,8 @@ export default function HotlinesScreen({
   const { width, height } = useWindowDimensions();
 
   // ===== Responsive scaling helpers =====
-  const wScale = Math.min(Math.max(width / 375, 0.9), 1.25);
-  const hScale = Math.min(Math.max(height / 812, 0.9), 1.2);
+  const wScale = Math.min(Math.max(Math.min(width / 375, height / 700), 0.86), 1.2);
+  const hScale = Math.min(Math.max(height / 812, 0.78), 1.12);
 
   const scale = (n: number) => Math.round(n * wScale);
   const vscale = (n: number) => Math.round(n * hScale);
@@ -89,13 +89,16 @@ export default function HotlinesScreen({
   const SEARCH_H = vscale(46);
   const FILTER_SIZE = vscale(46);
 
-  const styles = useMemo(() => makeStyles(scale, vscale, { SEARCH_H, FILTER_SIZE }), [width, height]);
+  const styles = useMemo(
+    () => makeStyles(scale, vscale, { SEARCH_H, FILTER_SIZE }),
+    [width, height]
+  );
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [query, setQuery] = useState("");
 
   // ✅ MATCH HomeScreen nav sizing exactly
-  const NAV_BASE_HEIGHT = 78;
+  const NAV_BASE_HEIGHT = height < 500 ? 66 : 78;
   const FAB_SIZE = 62;
 
   const bottomPad = Math.max(insets.bottom, 10);
@@ -104,7 +107,8 @@ export default function HotlinesScreen({
   const chevronBottom = navHeight + 90;
   const fabBottom = navHeight - FAB_SIZE / 2 - 10;
 
-  const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + 6;
+  const CONTENT_BOTTOM_PAD =
+    Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + 6;
 
   const sections: HotlineSection[] = useMemo(
     () => [
@@ -191,6 +195,8 @@ export default function HotlinesScreen({
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: CONTENT_BOTTOM_PAD }]}
           showsVerticalScrollIndicator={false}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
         >
           {filteredSections.map((sec) => (
             <View key={sec.title} style={styles.section}>
@@ -248,7 +254,7 @@ export default function HotlinesScreen({
           fabBottom={fabBottom}
           fabSize={FAB_SIZE}
           onFabPress={() => handleTab("Incident")}
-          centerLabel="Incident Log"
+          centerLabel="Services"
         />
       </View>
     </SafeAreaView>
@@ -267,6 +273,9 @@ function makeStyles(
     page: { flex: 1, backgroundColor: BG },
 
     header: {
+      width: "100%",
+      maxWidth: 760,
+      alignSelf: "center",
       paddingHorizontal: scale(16),
       paddingTop: vscale(8),
       paddingBottom: vscale(6),
@@ -286,6 +295,9 @@ function makeStyles(
     },
 
     searchRow: {
+      width: "100%",
+      maxWidth: 760,
+      alignSelf: "center",
       paddingHorizontal: scale(16),
       paddingTop: vscale(10),
       paddingBottom: vscale(10),
@@ -308,6 +320,7 @@ function makeStyles(
     // ✅ unbold regular text
     searchInput: {
       flex: 1,
+      minWidth: 0,
       fontSize: scale(15),
       fontWeight: "400",
       color: TEXT,
@@ -325,6 +338,9 @@ function makeStyles(
     },
 
     content: {
+      width: "100%",
+      maxWidth: 760,
+      alignSelf: "center",
       paddingHorizontal: scale(16),
       paddingTop: vscale(6),
     },

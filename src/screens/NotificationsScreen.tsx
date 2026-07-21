@@ -737,6 +737,8 @@ export default function NotificationsScreen({ onBack }: Props) {
             keyExtractor={(item) => item.id}
             stickySectionHeadersEnabled={false}
             showsVerticalScrollIndicator={false}
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            keyboardShouldPersistTaps="handled"
             alwaysBounceVertical
             bounces
             overScrollMode="always"
@@ -950,6 +952,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
     },
 
     topBar: {
+      width: "100%",
+      maxWidth: 720,
+      alignSelf: "center",
       paddingHorizontal: scale(16),
       paddingTop: vscale(8),
       paddingBottom: vscale(10),
@@ -1039,6 +1044,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
     },
 
     searchRow: {
+      width: "100%",
+      maxWidth: 720,
+      alignSelf: "center",
       paddingHorizontal: scale(16),
       paddingTop: vscale(12),
       paddingBottom: vscale(0),
@@ -1067,6 +1075,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
     },
 
     filtersRow: {
+      width: "100%",
+      maxWidth: 720,
+      alignSelf: "center",
       paddingHorizontal: scale(16),
       paddingTop: vscale(12),
       paddingBottom: vscale(10),
@@ -1097,6 +1108,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
     },
 
     content: {
+      width: "100%",
+      maxWidth: 720,
+      alignSelf: "center",
       paddingHorizontal: scale(16),
       paddingTop: vscale(6),
       gap: vscale(10),
@@ -1286,6 +1300,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       justifyContent: "flex-end",
     },
     menuSheet: {
+      width: "100%",
+      maxWidth: 600,
+      alignSelf: "center",
       backgroundColor: TC.surface,
       borderTopLeftRadius: scale(18),
       borderTopRightRadius: scale(18),

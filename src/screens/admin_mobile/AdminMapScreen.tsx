@@ -7,6 +7,7 @@ import {
   StatusBar,
   ActivityIndicator,
   Pressable,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -81,7 +82,7 @@ function buildHeatmapHtml(points: AlertPoint[]): string {
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"><\/script>
   <style>
-    * { margin: 0; padding: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #map { width: 100%; height: 100%; }
     .legend {
       background: #fff; padding: 10px 14px; border-radius: 10px;
@@ -98,6 +99,13 @@ function buildHeatmapHtml(points: AlertPoint[]): string {
     .info-popup { max-width: 220px; }
     .info-popup b { display: block; margin-bottom: 2px; }
     .info-popup .meta { color: #666; font-size: 11px; margin-top: 4px; }
+    @media (max-width: 360px), (max-height: 480px) {
+      .legend { padding: 7px 9px; border-radius: 8px; font-size: 11px; }
+      .legend-title { font-size: 11px; }
+      .gradient-bar { width: 88px; height: 9px; }
+      .legend-row { gap: 5px; margin: 2px 0; }
+      .dot { width: 9px; height: 9px; }
+    }
   </style>
 </head>
 <body>
@@ -172,17 +180,22 @@ function buildHeatmapHtml(points: AlertPoint[]): string {
 export default function AdminMapScreen({ onTabChange, initialTab = "Map" }: Props) {
   const TC = useColors();
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [points, setPoints] = useState<AlertPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const NAV_BASE_HEIGHT = 78;
+  const NAV_BASE_HEIGHT = height < 500 ? 66 : 78;
   const FAB_SIZE = 62;
   const bottomPad = Math.max(insets.bottom, 10);
   const navHeight = NAV_BASE_HEIGHT + bottomPad;
   const chevronBottom = navHeight + 90;
   const fabBottom = navHeight - FAB_SIZE / 2 - 10;
+  const styles = useMemo(
+    () => makeStyles(width, height, navHeight + 14),
+    [width, height, navHeight]
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -246,9 +259,9 @@ export default function AdminMapScreen({ onTabChange, initialTab = "Map" }: Prop
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerRow}>
-            <View>
-              <Text style={styles.title}>Alert Map</Text>
-              <Text style={styles.subtitle}>
+            <View style={styles.headerCopy}>
+              <Text style={styles.title} numberOfLines={1}>Alert Map</Text>
+              <Text style={styles.subtitle} numberOfLines={1}>
                 {loading
                   ? "Loading alerts..."
                   : `${points.length} alert${points.length !== 1 ? "s" : ""} with location data`}
@@ -309,14 +322,20 @@ export default function AdminMapScreen({ onTabChange, initialTab = "Map" }: Prop
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(width: number, height: number, mapBottomInset: number) {
+  const compact = width < 360;
+  const compactHeight = height < 500;
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F5FAFE" },
   page: { flex: 1, backgroundColor: "#F5FAFE" },
 
   header: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
+    width: "100%",
+    maxWidth: 900,
+    alignSelf: "center",
+    paddingHorizontal: compact ? 12 : 16,
+    paddingTop: compactHeight ? 5 : 8,
+    paddingBottom: compactHeight ? 5 : 8,
     backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
     borderBottomColor: "#E7EEF7",
@@ -326,15 +345,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  headerCopy: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 12,
+  },
   title: {
-    fontSize: 22,
+    fontSize: compact ? 19 : 22,
     fontWeight: "900",
     color: "#0B2B45",
     letterSpacing: 0.2,
   },
   subtitle: {
     marginTop: 2,
-    fontSize: 13,
+    fontSize: compact ? 11 : 13,
     fontWeight: "400",
     color: "#6B7280",
   },
@@ -349,6 +373,7 @@ const styles = StyleSheet.create({
 
   mapContainer: {
     flex: 1,
+    marginBottom: mapBottomInset,
   },
   webview: {
     flex: 1,
@@ -379,4 +404,5 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
   },
-});
+  });
+}

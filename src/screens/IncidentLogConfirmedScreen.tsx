@@ -7,6 +7,7 @@ import {
   Pressable,
   StatusBar,
   ScrollView,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -39,6 +40,8 @@ export default function IncidentLogConfirmedScreen({
   onGoHome,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isCompact = width < 340;
   const [showAiAnalysis, setShowAiAnalysis] = useState(false);
 
   const reportRef = useMemo(() => compactRef(alertNo), [alertNo]);
@@ -73,12 +76,11 @@ export default function IncidentLogConfirmedScreen({
               Report Submitted{"\n"}Successfully
             </Text>
             <Text style={styles.subtitle}>
-              Your incident report has been securely recorded{"\n"}
-              and transmitted to the barangay office.
+              Your incident report has been securely recorded and transmitted to the barangay office.
             </Text>
           </View>
 
-          <View style={styles.summaryCard}>
+          <View style={[styles.summaryCard, isCompact && styles.summaryCardCompact]}>
             <View style={styles.summaryTextWrap}>
               <Text style={styles.refText} numberOfLines={1}>
                 Incident Ref: {reportRef}
@@ -91,9 +93,9 @@ export default function IncidentLogConfirmedScreen({
               </View>
             </View>
 
-            <Pressable style={styles.viewDetailsBtn}>
+            <Pressable style={[styles.viewDetailsBtn, isCompact && styles.viewDetailsBtnCompact]}>
               <Text style={styles.viewDetailsText} allowFontScaling={false}>
-                View{"\n"}Details
+                View Details
               </Text>
               <Ionicons name="chevron-forward" size={16} color="#001F3F" />
             </Pressable>
@@ -167,6 +169,8 @@ function AiIncidentAnalysisScreen({
   onGoHome?: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isCompact = width < 340;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -177,7 +181,7 @@ function AiIncidentAnalysisScreen({
           <Pressable onPress={onBack} hitSlop={12} style={styles.analysisBackBtn}>
             <Ionicons name="chevron-back" size={31} color="#00518D" />
           </Pressable>
-          <Text style={styles.analysisTitle} allowFontScaling={false}>
+          <Text style={[styles.analysisTitle, isCompact && styles.analysisTitleCompact]} allowFontScaling={false}>
             AI Incident Analysis
           </Text>
           <View style={styles.analysisHeaderSpacer} />
@@ -280,9 +284,7 @@ function AiIncidentAnalysisScreen({
               </Text>
             </View>
             <Text style={styles.analysisDisclaimer}>
-              This analysis is for guidance and transparency only.{"\n"}
-              Barangay officials will conduct the official review and{"\n"}
-              determine the appropriate actions.
+              This analysis is for guidance and transparency only. Barangay officials will conduct the official review and determine the appropriate actions.
             </Text>
           </View>
         </ScrollView>
@@ -306,6 +308,9 @@ const styles = StyleSheet.create({
     backgroundColor: BG,
   },
   content: {
+    width: "100%",
+    maxWidth: 680,
+    alignSelf: "center",
     paddingHorizontal: 24,
     paddingTop: 28,
   },
@@ -347,6 +352,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     elevation: 1,
   },
+  summaryCardCompact: {
+    alignItems: "stretch",
+    flexDirection: "column",
+  },
   summaryTextWrap: {
     flex: 1,
     paddingRight: 12,
@@ -376,6 +385,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-end",
     gap: 8,
+  },
+  viewDetailsBtnCompact: {
+    alignSelf: "flex-end",
+    minHeight: 40,
   },
   viewDetailsText: {
     fontSize: 14,
@@ -479,8 +492,11 @@ const styles = StyleSheet.create({
     color: NAVY,
   },
   analysisHeader: {
+    width: "100%",
+    maxWidth: 720,
+    alignSelf: "center",
     paddingHorizontal: 15,
-    paddingTop: 24,
+    paddingTop: 10,
     paddingBottom: 17,
     flexDirection: "row",
     alignItems: "center",
@@ -499,11 +515,17 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: TEXT_DARK,
   },
+  analysisTitleCompact: {
+    fontSize: 18,
+  },
   analysisHeaderSpacer: {
     width: 38,
     height: 38,
   },
   analysisContent: {
+    width: "100%",
+    maxWidth: 680,
+    alignSelf: "center",
     paddingHorizontal: 15,
   },
   analysisIntroCard: {

@@ -7,6 +7,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -120,12 +121,16 @@ export default function AppAlertProvider({ children }: Props) {
   const hasMessage = !!String(current?.message || "").trim();
   const isStacked = buttons.length > 2;
 
-  const s = clamp(width / 375, 0.95, 1.45);
-  const vs = clamp(height / 812, 0.95, 1.25);
+  const layoutWidth = Math.min(width, 600);
+  const s = clamp(layoutWidth / 375, 0.88, 1.2);
+  const vs = clamp(height / 812, 0.82, 1.15);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
-  const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
+  const styles = useMemo(
+    () => createStyles(scale, vscale, Math.max(200, height - 32)),
+    [width, height]
+  );
 
   useEffect(() => {
     alertHandler = (title, message, alertButtons, options) => {
@@ -260,7 +265,14 @@ export default function AppAlertProvider({ children }: Props) {
               </Text>
 
               {hasMessage ? (
-                <Text style={[styles.sub, { color: TC.muted }]}>{current.message}</Text>
+                <ScrollView
+                  style={styles.messageScroll}
+                  contentContainerStyle={styles.messageScrollContent}
+                  showsVerticalScrollIndicator={false}
+                  bounces={false}
+                >
+                  <Text style={[styles.sub, { color: TC.muted }]}>{current.message}</Text>
+                </ScrollView>
               ) : null}
 
               <View style={isStacked ? styles.btnStack : styles.btnRow}>{buttons.map(renderButton)}</View>
@@ -272,13 +284,18 @@ export default function AppAlertProvider({ children }: Props) {
   );
 }
 
-function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+function createStyles(
+  scale: (n: number) => number,
+  vscale: (n: number) => number,
+  cardMaxHeight: number
+) {
   return StyleSheet.create({
     modalRoot: {
       flex: 1,
       justifyContent: "center",
       alignItems: "center",
       paddingHorizontal: scale(24),
+      paddingVertical: 16,
     },
     backdrop: {
       ...StyleSheet.absoluteFillObject,
@@ -287,6 +304,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     card: {
       width: "100%",
       maxWidth: scale(328),
+      maxHeight: cardMaxHeight,
       borderRadius: scale(20),
       backgroundColor: "#FFFFFF",
       paddingHorizontal: scale(24),
@@ -318,7 +336,16 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       fontSize: scale(12),
       lineHeight: scale(18),
       color: "#6B7280",
+    },
+    messageScroll: {
+      alignSelf: "stretch",
+      flexShrink: 1,
+      minHeight: 0,
+      maxHeight: vscale(240),
       marginBottom: scale(24),
+    },
+    messageScrollContent: {
+      flexGrow: 0,
     },
     btnRow: {
       flexDirection: "row",

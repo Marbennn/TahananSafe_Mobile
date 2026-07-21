@@ -115,6 +115,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     // LoginScreen:
     // header: { paddingHorizontal: 18, paddingTop: 6 }
     header: {
+      width: "100%",
+      maxWidth: 480,
+      alignSelf: "center",
       paddingHorizontal: scale(18),
       paddingTop: vscale(6),
       paddingBottom: vscale(6),

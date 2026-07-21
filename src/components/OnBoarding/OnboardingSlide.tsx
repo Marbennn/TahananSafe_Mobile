@@ -24,15 +24,20 @@ export default function OnboardingSlide({ Svg, title, description }: Props) {
   const { width, height } = useWindowDimensions();
 
   // ✅ responsive scale
-  const s = clamp(width / 375, 0.95, 1.6);
-  const vs = clamp(height / 812, 0.95, 1.35);
+  const s = clamp(Math.min(width, 480) / 375, 0.84, 1.12);
+  const vs = clamp(height / 812, 0.76, 1.08);
 
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
   const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
 
-  const illusW = clamp(Math.round(width * 0.74), scale(250), scale(360));
+  const availableWidth = Math.max(0, width - scale(44));
+  const illusW = clamp(
+    Math.round(Math.min(availableWidth, width * 0.74, height * 0.4)),
+    scale(190),
+    scale(330)
+  );
   const illusH = Math.round(illusW * 0.82);
 
   return (
@@ -57,6 +62,7 @@ function createStyles(
       alignItems: "center",
       justifyContent: "center",
       paddingHorizontal: scale(22),
+      paddingBottom: vscale(32),
       backgroundColor: "#FFFFFF",
     },
 

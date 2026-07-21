@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  ScrollView,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors, useColors } from "../../theme/colors";
@@ -98,8 +99,8 @@ export default function EnterVerificationModal({
   const TC = useColors();
   const { width, height } = useWindowDimensions();
 
-  const s = clamp(width / 375, 0.95, 1.45);
-  const vs = clamp(height / 812, 0.95, 1.25);
+  const s = clamp(Math.min(width, 480) / 375, 0.84, 1.12);
+  const vs = clamp(height / 812, 0.76, 1.08);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
@@ -274,6 +275,13 @@ export default function EnterVerificationModal({
             </View>
           </Pressable>
 
+          <ScrollView
+            style={styles.cardScroll}
+            contentContainerStyle={styles.cardContent}
+            bounces={false}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
           <View style={styles.badgeWrap}>
             <ChecklistBadge size={scale(86)} />
           </View>
@@ -379,6 +387,7 @@ export default function EnterVerificationModal({
             </View>
           </Pressable>
 
+          </ScrollView>
         </Animated.View>
       </KeyboardAvoidingView>
       </View>
@@ -401,6 +410,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     card: {
       width: "100%",
       maxWidth: scale(320),
+      maxHeight: "94%",
       borderRadius: scale(18),
       backgroundColor: "#FFFFFF",
       paddingHorizontal: scale(18),
@@ -416,6 +426,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
         android: { elevation: 10 },
       }),
     },
+    cardScroll: { width: "100%", flexShrink: 1 },
+    cardContent: { paddingTop: scale(2), paddingBottom: scale(2) },
     badgeWrap: {
       alignItems: "center",
       marginTop: scale(2),

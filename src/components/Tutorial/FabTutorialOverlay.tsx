@@ -48,7 +48,10 @@ export default function FabTutorialOverlay({
   const ringBottom = fabBottom - (ringSize - fabSize) / 2;
 
   const arrowSize = clamp(Math.round(30 * s), 26, 34);
-  const tooltipMaxW = clamp(Math.round(width * 0.78), 260, 340);
+  const tooltipMaxW = Math.min(
+    clamp(Math.round(width * 0.78), 260, 340),
+    Math.max(width - 24, 1)
+  );
 
   const tooltipBottom = ringBottom + ringSize + clamp(Math.round(14 * s), 12, 18);
   const tooltipLeft = clamp(

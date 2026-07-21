@@ -172,6 +172,10 @@ const COMMENT_REACTIONS = [
   { key: "angry", emoji: "😡" },
 ];
 
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
@@ -343,6 +347,10 @@ function PostCard({
   onImagePress: (imageUris: string[], index: number) => void;
   colors: ReturnType<typeof useColors>;
 }) {
+  const { width } = useWindowDimensions();
+  const postWidth = Math.min(Math.max(width - 32, 0), 688);
+  const postImageHeight = Math.round(clamp(postWidth / 1.55, 180, 390));
+  const galleryItemSize = Math.round(clamp(postWidth * 0.64, 180, 300));
   const isOwner = String(post.user._id || "") === String(currentUserId);
   const liked =
     typeof post.likedByMe === "boolean"
@@ -411,7 +419,7 @@ function PostCard({
         >
           <Image
             source={{ uri: imageUrls[0] }}
-            style={styles.postImage}
+            style={[styles.postImage, { height: postImageHeight }]}
             resizeMode="cover"
           />
           <View style={styles.expandImageBadge}>
@@ -430,7 +438,10 @@ function PostCard({
               <Pressable
                 key={`${post._id}-${index}`}
                 onPress={() => onImagePress(imageUrls, index)}
-                style={styles.postGalleryItem}
+                style={[
+                  styles.postGalleryItem,
+                  { width: galleryItemSize, height: galleryItemSize },
+                ]}
               >
                 <Image
                   source={{ uri: imageUri }}
@@ -669,8 +680,14 @@ function CreatePostModal({
             </Pressable>
           </View>
 
-          {/* Compose area */}
-          <View style={styles.composeArea}>
+          <ScrollView
+            style={styles.modalBodyScroll}
+            contentContainerStyle={styles.modalBodyContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Compose area */}
+            <View style={styles.composeArea}>
             <AvatarImage
               uri={userAvatar}
               size={36}
@@ -694,11 +711,11 @@ function CreatePostModal({
               value={content}
               onChangeText={setContent}
             />
-          </View>
+            </View>
 
           {/* Photo preview */}
-          {photoUris.length > 0 && (
-            <View style={styles.photoPreviewWrap}>
+            {photoUris.length > 0 && (
+              <View style={styles.photoPreviewWrap}>
               <Text style={[styles.photoPreviewTitle, { color: colors.muted }]}>
                 Selected images ({photoUris.length}/{MAX_POST_IMAGES})
               </Text>
@@ -722,24 +739,25 @@ function CreatePostModal({
                   </View>
                 ))}
               </ScrollView>
-            </View>
-          )}
+              </View>
+            )}
 
           {/* Actions */}
-          <View style={styles.composeActions}>
-            <Pressable style={styles.composeActionBtn} onPress={pickImage}>
-              <Ionicons name="image-outline" size={24} color={colors.primary} />
-              <Text style={[styles.composeActionLabel, { color: colors.body }]}>
-                Photo
-              </Text>
-            </Pressable>
-            <Pressable style={styles.composeActionBtn} onPress={takePhoto}>
-              <Ionicons name="camera-outline" size={24} color="#10B981" />
-              <Text style={[styles.composeActionLabel, { color: colors.body }]}>
-                Camera
-              </Text>
-            </Pressable>
-          </View>
+            <View style={styles.composeActions}>
+              <Pressable style={styles.composeActionBtn} onPress={pickImage}>
+                <Ionicons name="image-outline" size={24} color={colors.primary} />
+                <Text style={[styles.composeActionLabel, { color: colors.body }]}>
+                  Photo
+                </Text>
+              </Pressable>
+              <Pressable style={styles.composeActionBtn} onPress={takePhoto}>
+                <Ionicons name="camera-outline" size={24} color="#10B981" />
+                <Text style={[styles.composeActionLabel, { color: colors.body }]}>
+                  Camera
+                </Text>
+              </Pressable>
+            </View>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -831,7 +849,12 @@ function EditPostModal({
             </Pressable>
           </View>
 
-          <View style={styles.editPostBody}>
+          <ScrollView
+            style={styles.modalBodyScroll}
+            contentContainerStyle={styles.editPostBody}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             <TextInput
               placeholder="What's happening in your area?"
               placeholderTextColor={colors.placeholder}
@@ -848,7 +871,7 @@ function EditPostModal({
               value={content}
               onChangeText={setContent}
             />
-          </View>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -1137,7 +1160,7 @@ function CommentsModal({
   const totalComments = countThreadComments(post.comments);
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
@@ -1866,6 +1889,9 @@ const styles = StyleSheet.create({
 
   /* Header */
   header: {
+    width: "100%",
+    maxWidth: 720,
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1879,7 +1905,13 @@ const styles = StyleSheet.create({
   loadingWrap: { flex: 1, justifyContent: "center", alignItems: "center" },
 
   /* List */
-  listContent: { paddingHorizontal: 16, paddingTop: 6 },
+  listContent: {
+    width: "100%",
+    maxWidth: 720,
+    alignSelf: "center",
+    paddingHorizontal: 16,
+    paddingTop: 6,
+  },
 
   /* Create bar */
   createBar: {
@@ -1901,7 +1933,12 @@ const styles = StyleSheet.create({
   },
 
   /* Filters */
-  filterRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
+  filterRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 14,
+  },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   chipText: { fontSize: 12, fontWeight: "700" },
 
@@ -2009,12 +2046,20 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalContent: {
+    width: "100%",
+    maxWidth: 720,
+    alignSelf: "center",
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
-    minHeight: 340,
-    maxHeight: "85%",
+    maxHeight: "88%",
     borderWidth: 1,
     overflow: "hidden",
+  },
+  modalBodyScroll: {
+    flexShrink: 1,
+  },
+  modalBodyContent: {
+    paddingBottom: 4,
   },
   modalHeader: {
     flexDirection: "row",
@@ -2140,6 +2185,10 @@ const styles = StyleSheet.create({
 
   /* Comments modal */
   commentsModalContent: {
+    width: "100%",
+    maxWidth: 720,
+    maxHeight: 720,
+    alignSelf: "center",
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     height: "70%",
@@ -2190,19 +2239,21 @@ const styles = StyleSheet.create({
   },
   reactionPickerWrap: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
-    alignSelf: "flex-start",
+    alignSelf: "stretch",
     marginTop: 8,
     marginLeft: 40,
+    marginRight: 8,
     paddingHorizontal: 8,
     paddingVertical: 8,
     borderRadius: 999,
-    gap: 6,
+    gap: 4,
   },
   reactionPickerItem: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
   },

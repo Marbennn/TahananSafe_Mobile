@@ -108,8 +108,9 @@ export default function ChatbotModal({ visible, onClose }: Props) {
   const { width, height } = useWindowDimensions();
   const compactHeader = width <= 360;
 
-  const s = clamp(width / 375, 0.95, 1.22);
-  const vs = clamp(height / 812, 0.88, 1.15);
+  const layoutWidth = Math.min(width, 600);
+  const s = clamp(layoutWidth / 375, 0.88, 1.2);
+  const vs = clamp(height / 812, 0.82, 1.15);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
   const openSlideOffset = Math.round(42 * vs);

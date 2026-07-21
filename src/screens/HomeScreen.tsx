@@ -19,6 +19,7 @@ import {
   Easing,
   InteractionManager,
   PanResponder,
+  Linking,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -87,7 +88,6 @@ type Props = {
 
 const BG = "#F5FAFE";
 const TEXT_DARK = "#0B2B45";
-const FAB_MENU_DIM = "rgba(0, 0, 0, 0.22)";
 
 // âœ… once-only tutorial key
 const FAB_TUTORIAL_SEEN_KEY = "tahanansafe_fab_tutorial_seen_v1";
@@ -236,7 +236,11 @@ export default function HomeScreen({
   const isFocused = useIsFocused();
   const isFocusedRef = useRef(isFocused);
 
-  const { s, fs } = useMemo(() => makeScale(width, height), [width, height]);
+  // Keep content readable on tablets while still using the full screen for
+  // overlays and the bottom navigation.
+  const contentWidth = Math.min(width, 720);
+
+  const { s, fs } = useMemo(() => makeScale(contentWidth, height), [contentWidth, height]);
 
   // âœ… AuthContext
   const { user, setUser, accessToken, logout } = useAuth() as any;
@@ -368,7 +372,9 @@ export default function HomeScreen({
   const navHeight = NAV_BASE_HEIGHT + bottomPad;
 
   const chevronBottom = navHeight + 90;
-  const fabBottom = navHeight - FAB_SIZE / 2 - 10;
+  const fabNavScale = clamp(width / 375, 0.86, 1.2);
+  const fabCradleLift = clamp(Math.round(5 * fabNavScale), 4, 6);
+  const fabBottom = navHeight - FAB_SIZE / 2 - 10 + fabCradleLift;
 
   const CONTENT_BOTTOM_PAD = useMemo(() => {
     const fabOverlapPad = Math.round(FAB_SIZE * 0.55);
@@ -636,7 +642,7 @@ export default function HomeScreen({
   const PAD = useMemo(() => clamp(Math.round(16 * s), 12, 20), [s]);
   const GAP = useMemo(() => clamp(Math.round(16 * s), 12, 18), [s]);
 
-  const logoW = clamp(Math.round(width * 0.48), 140, 230);
+  const logoW = clamp(Math.round(contentWidth * 0.48), 140, 230);
   const logoH = clamp(Math.round(36 * s), 28, 42);
 
   const iconBtnSize = clamp(Math.round(38 * s), 34, 44);
@@ -731,20 +737,15 @@ export default function HomeScreen({
 
     fabMenuAnim.stopAnimation();
     setFabMenuOpen(true);
-    Animated.sequence([
-      Animated.timing(fabMenuAnim, {
-        toValue: 0.92,
-        duration: 400,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.spring(fabMenuAnim, {
-        toValue: 1,
-        useNativeDriver: true,
-        friction: 7,
-        tension: 150,
-      }),
-    ]).start();
+    Animated.spring(fabMenuAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      stiffness: 190,
+      damping: 20,
+      mass: 0.85,
+      restDisplacementThreshold: 0.001,
+      restSpeedThreshold: 0.001,
+    }).start();
   }, [fabMenuAnim, fabMenuOpen]);
 
   const closeFabMenu = useCallback(() => {
@@ -753,10 +754,12 @@ export default function HomeScreen({
     fabMenuAnim.stopAnimation();
     Animated.timing(fabMenuAnim, {
       toValue: 0,
-      duration: 180,
-      easing: Easing.out(Easing.quad),
+      duration: 200,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
-    }).start(() => setFabMenuOpen(false));
+    }).start(({ finished }) => {
+      if (finished) setFabMenuOpen(false);
+    });
   }, [fabMenuAnim, fabMenuOpen]);
 
   const toggleFabMenu = useCallback(() => {
@@ -893,14 +896,28 @@ export default function HomeScreen({
   }, [resetSosSlider, sendingSos]);
 
   const handleAlertAction = useCallback(() => {
-    closeFabMenu();
     setSosDragging(false);
     resetSosSlider();
     setSosModalVisible(true);
-  }, [closeFabMenu, resetSosSlider]);
+  }, [resetSosSlider]);
 
-  const handleQuickSchedule = useCallback(() => {
-    Alert.alert("Schedule", "Scheduling is coming soon.");
+  const callEmergencyNumber = useCallback(async (number: string) => {
+    if (Platform.OS === "web") {
+      Alert.alert("Call not supported", "Calling is not supported on web.");
+      return;
+    }
+
+    const url = `tel:${number}`;
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        Alert.alert("Cannot place call", `Your device cannot call ${number}.`);
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert("Cannot place call", `Unable to call ${number}. Please dial it manually.`);
+    }
   }, []);
 
   const sosPanResponder = useMemo(
@@ -948,19 +965,16 @@ export default function HomeScreen({
   );
 
   const handleFabHideApp = useCallback(() => {
-    closeFabMenu();
     closeAndRemoveFromRecents();
-  }, [closeFabMenu]);
+  }, []);
 
   const handleFabIncidentLog = useCallback(() => {
-    closeFabMenu();
     navigateToTab("Incident");
-  }, [closeFabMenu, navigateToTab]);
+  }, [navigateToTab]);
 
   const handleFabServices = useCallback(() => {
-    closeFabMenu();
     setServicesModalVisible(true);
-  }, [closeFabMenu]);
+  }, []);
 
   const closeServicesModal = useCallback(() => {
     setServicesModalVisible(false);
@@ -993,9 +1007,8 @@ export default function HomeScreen({
   );
 
   const handleFabSignOut = useCallback(() => {
-    closeFabMenu();
     setLogoutModalVisible(true);
-  }, [closeFabMenu]);
+  }, []);
 
   const handleLogoutModalCancel = useCallback(() => {
     setLogoutModalVisible(false);
@@ -1045,7 +1058,7 @@ export default function HomeScreen({
         icon: "add-circle-outline" as const,
         iconColor: "#7C3AED",
         title: "How to Use Quick Actions",
-        description: "View the shortcut guide for Incident Log, S.O.S, Services, Hide App, and Sign Out.",
+        description: "View the shortcut guide for Create Log, Alert, Menu, Privacy, and Logout.",
         onPress: () => openTutorialByKey("quick_actions"),
       },
     ],
@@ -1065,13 +1078,10 @@ export default function HomeScreen({
       StyleSheet.create({
         safe: { flex: 1, backgroundColor: BG },
         page: { flex: 1, backgroundColor: BG, position: "relative" },
-        fabMenuBackdrop: {
-          ...StyleSheet.absoluteFillObject,
-          backgroundColor: FAB_MENU_DIM,
-          zIndex: 18,
-        },
-
         topBar: {
+          width: "100%",
+          maxWidth: contentWidth,
+          alignSelf: "center",
           paddingHorizontal: PAD,
           paddingTop: HEADER_TOP_PAD,
           paddingBottom: clamp(Math.round(10 * s), 6, 14),
@@ -1114,6 +1124,9 @@ export default function HomeScreen({
 
         scroll: { flex: 1 },
         scrollContent: {
+          width: "100%",
+          maxWidth: contentWidth,
+          alignSelf: "center",
           paddingTop: clamp(Math.round(10 * s), 8, 12),
           paddingBottom: CONTENT_BOTTOM_PAD,
         },
@@ -1132,53 +1145,65 @@ export default function HomeScreen({
         logsWrap: { paddingHorizontal: PAD, paddingTop: clamp(Math.round(10 * s), 8, 12) },
         logsGap: { height: GAP },
 
-        quickActionsWrap: {
-          paddingHorizontal: clamp(Math.round(26 * s), 20, 32),
+        emergencyContactsWrap: {
+          paddingHorizontal: PAD,
           paddingTop: clamp(Math.round(8 * s), 6, 10),
         },
-        quickActionsRow: {
+        emergencyContactsRow: {
           flexDirection: "row",
           gap: clamp(Math.round(12 * s), 10, 14),
         },
-        quickActionCard: {
+        emergencyContactCard: {
           flex: 1,
-          height: clamp(Math.round(102 * s), 92, 110),
+          minWidth: 0,
+          height: clamp(Math.round(96 * s), 88, 106),
           borderRadius: clamp(Math.round(16 * s), 14, 18),
-          borderWidth: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          gap: clamp(Math.round(8 * s), 6, 10),
+          overflow: "hidden",
           ...Platform.select({
             ios: {
               shadowColor: "#0F172A",
-              shadowOpacity: 0.06,
-              shadowRadius: 6,
-              shadowOffset: { width: 0, height: 3 },
+              shadowOpacity: 0.14,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 4 },
             },
-            android: { elevation: 2 },
+            android: { elevation: 3 },
           }),
         },
-        quickActionSos: {
-          borderColor: "#C81024",
-          backgroundColor: "#D20A20",
+        emergencyContactGradient: {
+          flex: 1,
+          paddingHorizontal: clamp(Math.round(13 * s), 11, 16),
+          paddingVertical: clamp(Math.round(12 * s), 10, 14),
+          justifyContent: "space-between",
         },
-        quickActionPressed: {
+        emergencyContactTop: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: clamp(Math.round(9 * s), 7, 11),
+        },
+        emergencyContactIcon: {
+          width: clamp(Math.round(34 * s), 30, 38),
+          height: clamp(Math.round(34 * s), 30, 38),
+          borderRadius: 999,
+          backgroundColor: "rgba(255,255,255,0.18)",
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        emergencyContactPressed: {
           transform: [{ scale: 0.97 }],
+          opacity: 0.92,
         },
-        quickActionSosIcon: {
+        emergencyContactNumber: {
+          flexShrink: 1,
           color: "#FFFFFF",
-          fontSize: clamp(Math.round(34 * fs), 30, 38),
+          fontSize: clamp(Math.round(29 * fs), 25, 33),
           fontWeight: "900",
-          lineHeight: clamp(Math.round(28 * fs), 25, 32),
+          lineHeight: clamp(Math.round(34 * fs), 30, 38),
         },
-        quickActionSosLabel: {
+        emergencyContactLabel: {
           color: "#FFFFFF",
-          fontSize: clamp(Math.round(13 * fs), 12, 15),
-          fontWeight: "900",
-        },
-        quickActionLabel: {
-          fontSize: clamp(Math.round(13 * fs), 12, 15),
-          fontWeight: "800",
+          fontSize: clamp(Math.round(11 * fs), 10, 12),
+          fontWeight: "700",
+          opacity: 0.94,
         },
 
         // Safety status chips
@@ -1438,6 +1463,7 @@ export default function HomeScreen({
       fs,
       logoW,
       logoH,
+      contentWidth,
       iconBtnSize,
       HEADER_TOP_PAD,
       ACTION_GAP,
@@ -1550,53 +1576,63 @@ export default function HomeScreen({
             )}
           </View>
 
-          {/* Quick actions */}
+          {/* Emergency contacts */}
           <View style={styles.sectionRow}>
             <View style={styles.sectionTitleRow}>
               <Text style={[styles.sectionTitle, { color: TC.textDark }]} allowFontScaling={false}>
-                Quick Actions
+                Emergency Contacts
               </Text>
             </View>
           </View>
 
-          <View style={styles.quickActionsWrap}>
-            <View style={styles.quickActionsRow}>
+          <View style={styles.emergencyContactsWrap}>
+            <View style={styles.emergencyContactsRow}>
               <Pressable
-                onPress={handleAlertAction}
-                style={({ pressed }) => [styles.quickActionCard, styles.quickActionSos, pressed && styles.quickActionPressed]}
+                onPress={() => callEmergencyNumber("911")}
+                accessibilityRole="button"
+                accessibilityLabel="Call 911 Emergency Hotline"
+                style={({ pressed }) => [styles.emergencyContactCard, pressed && styles.emergencyContactPressed]}
               >
-                <Text style={styles.quickActionSosIcon} allowFontScaling={false}>*</Text>
-                <Text style={styles.quickActionSosLabel} allowFontScaling={false}>SOS</Text>
+                <LinearGradient
+                  colors={["#E42535", "#B80D18"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.emergencyContactGradient}
+                >
+                  <View style={styles.emergencyContactTop}>
+                    <View style={styles.emergencyContactIcon}>
+                      <Ionicons name="call" size={clamp(Math.round(17 * s), 15, 19)} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.emergencyContactNumber} numberOfLines={1} allowFontScaling={false}>911</Text>
+                  </View>
+                  <Text style={styles.emergencyContactLabel} numberOfLines={1} allowFontScaling={false}>
+                    Emergency Hotline
+                  </Text>
+                </LinearGradient>
               </Pressable>
 
               <Pressable
-                onPress={handleQuickSchedule}
-                style={({ pressed }) => [
-                  styles.quickActionCard,
-                  {
-                    backgroundColor: TC.isDark ? "#26364A" : "#EFF2F5",
-                    borderColor: TC.isDark ? "#42546A" : "#D7DDE3",
-                  },
-                  pressed && styles.quickActionPressed,
-                ]}
+                onPress={() => callEmergencyNumber("117")}
+                accessibilityRole="button"
+                accessibilityLabel="Call 117 Police Assistance"
+                style={({ pressed }) => [styles.emergencyContactCard, pressed && styles.emergencyContactPressed]}
               >
-                <Ionicons name="calendar-outline" size={25} color="#159D9A" />
-                <Text style={[styles.quickActionLabel, { color: TC.textDark }]} allowFontScaling={false}>Schedule</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => navigateToTab("Inbox")}
-                style={({ pressed }) => [
-                  styles.quickActionCard,
-                  {
-                    backgroundColor: TC.isDark ? "#26364A" : "#EFF2F5",
-                    borderColor: TC.isDark ? "#42546A" : "#D7DDE3",
-                  },
-                  pressed && styles.quickActionPressed,
-                ]}
-              >
-                <Ionicons name="document-text-outline" size={25} color={TC.textDark} />
-                <Text style={[styles.quickActionLabel, { color: TC.textDark }]} allowFontScaling={false}>Hotlines</Text>
+                <LinearGradient
+                  colors={["#E88708", "#A94A00"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.emergencyContactGradient}
+                >
+                  <View style={styles.emergencyContactTop}>
+                    <View style={styles.emergencyContactIcon}>
+                      <Ionicons name="call" size={clamp(Math.round(17 * s), 15, 19)} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.emergencyContactNumber} numberOfLines={1} allowFontScaling={false}>117</Text>
+                  </View>
+                  <Text style={styles.emergencyContactLabel} numberOfLines={1} allowFontScaling={false}>
+                    Police Assistance
+                  </Text>
+                </LinearGradient>
               </Pressable>
             </View>
           </View>
@@ -1772,20 +1808,13 @@ export default function HomeScreen({
           centerLabel="Services"
         />
 
-        {fabMenuOpen ? (
-          <Animated.View style={[styles.fabMenuBackdrop, { opacity: fabMenuAnim }]}>
-            <Pressable style={StyleSheet.absoluteFillObject} onPress={closeFabMenu} />
-          </Animated.View>
-        ) : null}
-
         <QuickActions
           isOpen={fabMenuOpen}
           animation={fabMenuAnim}
           navHeight={navHeight}
+          navPaddingBottom={bottomPad}
           fabBottom={fabBottom}
           fabSize={FAB_SIZE}
-          s={s}
-          fs={fs}
           onToggle={toggleFabMenu}
           onIncidentLog={handleFabIncidentLog}
           onSos={handleAlertAction}
@@ -1804,7 +1833,7 @@ export default function HomeScreen({
           fabBottom={fabBottom}
           navHeight={navHeight}
           title="Open Quick Actions"
-          message="Tap the + button to open Incident Log, S.O.S, Services, Hide App, and Sign Out shortcuts."
+          message="Tap the + button to open Create Log, Alert, Menu, Privacy, and Logout shortcuts."
         />
 
         <TutorialPickerModal

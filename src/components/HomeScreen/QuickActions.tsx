@@ -1,10 +1,9 @@
 // src/components/HomeScreen/QuickActions.tsx
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
   Animated,
   BackHandler,
-  Easing,
   Platform,
   Pressable,
   StyleSheet,
@@ -14,6 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import Svg, { Path } from "react-native-svg";
 
 import { useColors } from "../../theme/colors";
 
@@ -27,11 +27,11 @@ type Props = {
   isOpen: boolean;
   animation: Animated.Value;
   navHeight: number;
+  navPaddingBottom: number;
   fabBottom?: number;
   fabSize: number;
-  s: number;
-  fs: number;
   onToggle: () => void;
+  onFabLongPress?: () => void;
   onIncidentLog: () => void;
   onSos: () => void;
   onServices: () => void;
@@ -41,20 +41,24 @@ type Props = {
 
 type ActionItem = {
   label: string;
-  menuLabel: string;
   icon: IconName;
   onPress: () => void;
+};
+
+type ActionTarget = {
+  x: number;
+  rise: number;
 };
 
 export default function QuickActions({
   isOpen,
   animation,
   navHeight,
+  navPaddingBottom,
   fabBottom,
   fabSize,
-  s,
-  fs,
   onToggle,
+  onFabLongPress,
   onIncidentLog,
   onSos,
   onServices,
@@ -63,139 +67,260 @@ export default function QuickActions({
 }: Props) {
   const TC = useColors();
   const { width, height } = useWindowDimensions();
+  const menuScale = clamp(width / 375, 0.86, 1.2);
+  const menuFontScale = clamp(menuScale * 1.06, 0.95, 1.3);
   const centerFabBottom = fabBottom ?? navHeight - fabSize / 2 - 10;
-  const fabArchSize = clamp(Math.round(fabSize + 34 * s), fabSize + 28, fabSize + 44);
-  const actionButtonSize = clamp(Math.round(54 * s), 48, 58);
-  const actionIconSize = clamp(Math.round(24 * s), 21, 26);
-  const expandedActionWidth = clamp(Math.round(150 * s), 132, 160);
-  const longPressHintWidth = clamp(Math.round(170 * s), 152, 184);
   const fabCenterY = height - centerFabBottom - fabSize / 2;
-  const rightColumnOffset = width / 2 - actionButtonSize / 2 - clamp(Math.round(16 * s), 14, 20);
-  const columnBottomRise = clamp(Math.round(84 * s), 74, 94);
-  const desiredColumnStep = clamp(Math.round(68 * s), 62, 74);
-  const maxColumnTopRise = Math.max(
-    columnBottomRise,
-    fabCenterY - actionButtonSize / 2 - 32
+
+  const actionButtonSize = clamp(Math.round(56 * menuScale), 48, 60);
+  const actionIconSize = clamp(Math.round(24 * menuScale), 21, 28);
+  const actionLabelWidth = clamp(Math.round(92 * menuScale), 82, 108);
+  const actionLabelGap = clamp(Math.round(6 * menuScale), 4, 8);
+  const actionLabelLineHeight = clamp(
+    Math.round(15 * menuFontScale),
+    13,
+    18
   );
-  const columnTopRise = Math.min(
-    columnBottomRise + desiredColumnStep * 4,
-    maxColumnTopRise
+  const actionLabelAreaHeight = actionLabelGap + actionLabelLineHeight;
+  const actionItemHeight = actionButtonSize + actionLabelAreaHeight;
+  const fabCenterFromBottom = centerFabBottom + fabSize / 2;
+  const actionNodeBottom =
+    fabCenterFromBottom - actionButtonSize / 2 - actionLabelAreaHeight;
+  const actionVerticalInset = clamp(
+    Math.round(10 * menuScale),
+    8,
+    12
   );
-  const columnStep = (columnTopRise - columnBottomRise) / 4;
-  const actionMenuBg = TC.isDark ? TC.surface : "#FFFFFF";
+  const menuLayoutWidth = Math.min(width, 720);
+  const quarterEllipseKappa = 0.5522847498;
+  const navScale = menuScale;
+  const menuSideClearance = clamp(
+    Math.round(12 * menuScale),
+    10,
+    18
+  );
+  const outerAngleRadians = (28 * Math.PI) / 180;
+  const idealRadialRadius = clamp(menuLayoutWidth * 0.415, 132, 240);
+  const horizontalRadiusCap =
+    (menuLayoutWidth / 2 - actionButtonSize / 2 - menuSideClearance) /
+    Math.cos(outerAngleRadians);
+  const verticalRadiusCap =
+    fabCenterY -
+    clamp(Math.round(24 * menuScale), 20, 32) -
+    actionButtonSize / 2;
+  const radialRadius = Math.max(
+    96,
+    Math.min(idealRadialRadius, horizontalRadiusCap, verticalRadiusCap)
+  );
+  const actionAngles = [152, 121, 90, 59, 28];
+  const actionTargets: ActionTarget[] = actionAngles.map((angle) => {
+    const radians = (angle * Math.PI) / 180;
+    return {
+      x: radialRadius * Math.cos(radians),
+      rise: radialRadius * Math.sin(radians),
+    };
+  });
+
+  // Keep these measurements synchronized with BottomNavBar's cradle so this
+  // fill occupies only the transparent notch and never covers the white bar.
+  const navExtraBarHeight = clamp(Math.round(12 * navScale), 10, 18);
+  const navTopLowering = clamp(Math.round(12 * navScale), 10, 14);
+  const effectiveNavHeight =
+    navHeight + navExtraBarHeight - navTopLowering;
+  const navItemPaddingBottom = clamp(Math.round(12 * navScale), 10, 16);
+  const navLabelFont = clamp(Math.round(10 * navScale), 9, 12);
+  const navLabelMarginTop = clamp(Math.round(3 * navScale), 2, 4);
+  const fabCenterYWithinBar =
+    effectiveNavHeight - (centerFabBottom + fabSize / 2);
+  const fabBottomWithinBar = fabCenterYWithinBar + fabSize / 2;
+  const cradleHalfWidth =
+    fabSize / 2 + clamp(Math.round(28 * navScale), 24, 32);
+  const cradleShoulderWidth = clamp(
+    Math.round(24 * navScale),
+    20,
+    28
+  );
+  const minimumCradleDepth = Math.max(
+    0,
+    Math.round(
+      fabBottomWithinBar + clamp(Math.round(9 * navScale), 8, 11)
+    )
+  );
+  const maximumCradleDepth = Math.max(
+    minimumCradleDepth,
+    effectiveNavHeight -
+      (navPaddingBottom +
+        navItemPaddingBottom +
+        navLabelFont +
+        navLabelMarginTop +
+        6)
+  );
+  const cradleDepth = clamp(
+    Math.round(
+      fabBottomWithinBar + clamp(Math.round(12 * navScale), 10, 14)
+    ),
+    minimumCradleDepth,
+    maximumCradleDepth
+  );
+  const cradleCenterX = width / 2;
+  const cradleStartX = cradleCenterX - cradleHalfWidth;
+  const cradleEndX = cradleCenterX + cradleHalfWidth;
+  const cradleShoulderDepth = cradleDepth * 0.34;
+  const cradleLeftSideX = cradleStartX + cradleShoulderWidth;
+  const cradleRightSideX = cradleEndX - cradleShoulderWidth;
+  const cradleBottomControlX =
+    (cradleCenterX - cradleLeftSideX) * quarterEllipseKappa;
+  const cradleBottomControlY =
+    (cradleDepth - cradleShoulderDepth) * quarterEllipseKappa;
+  const notchCurvePath = [
+    `M ${cradleStartX} 0`,
+    `C ${cradleStartX + cradleShoulderWidth * 0.55} 0 ${
+      cradleLeftSideX
+    } ${cradleDepth * 0.08} ${cradleLeftSideX} ${cradleShoulderDepth}`,
+    `C ${cradleLeftSideX} ${
+      cradleShoulderDepth + cradleBottomControlY
+    } ${cradleCenterX - cradleBottomControlX} ${cradleDepth} ${
+      cradleCenterX
+    } ${cradleDepth}`,
+    `C ${cradleCenterX + cradleBottomControlX} ${cradleDepth} ${
+      cradleRightSideX
+    } ${cradleShoulderDepth + cradleBottomControlY} ${cradleRightSideX} ${
+      cradleShoulderDepth
+    }`,
+    `C ${cradleRightSideX} ${cradleDepth * 0.08} ${
+      cradleEndX - cradleShoulderWidth * 0.55
+    } 0 ${cradleEndX} 0`,
+  ].join(" ");
+  const notchFillPath = [
+    notchCurvePath,
+    `L ${cradleStartX} 0`,
+    `Z`,
+  ].join(" ");
+  const notchEdgeStrokeWidth = clamp(1.75 * navScale, 1.5, 2.25);
+
+  const panelWidth = menuLayoutWidth;
+  const panelHeight =
+    radialRadius +
+    actionButtonSize / 2 +
+    clamp(Math.round(16 * menuScale), 12, 20);
+  const panelLeft = (width - panelWidth) / 2;
+  const panelPath = [
+    `M 0 ${panelHeight}`,
+    `C 0 ${panelHeight - panelHeight * quarterEllipseKappa} ${
+      panelWidth / 2 - (panelWidth / 2) * quarterEllipseKappa
+    } 0 ${panelWidth / 2} 0`,
+    `C ${panelWidth / 2 + (panelWidth / 2) * quarterEllipseKappa} 0 ${
+      panelWidth
+    } ${panelHeight - panelHeight * quarterEllipseKappa} ${panelWidth} ${
+      panelHeight
+    }`,
+    `L 0 ${panelHeight}`,
+    `Z`,
+  ].join(" ");
+  const panelBackground = TC.isDark ? "#243247" : "#E7EEF8";
+  const panelRestingOpacity = 0.72;
+
+  const actions: ActionItem[] = [
+    {
+      label: "Create Log",
+      icon: "document-text-outline",
+      onPress: onIncidentLog,
+    },
+    { label: "Alert", icon: "warning-outline", onPress: onSos },
+    { label: "Menu", icon: "grid-outline", onPress: onServices },
+    { label: "Privacy", icon: "eye-off-outline", onPress: onHideApp },
+    { label: "Logout", icon: "log-out-outline", onPress: onSignOut },
+  ];
 
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        archRoot: {
+        root: {
           position: "absolute",
           left: 0,
           right: 0,
-          bottom: centerFabBottom,
-          alignItems: "center",
-          zIndex: 2,
-          elevation: 2,
+          top: 0,
+          bottom: 0,
+          zIndex: 50,
         },
-        root: {
+        backdrop: {
+          ...StyleSheet.absoluteFillObject,
+          backgroundColor: "rgba(0, 0, 0, 0.22)",
+          zIndex: 0,
+        },
+        menuPanelClip: {
+          position: "absolute",
+          left: panelLeft,
+          bottom: effectiveNavHeight,
+          width: panelWidth,
+          height: panelHeight,
+          zIndex: 1,
+        },
+        notchPanelFill: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: effectiveNavHeight,
+          zIndex: 2,
+        },
+        actionLayer: {
+          ...StyleSheet.absoluteFillObject,
+          zIndex: 3,
+        },
+        actionNode: {
+          position: "absolute",
+          width: actionLabelWidth,
+          height: actionItemHeight,
+          alignItems: "center",
+        },
+        actionPressable: {
+          width: actionLabelWidth,
+          height: actionItemHeight,
+          alignItems: "center",
+        },
+        actionCircleShadow: {
+          width: actionButtonSize,
+          height: actionButtonSize,
+          borderRadius: actionButtonSize / 2,
+          backgroundColor: TC.primary,
+          ...Platform.select({
+            ios: {
+              shadowColor: "#0F172A",
+              shadowOpacity: TC.isDark ? 0.3 : 0.22,
+              shadowRadius: 9,
+              shadowOffset: { width: 0, height: 5 },
+            },
+            android: { elevation: 8 },
+          }),
+        },
+        actionCircle: {
+          width: actionButtonSize,
+          height: actionButtonSize,
+          borderRadius: actionButtonSize / 2,
+          overflow: "hidden",
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        actionLabel: {
+          width: actionLabelWidth,
+          marginTop: actionLabelGap,
+          color: TC.textDark,
+          fontSize: clamp(Math.round(12 * menuFontScale), 10, 14),
+          lineHeight: actionLabelLineHeight,
+          fontWeight: "700",
+          textAlign: "center",
+          includeFontPadding: false,
+        },
+        fabAnchor: {
           position: "absolute",
           left: 0,
           right: 0,
           bottom: centerFabBottom,
           height: fabSize,
           alignItems: "center",
-          zIndex: 20,
+          zIndex: 4,
           elevation: 20,
-        },
-        actionLayer: {
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: 0,
-          bottom: 0,
-          zIndex: 3,
-        },
-        actionNode: {
-          position: "absolute",
-          width: actionButtonSize,
-          height: actionButtonSize,
-          overflow: "visible",
-        },
-        actionSurface: {
-          position: "absolute",
-          right: 0,
-          top: 0,
-          height: actionButtonSize,
-          borderRadius: actionButtonSize / 2,
-          backgroundColor: actionMenuBg,
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: TC.isDark ? "rgba(148, 163, 184, 0.22)" : "#E7EEF7",
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "hidden",
-          ...Platform.select({
-            ios: {
-              shadowColor: "#0F172A",
-              shadowOpacity: TC.isDark ? 0.28 : 0.16,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 4 },
-            },
-            android: { elevation: 6 },
-          }),
-        },
-        iconPressable: {
-          position: "absolute",
-          right: 0,
-          top: 0,
-          width: actionButtonSize,
-          height: actionButtonSize,
-          borderRadius: actionButtonSize / 2,
-          alignItems: "center",
-          justifyContent: "center",
-        },
-        expandedLabel: {
-          position: "absolute",
-          left: clamp(Math.round(10 * s), 8, 12),
-          right: actionButtonSize + clamp(Math.round(8 * s), 7, 10),
-          top: 0,
-          bottom: 0,
-          justifyContent: "center",
-        },
-        expandedLabelText: {
-          fontSize: clamp(Math.round(11 * fs), 10, 12),
-          fontWeight: "800",
-          color: TC.textDark,
-          textAlign: "center",
-          includeFontPadding: false,
-        },
-        longPressHint: {
-          position: "absolute",
-          width: longPressHintWidth,
-          minHeight: clamp(Math.round(38 * s), 34, 42),
-          paddingHorizontal: clamp(Math.round(10 * s), 9, 12),
-          paddingVertical: clamp(Math.round(7 * s), 6, 8),
-          borderRadius: clamp(Math.round(12 * s), 10, 14),
-          backgroundColor: actionMenuBg,
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: TC.isDark ? "rgba(148, 163, 184, 0.22)" : "#E7EEF7",
-          justifyContent: "center",
-          zIndex: 12,
-          ...Platform.select({
-            ios: {
-              shadowColor: "#0F172A",
-              shadowOpacity: TC.isDark ? 0.28 : 0.16,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 4 },
-            },
-            android: { elevation: 8 },
-          }),
-        },
-        longPressHintText: {
-          fontSize: clamp(Math.round(10 * fs), 9, 11),
-          fontWeight: "800",
-          color: TC.textDark,
-          textAlign: "center",
-          lineHeight: clamp(Math.round(13 * fs), 12, 15),
-          includeFontPadding: false,
         },
         fabButton: {
           width: fabSize,
@@ -204,196 +329,41 @@ export default function QuickActions({
           overflow: "hidden",
           alignItems: "center",
           justifyContent: "center",
-          zIndex: 2,
           ...Platform.select({
             ios: {
               shadowColor: "#000",
-              shadowOpacity: 0.18,
+              shadowOpacity: 0.2,
               shadowRadius: 14,
               shadowOffset: { width: 0, height: 8 },
             },
             android: { elevation: 10 },
           }),
         },
-        fabArchClip: {
-          position: "absolute",
-          bottom: fabSize / 2,
-          width: fabArchSize,
-          height: fabArchSize / 2,
-          overflow: "hidden",
-          alignItems: "center",
-          zIndex: 1,
-        },
-        fabArch: {
-          width: fabArchSize,
-          height: fabArchSize,
-          borderRadius: fabArchSize / 2,
-          backgroundColor: TC.surface,
-        },
       }),
     [
-      TC.surface,
       TC.isDark,
-      actionMenuBg,
+      TC.primary,
+      TC.textDark,
       actionButtonSize,
+      actionItemHeight,
+      actionLabelGap,
+      actionLabelLineHeight,
+      actionLabelWidth,
       centerFabBottom,
-      fabArchSize,
+      effectiveNavHeight,
       fabSize,
-      fs,
-      s,
-      expandedActionWidth,
-      longPressHintWidth,
+      menuFontScale,
+      panelHeight,
+      panelLeft,
+      panelWidth,
     ]
   );
 
   const [reduceMotion, setReduceMotion] = useState(false);
-  const [expandedActionIndex, setExpandedActionIndex] = useState<number | "all" | null>(null);
-  const [showLongPressHint, setShowLongPressHint] = useState(false);
-  const expansion = useRef(new Animated.Value(0)).current;
-  const labelOpacity = useRef(new Animated.Value(0)).current;
-  const hintOpacity = useRef(new Animated.Value(0)).current;
-  const expandedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressSuppressRef = useRef<string | null>(null);
-  const longPressSuppressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastMenuAnimationValueRef = useRef(0);
-
-  const clearExpandedTimer = useCallback(() => {
-    if (!expandedTimerRef.current) return;
-    clearTimeout(expandedTimerRef.current);
-    expandedTimerRef.current = null;
-  }, []);
-
-  const clearHintTimer = useCallback(() => {
-    if (!hintTimerRef.current) return;
-    clearTimeout(hintTimerRef.current);
-    hintTimerRef.current = null;
-  }, []);
-
-  const hideLongPressHint = useCallback(
-    (immediate = false) => {
-      clearHintTimer();
-      hintOpacity.stopAnimation();
-
-      if (immediate || reduceMotion) {
-        hintOpacity.setValue(0);
-        setShowLongPressHint(false);
-        return;
-      }
-
-      Animated.timing(hintOpacity, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished) setShowLongPressHint(false);
-      });
-    },
-    [clearHintTimer, hintOpacity, reduceMotion]
-  );
-
-  const revealLongPressHint = useCallback(() => {
-    clearHintTimer();
-    hintOpacity.stopAnimation();
-    setShowLongPressHint(true);
-    hintOpacity.setValue(0);
-
-    Animated.timing(hintOpacity, {
-      toValue: 1,
-      duration: reduceMotion ? 0 : 220,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (!finished) return;
-      hintTimerRef.current = setTimeout(() => hideLongPressHint(), 10000);
-    });
-  }, [clearHintTimer, hideLongPressHint, hintOpacity, reduceMotion]);
-
-  const collapseActionLabel = useCallback(
-    (immediate = false, showHintAfter = false) => {
-      clearExpandedTimer();
-      expansion.stopAnimation();
-      labelOpacity.stopAnimation();
-
-      if (immediate || reduceMotion) {
-        expansion.setValue(0);
-        labelOpacity.setValue(0);
-        setExpandedActionIndex(null);
-        if (immediate) hideLongPressHint(true);
-        else if (showHintAfter) revealLongPressHint();
-        return;
-      }
-
-      Animated.parallel([
-        Animated.timing(labelOpacity, {
-          toValue: 0,
-          duration: 170,
-          useNativeDriver: true,
-        }),
-        Animated.timing(expansion, {
-          toValue: 0,
-          duration: 240,
-          useNativeDriver: false,
-        }),
-      ]).start(({ finished }) => {
-        if (!finished) return;
-        setExpandedActionIndex(null);
-        if (showHintAfter) revealLongPressHint();
-      });
-    },
-    [
-      clearExpandedTimer,
-      expansion,
-      hideLongPressHint,
-      labelOpacity,
-      reduceMotion,
-      revealLongPressHint,
-    ]
-  );
-
-  const expandActionLabels = useCallback(
-    (target: number | "all", visibleForMs: number) => {
-      clearExpandedTimer();
-      hideLongPressHint(true);
-      expansion.stopAnimation();
-      labelOpacity.stopAnimation();
-      setExpandedActionIndex(target);
-      expansion.setValue(0);
-      labelOpacity.setValue(0);
-
-      Animated.parallel([
-        Animated.timing(expansion, {
-          toValue: 1,
-          duration: reduceMotion ? 0 : 260,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: false,
-        }),
-        Animated.timing(labelOpacity, {
-          toValue: 1,
-          delay: reduceMotion ? 0 : 90,
-          duration: reduceMotion ? 0 : 170,
-          useNativeDriver: true,
-        }),
-      ]).start(({ finished }) => {
-        if (!finished) return;
-        expandedTimerRef.current = setTimeout(
-          () => collapseActionLabel(false, target === "all"),
-          visibleForMs
-        );
-      });
-    },
-    [
-      clearExpandedTimer,
-      collapseActionLabel,
-      expansion,
-      hideLongPressHint,
-      labelOpacity,
-      reduceMotion,
-    ]
-  );
-
-  const expandActionLabel = useCallback(
-    (index: number) => expandActionLabels(index, 3000),
-    [expandActionLabels]
+  const [actionsInteractive, setActionsInteractive] = useState(false);
+  const longPressSuppressRef = useRef(false);
+  const longPressSuppressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
   );
 
   useEffect(() => {
@@ -403,235 +373,274 @@ export default function QuickActions({
   }, []);
 
   useEffect(() => {
-    return () => {
-      clearExpandedTimer();
-      clearHintTimer();
-      if (longPressSuppressTimerRef.current) clearTimeout(longPressSuppressTimerRef.current);
-      expansion.stopAnimation();
-      labelOpacity.stopAnimation();
-      hintOpacity.stopAnimation();
-    };
-  }, [clearExpandedTimer, clearHintTimer, expansion, hintOpacity, labelOpacity]);
+    if (!isOpen) {
+      setActionsInteractive(false);
+      return;
+    }
 
-  useEffect(() => {
-    if (!isOpen) collapseActionLabel(true);
-  }, [collapseActionLabel, isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    expandActionLabels("all", 5000);
-  }, [expandActionLabels, isOpen]);
+    if (reduceMotion) setActionsInteractive(true);
+  }, [isOpen, reduceMotion]);
 
   useEffect(() => {
     const listenerId = animation.addListener(({ value }) => {
-      if (value < lastMenuAnimationValueRef.current - 0.01) {
-        collapseActionLabel(true);
+      if (!isOpen || value < 0.7) {
+        setActionsInteractive(false);
+      } else {
+        setActionsInteractive(true);
       }
-      lastMenuAnimationValueRef.current = value;
     });
 
     return () => animation.removeListener(listenerId);
-  }, [animation, collapseActionLabel]);
-
-  const fabRotate = animation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "45deg"],
-  });
+  }, [animation, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
 
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      collapseActionLabel(true);
       onToggle();
       return true;
     });
 
     return () => subscription.remove();
-  }, [collapseActionLabel, isOpen, onToggle]);
+  }, [isOpen, onToggle]);
 
-  const actions: ActionItem[] = [
-    { label: "Incident Log", menuLabel: "Incident Log", icon: "document-text-outline", onPress: onIncidentLog },
-    { label: "Alert", menuLabel: "Alert", icon: "warning-outline", onPress: onSos },
-    { label: "Services", menuLabel: "Services", icon: "grid-outline", onPress: onServices },
-    { label: "Hide App", menuLabel: "Hide App", icon: "eye-off-outline", onPress: onHideApp },
-    { label: "Sign Out", menuLabel: "Sign Out", icon: "log-out-outline", onPress: onSignOut },
-  ];
-  const columnTargets = [
-    { x: rightColumnOffset, rise: columnTopRise },
-    { x: rightColumnOffset, rise: columnTopRise - columnStep },
-    { x: rightColumnOffset, rise: columnTopRise - columnStep * 2 },
-    { x: rightColumnOffset, rise: columnTopRise - columnStep * 3 },
-    { x: rightColumnOffset, rise: columnBottomRise },
-  ];
-  const hintIconLeft = width / 2 - actionButtonSize / 2 + rightColumnOffset;
-  const longPressHintLeft = clamp(
-    hintIconLeft - longPressHintWidth - 12,
-    8,
-    width - longPressHintWidth - 8
-  );
-  const longPressHintTop = fabSize / 2 - actionButtonSize / 2 - columnBottomRise;
-  const longPressHintTranslateY = hintOpacity.interpolate({
+  useEffect(() => {
+    return () => {
+      if (longPressSuppressTimerRef.current) {
+        clearTimeout(longPressSuppressTimerRef.current);
+      }
+    };
+  }, []);
+
+  const fabRotate = animation.interpolate({
     inputRange: [0, 1],
-    outputRange: [6, 0],
+    outputRange: ["0deg", "45deg"],
+  });
+  const backdropOpacity = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+    extrapolate: "clamp",
+  });
+  const panelOpacity = animation.interpolate({
+    inputRange: [0, 0.08, 0.7, 1],
+    outputRange: [0, 0, 0.68, panelRestingOpacity],
+    extrapolate: "clamp",
   });
 
   return (
-    <>
-      <View pointerEvents="none" style={styles.archRoot}>
-        <View style={styles.fabArchClip}>
-          <View style={styles.fabArch} />
-        </View>
-      </View>
+    <View
+      pointerEvents="box-none"
+      style={styles.root}
+      accessibilityViewIsModal={isOpen}
+      importantForAccessibility={isOpen ? "yes" : "auto"}
+    >
+      {isOpen ? (
+        <Animated.View
+          style={[
+            styles.backdrop,
+            { opacity: reduceMotion ? 1 : backdropOpacity },
+          ]}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFillObject}
+            onPress={onToggle}
+            accessibilityRole="button"
+            accessibilityLabel="Close services menu"
+          />
+        </Animated.View>
+      ) : null}
 
-      <View pointerEvents="box-none" style={styles.root}>
-        {isOpen ? (
-          <View pointerEvents="box-none" style={styles.actionLayer}>
-            {actions.map((item, index) => {
-              // Sign Out is nearest the FAB, so the stack expands bottom to top.
-              const revealRank = actions.length - 1 - index;
-              const revealStart = revealRank * 0.055;
-              const revealEnd = Math.min(1, revealStart + 0.72);
-              const hasDelay = revealStart > 0;
-              const target = columnTargets[index];
-              const itemOpacity = animation.interpolate({
-                inputRange: hasDelay ? [0, revealStart, revealEnd] : [0, revealEnd],
-                outputRange: hasDelay ? [0, 0, 1] : [0, 1],
-                extrapolate: "clamp",
-              });
-              const itemTranslateY = animation.interpolate({
-                inputRange: hasDelay ? [0, revealStart, revealEnd] : [0, revealEnd],
-                outputRange: hasDelay ? [0, 0, -target.rise] : [0, -target.rise],
-                extrapolate: "clamp",
-              });
-              const itemTranslateX = animation.interpolate({
-                inputRange: hasDelay ? [0, revealStart, revealEnd] : [0, revealEnd],
-                outputRange: hasDelay ? [0, 0, target.x] : [0, target.x],
-                extrapolate: "clamp",
-              });
-              const itemScale = animation.interpolate({
-                inputRange: hasDelay ? [0, revealStart, revealEnd] : [0, revealEnd],
-                outputRange: hasDelay ? [0.5, 0.5, 1] : [0.5, 1],
-                extrapolate: "clamp",
-              });
-              const isExpanded = expandedActionIndex === "all" || expandedActionIndex === index;
-              const surfaceWidth = isExpanded
-                ? expansion.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [actionButtonSize, expandedActionWidth],
-                  })
-                : actionButtonSize;
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.menuPanelClip,
+          {
+            opacity: reduceMotion
+              ? isOpen
+                ? panelRestingOpacity
+                : 0
+              : panelOpacity,
+          },
+        ]}
+      >
+        <Svg
+          pointerEvents="none"
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${panelWidth} ${panelHeight}`}
+          preserveAspectRatio="none"
+        >
+          <Path d={panelPath} fill={panelBackground} />
+        </Svg>
+      </Animated.View>
 
-              return (
-                <Animated.View
-                  key={item.label}
-                  style={[
-                    styles.actionNode,
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.notchPanelFill,
+          {
+            opacity: reduceMotion
+              ? isOpen
+                ? panelRestingOpacity
+                : 0
+              : panelOpacity,
+          },
+        ]}
+      >
+        <Svg
+          pointerEvents="none"
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${width} ${effectiveNavHeight}`}
+          preserveAspectRatio="none"
+        >
+          <Path d={notchFillPath} fill={panelBackground} />
+          <Path
+            d={notchCurvePath}
+            fill="none"
+            stroke={panelBackground}
+            strokeWidth={notchEdgeStrokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      </Animated.View>
+
+      <View
+        pointerEvents={isOpen ? "box-none" : "none"}
+        style={styles.actionLayer}
+      >
+        {actions.map((item, index) => {
+          const target = actionTargets[index];
+          const revealRank = Math.abs(index - 2);
+          const revealStart = revealRank * 0.045;
+          const revealEnd = Math.min(1, 0.72 + revealRank * 0.05);
+          const hasDelay = revealStart > 0;
+          const inputRange = hasDelay
+            ? [0, revealStart, revealEnd]
+            : [0, revealEnd];
+          const itemOpacity = animation.interpolate({
+            inputRange,
+            outputRange: hasDelay ? [0, 0, 1] : [0, 1],
+            extrapolate: "clamp",
+          });
+          const translateX = animation.interpolate({
+            inputRange,
+            outputRange: hasDelay ? [0, 0, target.x] : [0, target.x],
+            extrapolate: "clamp",
+          });
+          const translateY = animation.interpolate({
+            inputRange,
+            outputRange: hasDelay
+              ? [0, 0, -target.rise + actionVerticalInset]
+              : [0, -target.rise + actionVerticalInset],
+            extrapolate: "clamp",
+          });
+          const itemScale = animation.interpolate({
+            inputRange,
+            outputRange: hasDelay ? [0.58, 0.58, 1] : [0.58, 1],
+            extrapolate: "clamp",
+          });
+
+          return (
+            <Animated.View
+              key={item.label}
+              pointerEvents={actionsInteractive ? "auto" : "none"}
+              style={[
+                styles.actionNode,
+                {
+                  left: "50%",
+                  marginLeft: -actionLabelWidth / 2,
+                  bottom: actionNodeBottom,
+                  opacity: reduceMotion ? 1 : itemOpacity,
+                  transform: [
+                    { translateX: reduceMotion ? target.x : translateX },
                     {
-                      left: width / 2 - actionButtonSize / 2,
-                      top: fabSize / 2 - actionButtonSize / 2,
-                      opacity: reduceMotion ? 1 : itemOpacity,
-                      transform: [
-                        { translateX: reduceMotion ? target.x : itemTranslateX },
-                        { translateY: reduceMotion ? -target.rise : itemTranslateY },
-                        { scale: reduceMotion ? 1 : itemScale },
-                      ],
+                      translateY: reduceMotion
+                        ? -target.rise + actionVerticalInset
+                        : translateY,
                     },
-                  ]}
-                >
-                  <Animated.View style={[styles.actionSurface, { width: surfaceWidth }]}>
-                    {isExpanded ? (
-                      <Animated.View style={[styles.expandedLabel, { opacity: labelOpacity }]}>
-                        <Text
-                          style={[
-                            styles.expandedLabelText,
-                            item.label === "Sign Out" && { color: "#DC2626" },
-                          ]}
-                          numberOfLines={1}
-                          allowFontScaling={false}
-                        >
-                          {item.menuLabel}
-                        </Text>
-                      </Animated.View>
-                    ) : null}
-                  </Animated.View>
-
-                  <Pressable
-                    onPress={() => {
-                      if (longPressSuppressRef.current === item.label) {
-                        longPressSuppressRef.current = null;
-                        return;
-                      }
-
-                      collapseActionLabel(true);
-                      onToggle();
-                      item.onPress();
-                    }}
-                    onLongPress={() => {
-                      longPressSuppressRef.current = item.label;
-                      if (longPressSuppressTimerRef.current) {
-                        clearTimeout(longPressSuppressTimerRef.current);
-                        longPressSuppressTimerRef.current = null;
-                      }
-                      expandActionLabel(index);
-                    }}
-                    onPressOut={() => {
-                      if (longPressSuppressRef.current !== item.label) return;
-                      if (longPressSuppressTimerRef.current) {
-                        clearTimeout(longPressSuppressTimerRef.current);
-                      }
-                      longPressSuppressTimerRef.current = setTimeout(() => {
-                        longPressSuppressRef.current = null;
-                        longPressSuppressTimerRef.current = null;
-                      }, 100);
-                    }}
-                    delayLongPress={450}
-                    style={({ pressed }) => [
-                      styles.iconPressable,
-                      pressed && { transform: [{ scale: 0.94 }] },
-                    ]}
-                    hitSlop={6}
-                    accessibilityRole="button"
-                    accessibilityLabel={item.label}
-                    accessibilityHint={`Activate ${item.label}`}
-                  >
+                    { scale: reduceMotion ? 1 : itemScale },
+                  ],
+                },
+              ]}
+            >
+              <Pressable
+                onPress={() => {
+                  onToggle();
+                  item.onPress();
+                }}
+                hitSlop={4}
+                accessibilityRole="button"
+                accessibilityLabel={item.label}
+                accessibilityHint={`Activate ${item.label}`}
+                style={({ pressed }) => [
+                  styles.actionPressable,
+                  pressed && { opacity: 0.78 },
+                ]}
+              >
+                <View style={styles.actionCircleShadow}>
+                  <View style={styles.actionCircle}>
+                    <LinearGradient
+                      colors={TC.gradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={StyleSheet.absoluteFillObject}
+                    />
                     <Ionicons
                       name={item.icon}
                       size={actionIconSize}
-                      color={item.label === "Sign Out" ? "#DC2626" : TC.primary}
+                      color="#FFFFFF"
                     />
-                  </Pressable>
-                </Animated.View>
-              );
-            })}
+                  </View>
+                </View>
 
-            {showLongPressHint ? (
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  styles.longPressHint,
-                  {
-                    left: longPressHintLeft,
-                    top: longPressHintTop,
-                    opacity: hintOpacity,
-                    transform: [{ translateY: longPressHintTranslateY }],
-                  },
-                ]}
-              >
-                <Text style={styles.longPressHintText} allowFontScaling={false}>
-                  Long press to see the icon label
+                <Text
+                  style={styles.actionLabel}
+                  numberOfLines={1}
+                  allowFontScaling={false}
+                >
+                  {item.label}
                 </Text>
-              </Animated.View>
-            ) : null}
-          </View>
-        ) : null}
+              </Pressable>
+            </Animated.View>
+          );
+        })}
+      </View>
 
+      <View pointerEvents="box-none" style={styles.fabAnchor}>
         <Pressable
           onPress={() => {
-            collapseActionLabel(true);
+            if (longPressSuppressRef.current) {
+              longPressSuppressRef.current = false;
+              return;
+            }
+
             onToggle();
           }}
+          onLongPress={
+            onFabLongPress
+              ? () => {
+                  longPressSuppressRef.current = true;
+                  onFabLongPress();
+                }
+              : undefined
+          }
+          onPressOut={() => {
+            if (!longPressSuppressRef.current) return;
+            if (longPressSuppressTimerRef.current) {
+              clearTimeout(longPressSuppressTimerRef.current);
+            }
+            longPressSuppressTimerRef.current = setTimeout(() => {
+              longPressSuppressRef.current = false;
+              longPressSuppressTimerRef.current = null;
+            }, 100);
+          }}
+          delayLongPress={450}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={isOpen ? "Close services menu" : "Open services menu"}
+          accessibilityState={{ expanded: isOpen }}
           style={({ pressed }) => [
             styles.fabButton,
             pressed && { transform: [{ scale: 0.95 }] },
@@ -644,10 +653,14 @@ export default function QuickActions({
             style={StyleSheet.absoluteFillObject}
           />
           <Animated.View style={{ transform: [{ rotate: fabRotate }] }}>
-            <Ionicons name="add" size={30} color="#FFFFFF" />
+            <Ionicons
+              name="add"
+              size={clamp(Math.round(30 * menuScale), 27, 34)}
+              color="#FFFFFF"
+            />
           </Animated.View>
         </Pressable>
       </View>
-    </>
+    </View>
   );
 }

@@ -101,8 +101,8 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
   const TC = useColors();
   const { width, height } = useWindowDimensions();
 
-  const s = clamp(width / 375, 0.95, 1.45);
-  const vs = clamp(height / 812, 0.95, 1.25);
+  const s = clamp(Math.min(width, 480) / 375, 0.84, 1.12);
+  const vs = clamp(height / 812, 0.78, 1.08);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
@@ -229,7 +229,7 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
     <View style={[styles.safe, { backgroundColor: TC.surface }]}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView
           bounces={false}
@@ -298,7 +298,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingBottom: vscale(14),
     },
 
-    page: { flexGrow: 1 },
+    page: {
+      flexGrow: 1,
+      width: "100%",
+      maxWidth: 480,
+      alignSelf: "center",
+    },
 
     titleBlock: { marginTop: vscale(18), marginBottom: vscale(22) },
 
@@ -329,7 +334,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     inputWrap: { position: "relative" },
 
     input: {
-      height: vscale(50),
+      minHeight: Math.max(44, vscale(50)),
       borderRadius: scale(14),
       paddingHorizontal: scale(14),
       borderWidth: 1,
@@ -343,7 +348,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       position: "absolute",
       right: scale(10),
       top: 0,
-      height: vscale(50),
+      minHeight: Math.max(44, vscale(50)),
       width: scale(34),
       alignItems: "center",
       justifyContent: "center",
@@ -372,7 +377,11 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
 
     ctaInnerClip: { borderRadius: scale(14), overflow: "hidden" },
 
-    ctaGradient: { height: vscale(52), alignItems: "center", justifyContent: "center" },
+    ctaGradient: {
+      minHeight: Math.max(46, vscale(52)),
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
     ctaText: { color: "#FFFFFF", fontSize: scale(14), fontWeight: "800" },
 
@@ -401,7 +410,13 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       lineHeight: scale(14),
     },
 
-    termsRow: { flexDirection: "row", alignItems: "center", marginTop: vscale(2) },
+    termsRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      flexWrap: "wrap",
+      marginTop: vscale(2),
+    },
 
     termsLink: {
       fontSize: scale(11),

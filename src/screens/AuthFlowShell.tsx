@@ -45,8 +45,8 @@ export default function AuthFlowShell({
 }: Props) {
   const { width, height } = useWindowDimensions();
 
-  const s = clamp(width / 375, 0.95, 1.6);
-  const vs = clamp(height / 812, 0.95, 1.35);
+  const s = clamp(Math.min(width, 480) / 375, 0.84, 1.12);
+  const vs = clamp(height / 812, 0.78, 1.08);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 

@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Modal,
   Animated,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -112,12 +113,15 @@ export default function PinScreen({
   const TC = useColors();
   const { width, height } = useWindowDimensions();
 
-  const s = clamp(width / 375, 0.95, 1.45);
-  const vs = clamp(height / 812, 0.95, 1.25);
+  const s = clamp(Math.min(width, 480) / 375, 0.84, 1.12);
+  const vs = clamp(height / 812, 0.76, 1.08);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
-  const styles = useMemo(() => createStyles(scale, vscale), [width, height]);
+  const styles = useMemo(
+    () => createStyles(scale, vscale, width, height),
+    [width, height]
+  );
 
   const [pin, setPin] = useState("");
   const [lockedOut, setLockedOut] = useState(false);
@@ -245,7 +249,12 @@ export default function PinScreen({
       <SafeAreaView style={[styles.safe, { backgroundColor: TC.screenBg }]} edges={["top", "bottom"]}>
       <StatusBar barStyle={TC.statusBar} backgroundColor={TC.screenBg} />
 
-      <View style={[styles.container, { backgroundColor: TC.screenBg }]}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: TC.screenBg }}
+        contentContainerStyle={[styles.container, { backgroundColor: TC.screenBg }]}
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Top Bar */}
         <View style={styles.topBar}>
           <Pressable
@@ -347,7 +356,7 @@ export default function PinScreen({
             </View>
           </>
         )}
-      </View>
+      </ScrollView>
       </SafeAreaView>
 
       <InvalidPinModal
@@ -376,7 +385,7 @@ export default function PinScreen({
               opacity: lockFade,
               transform: [{ scale: lockPop }],
               width: "100%",
-              maxWidth: scale(320),
+              maxWidth: 360,
               borderRadius: scale(18),
               backgroundColor: TC.surface,
               paddingHorizontal: scale(24),
@@ -419,24 +428,40 @@ export default function PinScreen({
   );
 }
 
-function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+function createStyles(
+  scale: (n: number) => number,
+  vscale: (n: number) => number,
+  width: number,
+  height: number
+) {
+  const contentWidth = Math.min(width, 480);
+  const hPad = scale(22);
+  const keyGap = clamp(scale(20), 12, 22);
   const dotSize = clamp(scale(22), 18, 28);
 
-  const spaceLogoToTitle = clamp(vscale(22), 16, 30);
-  const spaceTitleToDots = clamp(vscale(18), 14, 26);
+  const spaceLogoToTitle = clamp(vscale(18), 10, 24);
+  const spaceTitleToDots = clamp(vscale(18), 10, 22);
   const spaceDotsToKeypad = clamp(vscale(10), 6, 14);
-  const keypadTop = clamp(vscale(48), 40, 70);
-  const keypadRowGap = clamp(vscale(12), 10, 18);
+  const keypadTop = clamp(vscale(height < 700 ? 18 : 34), 14, 42);
+  const keypadRowGap = clamp(vscale(12), 8, 16);
 
-  const btnSize = scale(70);
+  const availableKeyWidth = contentWidth - hPad * 2 - keyGap * 2;
+  const btnSizeByWidth = Math.floor(availableKeyWidth / 3);
+  const btnSizeByHeight = Math.floor((height * 0.4 - keypadRowGap * 3) / 4);
+  const btnSize = clamp(Math.min(scale(70), btnSizeByWidth, btnSizeByHeight), 48, 70);
+  const keypadWidth = btnSize * 3 + keyGap * 2;
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: "#F0F4F8" },
 
     container: {
-      flex: 1,
-      paddingHorizontal: scale(22),
+      flexGrow: 1,
+      width: "100%",
+      maxWidth: 480,
+      alignSelf: "center",
+      paddingHorizontal: hPad,
       paddingTop: vscale(6),
+      paddingBottom: vscale(16),
       alignItems: "center",
       backgroundColor: "#F0F4F8",
     },
@@ -457,7 +482,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     headerSpacer: { width: scale(36), height: scale(36) },
 
     logoWrap: {
-      marginTop: vscale(26),
+      marginTop: vscale(height < 700 ? 8 : 22),
       marginBottom: spaceLogoToTitle,
       alignItems: "center",
     },
@@ -476,7 +501,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
 
     pinHeader: {
       alignItems: "center",
-      marginTop: vscale(48),
+      marginTop: vscale(height < 700 ? 8 : 24),
     },
 
 
@@ -528,10 +553,10 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     keypadGrid: {
-      width: scale(260),
+      width: keypadWidth,
       flexDirection: "row",
       flexWrap: "wrap",
-      justifyContent: "space-between",
+      columnGap: keyGap,
       rowGap: keypadRowGap,
     },
 

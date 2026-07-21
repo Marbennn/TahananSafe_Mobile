@@ -60,6 +60,7 @@ export default function IncidentLogConfirmationScreen({
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const s = useMemo(() => clamp(screenWidth / 375, 0.9, 1.16), [screenWidth]);
+  const isCompact = screenWidth < 350;
 
   const [stage, setStage] = useState<"preview" | "confirmed">("preview");
   const [confirmedAlertNo, setConfirmedAlertNo] = useState("");
@@ -112,7 +113,7 @@ export default function IncidentLogConfirmationScreen({
             <Ionicons name="chevron-back" size={31} color="#00518D" />
           </Pressable>
 
-          <Text style={styles.topTitle} allowFontScaling={false}>
+          <Text style={[styles.topTitle, isCompact && styles.topTitleCompact]} allowFontScaling={false}>
             Incident Log Preview
           </Text>
 
@@ -146,33 +147,36 @@ export default function IncidentLogConfirmationScreen({
           <IncidentPreviewCard data={data} />
         </ScrollView>
 
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
-          <Pressable
-            disabled={submitting}
-            onPress={onBack}
-            style={({ pressed }) => [
-              styles.editBtn,
-              (pressed || submitting) && { opacity: 0.72 },
-            ]}
-          >
-            <Text style={styles.editText} allowFontScaling={false}>
-              Edit
-            </Text>
-          </Pressable>
+        <View style={[styles.footerSurface, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+          <View style={styles.footer}>
+            <Pressable
+              disabled={submitting}
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.editBtn,
+                isCompact && styles.editBtnCompact,
+                (pressed || submitting) && { opacity: 0.72 },
+              ]}
+            >
+              <Text style={styles.editText} allowFontScaling={false}>
+                Edit
+              </Text>
+            </Pressable>
 
-          <Pressable
-            disabled={submitting}
-            onPress={handleConfirm}
-            style={({ pressed }) => [
-              styles.confirmBtn,
-              (pressed || submitting) && { opacity: 0.9 },
-            ]}
-          >
-            {submitting ? <ActivityIndicator color="#FFFFFF" /> : null}
-            <Text style={styles.confirmText} allowFontScaling={false}>
-              {submitting ? "Submitting..." : "Confirm"}
-            </Text>
-          </Pressable>
+            <Pressable
+              disabled={submitting}
+              onPress={handleConfirm}
+              style={({ pressed }) => [
+                styles.confirmBtn,
+                (pressed || submitting) && { opacity: 0.9 },
+              ]}
+            >
+              {submitting ? <ActivityIndicator color="#FFFFFF" /> : null}
+              <Text style={styles.confirmText} allowFontScaling={false}>
+                {submitting ? "Submitting..." : "Confirm"}
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </SafeAreaView>
@@ -195,8 +199,11 @@ const styles = StyleSheet.create({
     backgroundColor: BG,
   },
   topBar: {
+    width: "100%",
+    maxWidth: 720,
+    alignSelf: "center",
     paddingHorizontal: 17,
-    paddingTop: 35,
+    paddingTop: 12,
     paddingBottom: 24,
     flexDirection: "row",
     alignItems: "center",
@@ -215,6 +222,9 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: TEXT_DARK,
   },
+  topTitleCompact: {
+    fontSize: 20,
+  },
   headerSpacer: {
     width: 40,
     height: 40,
@@ -224,6 +234,9 @@ const styles = StyleSheet.create({
     gap: 15,
   },
   stepHeader: {
+    width: "100%",
+    maxWidth: 680,
+    alignSelf: "center",
     paddingHorizontal: 11,
   },
   stepEyebrow: {
@@ -258,17 +271,22 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: TEXT_MUTED,
   },
-  footer: {
+  footerSurface: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 17,
     paddingTop: 12,
+    paddingHorizontal: 17,
+    backgroundColor: BG,
+  },
+  footer: {
+    width: "100%",
+    maxWidth: 680,
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: BG,
   },
   editBtn: {
     width: 97,
@@ -279,6 +297,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
+  },
+  editBtnCompact: {
+    width: 82,
   },
   editText: {
     fontSize: 18,

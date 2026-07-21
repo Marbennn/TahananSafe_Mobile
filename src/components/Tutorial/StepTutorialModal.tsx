@@ -1,17 +1,17 @@
-import React, { useState, useRef, useCallback, useMemo } from "react";
+import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Modal,
   Pressable,
-  Dimensions,
   FlatList,
   Animated,
+  ScrollView,
+  useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export type TutorialStep = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -35,6 +35,8 @@ export default function StepTutorialModal({
   headerIcon = "book-outline",
   steps,
 }: Props) {
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -44,7 +46,27 @@ export default function StepTutorialModal({
     onClose();
   }, [onClose]);
 
-  const cardWidth = SCREEN_WIDTH - 48;
+  const containerWidth = Math.min(Math.max(width - 32, 1), 560);
+  const cardWidth = containerWidth;
+  const containerMaxHeight = Math.min(
+    Math.max(height - insets.top - insets.bottom - 32, 1),
+    560
+  );
+  const isShort = height < 600;
+  const cardViewportHeight = Math.max(
+    96,
+    containerMaxHeight - (isShort ? 144 : 150)
+  );
+
+  useEffect(() => {
+    if (!visible || !steps.length) return;
+    requestAnimationFrame(() => {
+      flatListRef.current?.scrollToIndex({
+        index: Math.min(activeIndex, steps.length - 1),
+        animated: false,
+      });
+    });
+  }, [cardWidth, steps.length, visible]);
 
   const goToNext = useCallback(() => {
     if (activeIndex < steps.length - 1) {
@@ -71,16 +93,27 @@ export default function StepTutorialModal({
 
   const renderItem = useCallback(
     ({ item, index }: { item: TutorialStep; index: number }) => (
-      <View style={[styles.card, { width: cardWidth }]}>
-        <View style={[styles.iconCircle, { backgroundColor: item.iconColor + "15" }]}>
-          <Ionicons name={item.icon} size={48} color={item.iconColor} />
+      <ScrollView
+        style={{ width: cardWidth, height: cardViewportHeight }}
+        contentContainerStyle={[styles.card, isShort && styles.cardShort]}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        <View
+          style={[
+            styles.iconCircle,
+            isShort && styles.iconCircleShort,
+            { backgroundColor: item.iconColor + "15" },
+          ]}
+        >
+          <Ionicons name={item.icon} size={isShort ? 36 : 48} color={item.iconColor} />
         </View>
         <Text style={styles.stepLabel}>Step {index + 1} of {steps.length}</Text>
         <Text style={styles.cardTitle}>{item.title}</Text>
         <Text style={styles.cardDesc}>{item.description}</Text>
-      </View>
+      </ScrollView>
     ),
-    [cardWidth, steps.length]
+    [cardViewportHeight, cardWidth, isShort, steps.length]
   );
 
   const dots = useMemo(
@@ -105,7 +138,12 @@ export default function StepTutorialModal({
       <View style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
 
-        <View style={styles.container}>
+        <View
+          style={[
+            styles.container,
+            { width: containerWidth, maxHeight: containerMaxHeight },
+          ]}
+        >
           <View style={styles.header}>
             <Ionicons name={headerIcon} size={22} color="#1A3C6E" />
             <Text style={styles.headerTitle}>{title}</Text>
@@ -115,7 +153,9 @@ export default function StepTutorialModal({
           </View>
 
           <FlatList
+            key={`tutorial-${Math.round(cardWidth)}`}
             ref={flatListRef}
+            style={[styles.stepsList, { height: cardViewportHeight }]}
             data={steps}
             horizontal
             pagingEnabled
@@ -136,6 +176,12 @@ export default function StepTutorialModal({
               offset: cardWidth * index,
               index,
             })}
+            onScrollToIndexFailed={({ index }) => {
+              flatListRef.current?.scrollToOffset({
+                offset: index * cardWidth,
+                animated: false,
+              });
+            }}
           />
 
           <View style={styles.dotsRow}>{dots}</View>
@@ -173,13 +219,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
   container: {
-    width: SCREEN_WIDTH - 32,
     backgroundColor: "#FFF",
     borderRadius: 20,
     overflow: "hidden",
-    maxHeight: 520,
   },
   header: {
     flexDirection: "row",
@@ -195,10 +241,18 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#1A3C6E",
   },
+  stepsList: {
+    flexShrink: 1,
+  },
   card: {
+    flexGrow: 1,
     alignItems: "center",
     paddingHorizontal: 24,
     paddingVertical: 20,
+  },
+  cardShort: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
   },
   iconCircle: {
     width: 88,
@@ -207,6 +261,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
+  },
+  iconCircleShort: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    marginBottom: 10,
   },
   stepLabel: {
     fontSize: 11,

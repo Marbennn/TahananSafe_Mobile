@@ -277,7 +277,9 @@ export default function GreetingCard({ greeting, dateLine, userName = "User" }: 
     () =>
       StyleSheet.create({
         cardOuter: {
-          marginHorizontal: MH,
+          width: cardWApprox,
+          maxWidth: 560,
+          alignSelf: "center",
           marginTop: clamp(Math.round(6 * s), 4, 10),
           height: CARD_H,
           borderRadius: R,
@@ -381,6 +383,7 @@ export default function GreetingCard({ greeting, dateLine, userName = "User" }: 
       s,
       fs,
       CARD_H,
+      cardWApprox,
       MH,
       R,
       rightCropPad,

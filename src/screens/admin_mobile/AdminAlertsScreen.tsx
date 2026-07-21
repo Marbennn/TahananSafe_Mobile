@@ -307,8 +307,8 @@ export default function AdminAlertsScreen({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
-  const wScale = Math.min(Math.max(width / 375, 0.9), 1.25);
-  const hScale = Math.min(Math.max(height / 812, 0.9), 1.2);
+  const wScale = Math.min(Math.max(Math.min(width / 375, height / 700), 0.86), 1.2);
+  const hScale = Math.min(Math.max(height / 812, 0.76), 1.12);
   const scale = (n: number) => Math.round(n * wScale);
   const vscale = (n: number) => Math.round(n * hScale);
 
@@ -323,7 +323,7 @@ export default function AdminAlertsScreen({
   const [selectedAlert, setSelectedAlert] = useState<AlertItem | null>(null);
   const [adminCoords, setAdminCoords] = useState<{ lat: number; lng: number } | null>(null);
 
-  const NAV_BASE_HEIGHT = 78;
+  const NAV_BASE_HEIGHT = height < 500 ? 66 : 78;
   const FAB_SIZE = 62;
   const bottomPad = Math.max(insets.bottom, 10);
   const navHeight = NAV_BASE_HEIGHT + bottomPad;
@@ -419,7 +419,10 @@ export default function AdminAlertsScreen({
     onTabChange?.(key);
   };
 
-  const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
+  const styles = useMemo(
+    () => makeStyles(scale, vscale, height),
+    [width, height]
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -584,7 +587,7 @@ export default function AdminAlertsScreen({
           <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)" }}>
             {/* Top bar */}
             <SafeAreaView edges={["top"]} style={{ backgroundColor: Colors.primary }}>
-              <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, backgroundColor: Colors.primary }}>
+              <View style={styles.modalHeader}>
                 <Pressable onPress={() => setSelectedAlert(null)} hitSlop={12} style={{ marginRight: 12 }}>
                   <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
                 </Pressable>
@@ -617,21 +620,13 @@ export default function AdminAlertsScreen({
             </View>
 
             {/* Bottom info card */}
-            <SafeAreaView edges={["bottom"]} style={{ backgroundColor: "#FFFFFF" }}>
-              <View style={{
-                backgroundColor: "#FFFFFF",
-                paddingHorizontal: 20,
-                paddingTop: 16,
-                paddingBottom: 8,
-                borderTopLeftRadius: 20,
-                borderTopRightRadius: 20,
-                marginTop: -20,
-                shadowColor: "#000",
-                shadowOpacity: 0.1,
-                shadowRadius: 10,
-                shadowOffset: { width: 0, height: -4 },
-                elevation: 10,
-              }}>
+            <SafeAreaView edges={["bottom"]} style={styles.modalBottomSafe}>
+              <ScrollView
+                style={styles.modalInfoScroll}
+                contentContainerStyle={styles.modalInfoContent}
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+              >
                 <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 10 }}>
                   <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: "#FEE2E2", alignItems: "center", justifyContent: "center" }}>
                     <Ionicons name="warning" size={20} color="#DC2626" />
@@ -640,7 +635,10 @@ export default function AdminAlertsScreen({
                     <Text style={{ fontSize: 14, fontWeight: "800", color: TEXT }} allowFontScaling={false} numberOfLines={1}>
                       {selectedAlert?.senderName ?? "Unknown Sender"}
                     </Text>
-                    <Text style={{ fontSize: 12, fontWeight: "500", color: "#64748B", marginTop: 2 }} allowFontScaling={false}>
+                    <Text
+                      style={{ fontSize: 12, fontWeight: "500", color: "#64748B", marginTop: 2 }}
+                      allowFontScaling={false}
+                    >
                       {selectedAlert?.description ?? ""}
                     </Text>
                   </View>
@@ -679,7 +677,7 @@ export default function AdminAlertsScreen({
                     Dismiss
                   </Text>
                 </Pressable>
-              </View>
+              </ScrollView>
             </SafeAreaView>
           </View>
         </Modal>
@@ -701,12 +699,19 @@ export default function AdminAlertsScreen({
   );
 }
 
-function makeStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+function makeStyles(
+  scale: (n: number) => number,
+  vscale: (n: number) => number,
+  height: number
+) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: BG },
     page: { flex: 1, backgroundColor: BG },
 
     header: {
+      width: "100%",
+      maxWidth: 880,
+      alignSelf: "center",
       paddingHorizontal: scale(16),
       paddingTop: vscale(8),
       paddingBottom: vscale(4),
@@ -743,6 +748,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
 
     filterRow: {
+      width: "100%",
+      maxWidth: 880,
+      alignSelf: "center",
       flexDirection: "row",
       paddingHorizontal: scale(16),
       paddingVertical: vscale(10),
@@ -787,7 +795,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
 
     errorWrap: {
-      marginHorizontal: scale(16),
+      width: "90%",
+      maxWidth: 848,
+      alignSelf: "center",
       marginTop: vscale(4),
       marginBottom: vscale(4),
       paddingHorizontal: scale(12),
@@ -814,6 +824,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     },
 
     content: {
+      width: "100%",
+      maxWidth: 880,
+      alignSelf: "center",
       paddingHorizontal: scale(16),
       paddingTop: vscale(2),
     },
@@ -930,6 +943,34 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       fontWeight: "400",
       color: MUTED,
       textAlign: "center",
+    },
+    modalHeader: {
+      width: "100%",
+      maxWidth: 900,
+      alignSelf: "center",
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: scale(16),
+      paddingVertical: vscale(12),
+      backgroundColor: Colors.primary,
+    },
+    modalBottomSafe: {
+      backgroundColor: "#FFFFFF",
+    },
+    modalInfoScroll: {
+      width: "100%",
+      maxWidth: 720,
+      maxHeight: Math.max(1, Math.min(320, height * 0.48)),
+      alignSelf: "center",
+      marginTop: -20,
+      backgroundColor: "#FFFFFF",
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+    },
+    modalInfoContent: {
+      paddingHorizontal: scale(20),
+      paddingTop: vscale(16),
+      paddingBottom: vscale(8),
     },
   });
 }

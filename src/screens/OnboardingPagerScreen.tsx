@@ -40,8 +40,8 @@ export default function OnboardingPagerScreen({ onDone }: Props) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
-  const s = clamp(width / 375, 0.95, 1.6);
-  const vs = clamp(height / 812, 0.95, 1.35);
+  const s = clamp(Math.min(width, 480) / 375, 0.84, 1.12);
+  const vs = clamp(height / 812, 0.76, 1.08);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
@@ -131,7 +131,7 @@ export default function OnboardingPagerScreen({ onDone }: Props) {
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: TC.surface }]} edges={["top", "bottom"]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: TC.surface }]} edges={["top"]}>
       <StatusBar barStyle={TC.statusBar} backgroundColor={TC.surface} />
 
       {/* ✅ FIXED HEADER */}
@@ -244,6 +244,9 @@ function createStyles(
     },
 
     header: {
+      width: "100%",
+      maxWidth: 480,
+      alignSelf: "center",
       paddingHorizontal: scale(18),
       paddingTop: vscale(6),
       height: vscale(46),
@@ -273,7 +276,7 @@ function createStyles(
       flexDirection: "row",
       alignItems: "center",
 
-      bottom: vscale(120),
+      bottom: clamp(vscale(120), 72, 120),
 
       zIndex: 50,
       elevation: 50,
@@ -288,6 +291,9 @@ function createStyles(
     },
 
     footer: {
+      width: "100%",
+      maxWidth: 524,
+      alignSelf: "center",
       paddingHorizontal: scale(22),
       paddingTop: vscale(10),
       paddingBottom: Math.max(vscale(14), bottomInset + vscale(10)),
@@ -301,7 +307,7 @@ function createStyles(
     },
 
     ctaGradient: {
-      height: vscale(46),
+      minHeight: Math.max(44, vscale(46)),
       alignItems: "center",
       justifyContent: "center",
 

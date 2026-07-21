@@ -24,8 +24,8 @@ export default function TooManyRequestsModal({ visible, onClose }: Props) {
   const TC = useColors();
   const { width, height } = useWindowDimensions();
 
-  const s = clamp(width / 375, 0.95, 1.45);
-  const vs = clamp(height / 812, 0.95, 1.25);
+  const s = clamp(Math.min(width, 480) / 375, 0.84, 1.12);
+  const vs = clamp(height / 812, 0.76, 1.08);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
@@ -110,6 +110,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     card: {
       width: "100%",
       maxWidth: scale(320),
+      maxHeight: "90%",
       borderRadius: scale(18),
       backgroundColor: "#FFFFFF",
       paddingHorizontal: scale(24),

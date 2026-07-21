@@ -134,12 +134,12 @@ export default function AdminReportsScreen({ onBack, onOpenReportDetail, onTabCh
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
-  const wScale = Math.min(Math.max(width / 375, 0.9), 1.25);
-  const hScale = Math.min(Math.max(height / 812, 0.9), 1.2);
+  const wScale = Math.min(Math.max(Math.min(width / 375, height / 700), 0.86), 1.2);
+  const hScale = Math.min(Math.max(height / 812, 0.78), 1.12);
   const scale  = (n: number) => Math.round(n * wScale);
   const vscale = (n: number) => Math.round(n * hScale);
 
-  const NAV_BASE_HEIGHT    = 78;
+  const NAV_BASE_HEIGHT    = height < 500 ? 66 : 78;
   const FAB_SIZE           = 62;
   const bottomPad          = Math.max(insets.bottom, 10);
   const navHeight          = NAV_BASE_HEIGHT + bottomPad;
@@ -234,7 +234,7 @@ export default function AdminReportsScreen({ onBack, onOpenReportDetail, onTabCh
     });
   }, [filter, tabAnim]);
 
-  const styles = useMemo(() => makeStyles(scale, vscale), [width, height]);
+  const styles = useMemo(() => makeStyles(scale, vscale, width), [width, height]);
 
   // ── Render card ───────────────────────────────────────────────────────────
   const renderCard: ListRenderItem<AdminIncident> = ({ item }) => {
@@ -492,7 +492,11 @@ export default function AdminReportsScreen({ onBack, onOpenReportDetail, onTabCh
 }
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
-function makeStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+function makeStyles(
+  scale: (n: number) => number,
+  vscale: (n: number) => number,
+  width: number
+) {
   const CARD_R    = scale(20);
   const _iconSize = scale(18);
   const _miniIcon = scale(13);
@@ -509,6 +513,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       },
 
       headerWrap: {
+        width: "100%",
+        maxWidth: 880,
+        alignSelf: "center",
         paddingHorizontal: scale(16),
         paddingTop: vscale(8),
         paddingBottom: vscale(10),
@@ -552,6 +559,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
 
       searchInput: {
         flex: 1,
+        minWidth: 0,
         fontSize: scale(12),
         color: TEXT_DARK,
         fontWeight: "400",
@@ -594,6 +602,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       segmentText: { fontSize: scale(10), fontWeight: "600" },
 
       listContent: {
+        width: "100%",
+        maxWidth: 880,
+        alignSelf: "center",
         paddingHorizontal: scale(16),
         paddingTop: vscale(8),
       },
@@ -752,6 +763,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       // Center states
       centerBox: {
         flex: 1,
+        width: "100%",
+        maxWidth: Math.min(width, 880),
+        alignSelf: "center",
         alignItems: "center",
         justifyContent: "center",
         paddingHorizontal: scale(20),

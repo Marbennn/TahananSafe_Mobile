@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, useColors } from "../../theme/colors";
@@ -46,8 +47,8 @@ export default function ForgotPinModal({
   const TC = useColors();
   const { width, height } = useWindowDimensions();
 
-  const s = clamp(width / 375, 0.95, 1.45);
-  const vs = clamp(height / 812, 0.95, 1.25);
+  const s = clamp(Math.min(width, 480) / 375, 0.84, 1.12);
+  const vs = clamp(height / 812, 0.76, 1.08);
   const scale = (n: number) => Math.round(n * s);
   const vscale = (n: number) => Math.round(n * vs);
 
@@ -509,11 +510,19 @@ export default function ForgotPinModal({
               </Pressable>
             )}
 
+            <ScrollView
+              style={styles.cardScroll}
+              contentContainerStyle={styles.cardContent}
+              bounces={false}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
             {step === "email" && renderEmail()}
             {step === "otp" && renderOtp()}
             {step === "password" && renderPassword()}
             {step === "newPin" && renderNewPin()}
             {step === "success" && renderSuccess()}
+            </ScrollView>
           </Animated.View>
         </View>
       </KeyboardAvoidingView>
@@ -540,6 +549,7 @@ function createStyles(
     card: {
       width: "100%",
       maxWidth: scale(340),
+      maxHeight: "92%",
       borderRadius: scale(20),
       paddingHorizontal: scale(24),
       paddingTop: scale(32),
@@ -554,6 +564,12 @@ function createStyles(
         },
         android: { elevation: 10 },
       }),
+    },
+    cardScroll: { width: "100%", flexShrink: 1 },
+    cardContent: {
+      alignItems: "center",
+      paddingTop: scale(2),
+      paddingBottom: scale(2),
     },
     closeBtn: {
       position: "absolute",

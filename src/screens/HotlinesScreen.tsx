@@ -18,8 +18,9 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
-import { Colors, useColors } from "../theme/colors";
+import { useColors } from "../theme/colors";
 
 type Hotline = {
   id?: string;
@@ -28,7 +29,11 @@ type Hotline = {
   custom?: boolean;
 };
 
+type HotlineSectionKey = "custom" | "philippine" | "municipal" | "barangay";
+type HotlineFilter = "all" | HotlineSectionKey;
+
 type HotlineSection = {
+  key: HotlineSectionKey;
   title: string;
   items: Hotline[];
 };
@@ -68,8 +73,6 @@ const SURFACE = "#FFFFFF";
 const BORDER = "#E7EEF7";
 const TEXT = "#111827";
 const MUTED = "#6B7280";
-const SUBTLE = "#9AA4B2";
-const ACCENT_SOFT = "#F2F6FF";
 const CUSTOM_HOTLINES_KEY = "@tahanansafe_custom_hotlines_v1";
 
 export default function HotlinesScreen({
@@ -80,25 +83,39 @@ export default function HotlinesScreen({
   const TC = useColors();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
+  const contentWidth = Math.min(width, 720);
 
-  // ===== Responsive scaling helpers =====
-  const wScale = Math.min(Math.max(width / 375, 0.9), 1.25);
-  const hScale = Math.min(Math.max(height / 812, 0.9), 1.2);
+  // Match the Reports page density without letting tablets over-scale the UI.
+  const compactHeight = height < 500;
+  const designWidth = Math.min(width, compactHeight ? 390 : 430);
+  const wScale = Math.min(Math.max(designWidth / 375, 0.9), 1.12);
+  const hScale = Math.min(Math.max(height / 812, 0.9), compactHeight ? 1 : 1.12);
 
   const scale = (n: number) => Math.round(n * wScale);
   const vscale = (n: number) => Math.round(n * hScale);
+  const compactScale = (n: number) => Math.min(scale(n), vscale(n));
 
-  // Sizes
-  const iconSize = scale(20);
-  const callIconSize = scale(18);
+  const iconSize = compactScale(18);
+  const callIconSize = compactScale(23);
 
-  const SEARCH_H = vscale(46);
-  const styles = useMemo(() => makeStyles(scale, vscale, { SEARCH_H }), [width, height]);
+  const SEARCH_H = compactScale(40);
+  const styles = useMemo(
+    () =>
+      makeStyles(scale, vscale, compactScale, {
+        SEARCH_H,
+        contentWidth,
+        compactHeight,
+        modalMaxHeight: Math.max(220, height - insets.top - insets.bottom - 32),
+      }),
+    [width, height, contentWidth, SEARCH_H, compactHeight, insets.top, insets.bottom]
+  );
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [query, setQuery] = useState("");
   const [customHotlines, setCustomHotlines] = useState<Hotline[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [sectionFilter, setSectionFilter] = useState<HotlineFilter>("all");
   const [contactLabel, setContactLabel] = useState("");
   const [contactNumber, setContactNumber] = useState("");
 
@@ -146,6 +163,8 @@ export default function HotlinesScreen({
 
     try {
       await saveCustomHotlines(next);
+      setQuery("");
+      setSectionFilter("custom");
       closeAddModal();
     } catch {
       Alert.alert("Unable to save", "Please try adding the emergency contact again.");
@@ -160,7 +179,9 @@ export default function HotlinesScreen({
         style: "destructive",
         onPress: async () => {
           try {
-            await saveCustomHotlines(customHotlines.filter((item) => item.id !== hotline.id));
+            const next = customHotlines.filter((item) => item.id !== hotline.id);
+            await saveCustomHotlines(next);
+            if (next.length === 0) setSectionFilter("all");
           } catch {
             Alert.alert("Unable to delete", "Please try again.");
           }
@@ -170,24 +191,25 @@ export default function HotlinesScreen({
   };
 
   // ✅ MATCH HomeScreen nav sizing exactly
-  const NAV_BASE_HEIGHT = 78;
-  const FAB_SIZE = 68;
+  const NAV_BASE_HEIGHT = compactHeight ? 66 : 78;
+  const FAB_SIZE = compactHeight ? 60 : 68;
 
   const bottomPad = Math.max(insets.bottom, 10);
   const navHeight = NAV_BASE_HEIGHT + bottomPad;
 
-  const chevronBottom = navHeight + 90;
-  const fabBottom = navHeight - FAB_SIZE / 2 - 10;
+  const chevronBottom = navHeight + (compactHeight ? 70 : 90);
+  const fabBottom = navHeight - FAB_SIZE / 2 - (compactHeight ? 6 : 10);
 
-  const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + 6;
+  const CONTENT_BOTTOM_PAD = Math.round(NAV_BASE_HEIGHT * 0.85) + bottomPad + vscale(64);
 
   const sections: HotlineSection[] = useMemo(
     () => [
       ...(customHotlines.length
-        ? [{ title: "My Emergency Contacts", items: customHotlines }]
+        ? [{ key: "custom" as const, title: "My Emergency Contacts", items: customHotlines }]
         : []),
       {
-        title: "Philippine Emergency",
+        key: "philippine",
+        title: "Philippine Emergency Hotlines",
         items: [
           { number: "911", label: "National Emergency Hotline" },
           { number: "117", label: "Philippine National Police (PNP)" },
@@ -197,14 +219,16 @@ export default function HotlinesScreen({
         ],
       },
       {
-        title: "Municipal",
+        key: "municipal",
+        title: "Municipal Hotlines",
         items: [
           { number: "098786543210", label: "Example Hotline" },
           { number: "098786543210", label: "Example Hotline" },
         ],
       },
       {
-        title: "Barangay",
+        key: "barangay",
+        title: "Barangay Hotlines",
         items: [
           { number: "098786543210", label: "Example Hotline" },
           { number: "098786543210", label: "Example Hotline" },
@@ -216,15 +240,37 @@ export default function HotlinesScreen({
 
   const filteredSections = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return sections;
+    const visibleSections = sectionFilter === "all" ? sections : sections.filter((section) => section.key === sectionFilter);
+    if (!q) return visibleSections;
 
-    return sections
+    return visibleSections
       .map((sec) => ({
         ...sec,
         items: sec.items.filter((h) => `${h.number} ${h.label}`.toLowerCase().includes(q)),
       }))
       .filter((sec) => sec.items.length > 0);
-  }, [query, sections]);
+  }, [query, sectionFilter, sections]);
+
+  const filterOptions = useMemo(
+    () => [
+      { key: "all" as const, label: "All hotlines" },
+      ...(customHotlines.length ? [{ key: "custom" as const, label: "My Emergency Contacts" }] : []),
+      { key: "philippine" as const, label: "Philippine Emergency Hotlines" },
+      { key: "municipal" as const, label: "Municipal Hotlines" },
+      { key: "barangay" as const, label: "Barangay Hotlines" },
+    ],
+    [customHotlines.length]
+  );
+
+  const selectSectionFilter = (nextFilter: HotlineFilter) => {
+    setSectionFilter(nextFilter);
+    setShowFilterModal(false);
+  };
+
+  const openAddContact = () => {
+    setShowFilterModal(false);
+    setTimeout(() => setShowAddModal(true), 180);
+  };
 
   const handleTab = (key: TabKey) => {
     setActiveTab(key);
@@ -233,40 +279,50 @@ export default function HotlinesScreen({
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: TC.screenBg }]} edges={["top"]}>
-      <StatusBar barStyle={TC.statusBar} />
+      <StatusBar barStyle={TC.statusBar} translucent backgroundColor="transparent" />
 
       <View style={[styles.page, { backgroundColor: TC.screenBg }]}>
-        {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerRow}>
-            <View style={styles.headerCopy}>
-              <Text style={[styles.title, { color: TC.textDark }]}>Hotlines</Text>
-              <Text style={[styles.subtitle, { color: TC.muted }]}>Quick-dial emergency and local contacts</Text>
-            </View>
-            <Pressable
-              onPress={() => setShowAddModal(true)}
-              style={({ pressed }) => [styles.addButton, { backgroundColor: TC.primary }, pressed && { opacity: 0.85 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Add emergency contact"
-            >
-              <Ionicons name="add" size={scale(20)} color="#FFFFFF" />
-              <Text style={styles.addButtonText}>Add</Text>
-            </Pressable>
-          </View>
-        </View>
+          <Text style={[styles.title, { color: TC.heading }]}>Hotlines</Text>
 
-        {/* Search row */}
-        <View style={styles.searchRow}>
-          <View style={[styles.searchBox, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
-            <Ionicons name="search-outline" size={iconSize} color={TC.placeholder} />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search hotlines"
-              placeholderTextColor={TC.placeholder}
-              style={[styles.searchInput, { color: TC.textDark }]}
-              returnKeyType="search"
-            />
+          <View style={styles.searchRow}>
+            <View style={[styles.searchBox, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
+              <Ionicons name="search-outline" size={iconSize} color={TC.muted} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search"
+                placeholderTextColor={TC.muted}
+                style={[styles.searchInput, { color: TC.textDark }]}
+                autoCorrect={false}
+                autoCapitalize="none"
+                returnKeyType="search"
+              />
+              {!!query && (
+                <Pressable
+                  onPress={() => setQuery("")}
+                  style={({ pressed }) => [styles.clearButton, pressed && { opacity: 0.65 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear hotline search"
+                >
+                  <Ionicons name="close" size={iconSize} color={TC.muted} />
+                </Pressable>
+              )}
+            </View>
+
+            <Pressable
+              onPress={() => setShowFilterModal(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Filter hotlines and manage emergency contacts"
+              style={({ pressed }) => [
+                styles.filterButton,
+                { backgroundColor: TC.surface, borderColor: TC.divider },
+                pressed && { opacity: 0.75, transform: [{ scale: 0.97 }] },
+              ]}
+            >
+              <Ionicons name="options-outline" size={compactScale(21)} color={TC.muted} />
+              {sectionFilter !== "all" ? <View style={[styles.filterActiveDot, { backgroundColor: TC.primary }]} /> : null}
+            </Pressable>
           </View>
         </View>
 
@@ -274,21 +330,22 @@ export default function HotlinesScreen({
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: CONTENT_BOTTOM_PAD }]}
           showsVerticalScrollIndicator={false}
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          keyboardShouldPersistTaps="handled"
         >
           {filteredSections.map((sec) => (
-            <View key={sec.title} style={styles.section}>
-              {/* Minimal section header */}
-              <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: TC.muted }]}>{sec.title}</Text>
-                <View style={[styles.sectionLine, { backgroundColor: TC.divider }]} />
-              </View>
+            <View key={sec.key} style={styles.section}>
+              <LinearGradient
+                colors={["#06223F", "#0A3657", "#06223F"]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.sectionHeader}
+              >
+                <Text style={styles.sectionTitle}>{sec.title}</Text>
+              </LinearGradient>
 
               {sec.items.map((h, idx) => (
-                <View key={`${h.number}-${idx}`} style={[styles.card, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
-                  <View style={[styles.leftIcon, { backgroundColor: TC.chipBg }]}>
-                    <Ionicons name="call-outline" size={scale(18)} color={TC.primary} />
-                  </View>
-
+                <View key={h.id ?? `${sec.key}-${h.number}-${idx}`} style={[styles.card, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
                   <View style={styles.cardBody}>
                     <Text style={[styles.cardNumber, { color: TC.textDark }]} numberOfLines={1}>
                       {h.number}
@@ -298,15 +355,6 @@ export default function HotlinesScreen({
                     </Text>
                   </View>
 
-                  <Pressable
-                    onPress={() => callNumber(h.number)}
-                    style={({ pressed }) => [styles.callPill, { backgroundColor: TC.chipBg, borderColor: TC.divider }, pressed && { transform: [{ scale: 0.98 }] }]}
-                    hitSlop={10}
-                  >
-                    <Ionicons name="call" size={callIconSize} color={TC.primary} />
-                    <Text style={[styles.callText, { color: TC.primary }]}>Call</Text>
-                  </Pressable>
-
                   {h.custom ? (
                     <Pressable
                       onPress={() => removeCustomHotline(h)}
@@ -315,9 +363,19 @@ export default function HotlinesScreen({
                       accessibilityRole="button"
                       accessibilityLabel={`Delete ${h.label}`}
                     >
-                      <Ionicons name="trash-outline" size={scale(19)} color="#DC2626" />
+                      <Ionicons name="trash-outline" size={compactScale(18)} color="#DC2626" />
                     </Pressable>
                   ) : null}
+
+                  <Pressable
+                    onPress={() => callNumber(h.number)}
+                    style={({ pressed }) => [styles.callButton, pressed && { opacity: 0.6, transform: [{ scale: 0.96 }] }]}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Call ${h.label} at ${h.number}`}
+                  >
+                    <Ionicons name="call" size={callIconSize} color={TC.primary} />
+                  </Pressable>
                 </View>
               ))}
             </View>
@@ -333,44 +391,106 @@ export default function HotlinesScreen({
           )}
         </ScrollView>
 
+        <Modal visible={showFilterModal} transparent animationType="fade" onRequestClose={() => setShowFilterModal(false)}>
+          <View style={styles.modalBackdrop}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowFilterModal(false)} />
+            <View style={[styles.filterModalCard, { backgroundColor: TC.surface }]}>
+              <View style={styles.modalHeader}>
+                <View style={styles.modalTitleWrap}>
+                  <Text style={[styles.modalTitle, { color: TC.textDark }]}>Hotline options</Text>
+                  <Text style={[styles.modalSubtitle, { color: TC.muted }]}>Choose which contacts to show.</Text>
+                </View>
+                <Pressable onPress={() => setShowFilterModal(false)} hitSlop={10} accessibilityLabel="Close hotline options">
+                  <Ionicons name="close" size={compactScale(24)} color={TC.muted} />
+                </Pressable>
+              </View>
+
+              <ScrollView style={styles.filterOptionsScroll} showsVerticalScrollIndicator={false} bounces={false}>
+                {filterOptions.map((option) => {
+                  const selected = sectionFilter === option.key;
+                  return (
+                    <Pressable
+                      key={option.key}
+                      onPress={() => selectSectionFilter(option.key)}
+                      style={({ pressed }) => [
+                        styles.filterOption,
+                        { borderColor: TC.divider, backgroundColor: selected ? TC.chipBg : TC.surface },
+                        pressed && { opacity: 0.72 },
+                      ]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: selected }}
+                    >
+                      <Text style={[styles.filterOptionText, { color: selected ? TC.primary : TC.textDark }]} numberOfLines={1}>
+                        {option.label}
+                      </Text>
+                      <Ionicons
+                        name={selected ? "checkmark-circle" : "ellipse-outline"}
+                        size={compactScale(20)}
+                        color={selected ? TC.primary : TC.muted}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+
+              <Pressable
+                onPress={openAddContact}
+                style={({ pressed }) => [styles.addContactOption, { backgroundColor: TC.primary }, pressed && { opacity: 0.85 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Add emergency contact"
+              >
+                <Ionicons name="add" size={compactScale(20)} color="#FFFFFF" />
+                <Text style={styles.addContactOptionText}>Add emergency contact</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+
         <Modal visible={showAddModal} transparent animationType="fade" onRequestClose={closeAddModal}>
           <KeyboardAvoidingView
             style={styles.modalBackdrop}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
           >
             <Pressable style={StyleSheet.absoluteFill} onPress={closeAddModal} />
             <View style={[styles.modalCard, { backgroundColor: TC.surface }]}>
-              <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: TC.textDark }]}>Add emergency contact</Text>
-                <Pressable onPress={closeAddModal} hitSlop={10}>
-                  <Ionicons name="close" size={scale(24)} color={TC.muted} />
-                </Pressable>
-              </View>
-              <Text style={[styles.inputLabel, { color: TC.muted }]}>Contact name</Text>
-              <TextInput
-                value={contactLabel}
-                onChangeText={setContactLabel}
-                placeholder="e.g. Mom, Barangay Office"
-                placeholderTextColor={TC.placeholder}
-                style={[styles.modalInput, { color: TC.textDark, borderColor: TC.divider }]}
-                maxLength={50}
-              />
-              <Text style={[styles.inputLabel, { color: TC.muted }]}>Phone number</Text>
-              <TextInput
-                value={contactNumber}
-                onChangeText={setContactNumber}
-                placeholder="e.g. 09171234567"
-                placeholderTextColor={TC.placeholder}
-                style={[styles.modalInput, { color: TC.textDark, borderColor: TC.divider }]}
-                keyboardType="phone-pad"
-                maxLength={24}
-              />
-              <Pressable
-                onPress={addCustomHotline}
-                style={({ pressed }) => [styles.saveButton, { backgroundColor: TC.primary }, pressed && { opacity: 0.85 }]}
+              <ScrollView
+                contentContainerStyle={styles.modalContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                bounces={false}
               >
-                <Text style={styles.saveButtonText}>Save contact</Text>
-              </Pressable>
+                <View style={styles.modalHeader}>
+                  <Text style={[styles.modalTitle, { color: TC.textDark }]}>Add emergency contact</Text>
+                  <Pressable onPress={closeAddModal} hitSlop={10} accessibilityLabel="Close add contact">
+                    <Ionicons name="close" size={compactScale(24)} color={TC.muted} />
+                  </Pressable>
+                </View>
+                <Text style={[styles.inputLabel, { color: TC.muted }]}>Contact name</Text>
+                <TextInput
+                  value={contactLabel}
+                  onChangeText={setContactLabel}
+                  placeholder="e.g. Mom, Barangay Office"
+                  placeholderTextColor={TC.placeholder}
+                  style={[styles.modalInput, { color: TC.textDark, borderColor: TC.divider }]}
+                  maxLength={50}
+                />
+                <Text style={[styles.inputLabel, { color: TC.muted }]}>Phone number</Text>
+                <TextInput
+                  value={contactNumber}
+                  onChangeText={setContactNumber}
+                  placeholder="e.g. 09171234567"
+                  placeholderTextColor={TC.placeholder}
+                  style={[styles.modalInput, { color: TC.textDark, borderColor: TC.divider }]}
+                  keyboardType="phone-pad"
+                  maxLength={24}
+                />
+                <Pressable
+                  onPress={addCustomHotline}
+                  style={({ pressed }) => [styles.saveButton, { backgroundColor: TC.primary }, pressed && { opacity: 0.85 }]}
+                >
+                  <Text style={styles.saveButtonText}>Save contact</Text>
+                </Pressable>
+              </ScrollView>
             </View>
           </KeyboardAvoidingView>
         </Modal>
@@ -397,64 +517,40 @@ export default function HotlinesScreen({
 function makeStyles(
   scale: (n: number) => number,
   vscale: (n: number) => number,
-  dims: { SEARCH_H: number }
+  compactScale: (n: number) => number,
+  dims: { SEARCH_H: number; contentWidth: number; compactHeight: boolean; modalMaxHeight: number }
 ) {
-  const { SEARCH_H } = dims;
+  const { SEARCH_H, contentWidth, compactHeight, modalMaxHeight } = dims;
+  const filterOptionsMaxHeight = Math.max(96, Math.min(vscale(280), modalMaxHeight - vscale(150)));
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: BG },
     page: { flex: 1, backgroundColor: BG },
 
     header: {
-      paddingHorizontal: scale(16),
-      paddingTop: vscale(8),
-      paddingBottom: vscale(6),
-    },
-    headerRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: scale(12),
-    },
-    headerCopy: { flex: 1 },
-    addButton: {
-      height: scale(38),
-      paddingHorizontal: scale(13),
-      borderRadius: scale(12),
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: scale(4),
-    },
-    addButtonText: {
-      color: "#FFFFFF",
-      fontSize: scale(13),
-      fontWeight: "800",
+      width: "100%",
+      maxWidth: contentWidth,
+      alignSelf: "center",
+      paddingHorizontal: scale(20),
+      paddingTop: vscale(compactHeight ? 10 : 18),
+      paddingBottom: vscale(compactHeight ? 7 : 10),
     },
     title: {
+      marginBottom: vscale(compactHeight ? 12 : 16),
       fontSize: scale(28),
-      fontWeight: "900",
+      fontWeight: "700",
       color: TEXT,
-      letterSpacing: 0.2,
+      letterSpacing: -0.2,
     },
     // ✅ unbold regular text
-    subtitle: {
-      marginTop: vscale(4),
-      fontSize: scale(13),
-      fontWeight: "400",
-      color: MUTED,
-    },
-
     searchRow: {
-      paddingHorizontal: scale(16),
-      paddingTop: vscale(10),
-      paddingBottom: vscale(10),
       flexDirection: "row",
       alignItems: "center",
-      gap: scale(10),
+      gap: scale(9),
     },
     searchBox: {
       flex: 1,
+      minWidth: 0,
       height: SEARCH_H,
       backgroundColor: SURFACE,
       borderRadius: Math.round(SEARCH_H / 2),
@@ -465,105 +561,119 @@ function makeStyles(
       alignItems: "center",
       gap: scale(10),
     },
+    clearButton: {
+      width: compactScale(28),
+      height: compactScale(28),
+      borderRadius: compactScale(14),
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    filterButton: {
+      width: SEARCH_H,
+      height: SEARCH_H,
+      flexShrink: 0,
+      borderRadius: SEARCH_H / 2,
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: "#64748B",
+      shadowOpacity: 0.13,
+      shadowRadius: scale(5),
+      shadowOffset: { width: 0, height: vscale(2) },
+      elevation: 2,
+    },
+    filterActiveDot: {
+      position: "absolute",
+      top: compactScale(6),
+      right: compactScale(6),
+      width: compactScale(6),
+      height: compactScale(6),
+      borderRadius: compactScale(3),
+    },
     // ✅ unbold regular text
     searchInput: {
       flex: 1,
-      fontSize: scale(15),
+      minWidth: 0,
+      fontSize: scale(14),
       fontWeight: "400",
       color: TEXT,
       paddingVertical: 0,
     },
 
     content: {
-      paddingHorizontal: scale(16),
+      width: "100%",
+      maxWidth: contentWidth,
+      alignSelf: "center",
+      paddingHorizontal: scale(14),
       paddingTop: vscale(6),
     },
 
-    section: { marginBottom: vscale(16) },
+    section: { marginBottom: 0 },
 
     sectionHeader: {
-      flexDirection: "row",
+      height: compactScale(24),
+      borderRadius: compactScale(12),
       alignItems: "center",
-      gap: scale(10),
-      marginBottom: vscale(10),
+      justifyContent: "center",
+      marginBottom: vscale(6),
+      overflow: "hidden",
     },
     // ✅ unbold regular text
     sectionTitle: {
-      fontSize: scale(13),
-      fontWeight: "400",
-      color: "#334155",
-      letterSpacing: 0.3,
-      textTransform: "uppercase",
-    },
-    sectionLine: {
-      flex: 1,
-      height: 1,
-      backgroundColor: BORDER,
-      marginTop: 1,
+      fontSize: scale(11.5),
+      fontWeight: "500",
+      color: "#FFFFFF",
+      letterSpacing: 0.1,
     },
 
     card: {
+      minHeight: compactScale(70),
       backgroundColor: SURFACE,
       borderWidth: 1,
       borderColor: BORDER,
-      borderRadius: scale(14),
+      borderRadius: compactScale(13),
       paddingVertical: vscale(12),
-      paddingHorizontal: scale(12),
-      marginBottom: vscale(10),
+      paddingLeft: scale(18),
+      paddingRight: scale(10),
+      marginBottom: vscale(9),
       flexDirection: "row",
       alignItems: "center",
-      gap: scale(10),
-    },
-
-    leftIcon: {
-      width: scale(38),
-      height: scale(38),
-      borderRadius: scale(12),
-      backgroundColor: ACCENT_SOFT,
-      alignItems: "center",
-      justifyContent: "center",
+      gap: scale(4),
     },
 
     cardBody: {
       flex: 1,
+      minWidth: 0,
       paddingRight: scale(6),
     },
     // ✅ unbold regular text (number is not a label)
     cardNumber: {
       fontSize: scale(17),
-      fontWeight: "400",
+      fontWeight: "800",
       color: TEXT,
+      lineHeight: compactScale(21),
+      letterSpacing: 0.2,
     },
     // ✅ KEEP labels bold
     cardLabel: {
-      marginTop: vscale(4),
-      fontSize: scale(13),
-      fontWeight: "900",
+      marginTop: vscale(3),
+      fontSize: scale(11.5),
+      fontWeight: "400",
       color: MUTED,
-      lineHeight: scale(18),
+      lineHeight: compactScale(15),
     },
 
-    callPill: {
-      flexDirection: "row",
+    callButton: {
+      width: compactScale(50),
+      height: compactScale(48),
+      flexShrink: 0,
       alignItems: "center",
-      gap: scale(6),
-      paddingHorizontal: scale(12),
-      height: scale(36),
-      borderRadius: scale(999),
-      backgroundColor: ACCENT_SOFT,
-      borderWidth: 1,
-      borderColor: "#DDE7FF",
+      justifyContent: "center",
     },
     // ✅ KEEP label bold
-    callText: {
-      fontSize: scale(13),
-      fontWeight: "900",
-      color: Colors.primary,
-      letterSpacing: 0.2,
-    },
     deleteButton: {
-      width: scale(30),
-      height: scale(36),
+      width: compactScale(42),
+      height: compactScale(48),
       alignItems: "center",
       justifyContent: "center",
     },
@@ -575,6 +685,28 @@ function makeStyles(
       backgroundColor: "rgba(3, 20, 35, 0.48)",
     },
     modalCard: {
+      width: "100%",
+      maxWidth: 480,
+      maxHeight: modalMaxHeight,
+      flexShrink: 1,
+      borderRadius: scale(18),
+      paddingHorizontal: scale(18),
+      paddingVertical: vscale(18),
+      overflow: "hidden",
+      elevation: 8,
+      shadowColor: "#000000",
+      shadowOpacity: 0.18,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 8 },
+    },
+    modalContent: {
+      flexGrow: 1,
+    },
+    filterModalCard: {
+      width: "100%",
+      maxWidth: 480,
+      maxHeight: modalMaxHeight,
+      flexShrink: 1,
       borderRadius: scale(18),
       paddingHorizontal: scale(18),
       paddingVertical: vscale(18),
@@ -594,6 +726,52 @@ function makeStyles(
       flex: 1,
       fontSize: scale(19),
       fontWeight: "900",
+    },
+    modalTitleWrap: {
+      flex: 1,
+      minWidth: 0,
+      paddingRight: scale(12),
+    },
+    modalSubtitle: {
+      marginTop: vscale(3),
+      fontSize: scale(12),
+      fontWeight: "400",
+    },
+    filterOptionsScroll: {
+      maxHeight: filterOptionsMaxHeight,
+      marginBottom: vscale(4),
+    },
+    filterOption: {
+      minHeight: compactScale(42),
+      marginBottom: vscale(8),
+      borderWidth: 1,
+      borderRadius: compactScale(11),
+      paddingHorizontal: scale(12),
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: scale(10),
+    },
+    filterOptionText: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: scale(13),
+      fontWeight: "700",
+    },
+    addContactOption: {
+      minHeight: compactScale(44),
+      borderRadius: compactScale(11),
+      marginTop: vscale(4),
+      paddingHorizontal: scale(14),
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: scale(7),
+    },
+    addContactOptionText: {
+      color: "#FFFFFF",
+      fontSize: scale(13),
+      fontWeight: "800",
     },
     inputLabel: {
       marginBottom: vscale(6),

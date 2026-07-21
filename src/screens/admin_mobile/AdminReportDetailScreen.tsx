@@ -1,9 +1,8 @@
 // src/screens/admin_mobile/AdminReportDetailScreen.tsx
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
-  Dimensions,
   Image,
   Modal,
   Platform,
@@ -13,6 +12,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -40,7 +40,6 @@ const SURFACE = "#FFFFFF";
 const BORDER = "#E7EEF7";
 const TEXT_DARK = "#0B2B45";
 const TEXT_MUTED = "#6E7D90";
-const { width: SCREEN_W } = Dimensions.get("window");
 
 const gradColors = (Colors.gradient ??
   ([PRIMARY, String((Colors as any).primaryDark ?? "#021C36")] as const)) as readonly [
@@ -159,6 +158,9 @@ function getInitials(user: AdminIncident["user"]): string {
 export default function AdminReportDetailScreen({ reportId, onBack }: Props) {
   const TC = useColors();
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const compact = width < 360;
+  const s = useMemo(() => makeStyles(width, height, compact), [width, height, compact]);
 
   const [incident,   setIncident]   = useState<AdminIncident | null>(null);
   const [loading,    setLoading]    = useState(true);
@@ -637,7 +639,7 @@ export default function AdminReportDetailScreen({ reportId, onBack }: Props) {
             <View style={s.viewerBackdrop}>
               <Pressable style={StyleSheet.absoluteFill} onPress={() => setPhotoPreview(null)} />
 
-              <View style={s.viewerTopBar}>
+              <View style={[s.viewerTopBar, { paddingTop: Math.max(insets.top, 10) }]}>
                 <Pressable
                   onPress={() => setPhotoPreview(null)}
                   hitSlop={12}
@@ -655,7 +657,7 @@ export default function AdminReportDetailScreen({ reportId, onBack }: Props) {
                 />
               )}
 
-              <Text style={s.viewerHint}>
+              <Text style={[s.viewerHint, { bottom: Math.max(insets.bottom, 10) }]}>
                 Tap outside to close{Platform.OS === "ios" ? " · Pinch to zoom" : ""}
               </Text>
             </View>
@@ -669,12 +671,20 @@ export default function AdminReportDetailScreen({ reportId, onBack }: Props) {
 // ─── Styles (uniform with ReportDetailScreen) ─────────────────────────────────
 const CARD_R = 18;
 
-const s = StyleSheet.create({
+function makeStyles(width: number, height: number, compact: boolean) {
+  const horizontalPadding = compact ? 10 : 14;
+  const viewerWidth = Math.max(1, Math.min(width - 24, 900));
+  const viewerHeight = Math.max(1, Math.min(height - 120, viewerWidth, 900));
+
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
 
   // Hero header (matching ReportDetailScreen heroCard)
   heroWrap: {
-    paddingHorizontal: 14,
+    width: "100%",
+    maxWidth: 840,
+    alignSelf: "center",
+    paddingHorizontal: horizontalPadding,
     paddingBottom: 10,
     backgroundColor: BG,
   },
@@ -705,7 +715,7 @@ const s = StyleSheet.create({
   },
   heroTitle: {
     flex: 1,
-    fontSize: 16.5,
+    fontSize: compact ? 15 : 16.5,
     fontWeight: "900",
     color: TEXT_DARK,
     letterSpacing: 0.1,
@@ -741,7 +751,16 @@ const s = StyleSheet.create({
   dot: { width: 7, height: 7, borderRadius: 99 },
 
   // States
-  centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 32 },
+  centered: {
+    flex: 1,
+    width: "100%",
+    maxWidth: 840,
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    paddingHorizontal: compact ? 20 : 32,
+  },
   loadingText: { fontSize: 11, color: TEXT_MUTED, fontWeight: "400" },
   errorTitle: { fontSize: 16, fontWeight: "900", color: TEXT_DARK, marginTop: 8 },
   errorText: { fontSize: 12, color: TEXT_MUTED, fontWeight: "400", textAlign: "center" },
@@ -757,7 +776,14 @@ const s = StyleSheet.create({
   retryText: { fontSize: 12, fontWeight: "900", color: PRIMARY },
 
   // Scroll
-  content: { paddingHorizontal: 14, paddingTop: 2, gap: 12 },
+  content: {
+    width: "100%",
+    maxWidth: 840,
+    alignSelf: "center",
+    paddingHorizontal: horizontalPadding,
+    paddingTop: 2,
+    gap: compact ? 10 : 12,
+  },
 
   // Section card (matching ReportDetailScreen sectionCard)
   sectionCard: {
@@ -874,19 +900,19 @@ const s = StyleSheet.create({
   },
   stepItem: { flex: 1, alignItems: "center", gap: 8 },
   stepCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: compact ? 30 : 34,
+    height: compact ? 30 : 34,
+    borderRadius: compact ? 15 : 17,
     borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
   },
   stepDotInner: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#D0DAEA" },
-  stepLabel: { fontSize: 10.5, fontWeight: "400", color: "#B0BECA", textAlign: "center" },
+  stepLabel: { fontSize: compact ? 9 : 10.5, fontWeight: "400", color: "#B0BECA", textAlign: "center" },
   stepConnector: {
     flex: 0.6,
     justifyContent: "center",
-    marginTop: 16,
+    marginTop: compact ? 14 : 16,
   },
   stepLine: { height: 2, borderRadius: 2 },
 
@@ -1017,9 +1043,8 @@ const s = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    paddingTop: 10 + (Platform.OS === "ios" ? 16 : 0),
     paddingHorizontal: 14,
-    height: 60 + (Platform.OS === "ios" ? 18 : 0),
+    minHeight: 60,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
@@ -1034,13 +1059,12 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   viewerImage: {
-    width: SCREEN_W - 24,
-    height: SCREEN_W - 24,
+    width: viewerWidth,
+    height: viewerHeight,
     borderRadius: 12,
   },
   viewerHint: {
     position: "absolute",
-    bottom: 10,
     left: 0,
     right: 0,
     textAlign: "center",
@@ -1048,4 +1072,5 @@ const s = StyleSheet.create({
     fontWeight: "400",
     color: "rgba(255,255,255,0.72)",
   },
-});
+  });
+}

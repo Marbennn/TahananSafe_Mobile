@@ -79,8 +79,7 @@ export default function SignupCard({
       <View style={styles.titleBlock}>
         <Text style={styles.screenTitle}>Create An Account</Text>
         <Text style={styles.screenSub}>
-          Create an account to securely store information{"\n"}
-          and access support when needed.
+          Create an account to securely store information and access support when needed.
         </Text>
       </View>
 

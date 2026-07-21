@@ -8,6 +8,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,15 +27,17 @@ function StatCard({
   icon,
   color,
   sub,
+  width,
 }: {
   label: string;
   value: number | string;
   icon: React.ComponentProps<typeof Ionicons>["name"];
   color: string;
   sub?: string;
+  width: number;
 }) {
   return (
-    <View style={[statStyles.card, { borderColor: `${color}20` }]}>
+    <View style={[statStyles.card, { borderColor: `${color}20`, width }]}>
       <View style={[statStyles.iconWrap, { backgroundColor: `${color}15` }]}>
         <Ionicons name={icon} size={20} color={color} />
       </View>
@@ -47,8 +50,10 @@ function StatCard({
 
 function BarChart({
   data,
+  compact,
 }: {
   data: { label: string; value: number; color: string }[];
+  compact?: boolean;
 }) {
   const max = Math.max(...data.map((d) => d.value), 1);
   return (
@@ -57,7 +62,10 @@ function BarChart({
         const pct = item.value / max;
         return (
           <View key={idx} style={chartStyles.barRow}>
-            <Text style={chartStyles.barLabel} numberOfLines={1}>
+            <Text
+              style={[chartStyles.barLabel, compact && chartStyles.barLabelCompact]}
+              numberOfLines={1}
+            >
               {item.label}
             </Text>
             <View style={chartStyles.barTrack}>
@@ -115,6 +123,21 @@ function deriveStatsFromIncidents(
 export default function AdminAnalyticsScreen({ onBack }: Props) {
   const TC = useColors();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const compact = width < 360;
+  const horizontalPadding = compact ? 14 : 20;
+  const boundedWidth = Math.min(width, 880);
+  const innerWidth = Math.max(0, boundedWidth - horizontalPadding * 2);
+  const statColumns = width >= 900 ? 4 : width >= 600 ? 3 : 2;
+  const statGap = compact ? 8 : 12;
+  const statCardWidth = Math.max(
+    0,
+    (innerWidth - statGap * (statColumns - 1)) / statColumns
+  );
+  const styles = useMemo(
+    () => makeStyles(horizontalPadding, statGap),
+    [horizontalPadding, statGap]
+  );
 
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [incidents, setIncidents] = useState<AdminIncident[]>([]);
@@ -303,12 +326,14 @@ export default function AdminAnalyticsScreen({ onBack }: Props) {
               value={derivedStats.pending}
               icon="time-outline"
               color={Colors.primary}
+              width={statCardWidth}
             />
             <StatCard
               label="On Going"
               value={derivedStats.reviewing}
               icon="sync-outline"
               color="#F5B301"
+              width={statCardWidth}
             />
             <StatCard
               label="Resolved"
@@ -316,12 +341,14 @@ export default function AdminAnalyticsScreen({ onBack }: Props) {
               icon="checkmark-circle-outline"
               color="#35B56A"
               sub={`${resolveRate}%`}
+              width={statCardWidth}
             />
             <StatCard
               label="High Risk"
               value={derivedStats.highRisk}
               icon="warning-outline"
               color="#F04452"
+              width={statCardWidth}
             />
             {derivedStats.totalUsers > 0 && (
               <StatCard
@@ -329,6 +356,7 @@ export default function AdminAnalyticsScreen({ onBack }: Props) {
                 value={derivedStats.totalUsers}
                 icon="people-outline"
                 color="#7C3AED"
+                width={statCardWidth}
               />
             )}
             {derivedStats.verifiedUsers > 0 && (
@@ -337,6 +365,7 @@ export default function AdminAnalyticsScreen({ onBack }: Props) {
                 value={derivedStats.verifiedUsers}
                 icon="shield-checkmark-outline"
                 color="#0891B2"
+                width={statCardWidth}
               />
             )}
           </View>
@@ -345,7 +374,7 @@ export default function AdminAnalyticsScreen({ onBack }: Props) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Status Breakdown</Text>
             <View style={styles.chartCard}>
-              <BarChart data={statusBreakdown} />
+              <BarChart data={statusBreakdown} compact={compact} />
             </View>
           </View>
 
@@ -353,7 +382,7 @@ export default function AdminAnalyticsScreen({ onBack }: Props) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Risk Distribution</Text>
             <View style={styles.chartCard}>
-              <BarChart data={riskBreakdown} />
+              <BarChart data={riskBreakdown} compact={compact} />
             </View>
           </View>
 
@@ -362,7 +391,7 @@ export default function AdminAnalyticsScreen({ onBack }: Props) {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Incident Categories</Text>
               <View style={styles.chartCard}>
-                <BarChart data={categoryBreakdown} />
+                <BarChart data={categoryBreakdown} compact={compact} />
               </View>
             </View>
           )}
@@ -406,7 +435,8 @@ export default function AdminAnalyticsScreen({ onBack }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(horizontalPadding: number, statGap: number) {
+  return StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: "#EEF3F8",
@@ -414,7 +444,10 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
+    width: "100%",
+    maxWidth: 880,
+    alignSelf: "center",
+    paddingHorizontal: horizontalPadding,
     paddingBottom: 14,
     gap: 12,
   },
@@ -477,7 +510,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   content: {
-    paddingHorizontal: 20,
+    width: "100%",
+    maxWidth: 880,
+    alignSelf: "center",
+    paddingHorizontal: horizontalPadding,
     paddingTop: 4,
     gap: 20,
   },
@@ -533,7 +569,7 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    gap: statGap,
   },
   section: {
     gap: 10,
@@ -588,6 +624,7 @@ const styles = StyleSheet.create({
   gaugeLegend: {
     flexDirection: "row",
     gap: 18,
+    flexWrap: "wrap",
   },
   legendItem: {
     flexDirection: "row",
@@ -604,7 +641,8 @@ const styles = StyleSheet.create({
     color: "#6B7A8D",
     fontWeight: "600",
   },
-});
+  });
+}
 
 const statStyles = StyleSheet.create({
   card: {
@@ -613,8 +651,8 @@ const statStyles = StyleSheet.create({
     borderWidth: 1,
     padding: 14,
     gap: 4,
-    minWidth: "47%",
-    flex: 1,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   iconWrap: {
     width: 36,
@@ -655,6 +693,9 @@ const chartStyles = StyleSheet.create({
     fontSize: 12,
     color: "#5B6B7A",
     fontWeight: "600",
+  },
+  barLabelCompact: {
+    width: 62,
   },
   barTrack: {
     flex: 1,
