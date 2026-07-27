@@ -80,6 +80,7 @@ type Props = {
   onQuickExit?: () => void;
   onTabChange?: (tab: TabKey) => void;
   initialTab?: TabKey;
+  isActive?: boolean;
 
   onOpenNotifications?: () => void;
 
@@ -227,6 +228,7 @@ export default function HomeScreen({
   onQuickExit,
   onTabChange,
   initialTab = "Home",
+  isActive = true,
   onOpenNotifications,
   onOpenReport,
 }: Props) {
@@ -246,6 +248,10 @@ export default function HomeScreen({
   const { user, setUser, accessToken, logout } = useAuth() as any;
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+
+  useEffect(() => {
+    if (isActive) setActiveTab(initialTab);
+  }, [initialTab, isActive]);
 
   // âœ… Tutorial
   const [showFabTutorial, setShowFabTutorial] = useState(false);
@@ -514,8 +520,9 @@ export default function HomeScreen({
   const lastReportsFetchAtRef = useRef(0);
 
   // âœ… FIX: Use requestJson with auth:true for auto token refresh
-  const fetchRecentReports = useCallback(async (opts?: { force?: boolean }) => {
+  const fetchRecentReports = useCallback(async (opts?: { force?: boolean; silent?: boolean }) => {
     const force = !!opts?.force;
+    const silent = !!opts?.silent;
     const now = Date.now();
 
     if (!force && now - lastReportsFetchAtRef.current < 90000) return;
@@ -523,7 +530,7 @@ export default function HomeScreen({
 
     reportsFetchInFlightRef.current = true;
     try {
-      setLoadingReports(true);
+      if (!silent) setLoadingReports(true);
 
       // âœ… FIX: This auto-attaches the access token AND auto-refreshes on 401
       const json: any = await requestJson({
@@ -602,10 +609,10 @@ export default function HomeScreen({
       setRecentReports(mapped);
       lastReportsFetchAtRef.current = Date.now();
     } catch {
-      // âœ… On error (including session expired), just clear reports silently
-      setRecentReports([]);
+      // Preserve existing cards when a background refresh fails.
+      if (!silent) setRecentReports([]);
     } finally {
-      setLoadingReports(false);
+      if (!silent) setLoadingReports(false);
       reportsFetchInFlightRef.current = false;
     }
   }, []); // âœ… FIX: No more [accessToken] dependency â€” requestJson handles token internally
@@ -623,6 +630,20 @@ export default function HomeScreen({
       return () => task.cancel();
     }, [fetchRecentReports])
   );
+
+  const wasActiveRef = useRef(isActive);
+  useEffect(() => {
+    const becameActive = isActive && !wasActiveRef.current;
+    wasActiveRef.current = isActive;
+    if (!becameActive) return;
+
+    const task = InteractionManager.runAfterInteractions(() => {
+      fetchNotifCount({ force: true, withStatusSync: false });
+      fetchRecentReports({ force: true, silent: true });
+    });
+
+    return () => task.cancel();
+  }, [fetchNotifCount, fetchRecentReports, isActive]);
 
   const logs: LogItem[] = useMemo(() => {
     return recentReports.map((r) => ({

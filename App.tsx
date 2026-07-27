@@ -1,7 +1,7 @@
 // App.tsx
 import "react-native-gesture-handler";
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, StyleSheet } from "react-native";
+import { Alert, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { enableScreens } from "react-native-screens";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -260,42 +260,46 @@ function MainShell({
     }
   }, [incomingReport, clearIncomingReport]);
 
-  if (activeTab === "Home") {
-    return (
-      <HomeScreen
-        initialTab="Home"
-        onQuickExit={handleQuickExit}
-        onTabChange={handleTabChange}
-        onOpenNotifications={onOpenNotifications}
-        onOpenReport={openReportDetail}
-      />
-    );
-  }
+  let foregroundScreen: React.ReactNode = null;
 
   if (activeTab === "Inbox") {
-    return (
+    foregroundScreen = (
       <InboxScreen initialTab="Inbox" onQuickExit={handleQuickExit} onTabChange={handleTabChange} />
     );
-  }
-
-  if (activeTab === "Reports") {
-    if (reportStep === "list") {
-      return (
-        <ReportScreen
-          initialTab="Reports"
-          onQuickExit={handleQuickExit}
-          onTabChange={handleTabChange}
-          onOpenReport={(item) => {
-            setSelectedReport(item);
-            setReportStep("detail");
-          }}
-        />
-      );
-    }
-
-    if (!selectedReport) return null;
-
-    return (
+  } else if (activeTab === "Settings") {
+    foregroundScreen = (
+      <SettingsScreen
+        initialTab="Settings"
+        onTabChange={handleTabChange}
+        onQuickExit={handleQuickExit}
+        onLogout={onLogout}
+      />
+    );
+  } else if (activeTab === "Community") {
+    foregroundScreen = (
+      <CommunityScreen initialTab="Community" onTabChange={handleTabChange} />
+    );
+  } else if (activeTab === "Incident") {
+    foregroundScreen = incidentStep === "form" ? (
+      <IncidentLogScreen
+        onBack={() => setActiveTab("Home")}
+        onSubmitted={(payload) => {
+          setLastIncident(payload);
+          setIncidentStep("confirmed");
+        }}
+      />
+    ) : (
+      <IncidentLogConfirmedScreen
+        alertNo={formatAlertNo(lastIncident?.incidentId)}
+        dateLine={formatDateLine(lastIncident?.createdAt)}
+        onGoHome={() => {
+          setActiveTab("Home");
+          setIncidentStep("form");
+        }}
+      />
+    );
+  } else if (activeTab === "Reports" && reportStep === "detail" && selectedReport) {
+    foregroundScreen = (
       <ReportDetailScreen
         initialTab="Reports"
         report={selectedReport}
@@ -306,52 +310,40 @@ function MainShell({
     );
   }
 
-  if (activeTab === "Settings") {
-    return (
-      <SettingsScreen
-        initialTab="Settings"
-        onTabChange={handleTabChange}
-        onQuickExit={handleQuickExit}
-        onLogout={onLogout}
-      />
-    );
-  }
+  const showReportList =
+    activeTab === "Reports" && (reportStep === "list" || !selectedReport);
 
-  if (activeTab === "Community") {
-    return (
-      <CommunityScreen
-        initialTab="Community"
-        onTabChange={handleTabChange}
-      />
-    );
-  }
+  return (
+    <View style={styles.mainShell}>
+      <View style={[styles.mainShellScreen, activeTab !== "Home" && styles.mainShellScreenHidden]}>
+        <HomeScreen
+          initialTab="Home"
+          isActive={activeTab === "Home"}
+          onQuickExit={handleQuickExit}
+          onTabChange={handleTabChange}
+          onOpenNotifications={onOpenNotifications}
+          onOpenReport={openReportDetail}
+        />
+      </View>
 
-  if (activeTab === "Incident") {
-    if (incidentStep === "form") {
-      return (
-        <IncidentLogScreen
-          onBack={() => setActiveTab("Home")}
-          onSubmitted={(payload) => {
-            setLastIncident(payload);
-            setIncidentStep("confirmed");
+      <View style={[styles.mainShellScreen, !showReportList && styles.mainShellScreenHidden]}>
+        <ReportScreen
+          initialTab="Reports"
+          isActive={showReportList}
+          onQuickExit={handleQuickExit}
+          onTabChange={handleTabChange}
+          onOpenReport={(item) => {
+            setSelectedReport(item);
+            setReportStep("detail");
           }}
         />
-      );
-    }
+      </View>
 
-    return (
-      <IncidentLogConfirmedScreen
-        alertNo={formatAlertNo(lastIncident?.incidentId)}
-        dateLine={formatDateLine(lastIncident?.createdAt)}
-        onGoHome={() => {
-          setActiveTab("Home");
-          setIncidentStep("form");
-        }}
-      />
-    );
-  }
-
-  return null;
+      {foregroundScreen ? (
+        <View style={styles.mainShellScreen}>{foregroundScreen}</View>
+      ) : null}
+    </View>
+  );
 }
 
 /* ===================== HELPERS ===================== */
@@ -938,6 +930,15 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  mainShell: {
+    flex: 1,
+  },
+  mainShellScreen: {
+    flex: 1,
+  },
+  mainShellScreenHidden: {
+    display: "none",
+  },
   placeholder: {
     flex: 1,
     alignItems: "center",

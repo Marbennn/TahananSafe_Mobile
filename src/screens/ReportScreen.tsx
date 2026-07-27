@@ -17,7 +17,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useIsFocused } from "@react-navigation/native";
 
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { Colors, useColors } from "../theme/colors";
@@ -254,15 +253,16 @@ export default function ReportScreen({
   onQuickExit,
   onTabChange,
   initialTab,
+  isActive = true,
   onOpenReport,
 }: {
   onQuickExit?: () => void;
   onTabChange?: (tab: TabKey) => void;
   initialTab?: TabKey;
+  isActive?: boolean;
   onOpenReport?: (item: ReportItem) => void;
 }) {
   const insets = useSafeAreaInsets();
-  const isFocused = useIsFocused();
   const { width, height } = useWindowDimensions();
   const TC = useColors();
 
@@ -286,6 +286,10 @@ export default function ReportScreen({
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab ?? "Reports");
   const [filter, setFilter] = useState<FilterKey>("Active");
   const [query, setQuery] = useState<string>("");
+
+  useEffect(() => {
+    if (isActive) setActiveTab(initialTab ?? "Reports");
+  }, [initialTab, isActive]);
 
   const [items, setItems] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -311,6 +315,8 @@ export default function ReportScreen({
   const longPressFab = () => onQuickExit?.();
 
   const abortRef = useRef<AbortController | null>(null);
+  const loadInFlightRef = useRef(false);
+  const hasLoadedRef = useRef(false);
 
   // ✅ FIX: Use requestJson with auth:true for auto token refresh
   const fetchMyReports = useCallback(async (signal?: AbortSignal): Promise<ReportItem[]> => {
@@ -391,22 +397,28 @@ export default function ReportScreen({
     return mapped;
   }, []); // ✅ FIX: No dependencies needed — requestJson handles token internally
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = !!opts?.silent;
+
     if (!userId) {
       setItems([]);
       setLoading(false);
+      hasLoadedRef.current = true;
       return;
     }
+
+    if (silent && loadInFlightRef.current) return;
 
     try {
       abortRef.current?.abort();
     } catch {}
     const controller = new AbortController();
     abortRef.current = controller;
+    loadInFlightRef.current = true;
 
     try {
-      setErrorMsg("");
-      setLoading(true);
+      if (!silent) setErrorMsg("");
+      if (!silent) setLoading(true);
 
       const list = await fetchMyReports(controller.signal);
 
@@ -422,24 +434,26 @@ export default function ReportScreen({
         );
       } catch {}
 
-      if (!controller.signal.aborted) setItems(list);
+      if (!controller.signal.aborted) {
+        setErrorMsg("");
+        setItems(list);
+      }
     } catch (e: any) {
       if (isAbortError(e)) return;
-      setErrorMsg(e?.message ? String(e.message) : "Failed to load reports.");
-      setItems([]);
+      if (!silent) {
+        setErrorMsg(e?.message ? String(e.message) : "Failed to load reports.");
+        setItems([]);
+      }
     } finally {
-      if (!controller.signal.aborted) setLoading(false);
+      if (abortRef.current === controller) {
+        loadInFlightRef.current = false;
+        hasLoadedRef.current = true;
+        if (!controller.signal.aborted && !silent) setLoading(false);
+      }
     }
   }, [fetchMyReports, userId]);
 
   useEffect(() => {
-    if (!isFocused) {
-      try {
-        abortRef.current?.abort();
-      } catch {}
-      return;
-    }
-
     load();
 
     return () => {
@@ -447,7 +461,17 @@ export default function ReportScreen({
         abortRef.current?.abort();
       } catch {}
     };
-  }, [isFocused, load]);
+  }, [load]);
+
+  const wasActiveRef = useRef(isActive);
+  useEffect(() => {
+    const becameActive = isActive && !wasActiveRef.current;
+    wasActiveRef.current = isActive;
+
+    if (becameActive && hasLoadedRef.current) {
+      load({ silent: true });
+    }
+  }, [isActive, load]);
 
   const onRefresh = useCallback(async () => {
     if (!userId) {
@@ -460,6 +484,7 @@ export default function ReportScreen({
     } catch {}
     const controller = new AbortController();
     abortRef.current = controller;
+    loadInFlightRef.current = true;
 
     try {
       setRefreshing(true);
@@ -484,7 +509,12 @@ export default function ReportScreen({
       if (isAbortError(e)) return;
       setErrorMsg(e?.message ? String(e.message) : "Failed to refresh reports.");
     } finally {
-      setRefreshing(false);
+      if (abortRef.current === controller) {
+        loadInFlightRef.current = false;
+        hasLoadedRef.current = true;
+        if (!controller.signal.aborted) setLoading(false);
+      }
+      if (!controller.signal.aborted) setRefreshing(false);
     }
   }, [fetchMyReports, userId]);
 
@@ -507,14 +537,24 @@ export default function ReportScreen({
 
   // ✅ Simple list fade/slide when filter changes
   const tabAnim = useRef(new Animated.Value(1)).current;
+  const previousAnimatedFilterRef = useRef<FilterKey>(filter);
   useEffect(() => {
+    const filterChanged = previousAnimatedFilterRef.current !== filter;
+    previousAnimatedFilterRef.current = filter;
+    tabAnim.stopAnimation();
+
+    if (!isActive || !filterChanged) {
+      tabAnim.setValue(1);
+      return;
+    }
+
     tabAnim.setValue(0);
     Animated.timing(tabAnim, {
       toValue: 1,
       duration: 180,
       useNativeDriver: true,
     }).start();
-  }, [filter, tabAnim]);
+  }, [filter, isActive, tabAnim]);
 
   const listAnimStyle = useMemo(() => {
     const opacity = tabAnim;
@@ -597,42 +637,61 @@ export default function ReportScreen({
         </View>
 
         {/* ===== Body ===== */}
-        {loading ? (
-          <View style={styles.centerBox}>
-            <ActivityIndicator size="large" color={TC.primary} />
-            <Text style={[styles.centerHint, { color: TC.muted }]}>Loading reports…</Text>
-          </View>
-        ) : errorMsg ? (
-          <View style={styles.centerBox}>
-            <Ionicons name="warning-outline" size={styles._emptyIcon} color="#F59E0B" />
-            <Text style={styles.errorText}>{errorMsg}</Text>
-            <Pressable onPress={load} style={({ pressed }) => [styles.retryBtn, { backgroundColor: TC.primary }, pressed && { opacity: 0.92 }]}>
-              <Text style={styles.retryText}>Retry</Text>
-            </Pressable>
-          </View>
-        ) : filtered.length === 0 ? (
-          <Animated.View style={[styles.centerBox, listAnimStyle]}>
-            <Ionicons name="document-text-outline" size={styles._emptyIcon} color="#94A3B8" />
-            <Text style={[styles.centerHint, { color: TC.muted }]}>No reports found for {filter}.</Text>
-            {!!query && <Text style={[styles.centerSubHint, { color: TC.muted }]}>Try a different keyword.</Text>}
-          </Animated.View>
-        ) : (
-          <Animated.View style={[{ flex: 1 }, listAnimStyle]}>
-            <FlatList
-              data={filtered}
-              keyExtractor={(it) => it.id}
-              showsVerticalScrollIndicator={false}
-              keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-              keyboardShouldPersistTaps="handled"
-              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-              contentContainerStyle={[styles.listContent, { paddingBottom: CONTENT_BOTTOM_PAD }]}
-              renderItem={({ item }) => (
-                <ReportCard item={item} onPress={() => onOpenReport?.(item)} styles={styles} TC={TC} />
-              )}
-              ItemSeparatorComponent={() => <View style={{ height: vscale(10) }} />}
-            />
-          </Animated.View>
-        )}
+        <Animated.View style={[{ flex: 1 }, listAnimStyle]}>
+          <FlatList
+            data={loading || errorMsg ? [] : filtered}
+            keyExtractor={(it) => it.id}
+            showsVerticalScrollIndicator={false}
+            alwaysBounceVertical
+            overScrollMode="always"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={TC.primary}
+                colors={[TC.primary]}
+                progressBackgroundColor={TC.surface}
+              />
+            }
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: CONTENT_BOTTOM_PAD },
+              (loading || !!errorMsg || filtered.length === 0) && styles.emptyListContent,
+            ]}
+            ListEmptyComponent={
+              <View style={styles.centerBox}>
+                {loading ? (
+                  <>
+                    <ActivityIndicator size="large" color={TC.primary} />
+                    <Text style={[styles.centerHint, { color: TC.muted }]}>Loading reports…</Text>
+                  </>
+                ) : errorMsg ? (
+                  <>
+                    <Ionicons name="warning-outline" size={styles._emptyIcon} color="#F59E0B" />
+                    <Text style={styles.errorText}>{errorMsg}</Text>
+                    <Pressable onPress={() => load()} style={({ pressed }) => [styles.retryBtn, { backgroundColor: TC.primary }, pressed && { opacity: 0.92 }]}>
+                      <Text style={styles.retryText}>Retry</Text>
+                    </Pressable>
+                    <Text style={[styles.centerSubHint, { color: TC.muted }]}>Or pull down to refresh.</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="document-text-outline" size={styles._emptyIcon} color="#94A3B8" />
+                    <Text style={[styles.centerHint, { color: TC.muted }]}>No reports found for {filter}.</Text>
+                    {!!query && <Text style={[styles.centerSubHint, { color: TC.muted }]}>Try a different keyword.</Text>}
+                    <Text style={[styles.centerSubHint, { color: TC.muted }]}>Pull down to refresh.</Text>
+                  </>
+                )}
+              </View>
+            }
+            renderItem={({ item }) => (
+              <ReportCard item={item} onPress={() => onOpenReport?.(item)} styles={styles} TC={TC} />
+            )}
+            ItemSeparatorComponent={() => <View style={{ height: vscale(10) }} />}
+          />
+        </Animated.View>
 
         <BottomNavBar
           activeTab={activeTab}
@@ -797,6 +856,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
         alignSelf: "center",
         paddingHorizontal: scale(14),
         paddingTop: vscale(6),
+      },
+      emptyListContent: {
+        flexGrow: 1,
       },
 
       // ✅ NO SHADOWS AT ALL
