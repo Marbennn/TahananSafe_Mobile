@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Colors } from "../../theme/colors";
 
 export type TutorialStep = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -339,7 +340,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 10,
-    backgroundColor: "#1A3C6E",
+    backgroundColor: Colors.actionPrimary,
     gap: 4,
   },
   navBtnPrimaryText: {

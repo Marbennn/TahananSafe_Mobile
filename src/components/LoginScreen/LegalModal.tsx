@@ -225,7 +225,7 @@ By checking the box below, you confirm you have read and understood this Privacy
               ]}
             >
               <LinearGradient
-                colors={TC.gradient}
+                colors={TC.actionGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.primaryBtnGradient}

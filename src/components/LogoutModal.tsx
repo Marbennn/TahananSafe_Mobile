@@ -114,7 +114,7 @@ export default function LogoutModal({
               hitSlop={8}
               style={({ pressed }) => [
                 styles.btnConfirm,
-                { backgroundColor: confirmColor || TC.primary },
+                { backgroundColor: confirmColor || TC.actionPrimary },
                 pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
               ]}
             >
@@ -201,12 +201,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       flex: 1,
       height: vscale(46),
       borderRadius: scale(14),
-      backgroundColor: Colors.primary,
+      backgroundColor: Colors.actionPrimary,
       alignItems: "center",
       justifyContent: "center",
       ...Platform.select({
         ios: {
-          shadowColor: Colors.primary,
+          shadowColor: Colors.actionPrimary,
           shadowOpacity: 0.3,
           shadowRadius: 8,
           shadowOffset: { width: 0, height: 4 },

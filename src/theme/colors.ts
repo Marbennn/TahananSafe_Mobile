@@ -1,6 +1,12 @@
 // src/theme/colors.ts
 import { useTheme } from "./ThemeContext";
 
+export const PRIMARY_ACTION_COLOR = "#00223E";
+export const PRIMARY_ACTION_GRADIENT = [
+  PRIMARY_ACTION_COLOR,
+  PRIMARY_ACTION_COLOR,
+] as const;
+
 export const Colors = {
   // ✅ Primary (from your Primary Blue Linear)
   primary: "#07519C",
@@ -25,6 +31,8 @@ export const Colors = {
 
   // ✅ Gradient MUST be a tuple (at least 2 colors) for expo-linear-gradient typing
   gradient: ["#07519C", "#021C36"] as const,
+  actionPrimary: PRIMARY_ACTION_COLOR,
+  actionGradient: PRIMARY_ACTION_GRADIENT,
 
   // ✅ Semantic surface colors (light defaults)
   screenBg: "#F5FAFE",
@@ -60,6 +68,8 @@ export const DarkColors = {
   inputBg: "#1E293B",
 
   gradient: ["#1A3A5C", "#0F172A"] as const,
+  actionPrimary: PRIMARY_ACTION_COLOR,
+  actionGradient: PRIMARY_ACTION_GRADIENT,
 
   screenBg: "#0F172A",
   surface: "#1E293B",

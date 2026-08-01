@@ -2,7 +2,6 @@
 
 A React Native mobile application built with Expo for reporting and managing domestic safety incidents. Features include incident logging with AI analysis, real-time push notifications, biometric authentication, PIN security, emergency hotlines, and blockchain-backed report integrity.
 
-
 ## Build Apk command
 
 npx eas-cli build --platform android --profile preview
@@ -89,6 +88,10 @@ npx expo start --web
 eas build --profile development --platform android
 eas build --profile development --platform ios
 ```
+
+# apk build
+
+npx eas-cli build --platform android --profile preview
 
 ### Android APK (manual Gradle build)
 
@@ -200,8 +203,8 @@ TahananSafe_Mobile/
 
 ## Related Repositories
 
-| Project | Description |
-|---------|-------------|
+| Project                 | Description                             |
+| ----------------------- | --------------------------------------- |
 | **TahananSafe_Backend** | Node.js/Express API server with MongoDB |
-| **TahananSafe_Web** | React web dashboard for administrators |
-| **TahananSafe_AI** | Python AI service for incident analysis |
+| **TahananSafe_Web**     | React web dashboard for administrators  |
+| **TahananSafe_AI**      | Python AI service for incident analysis |

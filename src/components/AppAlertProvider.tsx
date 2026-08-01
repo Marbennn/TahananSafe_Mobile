@@ -215,9 +215,11 @@ export default function AppAlertProvider({ children }: Props) {
             isCancel
               ? styles.btnCancel
               : stackedDefault
-                ? [styles.btnStackDefault, { borderColor: TC.primary }]
+                ? [styles.btnStackDefault, { borderColor: TC.actionPrimary }]
                 : styles.btnConfirm,
-            !isCancel && !stackedDefault && { backgroundColor: isDestructive ? "#DC2626" : TC.primary },
+            !isCancel && !stackedDefault && {
+              backgroundColor: isDestructive ? "#DC2626" : TC.actionPrimary,
+            },
             pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
           ]}
         >
@@ -227,7 +229,7 @@ export default function AppAlertProvider({ children }: Props) {
               isCancel
                 ? [styles.btnCancelText, { color: TC.textDark }]
                 : stackedDefault
-                  ? [styles.btnStackDefaultText, { color: TC.primary }]
+                  ? [styles.btnStackDefaultText, { color: TC.actionPrimary }]
                   : styles.btnConfirmText,
             ]}
           >
@@ -236,7 +238,15 @@ export default function AppAlertProvider({ children }: Props) {
         </Pressable>
       );
     },
-    [TC.primary, TC.textDark, buttons.length, closeWithAnim, current?.id, isStacked, styles]
+    [
+      TC.actionPrimary,
+      TC.textDark,
+      buttons.length,
+      closeWithAnim,
+      current?.id,
+      isStacked,
+      styles,
+    ]
   );
 
   return (
@@ -380,10 +390,10 @@ function createStyles(
       backgroundColor: "#F3F4F6",
     },
     btnConfirm: {
-      backgroundColor: Colors.primary,
+      backgroundColor: Colors.actionPrimary,
       ...Platform.select({
         ios: {
-          shadowColor: Colors.primary,
+          shadowColor: Colors.actionPrimary,
           shadowOpacity: 0.3,
           shadowRadius: 8,
           shadowOffset: { width: 0, height: 4 },

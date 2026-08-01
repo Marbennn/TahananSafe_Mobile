@@ -247,7 +247,7 @@ export default function VerifyPinScreen({ expectedPin, onContinue, onSkip }: Pro
           >
             <View style={styles.ctaInnerClip}>
               <LinearGradient
-                colors={TC.gradient}
+                colors={TC.actionGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.ctaGradient}

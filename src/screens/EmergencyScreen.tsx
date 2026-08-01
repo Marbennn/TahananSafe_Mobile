@@ -240,7 +240,11 @@ export default function EmergencyScreen({
           {/* Bottom button */}
           <Pressable
             onPress={handleReview}
-            style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.92 }, { backgroundColor: TC.primary }]}
+            style={({ pressed }) => [
+              styles.primaryBtn,
+              pressed && { opacity: 0.92 },
+              { backgroundColor: TC.actionPrimary },
+            ]}
           >
             <Text style={styles.primaryBtnText}>Review Complaint</Text>
           </Pressable>
@@ -438,7 +442,7 @@ const styles = StyleSheet.create({
   primaryBtn: {
     width: "100%",
     maxWidth: 520,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.actionPrimary,
     borderRadius: 999,
     paddingVertical: 14,
     alignItems: "center",

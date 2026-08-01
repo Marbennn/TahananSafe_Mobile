@@ -175,12 +175,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     btnConfirm: {
       height: vscale(46),
       borderRadius: scale(14),
-      backgroundColor: "#DC2626",
+      backgroundColor: Colors.actionPrimary,
       alignItems: "center",
       justifyContent: "center",
       ...Platform.select({
         ios: {
-          shadowColor: "#DC2626",
+          shadowColor: Colors.actionPrimary,
           shadowOpacity: 0.3,
           shadowRadius: 8,
           shadowOffset: { width: 0, height: 4 },

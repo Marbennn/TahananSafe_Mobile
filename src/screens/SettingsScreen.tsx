@@ -1315,7 +1315,7 @@ export default function SettingsScreen({
                   onPress={() => void handleSignOutCurrentSession()}
                   style={({ pressed }) => [
                     styles.profileActionBtn,
-                    { backgroundColor: primary },
+                    { backgroundColor: Colors.actionPrimary },
                     pressed && { opacity: 0.85 },
                   ]}
                 >
@@ -1497,7 +1497,7 @@ export default function SettingsScreen({
                       disabled={profileSaving}
                       style={({ pressed }) => [
                         styles.profileActionBtn,
-                        { backgroundColor: primary },
+                        { backgroundColor: Colors.actionPrimary },
                         pressed && !profileSaving && { opacity: 0.85 },
                       ]}
                     >
@@ -2434,7 +2434,13 @@ export default function SettingsScreen({
 
                 <Pressable
                   onPress={onSavePin}
-                  style={[styles.modalBtn, { backgroundColor: primary, borderColor: primary }]}
+                  style={[
+                    styles.modalBtn,
+                    {
+                      backgroundColor: Colors.actionPrimary,
+                      borderColor: Colors.actionPrimary,
+                    },
+                  ]}
                   android_ripple={{ color: "rgba(255,255,255,0.18)" }}
                 >
                   <Text style={[styles.modalBtnText, { color: "#fff" }]}>Save</Text>
@@ -2817,7 +2823,7 @@ function makeStyles(
     settingsFeedbackButton: {
       minHeight: vscale(44),
       borderRadius: compactScale(8),
-      backgroundColor: "#000000",
+      backgroundColor: Colors.actionPrimary,
       alignItems: "center",
       justifyContent: "center",
       paddingHorizontal: scale(14),

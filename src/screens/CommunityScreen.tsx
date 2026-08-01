@@ -668,7 +668,9 @@ function CreatePostModal({
               style={[
                 styles.postBtn,
                 {
-                  backgroundColor: content.trim() ? colors.primary : colors.border,
+                  backgroundColor: content.trim()
+                    ? colors.actionPrimary
+                    : colors.border,
                 },
               ]}
             >
@@ -837,7 +839,9 @@ function EditPostModal({
               style={[
                 styles.postBtn,
                 {
-                  backgroundColor: canSave ? colors.primary : colors.border,
+                  backgroundColor: canSave
+                    ? colors.actionPrimary
+                    : colors.border,
                 },
               ]}
             >

@@ -9,14 +9,16 @@ import {
   StatusBar,
   useWindowDimensions,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 
 import IncidentPreviewCard, {
   IncidentPreviewData,
 } from "../components/IncidentLogConfirmationScreen/IncidentPreviewCard";
 import IncidentLogConfirmedScreen from "./IncidentLogConfirmedScreen";
+import IncidentProgressHeader from "../components/IncidentLogScreen/IncidentProgressHeader";
+import { PRIMARY_ACTION_COLOR } from "../theme/colors";
 
 type ConfirmResult = {
   incidentId: string;
@@ -29,6 +31,7 @@ type Props = {
   onConfirm?: () => Promise<ConfirmResult>;
   submitting?: boolean;
   onGoHome?: () => void;
+  embedded?: boolean;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -56,6 +59,7 @@ export default function IncidentLogConfirmationScreen({
   onConfirm,
   submitting = false,
   onGoHome,
+  embedded = false,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
@@ -68,6 +72,10 @@ export default function IncidentLogConfirmationScreen({
 
   const FOOTER_H = 84 * s;
   const CONTENT_BOTTOM_PAD = Math.max(insets.bottom, 10) + FOOTER_H + 16;
+  const FOOTER_BOTTOM_PAD =
+    Platform.OS === "android"
+      ? Math.min(Math.max(insets.bottom, 24), 48)
+      : Math.max(insets.bottom, 14);
 
   const handleConfirm = async () => {
     if (submitting) return;
@@ -95,99 +103,81 @@ export default function IncidentLogConfirmationScreen({
     );
   }
 
+  const previewContent = (
+    <View style={styles.page}>
+      <ScrollView
+        style={styles.previewScroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: CONTENT_BOTTOM_PAD },
+        ]}
+      >
+        <Text style={styles.reviewCopy}>
+          Please verify the information below before submitting for AI analysis and mediation scheduling.
+        </Text>
+
+        <IncidentPreviewCard data={data} />
+      </ScrollView>
+
+      <View style={[styles.footerSurface, { paddingBottom: FOOTER_BOTTOM_PAD }]}>
+        <View style={styles.footer}>
+          <Pressable
+            disabled={submitting}
+            onPress={onBack}
+            style={({ pressed }) => [
+              styles.editBtn,
+              isCompact && styles.editBtnCompact,
+              (pressed || submitting) && { opacity: 0.72 },
+            ]}
+          >
+            <Text style={styles.editText} allowFontScaling={false}>
+              Edit
+            </Text>
+          </Pressable>
+
+          <Pressable
+            disabled={submitting}
+            onPress={handleConfirm}
+            style={({ pressed }) => [
+              styles.confirmBtn,
+              (pressed || submitting) && { opacity: 0.9 },
+            ]}
+          >
+            {submitting ? <ActivityIndicator color="#FFFFFF" /> : null}
+            <Text style={styles.confirmText} allowFontScaling={false}>
+              {submitting ? "Submitting..." : "Confirm"}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+
+  if (embedded) return previewContent;
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
-      <View style={styles.page}>
-        <View style={styles.topBar}>
-          <Pressable
-            disabled={submitting}
-            onPress={onBack}
-            hitSlop={12}
-            style={({ pressed }) => [
-              styles.backBtn,
-              (pressed || submitting) && { opacity: 0.65 },
-            ]}
-          >
-            <Ionicons name="chevron-back" size={31} color="#00518D" />
-          </Pressable>
+      <IncidentProgressHeader
+        screenTitle="Incident Log Preview"
+        step={2}
+        stepTitle="Details"
+        navigationIcon="chevron-back"
+        navigationDisabled={submitting}
+        onNavigationPress={onBack}
+        animateFromStep={1}
+      />
 
-          <Text style={[styles.topTitle, isCompact && styles.topTitleCompact]} allowFontScaling={false}>
-            Incident Log Preview
-          </Text>
-
-          <View style={styles.headerSpacer} />
-        </View>
-
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: CONTENT_BOTTOM_PAD },
-          ]}
-        >
-          <View style={styles.stepHeader}>
-            <Text style={styles.stepEyebrow} allowFontScaling={false}>
-              STEP 2 OF 3
-            </Text>
-            <Text style={styles.stepTitle} allowFontScaling={false}>
-              Details
-            </Text>
-            <View style={styles.progressRow}>
-              <View style={[styles.progressSegment, styles.progressSegmentActive]} />
-              <View style={[styles.progressSegment, styles.progressSegmentActive]} />
-              <View style={styles.progressSegment} />
-            </View>
-            <Text style={styles.reviewCopy}>
-              Please verify the information below before submitting for AI analysis and mediation scheduling.
-            </Text>
-          </View>
-
-          <IncidentPreviewCard data={data} />
-        </ScrollView>
-
-        <View style={[styles.footerSurface, { paddingBottom: Math.max(insets.bottom, 14) }]}>
-          <View style={styles.footer}>
-            <Pressable
-              disabled={submitting}
-              onPress={onBack}
-              style={({ pressed }) => [
-                styles.editBtn,
-                isCompact && styles.editBtnCompact,
-                (pressed || submitting) && { opacity: 0.72 },
-              ]}
-            >
-              <Text style={styles.editText} allowFontScaling={false}>
-                Edit
-              </Text>
-            </Pressable>
-
-            <Pressable
-              disabled={submitting}
-              onPress={handleConfirm}
-              style={({ pressed }) => [
-                styles.confirmBtn,
-                (pressed || submitting) && { opacity: 0.9 },
-              ]}
-            >
-              {submitting ? <ActivityIndicator color="#FFFFFF" /> : null}
-              <Text style={styles.confirmText} allowFontScaling={false}>
-                {submitting ? "Submitting..." : "Confirm"}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
+      {previewContent}
     </SafeAreaView>
   );
 }
 
 const BG = "#F5F7FA";
-const NAVY = "#00223E";
-const TEXT_DARK = "#344052";
+const NAVY = PRIMARY_ACTION_COLOR;
 const TEXT_MUTED = "#7B7F86";
-const BORDER = "#D8DDE2";
 
 const styles = StyleSheet.create({
   safe: {
@@ -198,74 +188,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: BG,
   },
-  topBar: {
-    width: "100%",
-    maxWidth: 720,
-    alignSelf: "center",
-    paddingHorizontal: 17,
-    paddingTop: 12,
-    paddingBottom: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  topTitle: {
+  previewScroll: {
     flex: 1,
-    textAlign: "center",
-    fontSize: 23,
-    fontWeight: "800",
-    color: TEXT_DARK,
-  },
-  topTitleCompact: {
-    fontSize: 20,
-  },
-  headerSpacer: {
-    width: 40,
-    height: 40,
   },
   scrollContent: {
     paddingHorizontal: 17,
+    paddingTop: 12,
     gap: 15,
   },
-  stepHeader: {
+  reviewCopy: {
     width: "100%",
     maxWidth: 680,
     alignSelf: "center",
     paddingHorizontal: 11,
-  },
-  stepEyebrow: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#858B94",
-    marginBottom: 3,
-  },
-  stepTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: TEXT_DARK,
-    marginBottom: 10,
-  },
-  progressRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 12,
-  },
-  progressSegment: {
-    flex: 1,
-    height: 5,
-    borderRadius: 999,
-    backgroundColor: BORDER,
-  },
-  progressSegmentActive: {
-    backgroundColor: NAVY,
-  },
-  reviewCopy: {
     fontSize: 15,
     lineHeight: 22,
     fontWeight: "500",

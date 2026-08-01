@@ -9,6 +9,7 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { Colors } from "../../theme/colors";
 
 type Props = {
   visible: boolean;
@@ -148,7 +149,7 @@ function createStyles(
     primaryBtn: {
       height: vscale(48),
       borderRadius: scale(14),
-      backgroundColor: "#0F766E",
+      backgroundColor: Colors.actionPrimary,
       alignItems: "center",
       justifyContent: "center",
     },

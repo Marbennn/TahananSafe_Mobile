@@ -17,7 +17,7 @@ export default function PrimaryButton({ title, onPress, disabled }: Props) {
       disabled={disabled}
       style={({ pressed }) => [
         styles.btn,
-        { backgroundColor: TC.primary },
+        { backgroundColor: TC.actionPrimary },
         disabled && styles.disabled,
         pressed && !disabled && { transform: [{ scale: 0.99 }] },
       ]}
@@ -31,7 +31,7 @@ const styles = StyleSheet.create({
   btn: {
     height: 48,
     borderRadius: 24,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.actionPrimary,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",

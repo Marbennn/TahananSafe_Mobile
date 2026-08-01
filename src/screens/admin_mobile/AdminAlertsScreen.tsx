@@ -665,7 +665,7 @@ export default function AdminAlertsScreen({
                 <Pressable
                   onPress={() => setSelectedAlert(null)}
                   style={({ pressed }) => [{
-                    backgroundColor: Colors.primary,
+                    backgroundColor: Colors.actionPrimary,
                     borderRadius: 14,
                     paddingVertical: 12,
                     alignItems: "center" as const,

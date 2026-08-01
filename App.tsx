@@ -36,6 +36,7 @@ import SettingsScreen from "./src/screens/SettingsScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
 import AdminNotificationsScreen from "./src/screens/admin_mobile/AdminNotificationsScreen";
 import AppAlertProvider from "./src/components/AppAlertProvider";
+import GlobalReportMessaging from "./src/components/GlobalReportMessaging";
 
 import IncidentLogScreen from "./src/screens/IncidentLogScreen";
 import IncidentLogConfirmedScreen from "./src/screens/IncidentLogConfirmedScreen";
@@ -492,6 +493,26 @@ function NotificationsWrapper({ navigation }: { navigation: any }) {
   );
 }
 
+function ResidentMessagingHost({ routeName }: { routeName: string }) {
+  const auth = useAuth() as any;
+  const residentRoute =
+    routeName === "Main" || routeName === "Notifications";
+
+  if (
+    !residentRoute ||
+    !auth?.user ||
+    isBarangayOfficial(auth.user.role)
+  ) {
+    return null;
+  }
+
+  return (
+    <View pointerEvents="box-none" style={styles.messagingOverlay}>
+      <GlobalReportMessaging />
+    </View>
+  );
+}
+
 /* ===================== ✅ PIN SCREEN WRAPPER ===================== */
 
 function PinScreenWrapper({ navigation }: { navigation: any }) {
@@ -851,18 +872,34 @@ function AppSplashScreenWrapper({
 /* ===================== APP ROOT ===================== */
 
 export default function App() {
+  const navigationRef = React.useRef<any>(null);
+  const [activeRootRoute, setActiveRootRoute] = useState("Splash");
+
+  const syncActiveRootRoute = useCallback(() => {
+    const nextRoute = navigationRef.current?.getCurrentRoute?.()?.name;
+    if (!nextRoute) return;
+    setActiveRootRoute((current) =>
+      current === nextRoute ? current : nextRoute
+    );
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
           <AuthProvider>
             <AppAlertProvider>
-              <NavigationContainer>
-                <Stack.Navigator
-                  id="root-stack"
-                  initialRouteName="Splash"
-                  screenOptions={{ headerShown: false, gestureEnabled: true }}
-                >
+              <NavigationContainer
+                ref={navigationRef}
+                onReady={syncActiveRootRoute}
+                onStateChange={syncActiveRootRoute}
+              >
+                <View style={styles.navigationRoot}>
+                  <Stack.Navigator
+                    id="root-stack"
+                    initialRouteName="Splash"
+                    screenOptions={{ headerShown: false, gestureEnabled: true }}
+                  >
                   <Stack.Screen name="Splash">
                     {({ navigation }) => (
                       <AppSplashScreenWrapper
@@ -919,7 +956,9 @@ export default function App() {
                   <Stack.Screen name="Notifications">
                     {({ navigation }) => <NotificationsWrapper navigation={navigation} />}
                   </Stack.Screen>
-                </Stack.Navigator>
+                  </Stack.Navigator>
+                  <ResidentMessagingHost routeName={activeRootRoute} />
+                </View>
               </NavigationContainer>
             </AppAlertProvider>
           </AuthProvider>
@@ -930,6 +969,13 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  navigationRoot: {
+    flex: 1,
+  },
+  messagingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+  },
   mainShell: {
     flex: 1,
   },

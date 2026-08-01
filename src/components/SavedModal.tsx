@@ -121,7 +121,7 @@ export default function SavedModal({
                 pressed ? { opacity: 0.85, transform: [{ scale: 0.99 }] } : null,
               ]}
             >
-              <View style={[styles.btnInner, { backgroundColor: TC.primary }]}>
+              <View style={[styles.btnInner, { backgroundColor: TC.actionPrimary }]}>
                 <Text style={styles.btnText}>{buttonLabel}</Text>
               </View>
             </Pressable>
@@ -208,7 +208,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     btnInner: {
       height: vscale(46),
       borderRadius: scale(14),
-      backgroundColor: Colors.primary,
+      backgroundColor: Colors.actionPrimary,
       alignItems: "center",
       justifyContent: "center",
     },

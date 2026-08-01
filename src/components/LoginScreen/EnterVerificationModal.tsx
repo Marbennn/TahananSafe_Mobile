@@ -379,7 +379,7 @@ export default function EnterVerificationModal({
           >
             <View style={styles.btnClip}>
               <LinearGradient
-                colors={TC.gradient}
+                colors={TC.actionGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.btnGradient}

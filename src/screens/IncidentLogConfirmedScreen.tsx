@@ -13,6 +13,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import type { IncidentPreviewData } from "../components/IncidentLogConfirmationScreen/IncidentPreviewCard";
 import ConfirmedCheckSvg from "../../assets/ConfirmedCheck.svg";
+import { PRIMARY_ACTION_COLOR } from "../theme/colors";
 
 type Props = {
   alertNo: string;
@@ -294,7 +295,7 @@ function AiIncidentAnalysisScreen({
 }
 
 const BG = "#F5F7FA";
-const NAVY = "#00223E";
+const NAVY = PRIMARY_ACTION_COLOR;
 const TEXT_DARK = "#344052";
 const TEXT_MUTED = "#7A7A7A";
 

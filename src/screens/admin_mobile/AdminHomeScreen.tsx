@@ -989,7 +989,7 @@ const AdminHomeScreen: React.FC<Props> = ({
         actionBtn: {
           width: "100%",
           borderRadius: 18,
-          backgroundColor: "#083B67",
+          backgroundColor: Colors.actionPrimary,
           paddingVertical: clamp(Math.round(16 * s), 14, 18),
           paddingHorizontal: clamp(Math.round(14 * s), 12, 16),
           flexDirection: "row",
@@ -1340,7 +1340,7 @@ const AdminHomeScreen: React.FC<Props> = ({
                 <Pressable
                   onPress={() => setSelectedAlert(null)}
                   style={({ pressed }) => [{
-                    backgroundColor: Colors.primary,
+                    backgroundColor: Colors.actionPrimary,
                     borderRadius: 14,
                     paddingVertical: 12,
                     alignItems: "center" as const,

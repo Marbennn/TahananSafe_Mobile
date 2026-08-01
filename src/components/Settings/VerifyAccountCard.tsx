@@ -641,7 +641,14 @@ export default function VerifyAccountCard({
               <Pressable
                 onPress={submitSelfie}
                 disabled={selfieLoading}
-                style={[styles.actionBtn, { backgroundColor: primary, borderColor: primary }, selfieLoading && { opacity: 0.85 }]}
+                style={[
+                  styles.actionBtn,
+                  {
+                    backgroundColor: TC.actionPrimary,
+                    borderColor: TC.actionPrimary,
+                  },
+                  selfieLoading && { opacity: 0.85 },
+                ]}
               >
                 {selfieLoading ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -753,7 +760,14 @@ export default function VerifyAccountCard({
               <Pressable
                 onPress={submitVerification}
                 disabled={submitLoading}
-                style={[styles.actionBtn, { backgroundColor: primary, borderColor: primary }, submitLoading && { opacity: 0.85 }]}
+                style={[
+                  styles.actionBtn,
+                  {
+                    backgroundColor: TC.actionPrimary,
+                    borderColor: TC.actionPrimary,
+                  },
+                  submitLoading && { opacity: 0.85 },
+                ]}
               >
                 {submitLoading ? (
                   <ActivityIndicator size="small" color="#fff" />

@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   retryBtn: {
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.actionPrimary,
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 12,

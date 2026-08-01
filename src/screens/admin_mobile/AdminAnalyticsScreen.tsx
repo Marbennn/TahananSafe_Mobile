@@ -499,7 +499,7 @@ function makeStyles(horizontalPadding: number, statGap: number) {
     paddingHorizontal: 32,
   },
   retryBtn: {
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.actionPrimary,
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 12,

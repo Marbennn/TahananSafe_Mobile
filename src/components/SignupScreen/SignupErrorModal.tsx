@@ -165,7 +165,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     btnInner: {
       height: vscale(46),
       borderRadius: scale(14),
-      backgroundColor: Colors.primary,
+      backgroundColor: Colors.actionPrimary,
       alignItems: "center",
       justifyContent: "center",
     },

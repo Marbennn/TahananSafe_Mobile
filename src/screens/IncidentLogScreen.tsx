@@ -14,6 +14,9 @@ import {
   KeyboardAvoidingView,
   Image,
   ActivityIndicator,
+  Animated,
+  Easing,
+  Keyboard,
   Switch,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -41,6 +44,8 @@ import type { IncidentPreviewData } from "../components/IncidentLogConfirmationS
 import type { TabKey } from "../components/BottomNavBar";
 import IncidentLocationMapModal from "../components/IncidentLocationMapModal";
 import IncidentVideoPreviewModal from "../components/IncidentVideoPreviewModal";
+import IncidentProgressHeader from "../components/IncidentLogScreen/IncidentProgressHeader";
+import { PRIMARY_ACTION_COLOR } from "../theme/colors";
 
 type IncidentSubmittedPayload = {
   incidentId: string;
@@ -249,7 +254,27 @@ export default function IncidentLogScreen({
   const [previewVideoUri, setPreviewVideoUri] = useState<string | null>(null);
 
   const [showPreview, setShowPreview] = useState(false);
+  const [previewHeaderActive, setPreviewHeaderActive] = useState(false);
+  const [transitioningPreview, setTransitioningPreview] = useState(false);
+  const previewSlideProgress = React.useRef(new Animated.Value(0)).current;
   const [submitting, setSubmitting] = useState(false);
+
+  React.useEffect(() => {
+    if (!showPreview) return;
+
+    const animation = Animated.timing(previewSlideProgress, {
+      toValue: 1,
+      duration: 460,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
+
+    animation.start(({ finished }) => {
+      if (finished) setTransitioningPreview(false);
+    });
+
+    return () => animation.stop();
+  }, [previewSlideProgress, showPreview]);
 
   /** ✅ AI staleness */
   const aiIsStale = useMemo(() => {
@@ -450,6 +475,19 @@ export default function IncidentLogScreen({
   });
 
   useSpeechRecognitionEvent("error", (event: any) => {
+    const errorCode = String(event?.error ?? event?.code ?? "").toLowerCase();
+    const isExpectedAbort =
+      errorCode === "aborted" ||
+      errorCode === "-1" ||
+      String(event?.message || "").toLowerCase().includes("aborted");
+
+    if (isExpectedAbort) {
+      setRecognizing(false);
+      setSpeechPreview("");
+      setSpeechError(null);
+      return;
+    }
+
     const msg = event?.message || "Speech recognition error";
     log("Speech error", event);
     setRecognizing(false);
@@ -513,6 +551,10 @@ export default function IncidentLogScreen({
   };
 
   const CONTENT_BOTTOM_PAD = 16 * s;
+  const FOOTER_BOTTOM_PAD =
+    Platform.OS === "android"
+      ? Math.min(Math.max(insets.bottom, 24), 48)
+      : Math.max(insets.bottom, 12);
 
   const requestAndSetCurrentLocation = async (
     opts?: { silent?: boolean }
@@ -1010,8 +1052,30 @@ export default function IncidentLogScreen({
       return;
     }
 
+    Keyboard.dismiss();
+    previewSlideProgress.stopAnimation();
+    previewSlideProgress.setValue(0);
+    setTransitioningPreview(true);
+    setPreviewHeaderActive(true);
     setShowPreview(true);
   };
+
+  const closePreview = React.useCallback(() => {
+    if (submitting || transitioningPreview) return;
+
+    setTransitioningPreview(true);
+    setPreviewHeaderActive(false);
+
+    Animated.timing(previewSlideProgress, {
+      toValue: 0,
+      duration: 460,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      setTransitioningPreview(false);
+      if (finished) setShowPreview(false);
+    });
+  }, [previewSlideProgress, submitting, transitioningPreview]);
 
   const onConfirmComplaint = async () => {
     if (submitting || aiLoading) return;
@@ -1024,6 +1088,8 @@ export default function IncidentLogScreen({
     const incidentId = res?.incident?._id || "";
     const createdAt = res?.incident?.createdAt;
 
+    previewSlideProgress.setValue(0);
+    setPreviewHeaderActive(false);
     setShowPreview(false);
 
     onSubmitted?.({ incidentId, createdAt });
@@ -1045,59 +1111,52 @@ export default function IncidentLogScreen({
     [dateStr, timeStr]
   );
 
-  if (showPreview) {
-    return (
-      <IncidentLogConfirmScreen
-        data={buildPreviewData()}
-        submitting={submitting}
-        onBack={() => (submitting ? null : setShowPreview(false))}
-        onConfirm={onConfirmComplaint as any}
-        onGoHome={() => setShowPreview(false)}
-      />
-    );
-  }
+  const formTranslateX = previewSlideProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -screenWidth],
+  });
+  const previewTranslateX = previewSlideProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [screenWidth, 0],
+  });
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="light-content" backgroundColor="#88AFD1" />
+      <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
       <KeyboardAvoidingView
         style={styles.page}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
       >
-        <View style={styles.statusBand} />
+        <IncidentProgressHeader
+          screenTitle={previewHeaderActive ? "Incident Log Preview" : "New Report"}
+          step={previewHeaderActive ? 2 : 1}
+          stepTitle={previewHeaderActive ? "Details" : "Report"}
+          navigationIcon={previewHeaderActive ? "chevron-back" : "close"}
+          navigationDisabled={submitting || aiLoading || transitioningPreview}
+          onNavigationPress={
+            previewHeaderActive
+              ? closePreview
+              : onBack ?? (() => Alert.alert("Back", "Wire onBack() to navigation"))
+          }
+        />
 
-        <View style={styles.topBar}>
-          <Pressable
-            disabled={submitting || aiLoading}
-            onPress={onBack ?? (() => Alert.alert("Back", "Wire onBack() to navigation"))}
-            hitSlop={12}
-            style={({ pressed }) => [styles.closeBtn, (pressed || submitting || aiLoading) && { opacity: 0.65 }]}
+        <View style={styles.transitionViewport}>
+          <Animated.View
+            pointerEvents={showPreview ? "none" : "auto"}
+            style={[
+              styles.transitionPane,
+              { transform: [{ translateX: formTranslateX }] },
+            ]}
           >
-            <Ionicons name="close" size={28} color="#344052" />
-          </Pressable>
-
-          <Text style={styles.topTitle} allowFontScaling={false}>New Report</Text>
-          <View style={styles.headerSpacer} />
-        </View>
-
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: CONTENT_BOTTOM_PAD }]}
+            <ScrollView
+              style={styles.formScroll}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+              contentContainerStyle={[styles.scrollContent, { paddingBottom: CONTENT_BOTTOM_PAD }]}
         >
-          <View style={styles.stepHeader}>
-            <Text style={styles.stepEyebrow} allowFontScaling={false}>STEP 1 OF 3</Text>
-            <Text style={styles.stepTitle} allowFontScaling={false}>Report</Text>
-            <View style={styles.progressRow}>
-              <View style={[styles.progressSegment, styles.progressSegmentActive]} />
-              <View style={styles.progressSegment} />
-              <View style={styles.progressSegment} />
-            </View>
-          </View>
-
           <View style={styles.card}>
             <View style={styles.fieldHeaderRow}>
               <Text style={styles.fieldLabel} allowFontScaling={false}>
@@ -1325,17 +1384,39 @@ export default function IncidentLogScreen({
           </View>
 
           <Text style={styles.draftedText} allowFontScaling={false}>Drafted: {draftedLine}</Text>
-        </ScrollView>
+            </ScrollView>
 
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-          <Pressable
-            disabled={submitting || aiLoading}
-            onPress={onSubmit}
-            style={({ pressed }) => [styles.submitBtn, (pressed || submitting || aiLoading) && { opacity: 0.88 }]}
-          >
-            {submitting || aiLoading ? <ActivityIndicator color="#FFFFFF" /> : null}
-            <Text style={styles.submitText} allowFontScaling={false}>{primaryActionText}</Text>
-          </Pressable>
+            <View style={[styles.footer, { paddingBottom: FOOTER_BOTTOM_PAD }]}>
+              <Pressable
+                disabled={submitting || aiLoading}
+                onPress={onSubmit}
+                style={({ pressed }) => [styles.submitBtn, (pressed || submitting || aiLoading) && { opacity: 0.88 }]}
+              >
+                {submitting || aiLoading ? <ActivityIndicator color="#FFFFFF" /> : null}
+                <Text style={styles.submitText} allowFontScaling={false}>{primaryActionText}</Text>
+              </Pressable>
+            </View>
+          </Animated.View>
+
+          {showPreview ? (
+            <Animated.View
+              pointerEvents={transitioningPreview ? "none" : "auto"}
+              style={[
+                styles.transitionPane,
+                styles.previewTransitionPane,
+                { transform: [{ translateX: previewTranslateX }] },
+              ]}
+            >
+              <IncidentLogConfirmScreen
+                embedded
+                data={buildPreviewData()}
+                submitting={submitting}
+                onBack={closePreview}
+                onConfirm={onConfirmComplaint as any}
+                onGoHome={closePreview}
+              />
+            </Animated.View>
+          ) : null}
         </View>
       </KeyboardAvoidingView>
 
@@ -1360,56 +1441,32 @@ const CARD_BG = "#FFFFFF";
 const BORDER = "#D9DEE5";
 const TEXT_DARK = "#344052";
 const TEXT_MUTED = "#7B7F86";
-const NAVY = "#00223E";
+const NAVY = PRIMARY_ACTION_COLOR;
 const SHADOW = "#000";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
   page: { flex: 1, backgroundColor: BG },
-
-  statusBand: {
-    height: 0,
-    backgroundColor: "#88AFD1",
-  },
-
-  topBar: {
-    width: "100%",
-    maxWidth: 720,
-    alignSelf: "center",
-    paddingHorizontal: 22,
-    paddingTop: 14,
-    paddingBottom: 22,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  closeBtn: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  topTitle: {
+  transitionViewport: {
     flex: 1,
-    textAlign: "center",
-    fontSize: 26,
-    fontWeight: "800",
-    color: "#374151",
+    overflow: "hidden",
+    backgroundColor: BG,
   },
-  headerSpacer: {
-    width: 40,
-    height: 40,
+  transitionPane: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: BG,
+  },
+  previewTransitionPane: {
+    zIndex: 1,
+    elevation: 1,
+  },
+  formScroll: {
+    flex: 1,
   },
 
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 10,
+    paddingTop: 16,
     gap: 16,
     alignItems: "center",
   },
@@ -1441,37 +1498,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
     color: TEXT_DARK,
-  },
-  stepHeader: {
-    width: "100%",
-    maxWidth: 680,
-    paddingHorizontal: 12,
-  },
-  stepEyebrow: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#858B94",
-    marginBottom: 3,
-  },
-  stepTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: TEXT_DARK,
-    marginBottom: 10,
-  },
-  progressRow: {
-    flexDirection: "row",
-    gap: 12,
-    paddingRight: 12,
-  },
-  progressSegment: {
-    flex: 1,
-    height: 5,
-    borderRadius: 999,
-    backgroundColor: "#D8DDE2",
-  },
-  progressSegmentActive: {
-    backgroundColor: NAVY,
   },
   fieldHeaderRow: {
     minHeight: 22,

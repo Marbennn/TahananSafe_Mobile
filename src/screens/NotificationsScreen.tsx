@@ -1284,7 +1284,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       marginTop: vscale(6),
       paddingVertical: vscale(10),
       paddingHorizontal: scale(18),
-      backgroundColor: TC.primary,
+      backgroundColor: TC.actionPrimary,
       borderRadius: scale(999),
     },
     retryText: {

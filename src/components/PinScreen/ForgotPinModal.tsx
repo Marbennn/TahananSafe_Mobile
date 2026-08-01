@@ -656,13 +656,13 @@ function createStyles(
       width: "100%",
       height: vscale(48),
       borderRadius: scale(14),
-      backgroundColor: Colors.primary,
+      backgroundColor: Colors.actionPrimary,
       alignItems: "center",
       justifyContent: "center",
       marginTop: scale(16),
       ...Platform.select({
         ios: {
-          shadowColor: Colors.primary,
+          shadowColor: Colors.actionPrimary,
           shadowOpacity: 0.3,
           shadowRadius: 8,
           shadowOffset: { width: 0, height: 4 },

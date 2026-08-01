@@ -1317,7 +1317,7 @@ export default function HomeScreen({
           alignItems: "center",
           gap: 5,
           marginTop: clamp(Math.round(6 * s), 4, 8),
-          backgroundColor: Colors.primary,
+          backgroundColor: Colors.actionPrimary,
           paddingHorizontal: clamp(Math.round(16 * s), 12, 20),
           paddingVertical: clamp(Math.round(8 * s), 6, 10),
           borderRadius: 999,

@@ -671,7 +671,14 @@ export default function ReportScreen({
                   <>
                     <Ionicons name="warning-outline" size={styles._emptyIcon} color="#F59E0B" />
                     <Text style={styles.errorText}>{errorMsg}</Text>
-                    <Pressable onPress={() => load()} style={({ pressed }) => [styles.retryBtn, { backgroundColor: TC.primary }, pressed && { opacity: 0.92 }]}>
+                    <Pressable
+                      onPress={() => load()}
+                      style={({ pressed }) => [
+                        styles.retryBtn,
+                        { backgroundColor: TC.actionPrimary },
+                        pressed && { opacity: 0.92 },
+                      ]}
+                    >
                       <Text style={styles.retryText}>Retry</Text>
                     </Pressable>
                     <Text style={[styles.centerSubHint, { color: TC.muted }]}>Or pull down to refresh.</Text>
@@ -990,7 +997,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
         marginTop: vscale(6),
         paddingVertical: vscale(10),
         paddingHorizontal: scale(18),
-        backgroundColor: PRIMARY,
+        backgroundColor: Colors.actionPrimary,
         borderRadius: scale(999),
       },
 

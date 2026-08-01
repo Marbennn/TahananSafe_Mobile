@@ -397,7 +397,7 @@ function makeStyles(width: number, height: number, mapBottomInset: number) {
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.actionPrimary,
   },
   retryText: {
     fontSize: 14,

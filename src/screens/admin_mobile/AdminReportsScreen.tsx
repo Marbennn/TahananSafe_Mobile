@@ -793,7 +793,7 @@ function makeStyles(
         marginTop: vscale(6),
         paddingVertical: vscale(10),
         paddingHorizontal: scale(18),
-        backgroundColor: PRIMARY,
+        backgroundColor: Colors.actionPrimary,
         borderRadius: scale(999),
       },
 

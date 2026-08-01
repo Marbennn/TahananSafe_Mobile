@@ -435,7 +435,11 @@ export default function HotlinesScreen({
 
               <Pressable
                 onPress={openAddContact}
-                style={({ pressed }) => [styles.addContactOption, { backgroundColor: TC.primary }, pressed && { opacity: 0.85 }]}
+                style={({ pressed }) => [
+                  styles.addContactOption,
+                  { backgroundColor: TC.actionPrimary },
+                  pressed && { opacity: 0.85 },
+                ]}
                 accessibilityRole="button"
                 accessibilityLabel="Add emergency contact"
               >
@@ -486,7 +490,11 @@ export default function HotlinesScreen({
                 />
                 <Pressable
                   onPress={addCustomHotline}
-                  style={({ pressed }) => [styles.saveButton, { backgroundColor: TC.primary }, pressed && { opacity: 0.85 }]}
+                  style={({ pressed }) => [
+                    styles.saveButton,
+                    { backgroundColor: TC.actionPrimary },
+                    pressed && { opacity: 0.85 },
+                  ]}
                 >
                   <Text style={styles.saveButtonText}>Save contact</Text>
                 </Pressable>
