@@ -644,28 +644,18 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
 
   const showFloatingBoundaryTooltip = useCallback(() => {
     stopFloatingBoundaryTooltipAnimation();
-    const animation = Animated.timing(floatingBoundaryTooltip, {
-      toValue: 1,
-      duration: 130,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-      isInteraction: false,
-    });
-    floatingBoundaryTooltipAnimationRef.current = animation;
-    animation.start(({ finished }) => {
-      if (finished && floatingBoundaryTooltipAnimationRef.current === animation) {
-        floatingBoundaryTooltipAnimationRef.current = null;
-      }
-    });
-  }, [floatingBoundaryTooltip, stopFloatingBoundaryTooltipAnimation]);
-
-  const hideFloatingBoundaryTooltip = useCallback(() => {
-    stopFloatingBoundaryTooltipAnimation();
     const animation = Animated.sequence([
-      Animated.delay(650),
+      Animated.timing(floatingBoundaryTooltip, {
+        toValue: 1,
+        duration: 130,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+        isInteraction: false,
+      }),
+      Animated.delay(700),
       Animated.timing(floatingBoundaryTooltip, {
         toValue: 0,
-        duration: 180,
+        duration: 220,
         easing: Easing.inOut(Easing.quad),
         useNativeDriver: true,
         isInteraction: false,
@@ -749,18 +739,12 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
         onPanResponderRelease: () => {
           floatingPosition.setValue(floatingPositionRef.current);
           releaseFloatingBottomImpact();
-          if (floatingBoundaryTooltipShownRef.current) {
-            floatingBoundaryTooltipShownRef.current = false;
-            hideFloatingBoundaryTooltip();
-          }
+          floatingBoundaryTooltipShownRef.current = false;
         },
         onPanResponderTerminate: () => {
           floatingPosition.setValue(floatingPositionRef.current);
           releaseFloatingBottomImpact();
-          if (floatingBoundaryTooltipShownRef.current) {
-            floatingBoundaryTooltipShownRef.current = false;
-            hideFloatingBoundaryTooltip();
-          }
+          floatingBoundaryTooltipShownRef.current = false;
         },
         onShouldBlockNativeResponder: () => true,
       }),
@@ -768,7 +752,6 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
       floatingBottomImpact,
       floatingBounds,
       floatingPosition,
-      hideFloatingBoundaryTooltip,
       releaseFloatingBottomImpact,
       resetFloatingBoundaryTooltip,
       showFloatingBoundaryTooltip,
