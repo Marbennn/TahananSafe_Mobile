@@ -1247,10 +1247,8 @@ function makeStyles(
     closeButton: {
       width: 34,
       height: 34,
-      borderRadius: 17,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: colors.inputBg,
     },
     listContent: {
       paddingHorizontal: 14,

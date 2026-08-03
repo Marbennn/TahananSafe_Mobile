@@ -2008,10 +2008,8 @@ function makeStyles({
       messageModalClose: {
         width: scale(32),
         height: scale(32),
-        borderRadius: scale(16),
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: isDark ? "#334155" : "#F1F5F9",
       },
       threadsKav: { flex: 1, backgroundColor: background },
       threadsWrap: {
