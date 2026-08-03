@@ -41,6 +41,8 @@ import ReportContextPanel, {
 
 const RESPONDER_LABEL = "Barangay Admin";
 const POLL_MS = 4000;
+const BUBBLE_MEASUREMENT_VERSION = 3;
+const BALANCED_MESSAGE_MIN_LENGTH = 33;
 
 type ThreadMessage = {
   id: string;
@@ -61,6 +63,14 @@ type ThreadMessage = {
   pending?: boolean;
 };
 
+type BubbleMeasurement = {
+  version: number;
+  text: string;
+  maxWidth: number;
+  fontScale: number;
+  width: number;
+};
+
 type Props = {
   reportId: string;
   canChat: boolean;
@@ -70,7 +80,6 @@ type Props = {
   autoOpen?: boolean;
   hideFab?: boolean;
   modalTitle?: string;
-  showBackButton?: boolean;
   onModalClose?: () => void;
 };
 
@@ -183,11 +192,10 @@ export default function ReportMessaging({
   autoOpen = false,
   hideFab = false,
   modalTitle = "Messages",
-  showBackButton = false,
   onModalClose,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
+  const { width, height, fontScale } = useWindowDimensions();
   const themeColors = useColors();
   const isTablet = Math.min(width, height) >= 600;
   const isWideLayout = width >= 600;
@@ -198,7 +206,6 @@ export default function ReportMessaging({
   const primary = String(themeColors.primary || "#07519C");
   const modalPanelWidth = Math.round(Math.min(width * 0.92, scale(520)));
   const contentMaxWidth = isWideLayout ? Math.min(720, Math.round(width * 0.92)) : width;
-  const contentSidePadding = isTablet ? scale(18) : scale(14);
 
   const styles = useMemo(
     () =>
@@ -227,7 +234,9 @@ export default function ReportMessaging({
   const [sending, setSending] = useState(false);
   const [adminTyping, setAdminTyping] = useState(false);
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
-  const [measuredBubbleWidths, setMeasuredBubbleWidths] = useState<Record<string, number>>({});
+  const [bubbleMeasurements, setBubbleMeasurements] = useState<
+    Record<string, BubbleMeasurement>
+  >({});
   const [threadsError, setThreadsError] = useState("");
   const [newMessageCount, setNewMessageCount] = useState(0);
   const [activePanel, setActivePanel] = useState<"messages" | "context">(
@@ -269,14 +278,12 @@ export default function ReportMessaging({
     return null;
   }, [messages]);
 
-  const keyboardOffset =
-    Platform.OS === "ios" ? Math.max(insets.top, vscale(6)) + vscale(44) : 0;
   const composerBaseBottomPadding = Math.max(insets.bottom, vscale(6));
-  const composerKeyboardLift = 0;
   const composerBottomPadding =
     Platform.OS === "android" && isKeyboardVisible ? vscale(4) : composerBaseBottomPadding;
+  const chatContentWidth = Math.max(modalPanelWidth - scale(44), scale(120));
   const threadBubbleMaxWidth = Math.round(
-    (contentMaxWidth - contentSidePadding * 2) * (isTablet ? 0.66 : 0.72)
+    chatContentWidth * (isTablet ? 0.66 : 0.78)
   );
   const messagesTranslateX = contextSlide.interpolate({
     inputRange: [0, 1],
@@ -553,7 +560,7 @@ export default function ReportMessaging({
 
     setVisible(false);
     setMessages([]);
-    setMeasuredBubbleWidths({});
+    setBubbleMeasurements({});
     setThreadsError("");
     setLoadingThreads(false);
     setNewMessageCount(0);
@@ -976,24 +983,54 @@ export default function ReportMessaging({
     void openMessages();
   }, [autoOpen, openMessages, reportId]);
 
-  const updateMeasuredBubbleWidth = useCallback(
-    (messageId: string, text: string, lineWidth: number) => {
-      if (!messageId || !Number.isFinite(lineWidth) || lineWidth <= 0) return;
+  const updateBubbleMeasurement = useCallback(
+    (messageId: string, text: string, lineWidths: number[]) => {
+      const validWidths = lineWidths.filter(
+        (lineWidth) => Number.isFinite(lineWidth) && lineWidth > 0
+      );
+      if (!messageId || !validWidths.length) return;
 
-      setMeasuredBubbleWidths((previous) => {
-        if (previous[messageId]) return previous;
-        const clean = String(text || "").trim();
-        const floorWidth =
-          clean.length > 44 ? scale(150) : clean.length > 22 ? scale(118) : scale(74);
-        const nextWidth = clamp(
-          Math.ceil(lineWidth + scale(30)),
-          floorWidth,
-          threadBubbleMaxWidth
-        );
-        return { ...previous, [messageId]: nextWidth };
+      const horizontalChrome = scale(14) * 2 + 2;
+      const layoutSlack = scale(4);
+      const singleLineWidth =
+        Math.ceil(validWidths.reduce((total, lineWidth) => total + lineWidth, 0)) +
+        horizontalChrome +
+        layoutSlack * validWidths.length;
+      const widestLineWidth =
+        Math.ceil(Math.max(...validWidths)) + horizontalChrome + layoutSlack;
+      const canFitOnOneLine =
+        !/[\r\n]/.test(text) && singleLineWidth <= threadBubbleMaxWidth;
+      const nextWidth = clamp(
+        canFitOnOneLine ? singleLineWidth : widestLineWidth,
+        scale(42),
+        threadBubbleMaxWidth
+      );
+
+      setBubbleMeasurements((previous) => {
+        const current = previous[messageId];
+        if (
+          current?.version === BUBBLE_MEASUREMENT_VERSION &&
+          current?.text === text &&
+          current.maxWidth === threadBubbleMaxWidth &&
+          current.fontScale === fontScale &&
+          current.width === nextWidth
+        ) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          [messageId]: {
+            version: BUBBLE_MEASUREMENT_VERSION,
+            text,
+            maxWidth: threadBubbleMaxWidth,
+            fontScale,
+            width: nextWidth,
+          },
+        };
       });
     },
-    [scale, threadBubbleMaxWidth]
+    [fontScale, scale, threadBubbleMaxWidth]
   );
 
   const onChatScroll = useCallback(
@@ -1145,43 +1182,33 @@ export default function ReportMessaging({
         animationType="fade"
         onRequestClose={handleMessageModalBack}
       >
-        <View style={styles.messageModalRoot}>
+        <View style={styles.messageModalLayer}>
           <Pressable style={styles.messageModalBackdrop} onPress={closeMessages} />
-          <View style={styles.messageModalCard}>
+          <KeyboardAvoidingView
+            pointerEvents="box-none"
+            style={styles.messageModalRoot}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={0}
+          >
+            <View style={styles.messageModalCard}>
             <View style={styles.messageModalHeader}>
-              {showBackButton ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    activePanel === "context"
-                      ? "Back to messages"
-                      : "Back to reports"
-                  }
-                  onPress={handleMessageModalBack}
-                  hitSlop={10}
-                  style={({ pressed }) => [
-                    styles.messageModalClose,
-                    pressed && { opacity: 0.7 },
-                  ]}
-                >
-                  <Ionicons
-                    name="chevron-back"
-                    size={styles._miniIcon}
-                    color="#64748B"
-                  />
-                </Pressable>
-              ) : null}
-
-              <View
-                style={[
-                  styles.messageModalHeaderContent,
-                  showBackButton && styles.messageModalHeaderContentCentered,
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close messages"
+                onPress={closeMessages}
+                hitSlop={10}
+                style={({ pressed }) => [
+                  styles.messageModalClose,
+                  pressed && { opacity: 0.7 },
                 ]}
               >
-                <Text style={styles.messageModalTitle} numberOfLines={1}>
-                  {modalTitle}
-                </Text>
+                <Ionicons name="close" size={styles._miniIcon} color="#64748B" />
+              </Pressable>
 
+              <View
+                style={styles.messageModalHeaderContent}
+                accessibilityLabel={modalTitle}
+              >
                 {reportContext || onContextPress ? (
                   <Pressable
                     accessibilityRole="button"
@@ -1229,22 +1256,6 @@ export default function ReportMessaging({
                 ) : null}
               </View>
 
-              {showBackButton ? (
-                <View style={styles.messageModalHeaderSpacer} />
-              ) : (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Close messages"
-                  onPress={closeMessages}
-                  hitSlop={10}
-                  style={({ pressed }) => [
-                    styles.messageModalClose,
-                    pressed && { opacity: 0.7 },
-                  ]}
-                >
-                  <Ionicons name="close" size={styles._miniIcon} color="#64748B" />
-                </Pressable>
-              )}
             </View>
 
             <View style={styles.messageModalBody}>
@@ -1264,11 +1275,7 @@ export default function ReportMessaging({
                   },
                 ]}
               >
-                <KeyboardAvoidingView
-                  style={styles.threadsKav}
-                  behavior={Platform.OS === "ios" ? "padding" : undefined}
-                  keyboardVerticalOffset={keyboardOffset}
-                >
+                <View style={styles.threadsKav}>
                   <View style={styles.threadsWrap}>
                 {loadingThreads ? (
                   <View style={styles.bannerNeutral}>
@@ -1337,10 +1344,21 @@ export default function ReportMessaging({
                     {messages.map((message) => {
                       const isLeft = message.side === "left";
                       const showMeta = visibleMessageMetaId === message.id;
-                      const measuredBubbleWidth = measuredBubbleWidths[message.id];
-                      const bubbleSizingStyle = measuredBubbleWidth
+                      const shouldBalanceMessage =
+                        Array.from(message.text.trim()).length >=
+                        BALANCED_MESSAGE_MIN_LENGTH;
+                      const storedMeasurement = bubbleMeasurements[message.id];
+                      const bubbleMeasurement =
+                        shouldBalanceMessage &&
+                        storedMeasurement?.version === BUBBLE_MEASUREMENT_VERSION &&
+                        storedMeasurement.text === message.text &&
+                        storedMeasurement.maxWidth === threadBubbleMaxWidth &&
+                        storedMeasurement.fontScale === fontScale
+                          ? storedMeasurement
+                          : null;
+                      const bubbleSizingStyle = bubbleMeasurement
                         ? {
-                            width: measuredBubbleWidth,
+                            width: bubbleMeasurement.width,
                             maxWidth: threadBubbleMaxWidth,
                           }
                         : { maxWidth: threadBubbleMaxWidth };
@@ -1497,20 +1515,22 @@ export default function ReportMessaging({
                                             ? styles.bubbleTextLeft
                                             : styles.bubbleTextRight,
                                         ]}
-                                        onTextLayout={(event) => {
-                                          const widths = (event.nativeEvent.lines || [])
-                                            .map((line: any) => Number(line?.width || 0))
-                                            .filter(
-                                              (lineWidth: number) =>
-                                                Number.isFinite(lineWidth) && lineWidth > 0
-                                            );
-                                          if (!widths.length) return;
-                                          updateMeasuredBubbleWidth(
-                                            message.id,
-                                            message.text,
-                                            Math.max(...widths)
-                                          );
-                                        }}
+                                        textBreakStrategy={
+                                          shouldBalanceMessage ? "balanced" : "simple"
+                                        }
+                                        onTextLayout={
+                                          !shouldBalanceMessage || bubbleMeasurement
+                                            ? undefined
+                                            : (event) => {
+                                                updateBubbleMeasurement(
+                                                  message.id,
+                                                  message.text,
+                                                  (event.nativeEvent.lines || []).map(
+                                                    (line: any) => Number(line?.width || 0)
+                                                  )
+                                                );
+                                              }
+                                        }
                                       >
                                         {message.text}
                                       </Text>
@@ -1661,7 +1681,6 @@ export default function ReportMessaging({
                       styles.composerDock,
                       {
                         paddingBottom: composerBottomPadding,
-                        marginBottom: composerKeyboardLift,
                       },
                     ]}
                   >
@@ -1722,7 +1741,7 @@ export default function ReportMessaging({
                   </View>
                 </View>
                   </View>
-                </KeyboardAvoidingView>
+                </View>
               </Animated.View>
 
               {reportContext ? (
@@ -1752,7 +1771,8 @@ export default function ReportMessaging({
                 </Animated.View>
               ) : null}
             </View>
-          </View>
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -1910,6 +1930,9 @@ function makeStyles({
         fontWeight: "900",
         color: "#FFFFFF",
       },
+      messageModalLayer: {
+        flex: 1,
+      },
       messageModalRoot: {
         flex: 1,
         alignItems: "center",
@@ -1948,24 +1971,14 @@ function makeStyles({
         alignItems: "center",
         justifyContent: "space-between",
         backgroundColor: background,
-        borderBottomWidth: 1,
-        borderBottomColor: border,
-      },
-      messageModalTitle: {
-        flexShrink: 1,
-        fontSize: scale(17),
-        fontWeight: "900",
-        color: textDark,
       },
       messageModalHeaderContent: {
         flex: 1,
         minWidth: 0,
         flexDirection: "row",
         alignItems: "center",
+        justifyContent: "flex-end",
         gap: scale(7),
-      },
-      messageModalHeaderContentCentered: {
-        justifyContent: "center",
       },
       contextButton: {
         flexShrink: 0,
@@ -1991,10 +2004,6 @@ function makeStyles({
       },
       contextButtonMessagesText: {
         color: "#FFFFFF",
-      },
-      messageModalHeaderSpacer: {
-        width: scale(32),
-        height: scale(32),
       },
       messageModalClose: {
         width: scale(32),
@@ -2189,18 +2198,21 @@ function makeStyles({
         marginTop: vscale(18),
       },
       messageBubbleGroup: {
-        maxWidth: isTablet ? "62%" : "76%",
+        maxWidth: isTablet ? "66%" : "78%",
+        minWidth: 0,
         flexShrink: 1,
       },
       messageBubbleGroupLeft: { alignItems: "flex-start" },
       messageBubbleGroupRight: { alignItems: "flex-end" },
       bubblePressable: {
-        alignSelf: "flex-start",
         maxWidth: "100%",
+        minWidth: 0,
+        flexShrink: 1,
       },
       bubble: {
         maxWidth: "100%",
-        alignSelf: "flex-start",
+        minWidth: 0,
+        flexShrink: 1,
         borderRadius: scale(12),
         paddingHorizontal: scale(14),
         paddingVertical: vscale(11),
@@ -2215,6 +2227,7 @@ function makeStyles({
         borderColor: "#000000",
       },
       bubbleText: {
+        flexShrink: 1,
         fontSize: scale(isTablet ? 13 : 12),
         fontWeight: "800",
         lineHeight: vscale(isTablet ? 18 : 17),

@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Animated,
   AppState,
+  Easing,
   FlatList,
   Keyboard,
   Modal,
@@ -165,7 +166,11 @@ function groupUnreadNotifications(items: NotificationItem[]) {
   return next;
 }
 
-export default function GlobalReportMessaging() {
+type Props = {
+  hidden?: boolean;
+};
+
+export default function GlobalReportMessaging({ hidden = false }: Props) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const colors = useColors();
@@ -203,6 +208,25 @@ export default function GlobalReportMessaging() {
     new Animated.Value(0),
     new Animated.Value(0),
   ]).current;
+  const reportListBackdrop = useRef(new Animated.Value(0)).current;
+  const reportListMotion = useRef(new Animated.Value(0)).current;
+  const reportListShouldAnimateRef = useRef(false);
+  const reportListClosingRef = useRef(false);
+  const reportListOriginRef = useRef({ x: width / 2, y: height / 2 });
+
+  useEffect(() => {
+    if (!hidden) return;
+
+    Keyboard.dismiss();
+    reportListShouldAnimateRef.current = false;
+    reportListClosingRef.current = false;
+    reportListBackdrop.stopAnimation();
+    reportListMotion.stopAnimation();
+    reportListBackdrop.setValue(0);
+    reportListMotion.setValue(0);
+    setListVisible(false);
+    setSelectedReport(null);
+  }, [hidden, reportListBackdrop, reportListMotion]);
 
   const totalUnread = useMemo(
     () => Object.values(unreadByReport).reduce((sum, count) => sum + count, 0),
@@ -349,17 +373,87 @@ export default function GlobalReportMessaging() {
     return () => loops.forEach((loop) => loop.stop());
   }, [dotAnimations, totalUnread]);
 
+  const handleReportListShow = useCallback(() => {
+    if (reportListClosingRef.current) return;
+
+    if (!reportListShouldAnimateRef.current) {
+      reportListBackdrop.setValue(1);
+      reportListMotion.setValue(1);
+      return;
+    }
+
+    reportListShouldAnimateRef.current = false;
+    reportListBackdrop.stopAnimation();
+    reportListMotion.stopAnimation();
+
+    Animated.parallel([
+      Animated.timing(reportListBackdrop, {
+        toValue: 1,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+        isInteraction: false,
+      }),
+      Animated.spring(reportListMotion, {
+        toValue: 1,
+        stiffness: 190,
+        damping: 22,
+        mass: 0.85,
+        overshootClamping: true,
+        restDisplacementThreshold: 0.001,
+        restSpeedThreshold: 0.001,
+        useNativeDriver: true,
+        isInteraction: false,
+      }),
+    ]).start();
+  }, [reportListBackdrop, reportListMotion]);
+
   const openReportList = useCallback(() => {
     Keyboard.dismiss();
+    reportListOriginRef.current = {
+      x: floatingPositionRef.current.x + FLOATING_BUTTON_SIZE / 2,
+      y: floatingPositionRef.current.y + FLOATING_BUTTON_SIZE / 2,
+    };
+    reportListClosingRef.current = false;
+    reportListShouldAnimateRef.current = true;
+    reportListBackdrop.stopAnimation();
+    reportListMotion.stopAnimation();
+    reportListBackdrop.setValue(0);
+    reportListMotion.setValue(0);
     setSelectedReport(null);
     setListVisible(true);
     void loadReports(reports.length ? "refresh" : "initial");
-  }, [loadReports, reports.length]);
+  }, [loadReports, reportListBackdrop, reportListMotion, reports.length]);
 
   const closeReportList = useCallback(() => {
-    setListVisible(false);
-    setSelectedReport(null);
-  }, []);
+    if (!listVisible || reportListClosingRef.current) return;
+
+    reportListClosingRef.current = true;
+    reportListShouldAnimateRef.current = false;
+    reportListBackdrop.stopAnimation();
+    reportListMotion.stopAnimation();
+
+    Animated.parallel([
+      Animated.timing(reportListBackdrop, {
+        toValue: 0,
+        duration: 180,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+        isInteraction: false,
+      }),
+      Animated.timing(reportListMotion, {
+        toValue: 0,
+        duration: 240,
+        easing: Easing.bezier(0.4, 0, 0.8, 0.2),
+        useNativeDriver: true,
+        isInteraction: false,
+      }),
+    ]).start(() => {
+      reportListClosingRef.current = false;
+      setListVisible(false);
+      setSelectedReport(null);
+    });
+  }, [listVisible, reportListBackdrop, reportListMotion]);
 
   const closeConversation = useCallback(() => {
     setSelectedReport(null);
@@ -490,26 +584,73 @@ export default function GlobalReportMessaging() {
     [floatingBounds, floatingPosition]
   );
 
-  if (!userId) return null;
+  const reportListWidth = Math.min(Math.round(width * 0.92), 540);
+  const reportListStartScale = clamp(
+    FLOATING_BUTTON_SIZE / Math.max(reportListWidth, 1),
+    0.1,
+    0.18
+  );
+  const reportListTranslateX = reportListMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [reportListOriginRef.current.x - width / 2, 0],
+    extrapolate: "clamp",
+  });
+  const reportListTranslateY = reportListMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [reportListOriginRef.current.y - height / 2, 0],
+    extrapolate: "clamp",
+  });
+  const reportListScale = reportListMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [reportListStartScale, 1],
+    extrapolate: "clamp",
+  });
+  const reportListCardOpacity = reportListMotion.interpolate({
+    inputRange: [0, 0.08, 0.24, 1],
+    outputRange: [0, 0.55, 1, 1],
+    extrapolate: "clamp",
+  });
+
+  if (!userId || hidden) return null;
 
   return (
     <>
       <Modal
         visible={listVisible && !selectedReport}
         transparent
-        animationType="fade"
+        animationType="none"
         statusBarTranslucent
+        hardwareAccelerated
+        onShow={handleReportListShow}
         onRequestClose={closeReportList}
       >
         <View style={styles.modalRoot}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close report messages"
-            style={styles.backdrop}
-            onPress={closeReportList}
-          />
+          <Animated.View
+            pointerEvents="box-none"
+            style={[styles.backdrop, { opacity: reportListBackdrop }]}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close report messages"
+              style={StyleSheet.absoluteFillObject}
+              onPress={closeReportList}
+            />
+          </Animated.View>
 
-          <View style={styles.modalCard}>
+          <Animated.View
+            renderToHardwareTextureAndroid
+            style={[
+              styles.modalCard,
+              {
+                opacity: reportListCardOpacity,
+                transform: [
+                  { translateX: reportListTranslateX },
+                  { translateY: reportListTranslateY },
+                  { scale: reportListScale },
+                ],
+              },
+            ]}
+          >
             <View style={styles.modalHeader}>
               <View style={styles.headerText}>
                 <Text style={styles.modalTitle} allowFontScaling={false}>
@@ -579,18 +720,6 @@ export default function GlobalReportMessaging() {
                     tintColor={colors.primary}
                   />
                 }
-                ListHeaderComponent={
-                  reports.length ? (
-                    <View style={styles.listHeadingRow}>
-                      <Text style={styles.listHeading}>Your Reports</Text>
-                      <View style={styles.reportCountPill}>
-                        <Text style={styles.reportCountText}>
-                          {reports.length}
-                        </Text>
-                      </View>
-                    </View>
-                  ) : null
-                }
                 ListEmptyComponent={
                   <View style={styles.centerState}>
                     <View style={styles.stateIcon}>
@@ -614,7 +743,10 @@ export default function GlobalReportMessaging() {
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Open messages for ${item.alertNo}`}
-                      onPress={() => setSelectedReport(item)}
+                      onPress={() => {
+                        if (reportListClosingRef.current) return;
+                        setSelectedReport(item);
+                      }}
                       style={({ pressed }) => [
                         styles.reportCard,
                         pressed && styles.reportCardPressed,
@@ -703,7 +835,7 @@ export default function GlobalReportMessaging() {
                 }}
               />
             )}
-          </View>
+          </Animated.View>
         </View>
       </Modal>
 
@@ -715,7 +847,6 @@ export default function GlobalReportMessaging() {
           reportStatus={selectedReport.rawStatus.toUpperCase()}
           autoOpen
           hideFab
-          showBackButton
           modalTitle={`Report ${selectedReport.alertNo}`}
           reportContext={selectedReportContext}
           onModalClose={closeConversation}
@@ -824,8 +955,6 @@ function makeStyles(
       flexDirection: "row",
       alignItems: "center",
       gap: 11,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.divider,
       backgroundColor: colors.card,
     },
     headerText: {
@@ -860,33 +989,6 @@ function makeStyles(
     emptyListContent: {
       flexGrow: 1,
       justifyContent: "center",
-    },
-    listHeadingRow: {
-      minHeight: 28,
-      marginBottom: 2,
-      paddingHorizontal: 2,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-    },
-    listHeading: {
-      fontSize: 14,
-      fontWeight: "900",
-      color: colors.heading,
-    },
-    reportCountPill: {
-      minWidth: 24,
-      height: 24,
-      borderRadius: 12,
-      paddingHorizontal: 7,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.chipBg,
-    },
-    reportCountText: {
-      fontSize: 11,
-      fontWeight: "900",
-      color: colors.primary,
     },
     reportCard: {
       borderRadius: 14,

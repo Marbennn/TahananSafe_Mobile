@@ -219,11 +219,13 @@ function MainShell({
   onOpenNotifications,
   incomingReport,
   clearIncomingReport,
+  onReportDetailChange,
 }: {
   onLogout: () => void;
   onOpenNotifications: () => void;
   incomingReport?: ReportItem | null;
   clearIncomingReport: () => void;
+  onReportDetailChange: (active: boolean) => void;
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>("Home");
 
@@ -232,6 +234,13 @@ function MainShell({
 
   const [reportStep, setReportStep] = useState<ReportStep>("list");
   const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
+  const isReportDetailScreen =
+    activeTab === "Reports" && reportStep === "detail" && !!selectedReport;
+
+  React.useLayoutEffect(() => {
+    onReportDetailChange(isReportDetailScreen);
+    return () => onReportDetailChange(false);
+  }, [isReportDetailScreen, onReportDetailChange]);
 
   const handleQuickExit = () => {
     Alert.alert("Quick Exit", "Returning to Login", [{ text: "OK", onPress: onLogout }]);
@@ -299,7 +308,7 @@ function MainShell({
         }}
       />
     );
-  } else if (activeTab === "Reports" && reportStep === "detail" && selectedReport) {
+  } else if (isReportDetailScreen && selectedReport) {
     foregroundScreen = (
       <ReportDetailScreen
         initialTab="Reports"
@@ -424,7 +433,15 @@ async function bootstrapAfterLogin({
 
 /* ===================== MAIN SCREEN WRAPPER ===================== */
 
-function MainScreenWrapper({ navigation, route }: { navigation: any; route: any }) {
+function MainScreenWrapper({
+  navigation,
+  route,
+  onReportDetailChange,
+}: {
+  navigation: any;
+  route: any;
+  onReportDetailChange: (active: boolean) => void;
+}) {
   const auth = useAuth() as any;
 
   const incomingReport: ReportItem | null = route?.params?.openReport ?? null;
@@ -447,6 +464,7 @@ function MainScreenWrapper({ navigation, route }: { navigation: any; route: any 
         clearIncomingReport={() => {
           try { navigation.setParams({ openReport: undefined }); } catch { /* ignore */ }
         }}
+        onReportDetailChange={onReportDetailChange}
       />
     </AuthenticatedIdleBoundary>
   );
@@ -493,7 +511,13 @@ function NotificationsWrapper({ navigation }: { navigation: any }) {
   );
 }
 
-function ResidentMessagingHost({ routeName }: { routeName: string }) {
+function ResidentMessagingHost({
+  routeName,
+  reportDetailActive,
+}: {
+  routeName: string;
+  reportDetailActive: boolean;
+}) {
   const auth = useAuth() as any;
   const residentRoute =
     routeName === "Main" || routeName === "Notifications";
@@ -508,7 +532,9 @@ function ResidentMessagingHost({ routeName }: { routeName: string }) {
 
   return (
     <View pointerEvents="box-none" style={styles.messagingOverlay}>
-      <GlobalReportMessaging />
+      <GlobalReportMessaging
+        hidden={routeName === "Main" && reportDetailActive}
+      />
     </View>
   );
 }
@@ -874,6 +900,8 @@ function AppSplashScreenWrapper({
 export default function App() {
   const navigationRef = React.useRef<any>(null);
   const [activeRootRoute, setActiveRootRoute] = useState("Splash");
+  const [reportDetailMessagingActive, setReportDetailMessagingActive] =
+    useState(false);
 
   const syncActiveRootRoute = useCallback(() => {
     const nextRoute = navigationRef.current?.getCurrentRoute?.()?.name;
@@ -945,7 +973,11 @@ export default function App() {
 
                   <Stack.Screen name="Main">
                     {({ navigation, route }) => (
-                      <MainScreenWrapper navigation={navigation} route={route} />
+                      <MainScreenWrapper
+                        navigation={navigation}
+                        route={route}
+                        onReportDetailChange={setReportDetailMessagingActive}
+                      />
                     )}
                   </Stack.Screen>
 
@@ -957,7 +989,10 @@ export default function App() {
                     {({ navigation }) => <NotificationsWrapper navigation={navigation} />}
                   </Stack.Screen>
                   </Stack.Navigator>
-                  <ResidentMessagingHost routeName={activeRootRoute} />
+                  <ResidentMessagingHost
+                    routeName={activeRootRoute}
+                    reportDetailActive={reportDetailMessagingActive}
+                  />
                 </View>
               </NavigationContainer>
             </AppAlertProvider>

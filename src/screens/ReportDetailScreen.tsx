@@ -21,6 +21,8 @@ import { WebView } from "react-native-webview";
 import type { TabKey } from "../components/BottomNavBar";
 import LogoutModal from "../components/LogoutModal";
 import IncidentVideoPreviewModal from "../components/IncidentVideoPreviewModal";
+import ReportMessaging from "../components/ReportDetailsScreen/ReportMessaging";
+import type { ReportContextData } from "../components/ReportDetailsScreen/ReportContextPanel";
 import { Colors, useColors } from "../theme/colors";
 
 import type { ReportItem } from "./ReportScreen";
@@ -518,6 +520,41 @@ export default function ReportDetailScreen({
   const reportCode = String((report as any)?.alertNo ?? (reportId ? `#${reportId.slice(-4)}` : "#—"));
 
   const reportRef = reportCode.trim().toUpperCase().startsWith("REP") ? reportCode : `REP ${reportCode}`;
+  const messageReference = reportCode.replace(/^REP\s*/i, "").trim();
+  const messageModalTitle = messageReference ? `Report ${messageReference}` : "Report Messages";
+  const canChat = !["CANCELLED", "CANCELED", "RESOLVED"].includes(statusUpper);
+  const reportContext = useMemo<ReportContextData>(
+    () => ({
+      reference: messageReference || reportRef,
+      title: incidentTitle,
+      description: incidentNarrative,
+      statusLabel,
+      statusColor: accent,
+      statusBackgroundColor: `${accent}1A`,
+      incidentDate: dateLabel,
+      incidentTime: timeLabel,
+      location: locationLabel,
+      reportedPerson: complaintName,
+      witnessName,
+      witnessType: witnessRole,
+      evidenceCount,
+    }),
+    [
+      accent,
+      complaintName,
+      dateLabel,
+      evidenceCount,
+      incidentNarrative,
+      incidentTitle,
+      locationLabel,
+      messageReference,
+      reportRef,
+      statusLabel,
+      timeLabel,
+      witnessName,
+      witnessRole,
+    ]
+  );
 
   const timelineEntries = useMemo(() => {
     const submittedAt =
@@ -1031,6 +1068,14 @@ export default function ReportDetailScreen({
         )}
 
       </View>
+
+      <ReportMessaging
+        reportId={resolvedReportId || reportId}
+        canChat={canChat}
+        reportStatus={statusUpper}
+        modalTitle={messageModalTitle}
+        reportContext={reportContext}
+      />
     </SafeAreaView>
   );
 }
