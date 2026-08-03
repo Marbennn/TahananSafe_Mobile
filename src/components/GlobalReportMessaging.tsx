@@ -61,6 +61,8 @@ type FloatingBounds = {
 };
 
 const FLOATING_BUTTON_SIZE = 56;
+const FLOATING_TOOLTIP_WIDTH = 168;
+const FLOATING_TOOLTIP_HEIGHT = 38;
 
 const REPORT_CARD_STATUS_COLORS: Record<
   ReportStatus,
@@ -201,6 +203,12 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
   const floatingPosition = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const floatingPositionRef = useRef({ x: 0, y: 0 });
   const floatingDragStartRef = useRef({ x: 0, y: 0 });
+  const floatingBottomImpact = useRef(new Animated.Value(0)).current;
+  const floatingBottomImpactRef = useRef(0);
+  const floatingBoundaryTooltipShownRef = useRef(false);
+  const floatingBoundaryTooltip = useRef(new Animated.Value(0)).current;
+  const floatingBoundaryTooltipAnimationRef =
+    useRef<Animated.CompositeAnimation | null>(null);
   const floatingPositionUserRef = useRef("");
   const previousFloatingBoundsRef = useRef<FloatingBounds | null>(null);
   const dotAnimations = useRef([
@@ -214,6 +222,26 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
   const reportListClosingRef = useRef(false);
   const reportListOriginRef = useRef({ x: width / 2, y: height / 2 });
 
+  const stopFloatingBoundaryTooltipAnimation = useCallback(() => {
+    floatingBoundaryTooltipAnimationRef.current?.stop();
+    floatingBoundaryTooltipAnimationRef.current = null;
+    floatingBoundaryTooltip.stopAnimation();
+  }, [floatingBoundaryTooltip]);
+
+  const resetFloatingBoundaryTooltip = useCallback(() => {
+    stopFloatingBoundaryTooltipAnimation();
+    floatingBoundaryTooltipShownRef.current = false;
+    floatingBoundaryTooltip.setValue(0);
+  }, [floatingBoundaryTooltip, stopFloatingBoundaryTooltipAnimation]);
+
+  useEffect(
+    () => () => {
+      floatingBoundaryTooltipAnimationRef.current?.stop();
+      floatingBoundaryTooltip.stopAnimation();
+    },
+    [floatingBoundaryTooltip]
+  );
+
   useEffect(() => {
     if (!hidden) return;
 
@@ -222,11 +250,21 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
     reportListClosingRef.current = false;
     reportListBackdrop.stopAnimation();
     reportListMotion.stopAnimation();
+    floatingBottomImpact.stopAnimation();
     reportListBackdrop.setValue(0);
     reportListMotion.setValue(0);
+    floatingBottomImpactRef.current = 0;
+    floatingBottomImpact.setValue(0);
+    resetFloatingBoundaryTooltip();
     setListVisible(false);
     setSelectedReport(null);
-  }, [hidden, reportListBackdrop, reportListMotion]);
+  }, [
+    floatingBottomImpact,
+    hidden,
+    reportListBackdrop,
+    reportListMotion,
+    resetFloatingBoundaryTooltip,
+  ]);
 
   const totalUnread = useMemo(
     () => Object.values(unreadByReport).reduce((sum, count) => sum + count, 0),
@@ -420,10 +458,17 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
     reportListMotion.stopAnimation();
     reportListBackdrop.setValue(0);
     reportListMotion.setValue(0);
+    resetFloatingBoundaryTooltip();
     setSelectedReport(null);
     setListVisible(true);
     void loadReports(reports.length ? "refresh" : "initial");
-  }, [loadReports, reportListBackdrop, reportListMotion, reports.length]);
+  }, [
+    loadReports,
+    reportListBackdrop,
+    reportListMotion,
+    reports.length,
+    resetFloatingBoundaryTooltip,
+  ]);
 
   const closeReportList = useCallback(() => {
     if (!listVisible || reportListClosingRef.current) return;
@@ -495,6 +540,48 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
     insets.top,
     width,
   ]);
+  const floatingTooltipPosition = useMemo(() => {
+    const centerOffset = (FLOATING_TOOLTIP_WIDTH - FLOATING_BUTTON_SIZE) / 2;
+    const tooltipMinimumX = floatingBounds.minimumX;
+    const tooltipMaximumX = Math.max(
+      tooltipMinimumX,
+      floatingBounds.maximumX + FLOATING_BUTTON_SIZE - FLOATING_TOOLTIP_WIDTH
+    );
+    const leftCenterX = floatingBounds.minimumX + centerOffset;
+    const rightCenterX = floatingBounds.maximumX - centerOffset;
+
+    return {
+      translateX: floatingPosition.x.interpolate({
+        inputRange: [
+          floatingBounds.minimumX,
+          leftCenterX,
+          rightCenterX,
+          floatingBounds.maximumX,
+        ],
+        outputRange: [
+          tooltipMinimumX,
+          tooltipMinimumX,
+          tooltipMaximumX,
+          tooltipMaximumX,
+        ],
+        extrapolate: "clamp",
+      }),
+      translateY: Animated.add(
+        floatingPosition.y,
+        -(FLOATING_TOOLTIP_HEIGHT + 12)
+      ),
+      arrowTranslateX: floatingPosition.x.interpolate({
+        inputRange: [
+          floatingBounds.minimumX,
+          leftCenterX,
+          rightCenterX,
+          floatingBounds.maximumX,
+        ],
+        outputRange: [-centerOffset, 0, 0, centerOffset],
+        extrapolate: "clamp",
+      }),
+    };
+  }, [floatingBounds, floatingPosition.x, floatingPosition.y]);
 
   useEffect(() => {
     const shouldReset = floatingPositionUserRef.current !== userId;
@@ -543,7 +630,75 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
     previousFloatingBoundsRef.current = floatingBounds;
     floatingPositionRef.current = current;
     floatingPosition.setValue(current);
-  }, [floatingBounds, floatingPosition, userId]);
+    floatingBottomImpact.stopAnimation();
+    floatingBottomImpactRef.current = 0;
+    floatingBottomImpact.setValue(0);
+    resetFloatingBoundaryTooltip();
+  }, [
+    floatingBottomImpact,
+    floatingBounds,
+    floatingPosition,
+    resetFloatingBoundaryTooltip,
+    userId,
+  ]);
+
+  const showFloatingBoundaryTooltip = useCallback(() => {
+    stopFloatingBoundaryTooltipAnimation();
+    const animation = Animated.timing(floatingBoundaryTooltip, {
+      toValue: 1,
+      duration: 130,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+      isInteraction: false,
+    });
+    floatingBoundaryTooltipAnimationRef.current = animation;
+    animation.start(({ finished }) => {
+      if (finished && floatingBoundaryTooltipAnimationRef.current === animation) {
+        floatingBoundaryTooltipAnimationRef.current = null;
+      }
+    });
+  }, [floatingBoundaryTooltip, stopFloatingBoundaryTooltipAnimation]);
+
+  const hideFloatingBoundaryTooltip = useCallback(() => {
+    stopFloatingBoundaryTooltipAnimation();
+    const animation = Animated.sequence([
+      Animated.delay(650),
+      Animated.timing(floatingBoundaryTooltip, {
+        toValue: 0,
+        duration: 180,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+        isInteraction: false,
+      }),
+    ]);
+    floatingBoundaryTooltipAnimationRef.current = animation;
+    animation.start(({ finished }) => {
+      if (finished && floatingBoundaryTooltipAnimationRef.current === animation) {
+        floatingBoundaryTooltipAnimationRef.current = null;
+      }
+    });
+  }, [floatingBoundaryTooltip, stopFloatingBoundaryTooltipAnimation]);
+
+  const releaseFloatingBottomImpact = useCallback(() => {
+    if (floatingBottomImpactRef.current <= 0) {
+      floatingBottomImpact.setValue(0);
+      return;
+    }
+
+    floatingBottomImpactRef.current = 0;
+    floatingBottomImpact.stopAnimation();
+    Animated.spring(floatingBottomImpact, {
+      toValue: 0,
+      stiffness: 360,
+      damping: 15,
+      mass: 0.55,
+      overshootClamping: false,
+      restDisplacementThreshold: 0.001,
+      restSpeedThreshold: 0.001,
+      useNativeDriver: true,
+      isInteraction: false,
+    }).start();
+  }, [floatingBottomImpact]);
 
   const floatingPanResponder = useMemo(
     () =>
@@ -556,8 +711,24 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
         onPanResponderGrant: () => {
           floatingDragStartRef.current = floatingPositionRef.current;
           floatingPosition.stopAnimation();
+          floatingBottomImpact.stopAnimation();
+          floatingBottomImpactRef.current = 0;
+          floatingBottomImpact.setValue(0);
+          resetFloatingBoundaryTooltip();
         },
         onPanResponderMove: (_, gesture) => {
+          const rawY = floatingDragStartRef.current.y + gesture.dy;
+          const bottomOvershoot = Math.max(0, rawY - floatingBounds.maximumY);
+          const bottomImpact = clamp(bottomOvershoot / 28, 0, 1);
+
+          if (
+            bottomOvershoot >= 1 &&
+            !floatingBoundaryTooltipShownRef.current
+          ) {
+            floatingBoundaryTooltipShownRef.current = true;
+            showFloatingBoundaryTooltip();
+          }
+
           const next = {
             x: clamp(
               floatingDragStartRef.current.x + gesture.dx,
@@ -565,23 +736,43 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
               floatingBounds.maximumX
             ),
             y: clamp(
-              floatingDragStartRef.current.y + gesture.dy,
+              rawY,
               floatingBounds.minimumY,
               floatingBounds.maximumY
             ),
           };
+          floatingBottomImpactRef.current = bottomImpact;
+          floatingBottomImpact.setValue(bottomImpact);
           floatingPositionRef.current = next;
           floatingPosition.setValue(next);
         },
         onPanResponderRelease: () => {
           floatingPosition.setValue(floatingPositionRef.current);
+          releaseFloatingBottomImpact();
+          if (floatingBoundaryTooltipShownRef.current) {
+            floatingBoundaryTooltipShownRef.current = false;
+            hideFloatingBoundaryTooltip();
+          }
         },
         onPanResponderTerminate: () => {
           floatingPosition.setValue(floatingPositionRef.current);
+          releaseFloatingBottomImpact();
+          if (floatingBoundaryTooltipShownRef.current) {
+            floatingBoundaryTooltipShownRef.current = false;
+            hideFloatingBoundaryTooltip();
+          }
         },
         onShouldBlockNativeResponder: () => true,
       }),
-    [floatingBounds, floatingPosition]
+    [
+      floatingBottomImpact,
+      floatingBounds,
+      floatingPosition,
+      hideFloatingBoundaryTooltip,
+      releaseFloatingBottomImpact,
+      resetFloatingBoundaryTooltip,
+      showFloatingBoundaryTooltip,
+    ]
   );
 
   const reportListWidth = Math.min(Math.round(width * 0.92), 540);
@@ -854,66 +1045,164 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
       ) : null}
 
       {!listVisible && !selectedReport ? (
-        <Animated.View
-          {...floatingPanResponder.panHandlers}
-          style={[
-            styles.floatingButtonMover,
-            {
-              transform: floatingPosition.getTranslateTransform(),
-            },
-          ]}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              totalUnread
-                ? `Open messages, ${totalUnread} unread`
-                : "Open messages"
-            }
-            accessibilityHint="Tap to open or drag to reposition"
-            onPress={openReportList}
-            style={({ pressed }) => [
-              styles.floatingButton,
-              pressed && styles.floatingButtonPressed,
+        <>
+          <Animated.View
+            pointerEvents="none"
+            accessible={false}
+            importantForAccessibility="no-hide-descendants"
+            style={[
+              styles.floatingBoundaryTooltipPosition,
+              {
+                transform: [
+                  {
+                    translateX: floatingTooltipPosition.translateX,
+                  },
+                  {
+                    translateY: floatingTooltipPosition.translateY,
+                  },
+                ],
+              },
             ]}
           >
-            <View style={styles.floatingIconWrap}>
-              <Ionicons
-                name="chatbubble-outline"
-                size={25}
-                color="#FFFFFF"
-              />
-              <View style={styles.floatingDots}>
-                {dotAnimations.map((dot, index) => (
-                  <Animated.View
-                    key={index}
-                    style={[
-                      styles.floatingDot,
+            <Animated.View
+              style={[
+                styles.floatingBoundaryTooltip,
+                {
+                  opacity: floatingBoundaryTooltip,
+                  transform: [
+                    {
+                      translateY: floatingBoundaryTooltip.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [4, 0],
+                        extrapolate: "clamp",
+                      }),
+                    },
+                    {
+                      scale: floatingBoundaryTooltip.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.96, 1],
+                        extrapolate: "clamp",
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <Text
+                style={styles.floatingBoundaryTooltipText}
+                numberOfLines={1}
+                allowFontScaling={false}
+              >
+                You cannot drag it there
+              </Text>
+              <Animated.View
+                style={[
+                  styles.floatingBoundaryTooltipArrow,
+                  {
+                    transform: [
                       {
-                        transform: [
-                          {
-                            translateY: dot.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [0, -3],
-                            }),
-                          },
-                        ],
+                        translateX: floatingTooltipPosition.arrowTranslateX,
                       },
-                    ]}
-                  />
-                ))}
-              </View>
-            </View>
+                      { rotate: "45deg" },
+                    ],
+                  },
+                ]}
+              />
+            </Animated.View>
+          </Animated.View>
 
-            {totalUnread ? (
-              <View style={styles.floatingBadge}>
-                <Text style={styles.floatingBadgeText} allowFontScaling={false}>
-                  {totalUnread > 99 ? "99+" : totalUnread}
-                </Text>
-              </View>
-            ) : null}
-          </Pressable>
-        </Animated.View>
+          <Animated.View
+            {...floatingPanResponder.panHandlers}
+            style={[
+              styles.floatingButtonMover,
+              {
+                transform: floatingPosition.getTranslateTransform(),
+              },
+            ]}
+          >
+            <Animated.View
+              style={[
+                styles.floatingButtonImpact,
+                {
+                  transform: [
+                    {
+                      translateY: floatingBottomImpact.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, 4],
+                        extrapolate: "extend",
+                      }),
+                    },
+                    {
+                      scaleX: floatingBottomImpact.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, 1.08],
+                        extrapolate: "extend",
+                      }),
+                    },
+                    {
+                      scaleY: floatingBottomImpact.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, 0.86],
+                        extrapolate: "extend",
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  totalUnread
+                    ? `Open messages, ${totalUnread} unread`
+                    : "Open messages"
+                }
+                accessibilityHint="Tap to open or drag to reposition"
+                onPress={openReportList}
+                style={({ pressed }) => [
+                  styles.floatingButton,
+                  pressed && styles.floatingButtonPressed,
+                ]}
+              >
+                <View style={styles.floatingIconWrap}>
+                  <Ionicons
+                    name="chatbubble-outline"
+                    size={25}
+                    color="#FFFFFF"
+                  />
+                  <View style={styles.floatingDots}>
+                    {dotAnimations.map((dot, index) => (
+                      <Animated.View
+                        key={index}
+                        style={[
+                          styles.floatingDot,
+                          {
+                            transform: [
+                              {
+                                translateY: dot.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [0, -3],
+                                }),
+                              },
+                            ],
+                          },
+                        ]}
+                      />
+                    ))}
+                  </View>
+                </View>
+
+                {totalUnread ? (
+                  <View style={styles.floatingBadge}>
+                    <Text style={styles.floatingBadgeText} allowFontScaling={false}>
+                      {totalUnread > 99 ? "99+" : totalUnread}
+                    </Text>
+                  </View>
+                ) : null}
+              </Pressable>
+            </Animated.View>
+          </Animated.View>
+        </>
       ) : null}
     </>
   );
@@ -1137,11 +1426,52 @@ function makeStyles(
       fontWeight: "900",
       color: "#FFFFFF",
     },
+    floatingBoundaryTooltipPosition: {
+      position: "absolute",
+      left: 0,
+      top: 0,
+      zIndex: 101,
+      width: FLOATING_TOOLTIP_WIDTH,
+      height: FLOATING_TOOLTIP_HEIGHT,
+      overflow: "visible",
+    },
+    floatingBoundaryTooltip: {
+      width: FLOATING_TOOLTIP_WIDTH,
+      height: FLOATING_TOOLTIP_HEIGHT,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#0F172A",
+      shadowColor: "#020617",
+      shadowOpacity: colors.isDark ? 0.42 : 0.24,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 10,
+    },
+    floatingBoundaryTooltipText: {
+      fontSize: 11,
+      lineHeight: 15,
+      fontWeight: "800",
+      color: "#FFFFFF",
+      textAlign: "center",
+    },
+    floatingBoundaryTooltipArrow: {
+      position: "absolute",
+      left: (FLOATING_TOOLTIP_WIDTH - 10) / 2,
+      bottom: -4,
+      width: 10,
+      height: 10,
+      backgroundColor: "#0F172A",
+    },
     floatingButtonMover: {
       position: "absolute",
       left: 0,
       top: 0,
       zIndex: 100,
+      width: FLOATING_BUTTON_SIZE,
+      height: FLOATING_BUTTON_SIZE,
+    },
+    floatingButtonImpact: {
       width: FLOATING_BUTTON_SIZE,
       height: FLOATING_BUTTON_SIZE,
     },
