@@ -1,5 +1,5 @@
 // src/screens/HotlinesScreen.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
+import { useAuth } from "../auth/AuthContext";
 import { useColors } from "../theme/colors";
 
 type Hotline = {
@@ -36,6 +37,12 @@ type HotlineSection = {
   key: HotlineSectionKey;
   title: string;
   items: Hotline[];
+};
+
+type StoredCustomHotlines = {
+  storageKey: string;
+  items: Hotline[];
+  loaded: boolean;
 };
 
 type Props = {
@@ -73,13 +80,60 @@ const SURFACE = "#FFFFFF";
 const BORDER = "#E7EEF7";
 const TEXT = "#111827";
 const MUTED = "#6B7280";
-const CUSTOM_HOTLINES_KEY = "@tahanansafe_custom_hotlines_v1";
+const LEGACY_CUSTOM_HOTLINES_KEY = "@tahanansafe_custom_hotlines_v1";
+const CUSTOM_HOTLINES_KEY_PREFIX = "@tahanansafe_custom_hotlines_v2";
+const CUSTOM_HOTLINES_MIGRATION_OWNER_KEY =
+  "@tahanansafe_custom_hotlines_v2_migration_owner";
+
+function customHotlinesKeyForAccount(accountScope: string) {
+  return `${CUSTOM_HOTLINES_KEY_PREFIX}:${encodeURIComponent(accountScope)}`;
+}
+
+function parseStoredCustomHotlines(value: string | null): Hotline[] {
+  if (value === null) return [];
+
+  const parsed: unknown = JSON.parse(value);
+  if (
+    !Array.isArray(parsed) ||
+    !parsed.every(
+      (item) =>
+        !!item &&
+        typeof item === "object" &&
+        typeof (item as Hotline).label === "string" &&
+        typeof (item as Hotline).number === "string"
+    )
+  ) {
+    throw new Error("Invalid saved contacts");
+  }
+
+  return parsed as Hotline[];
+}
+
+let customHotlinesMigrationQueue = Promise.resolve();
+
+async function runCustomHotlinesMigrationExclusively<T>(
+  work: () => Promise<T>
+): Promise<T> {
+  const previous = customHotlinesMigrationQueue;
+  let release = () => {};
+  customHotlinesMigrationQueue = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  await previous;
+  try {
+    return await work();
+  } finally {
+    release();
+  }
+}
 
 export default function HotlinesScreen({
   onTabChange,
   onQuickExit,
   initialTab = "Inbox", // Inbox = Hotlines
 }: Props) {
+  const { user } = useAuth();
   const TC = useColors();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -112,28 +166,204 @@ export default function HotlinesScreen({
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [query, setQuery] = useState("");
-  const [customHotlines, setCustomHotlines] = useState<Hotline[]>([]);
+  const [storedCustomHotlines, setStoredCustomHotlines] =
+    useState<StoredCustomHotlines>({ storageKey: "", items: [], loaded: false });
+  const customHotlinesStorageKeyRef = useRef("");
+  const addContactTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [sectionFilter, setSectionFilter] = useState<HotlineFilter>("all");
   const [contactLabel, setContactLabel] = useState("");
   const [contactNumber, setContactNumber] = useState("");
 
+  const accountId = String(user?._id || user?.id || "").trim();
+  const accountEmail = String(user?.email || "").trim().toLowerCase();
+  const emailAccountScope = accountEmail ? `email:${accountEmail}` : "";
+  const accountScope = accountId
+    ? `id:${accountId}`
+    : emailAccountScope;
+  const customHotlinesStorageKey = accountScope
+    ? customHotlinesKeyForAccount(accountScope)
+    : "";
+  const emailFallbackStorageKey = accountId && emailAccountScope
+    ? customHotlinesKeyForAccount(emailAccountScope)
+    : "";
+  customHotlinesStorageKeyRef.current = customHotlinesStorageKey;
+  const customHotlines =
+    storedCustomHotlines.storageKey === customHotlinesStorageKey
+      ? storedCustomHotlines.items
+      : [];
+  const customHotlinesLoaded =
+    !!customHotlinesStorageKey &&
+    storedCustomHotlines.storageKey === customHotlinesStorageKey &&
+    storedCustomHotlines.loaded;
+
   useEffect(() => {
-    AsyncStorage.getItem(CUSTOM_HOTLINES_KEY)
-      .then((value) => {
-        if (!value) return;
-        const parsed = JSON.parse(value);
-        if (Array.isArray(parsed)) setCustomHotlines(parsed);
-      })
-      .catch(() => {
-        Alert.alert("Unable to load contacts", "Your saved emergency contacts could not be loaded.");
-      });
-  }, []);
+    let cancelled = false;
+
+    if (addContactTimerRef.current !== null) {
+      clearTimeout(addContactTimerRef.current);
+      addContactTimerRef.current = null;
+    }
+
+    setStoredCustomHotlines({
+      storageKey: customHotlinesStorageKey,
+      items: [],
+      loaded: false,
+    });
+    setQuery("");
+    setSectionFilter("all");
+    setShowAddModal(false);
+    setShowFilterModal(false);
+    setContactLabel("");
+    setContactNumber("");
+
+    if (!customHotlinesStorageKey) {
+      return () => {
+        cancelled = true;
+        if (addContactTimerRef.current !== null) {
+          clearTimeout(addContactTimerRef.current);
+          addContactTimerRef.current = null;
+        }
+      };
+    }
+
+    const loadCustomHotlines = async () => {
+      try {
+        let value = await AsyncStorage.getItem(customHotlinesStorageKey);
+
+        // A login can briefly expose only an email before the immutable user ID
+        // arrives. Move that same account's temporary email-scoped list to its ID.
+        if (value === null && emailFallbackStorageKey) {
+          const emailScopedValue = await AsyncStorage.getItem(emailFallbackStorageKey);
+          if (emailScopedValue !== null && !cancelled) {
+            const emailScopedContacts = parseStoredCustomHotlines(emailScopedValue);
+            value = JSON.stringify(emailScopedContacts);
+            await AsyncStorage.setItem(customHotlinesStorageKey, value);
+
+            const migrationOwner = await AsyncStorage.getItem(
+              CUSTOM_HOTLINES_MIGRATION_OWNER_KEY
+            ).catch(() => null);
+            if (migrationOwner === emailAccountScope) {
+              await AsyncStorage.setItem(
+                CUSTOM_HOTLINES_MIGRATION_OWNER_KEY,
+                accountScope
+              ).catch(() => {});
+            }
+
+            await AsyncStorage.removeItem(emailFallbackStorageKey).catch(() => {});
+          }
+        }
+
+        // The old key was shared by every login on this device. Assign that list
+        // once to the first authenticated owner instead of copying it to each user.
+        if (value === null) {
+          value = await runCustomHotlinesMigrationExclusively(async () => {
+            const existingAccountValue = await AsyncStorage.getItem(
+              customHotlinesStorageKey
+            );
+            if (existingAccountValue !== null || cancelled) {
+              return existingAccountValue;
+            }
+
+            const [legacyValue, existingMigrationOwner] = await Promise.all([
+              AsyncStorage.getItem(LEGACY_CUSTOM_HOTLINES_KEY),
+              AsyncStorage.getItem(CUSTOM_HOTLINES_MIGRATION_OWNER_KEY),
+            ]);
+
+            if (legacyValue === null || cancelled) return null;
+            if (
+              existingMigrationOwner !== null &&
+              existingMigrationOwner !== accountScope
+            ) {
+              return null;
+            }
+
+            if (existingMigrationOwner === null) {
+              await AsyncStorage.setItem(
+                CUSTOM_HOTLINES_MIGRATION_OWNER_KEY,
+                accountScope
+              );
+            }
+
+            // Once this account has claimed the one-time migration, finish its
+            // copy even if a logout occurs between these two storage operations.
+            const legacyContacts = parseStoredCustomHotlines(legacyValue);
+            const serializedContacts = JSON.stringify(legacyContacts);
+            await AsyncStorage.setItem(
+              customHotlinesStorageKey,
+              serializedContacts
+            );
+            await AsyncStorage.removeItem(LEGACY_CUSTOM_HOTLINES_KEY).catch(() => {});
+            return serializedContacts;
+          });
+        } else {
+          // Finish cleanup if the app stopped after copying but before deleting
+          // the legacy key during a previous migration attempt.
+          await AsyncStorage.getItem(CUSTOM_HOTLINES_MIGRATION_OWNER_KEY)
+            .then((migrationOwner) => {
+              if (migrationOwner === accountScope) {
+                return AsyncStorage.removeItem(LEGACY_CUSTOM_HOTLINES_KEY);
+              }
+              return undefined;
+            })
+            .catch(() => {});
+        }
+
+        const parsed = parseStoredCustomHotlines(value);
+
+        if (!cancelled) {
+          setStoredCustomHotlines({
+            storageKey: customHotlinesStorageKey,
+            items: parsed,
+            loaded: true,
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setStoredCustomHotlines({
+            storageKey: customHotlinesStorageKey,
+            items: [],
+            loaded: true,
+          });
+          Alert.alert(
+            "Unable to load contacts",
+            "Your saved emergency contacts could not be loaded."
+          );
+        }
+      }
+    };
+
+    void loadCustomHotlines();
+
+    return () => {
+      cancelled = true;
+      if (addContactTimerRef.current !== null) {
+        clearTimeout(addContactTimerRef.current);
+        addContactTimerRef.current = null;
+      }
+    };
+  }, [
+    accountScope,
+    customHotlinesStorageKey,
+    emailAccountScope,
+    emailFallbackStorageKey,
+  ]);
 
   const saveCustomHotlines = async (next: Hotline[]) => {
-    await AsyncStorage.setItem(CUSTOM_HOTLINES_KEY, JSON.stringify(next));
-    setCustomHotlines(next);
+    if (!customHotlinesStorageKey) {
+      throw new Error("No signed-in account is available");
+    }
+
+    const targetStorageKey = customHotlinesStorageKey;
+    await AsyncStorage.setItem(targetStorageKey, JSON.stringify(next));
+    if (customHotlinesStorageKeyRef.current === targetStorageKey) {
+      setStoredCustomHotlines({
+        storageKey: targetStorageKey,
+        items: next,
+        loaded: true,
+      });
+    }
   };
 
   const closeAddModal = () => {
@@ -143,6 +373,11 @@ export default function HotlinesScreen({
   };
 
   const addCustomHotline = async () => {
+    if (!customHotlinesLoaded) {
+      Alert.alert("Please wait", "Your emergency contacts are still loading.");
+      return;
+    }
+
     const label = contactLabel.trim();
     const number = contactNumber.trim();
     const cleaned = cleanTel(number);
@@ -172,22 +407,36 @@ export default function HotlinesScreen({
   };
 
   const removeCustomHotline = (hotline: Hotline) => {
-    Alert.alert("Delete emergency contact?", `${hotline.label} will be removed from this device.`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            const next = customHotlines.filter((item) => item.id !== hotline.id);
-            await saveCustomHotlines(next);
-            if (next.length === 0) setSectionFilter("all");
-          } catch {
-            Alert.alert("Unable to delete", "Please try again.");
-          }
+    const targetStorageKey = customHotlinesStorageKey;
+
+    Alert.alert(
+      "Delete emergency contact?",
+      `${hotline.label} will be removed from your account's contacts on this device.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            if (customHotlinesStorageKeyRef.current !== targetStorageKey) {
+              Alert.alert(
+                "Account changed",
+                "Open this account's emergency contacts and try again."
+              );
+              return;
+            }
+
+            try {
+              const next = customHotlines.filter((item) => item.id !== hotline.id);
+              await saveCustomHotlines(next);
+              if (next.length === 0) setSectionFilter("all");
+            } catch {
+              Alert.alert("Unable to delete", "Please try again.");
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   // ✅ MATCH HomeScreen nav sizing exactly
@@ -268,8 +517,30 @@ export default function HotlinesScreen({
   };
 
   const openAddContact = () => {
+    if (!customHotlinesStorageKey) {
+      Alert.alert(
+        "Account unavailable",
+        "Sign in again before adding an emergency contact."
+      );
+      return;
+    }
+
+    if (!customHotlinesLoaded) {
+      Alert.alert("Please wait", "Your emergency contacts are still loading.");
+      return;
+    }
+
+    const targetStorageKey = customHotlinesStorageKey;
     setShowFilterModal(false);
-    setTimeout(() => setShowAddModal(true), 180);
+    if (addContactTimerRef.current !== null) {
+      clearTimeout(addContactTimerRef.current);
+    }
+    addContactTimerRef.current = setTimeout(() => {
+      addContactTimerRef.current = null;
+      if (customHotlinesStorageKeyRef.current === targetStorageKey) {
+        setShowAddModal(true);
+      }
+    }, 180);
   };
 
   const handleTab = (key: TabKey) => {

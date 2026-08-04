@@ -604,7 +604,8 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
   };
 
   const maybeAskBiometricsOptIn = async (
-    emailNorm: string
+    emailNorm: string,
+    roleAfterPrompt: string
   ): Promise<boolean> => {
     try {
       const promptShown = await hasBioPromptBeenShown(emailNorm);
@@ -623,6 +624,7 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
       if (!enrolled) return false;
 
       setBioPromptEmail(emailNorm);
+      setPendingRoleAfterBioModal(roleAfterPrompt);
       setBioModalVisible(true);
       return true;
     } catch {
@@ -873,10 +875,9 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
     }
 
     if (pendingFirstLoginBioPrompt && verifyEmail) {
-      const opened = await maybeAskBiometricsOptIn(verifyEmail);
+      const opened = await maybeAskBiometricsOptIn(verifyEmail, pendingLoginRole);
 
       if (opened) {
-        setPendingRoleAfterBioModal(pendingLoginRole);
         setPendingFirstLoginBioPrompt(false);
         return;
       }
@@ -1016,8 +1017,6 @@ export default function LoginScreen({ onGoSignup, onLoginSuccess }: Props) {
         onClose={handleBiometricsNotNow}
         onEnable={handleEnableBiometrics}
         onNotNow={handleBiometricsNotNow}
-        scale={scale}
-        vscale={vscale}
       />
 
       <BiometricsEnabledModal
