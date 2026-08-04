@@ -745,7 +745,7 @@ export default function ReportDetailScreen({
       />
 
       <View style={[styles.page, { backgroundColor: TC.screenBg }]}>
-        <View style={[styles.heroWrap, { paddingTop: Math.max(insets.top, 14), backgroundColor: TC.screenBg }]}>
+        <View style={[styles.heroWrap, { backgroundColor: TC.screenBg }]}>
           <View style={styles.reportTopBar}>
             <Pressable
               onPress={onBack}
@@ -762,39 +762,43 @@ export default function ReportDetailScreen({
             <View style={styles.reportHeaderSpacer} />
           </View>
 
-          <View style={styles.reportTabsRow}>
-            {(["details", "timeline"] as const).map((key) => {
-              const active = view === key;
-              const label = key === "details" ? "Details" : "Timeline";
-              return (
-                <Pressable
-                  key={key}
-                  onPress={() => setView(key)}
-                  style={({ pressed }) => [
-                    styles.reportTabPill,
-                    active ? styles.reportTabPillActive : styles.reportTabPillInactive,
-                    pressed && { opacity: 0.86 },
-                  ]}
-                >
-                  <Text style={[styles.reportTabText, active && styles.reportTabTextActive]} numberOfLines={1}>
-                    {label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <View style={styles.reportHeroContent}>
+            <View style={styles.reportTabsRow}>
+              {(["details", "timeline"] as const).map((key) => {
+                const active = view === key;
+                const label = key === "details" ? "Details" : "Timeline";
+                return (
+                  <Pressable
+                    key={key}
+                    onPress={() => setView(key)}
+                    style={({ pressed }) => [
+                      styles.reportTabPill,
+                      active ? styles.reportTabPillActive : styles.reportTabPillInactive,
+                      pressed && { opacity: 0.86 },
+                    ]}
+                  >
+                    <Text style={[styles.reportTabText, active && styles.reportTabTextActive]} numberOfLines={1}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
-          <View style={styles.reportSummaryBlock}>
-            <Text style={styles.reportRefText} numberOfLines={1}>
-              {reportRef}
-            </Text>
-            <Text style={styles.reportTitleText} numberOfLines={2}>
-              {incidentTitle}
-            </Text>
-            <View style={styles.reportStatusChip}>
-              <Text style={styles.reportStatusText} numberOfLines={1}>
-                {statusLabel}
-              </Text>
+            <View style={styles.reportSummaryBlock}>
+              <View style={styles.reportSummaryTextBlock}>
+                <Text style={styles.reportRefText} numberOfLines={1}>
+                  {reportRef}
+                </Text>
+                <Text style={styles.reportTitleText} numberOfLines={2}>
+                  {incidentTitle}
+                </Text>
+              </View>
+              <View style={styles.reportStatusChip}>
+                <Text style={styles.reportStatusText} numberOfLines={1}>
+                  {statusLabel}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
@@ -1132,19 +1136,22 @@ function makeStyles(args: {
         color: "#FFFFFF",
       },
 
-      heroWrap: { paddingHorizontal: sidePad, paddingBottom: vscale(10), backgroundColor: BG, gap: vscale(10) },
+      heroWrap: { paddingBottom: vscale(10), backgroundColor: BG, gap: vscale(10) },
 
       reportTopBar: {
-        ...CONTENT_ALIGN,
-        paddingHorizontal: scale(22),
-        paddingBottom: vscale(22),
+        width: "100%",
+        maxWidth: 720,
+        alignSelf: "center",
+        paddingHorizontal: 22,
+        paddingTop: 14,
+        paddingBottom: 22,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
       },
       reportCloseBtn: {
-        width: scale(40),
-        height: scale(40),
+        width: 40,
+        height: 40,
         alignItems: "center",
         justifyContent: "center",
       },
@@ -1159,15 +1166,20 @@ function makeStyles(args: {
         width: 40,
         height: 40,
       },
+      reportHeroContent: {
+        paddingHorizontal: sidePad,
+        gap: vscale(10),
+      },
       reportTabsRow: {
         ...CONTENT_ALIGN,
         flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: scale(9),
+        alignItems: "stretch",
+        borderRadius: scale(999),
+        backgroundColor: "#E3E8EE",
+        overflow: "hidden",
       },
       reportTabPill: {
-        minWidth: scale(isTablet ? 120 : 100),
+        flex: 1,
         minHeight: vscale(isTablet ? 44 : 40),
         borderRadius: scale(999),
         alignItems: "center",
@@ -1209,8 +1221,24 @@ function makeStyles(args: {
       },
       reportSummaryBlock: {
         ...CONTENT_ALIGN,
-        paddingTop: vscale(16),
-        paddingLeft: scale(8),
+        minHeight: vscale(isTablet ? 92 : 84),
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(12),
+        borderWidth: 1,
+        borderColor: "#E3E8EE",
+        borderRadius: scale(isTablet ? 20 : 18),
+        backgroundColor: "#FFFFFF",
+        paddingHorizontal: scale(isTablet ? 20 : 16),
+        paddingVertical: vscale(isTablet ? 17 : 14),
+        shadowColor: "#64748B",
+        shadowOffset: { width: 0, height: vscale(2) },
+        shadowOpacity: 0.12,
+        shadowRadius: scale(5),
+        elevation: 2,
+      },
+      reportSummaryTextBlock: {
+        flex: 1,
       },
       reportRefText: {
         fontSize: scale(11),
@@ -1225,8 +1253,7 @@ function makeStyles(args: {
         color: TEXT_DARK,
       },
       reportStatusChip: {
-        marginTop: vscale(4),
-        alignSelf: "flex-start",
+        flexShrink: 0,
         borderRadius: scale(999),
         backgroundColor: "#DCC7FF",
         paddingHorizontal: scale(9),

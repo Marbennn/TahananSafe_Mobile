@@ -219,13 +219,13 @@ function MainShell({
   onOpenNotifications,
   incomingReport,
   clearIncomingReport,
-  onReportDetailChange,
+  onGlobalMessagingHiddenChange,
 }: {
   onLogout: () => void;
   onOpenNotifications: () => void;
   incomingReport?: ReportItem | null;
   clearIncomingReport: () => void;
-  onReportDetailChange: (active: boolean) => void;
+  onGlobalMessagingHiddenChange: (hidden: boolean) => void;
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>("Home");
 
@@ -236,11 +236,13 @@ function MainShell({
   const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
   const isReportDetailScreen =
     activeTab === "Reports" && reportStep === "detail" && !!selectedReport;
+  const shouldHideGlobalMessaging =
+    isReportDetailScreen || activeTab === "Incident";
 
   React.useLayoutEffect(() => {
-    onReportDetailChange(isReportDetailScreen);
-    return () => onReportDetailChange(false);
-  }, [isReportDetailScreen, onReportDetailChange]);
+    onGlobalMessagingHiddenChange(shouldHideGlobalMessaging);
+    return () => onGlobalMessagingHiddenChange(false);
+  }, [onGlobalMessagingHiddenChange, shouldHideGlobalMessaging]);
 
   const handleQuickExit = () => {
     Alert.alert("Quick Exit", "Returning to Login", [{ text: "OK", onPress: onLogout }]);
@@ -436,11 +438,11 @@ async function bootstrapAfterLogin({
 function MainScreenWrapper({
   navigation,
   route,
-  onReportDetailChange,
+  onGlobalMessagingHiddenChange,
 }: {
   navigation: any;
   route: any;
-  onReportDetailChange: (active: boolean) => void;
+  onGlobalMessagingHiddenChange: (hidden: boolean) => void;
 }) {
   const auth = useAuth() as any;
 
@@ -464,7 +466,7 @@ function MainScreenWrapper({
         clearIncomingReport={() => {
           try { navigation.setParams({ openReport: undefined }); } catch { /* ignore */ }
         }}
-        onReportDetailChange={onReportDetailChange}
+        onGlobalMessagingHiddenChange={onGlobalMessagingHiddenChange}
       />
     </AuthenticatedIdleBoundary>
   );
@@ -513,10 +515,10 @@ function NotificationsWrapper({ navigation }: { navigation: any }) {
 
 function ResidentMessagingHost({
   routeName,
-  reportDetailActive,
+  mainScreenHidden,
 }: {
   routeName: string;
-  reportDetailActive: boolean;
+  mainScreenHidden: boolean;
 }) {
   const auth = useAuth() as any;
   const residentRoute =
@@ -533,7 +535,7 @@ function ResidentMessagingHost({
   return (
     <View pointerEvents="box-none" style={styles.messagingOverlay}>
       <GlobalReportMessaging
-        hidden={routeName === "Main" && reportDetailActive}
+        hidden={routeName === "Main" && mainScreenHidden}
       />
     </View>
   );
@@ -900,7 +902,7 @@ function AppSplashScreenWrapper({
 export default function App() {
   const navigationRef = React.useRef<any>(null);
   const [activeRootRoute, setActiveRootRoute] = useState("Splash");
-  const [reportDetailMessagingActive, setReportDetailMessagingActive] =
+  const [mainScreenMessagingHidden, setMainScreenMessagingHidden] =
     useState(false);
 
   const syncActiveRootRoute = useCallback(() => {
@@ -976,7 +978,7 @@ export default function App() {
                       <MainScreenWrapper
                         navigation={navigation}
                         route={route}
-                        onReportDetailChange={setReportDetailMessagingActive}
+                        onGlobalMessagingHiddenChange={setMainScreenMessagingHidden}
                       />
                     )}
                   </Stack.Screen>
@@ -991,7 +993,7 @@ export default function App() {
                   </Stack.Navigator>
                   <ResidentMessagingHost
                     routeName={activeRootRoute}
-                    reportDetailActive={reportDetailMessagingActive}
+                    mainScreenHidden={mainScreenMessagingHidden}
                   />
                 </View>
               </NavigationContainer>
