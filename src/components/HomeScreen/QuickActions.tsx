@@ -221,13 +221,13 @@ export default function QuickActions({
   const panelRestingOpacity = 0.72;
 
   const actions: ActionItem[] = [
+    { label: "Schedule", icon: "calendar-outline", onPress: onServices },
+    { label: "Alert", icon: "warning-outline", onPress: onSos },
     {
       label: "Create Log",
       icon: "document-text-outline",
       onPress: onIncidentLog,
     },
-    { label: "Alert", icon: "warning-outline", onPress: onSos },
-    { label: "Menu", icon: "grid-outline", onPress: onServices },
     { label: "Privacy", icon: "eye-off-outline", onPress: onHideApp },
     { label: "Logout", icon: "log-out-outline", onPress: onSignOut },
   ];

@@ -1079,7 +1079,7 @@ export default function HomeScreen({
         icon: "add-circle-outline" as const,
         iconColor: "#7C3AED",
         title: "How to Use Quick Actions",
-        description: "View the shortcut guide for Create Log, Alert, Menu, Privacy, and Logout.",
+        description: "View the shortcut guide for Create Log, Alert, Schedule, Privacy, and Logout.",
         onPress: () => openTutorialByKey("quick_actions"),
       },
     ],
@@ -1854,7 +1854,7 @@ export default function HomeScreen({
           fabBottom={fabBottom}
           navHeight={navHeight}
           title="Open Quick Actions"
-          message="Tap the + button to open Create Log, Alert, Menu, Privacy, and Logout shortcuts."
+          message="Tap the + button to open Create Log, Alert, Schedule, Privacy, and Logout shortcuts."
         />
 
         <TutorialPickerModal
