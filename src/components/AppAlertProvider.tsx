@@ -107,6 +107,17 @@ function installAlertPatch() {
 
 installAlertPatch();
 
+/** Show the operating system alert without routing through the app's custom dialog. */
+export function showNativeAlert(
+  title: string,
+  message?: string,
+  buttons?: AlertButton[],
+  options?: AlertOptions
+) {
+  const alert = nativeAlertImpl ?? RNAlert.alert.bind(RNAlert);
+  alert(title, message, buttons, options);
+}
+
 export default function AppAlertProvider({ children }: Props) {
   const TC = useColors();
   const { width, height } = useWindowDimensions();

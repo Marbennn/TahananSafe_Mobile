@@ -13,7 +13,12 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import Svg, { Path } from "react-native-svg";
+import Svg, {
+  Defs,
+  LinearGradient as SvgLinearGradient,
+  Path,
+  Stop,
+} from "react-native-svg";
 
 import { useColors } from "../../theme/colors";
 
@@ -204,7 +209,7 @@ export default function QuickActions({
     actionButtonSize / 2 +
     clamp(Math.round(16 * menuScale), 12, 20);
   const panelLeft = (width - panelWidth) / 2;
-  const panelPath = [
+  const panelCurvePath = [
     `M 0 ${panelHeight}`,
     `C 0 ${panelHeight - panelHeight * quarterEllipseKappa} ${
       panelWidth / 2 - (panelWidth / 2) * quarterEllipseKappa
@@ -214,11 +219,25 @@ export default function QuickActions({
     } ${panelHeight - panelHeight * quarterEllipseKappa} ${panelWidth} ${
       panelHeight
     }`,
+  ].join(" ");
+  const panelPath = [
+    panelCurvePath,
     `L 0 ${panelHeight}`,
     `Z`,
   ].join(" ");
-  const panelBackground = TC.isDark ? "#243247" : "#E7EEF8";
-  const panelRestingOpacity = 0.72;
+  const glassTop = TC.isDark
+    ? "rgba(71, 85, 105, 0.82)"
+    : "rgba(255, 255, 255, 0.86)";
+  const glassMiddle = TC.isDark
+    ? "rgba(36, 50, 71, 0.68)"
+    : "rgba(232, 241, 251, 0.66)";
+  const glassBottom = TC.isDark
+    ? "rgba(24, 35, 52, 0.62)"
+    : "rgba(210, 225, 241, 0.54)";
+  const glassEdge = TC.isDark
+    ? "rgba(255, 255, 255, 0.24)"
+    : "rgba(255, 255, 255, 0.94)";
+  const panelRestingOpacity = 0.92;
 
   const actions: ActionItem[] = [
     { label: "Schedule", icon: "calendar-outline", onPress: onServices },
@@ -470,7 +489,27 @@ export default function QuickActions({
           viewBox={`0 0 ${panelWidth} ${panelHeight}`}
           preserveAspectRatio="none"
         >
-          <Path d={panelPath} fill={panelBackground} />
+          <Defs>
+            <SvgLinearGradient
+              id="quickActionsPanelGlass"
+              x1="0%"
+              y1="0%"
+              x2="0%"
+              y2="100%"
+            >
+              <Stop offset="0%" stopColor={glassTop} />
+              <Stop offset="38%" stopColor={glassMiddle} />
+              <Stop offset="100%" stopColor={glassBottom} />
+            </SvgLinearGradient>
+          </Defs>
+          <Path d={panelPath} fill="url(#quickActionsPanelGlass)" />
+          <Path
+            d={panelCurvePath}
+            fill="none"
+            stroke={glassEdge}
+            strokeWidth={clamp(1.4 * menuScale, 1.2, 1.8)}
+            strokeLinecap="round"
+          />
         </Svg>
       </Animated.View>
 
@@ -494,11 +533,23 @@ export default function QuickActions({
           viewBox={`0 0 ${width} ${effectiveNavHeight}`}
           preserveAspectRatio="none"
         >
-          <Path d={notchFillPath} fill={panelBackground} />
+          <Defs>
+            <SvgLinearGradient
+              id="quickActionsNotchGlass"
+              x1="0%"
+              y1="0%"
+              x2="0%"
+              y2="100%"
+            >
+              <Stop offset="0%" stopColor={glassBottom} />
+              <Stop offset="100%" stopColor={glassMiddle} />
+            </SvgLinearGradient>
+          </Defs>
+          <Path d={notchFillPath} fill="url(#quickActionsNotchGlass)" />
           <Path
             d={notchCurvePath}
             fill="none"
-            stroke={panelBackground}
+            stroke={glassEdge}
             strokeWidth={notchEdgeStrokeWidth}
             strokeLinecap="round"
             strokeLinejoin="round"

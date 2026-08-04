@@ -237,7 +237,9 @@ function MainShell({
   const isReportDetailScreen =
     activeTab === "Reports" && reportStep === "detail" && !!selectedReport;
   const shouldHideGlobalMessaging =
-    isReportDetailScreen || activeTab === "Incident";
+    isReportDetailScreen ||
+    activeTab === "Incident" ||
+    activeTab === "Settings";
 
   React.useLayoutEffect(() => {
     onGlobalMessagingHiddenChange(shouldHideGlobalMessaging);

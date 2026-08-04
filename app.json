@@ -36,6 +36,14 @@
       "@react-native-community/datetimepicker",
       "expo-secure-store",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow TahananSafe to use your camera for report message photos and videos.",
+          "microphonePermission": "Allow TahananSafe to use your microphone while recording report message videos.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
         "expo-speech-recognition",
         {
           "microphonePermission": "Allow TahananSafe to use the microphone.",

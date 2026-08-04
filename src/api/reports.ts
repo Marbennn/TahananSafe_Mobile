@@ -5,6 +5,17 @@ const API_URL = (process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000")
   .trim()
   .replace(/\/+$/, "");
 
+export type ThreadAttachmentKind = "image" | "video";
+
+export type ThreadAttachmentDto = {
+  fileId: string;
+  fileName?: string;
+  mimeType?: string;
+  size?: number;
+  kind?: ThreadAttachmentKind;
+  url?: string;
+};
+
 export type ThreadDto = {
   _id: string;
   reportId: string;
@@ -15,12 +26,26 @@ export type ThreadDto = {
   editedAt?: string | null;
   deletedAt?: string | null;
   deletedByRole?: "resident" | "staff" | null;
+  attachment?: ThreadAttachmentDto | null;
   replyTo?: {
     threadId?: string | null;
     senderName?: string;
     senderRole?: "resident" | "staff";
     text?: string;
   } | null;
+};
+
+export type ReportThreadAttachmentInput = {
+  uri: string;
+  name: string;
+  type: string;
+  file?: Blob | null;
+};
+
+export type SendReportThreadMessagePayload = {
+  text?: string;
+  replyToThreadId?: string | null;
+  attachment?: ReportThreadAttachmentInput | null;
 };
 
 // ✅ matches your Mongo incident document fields
@@ -212,27 +237,50 @@ export async function setReportTyping(
  */
 export async function sendReportThreadMessage(
   reportId: string,
-  message: string | { text: string; replyToThreadId?: string | null },
+  message: string | SendReportThreadMessagePayload,
   signal?: AbortSignal
 ) {
   const token = await getAccessToken();
-
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
+  const payload: SendReportThreadMessagePayload =
+    typeof message === "string" ? { text: message } : message;
+  const headers: Record<string, string> = { Accept: "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
+
+  let body: FormData | string;
+  if (payload.attachment) {
+    const form = new FormData();
+    form.append("text", String(payload.text || ""));
+    if (payload.replyToThreadId) {
+      form.append("replyToThreadId", payload.replyToThreadId);
+    }
+    if (payload.attachment.file) {
+      (form.append as any)(
+        "attachment",
+        payload.attachment.file,
+        payload.attachment.name
+      );
+    } else {
+      form.append("attachment", {
+        uri: payload.attachment.uri,
+        name: payload.attachment.name,
+        type: payload.attachment.type,
+      } as any);
+    }
+    body = form;
+  } else {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify({
+      text: String(payload.text || ""),
+      replyToThreadId: payload.replyToThreadId || undefined,
+    });
+  }
 
   const res = await fetch(
     `${API_URL}/api/mobile/reports/${encodeURIComponent(reportId)}/threads`,
     {
       method: "POST",
       headers,
-      body: JSON.stringify(
-        typeof message === "string"
-          ? { text: message }
-          : { text: message.text, replyToThreadId: message.replyToThreadId || undefined }
-      ),
+      body,
       signal,
     }
   );
@@ -244,6 +292,19 @@ export async function sendReportThreadMessage(
   }
 
   return data; // { message, thread }
+}
+
+export function buildReportThreadAttachmentUrl(
+  reportId: string,
+  threadId: string,
+  attachment: ThreadAttachmentDto | null | undefined
+): string | null {
+  const rawFileId = (attachment as any)?.fileId?.$oid ?? attachment?.fileId;
+  const fileId = String(rawFileId || "").trim();
+  if (!reportId || !threadId || !fileId) return null;
+  return `${API_URL}/api/mobile/reports/${encodeURIComponent(
+    reportId
+  )}/threads/${encodeURIComponent(threadId)}/attachment/${encodeURIComponent(fileId)}`;
 }
 
 export async function deleteReportThreadMessage(

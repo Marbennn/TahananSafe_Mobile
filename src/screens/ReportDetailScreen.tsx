@@ -458,8 +458,12 @@ export default function ReportDetailScreen({
     (report as any)?.complaint ||
     "-";
 
-  const witnessName = detail?.witnessName || (report as any)?.witnessName || "—";
-  const witnessRole = detail?.witnessType || (report as any)?.witnessRole || (report as any)?.witnessType || "—";
+  const witnessName = String(
+    detail?.witnessName || (report as any)?.witnessName || ""
+  ).trim();
+  const witnessRole = String(
+    detail?.witnessType || (report as any)?.witnessRole || (report as any)?.witnessType || ""
+  ).trim();
 
   const locationLabel = detail?.locationStr || (report as any)?.locationStr || (report as any)?.location || "—";
   const locationLatitude = Number(detail?.latitude ?? (report as any)?.latitude);
@@ -848,6 +852,25 @@ export default function ReportDetailScreen({
                 <Text style={styles.reportBoxText} numberOfLines={2}>
                   {complaintName}
                 </Text>
+              </View>
+
+              <View style={styles.reportWitnessRow}>
+                <View style={styles.reportWitnessCell}>
+                  <Text style={styles.reportFieldLabel}>Witness</Text>
+                  <View style={styles.reportTextBox}>
+                    <Text style={styles.reportBoxText} numberOfLines={2}>
+                      {witnessName || "None"}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.reportWitnessCell}>
+                  <Text style={styles.reportFieldLabel}>Relationship</Text>
+                  <View style={styles.reportTextBox}>
+                    <Text style={styles.reportBoxText} numberOfLines={2}>
+                      {witnessRole || "None"}
+                    </Text>
+                  </View>
+                </View>
               </View>
 
               <View style={styles.reportDateTimeRow}>
@@ -1426,6 +1449,15 @@ function makeStyles(args: {
       },
       reportDateTimeCell: {
         flex: 1,
+      },
+      reportWitnessRow: {
+        flexDirection: metaDirection,
+        gap: scale(14),
+        marginTop: vscale(2),
+      },
+      reportWitnessCell: {
+        flex: metaDirection === "row" ? 1 : undefined,
+        width: metaDirection === "row" ? undefined : "100%",
       },
       reportPlainText: {
         fontSize: scale(13),

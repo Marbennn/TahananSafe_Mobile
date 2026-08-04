@@ -45,7 +45,8 @@ import type { TabKey } from "../components/BottomNavBar";
 import IncidentLocationMapModal from "../components/IncidentLocationMapModal";
 import IncidentVideoPreviewModal from "../components/IncidentVideoPreviewModal";
 import IncidentProgressHeader from "../components/IncidentLogScreen/IncidentProgressHeader";
-import { PRIMARY_ACTION_COLOR } from "../theme/colors";
+import { showNativeAlert } from "../components/AppAlertProvider";
+import { Colors, PRIMARY_ACTION_COLOR } from "../theme/colors";
 
 type IncidentSubmittedPayload = {
   incidentId: string;
@@ -65,6 +66,14 @@ type Props = {
 };
 
 type Mode = "complain" | "emergency";
+type WitnessRelationship = "Neighbor" | "Parent" | "Friend" | "Other";
+
+const WITNESS_RELATIONSHIPS: WitnessRelationship[] = [
+  "Neighbor",
+  "Parent",
+  "Friend",
+  "Other",
+];
 
 // ✅ Type picker removed, but keep a safe internal value for backend compatibility
 type IncidentTypeValue = "Other" | "Emergency";
@@ -222,9 +231,16 @@ export default function IncidentLogScreen({
   const [details, setDetails] = useState("");
   const [offenderName, setOffenderName] = useState("");
   const [witnessName, setWitnessName] = useState("");
-  const [witnessType, setWitnessType] = useState("");
+  const [witnessType, setWitnessType] = useState<WitnessRelationship | "">("");
+  const [witnessOtherType, setWitnessOtherType] = useState("");
+  const [witnessRelationshipOpen, setWitnessRelationshipOpen] = useState(false);
+  const [witnessKeyboardHeight, setWitnessKeyboardHeight] = useState(0);
 
   const detailsInputRef = React.useRef<TextInput>(null);
+  const formScrollRef = React.useRef<ScrollView>(null);
+  const formScrollOffsetRef = React.useRef(0);
+  const preWitnessFocusScrollOffsetRef = React.useRef<number | null>(null);
+  const witnessFocusScrollTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [dateStr, setDateStr] = useState(() => formatDateMMDDYYYY(new Date()));
   const [timeStr, setTimeStr] = useState(() => formatTime12h(new Date()));
@@ -258,6 +274,86 @@ export default function IncidentLogScreen({
   const [transitioningPreview, setTransitioningPreview] = useState(false);
   const previewSlideProgress = React.useRef(new Animated.Value(0)).current;
   const [submitting, setSubmitting] = useState(false);
+
+  const resolvedWitnessType =
+    witnessType === "Other"
+      ? safeTrim(witnessOtherType) || "Other"
+      : witnessType;
+
+  const scrollWitnessFieldIntoView = React.useCallback(() => {
+    if (preWitnessFocusScrollOffsetRef.current === null) {
+      preWitnessFocusScrollOffsetRef.current = formScrollOffsetRef.current;
+    }
+
+    if (Platform.OS === "android") {
+      const visibleKeyboardHeight = Math.max(
+        0,
+        Number(Keyboard.metrics()?.height || 0)
+      );
+      if (visibleKeyboardHeight > 0) {
+        setWitnessKeyboardHeight(visibleKeyboardHeight);
+      }
+    }
+
+    if (witnessFocusScrollTimerRef.current) {
+      clearTimeout(witnessFocusScrollTimerRef.current);
+    }
+
+    const scrollToField = () => {
+      formScrollRef.current?.scrollToEnd({ animated: true });
+    };
+
+    requestAnimationFrame(scrollToField);
+    witnessFocusScrollTimerRef.current = setTimeout(
+      scrollToField,
+      Platform.OS === "android" ? 320 : 220
+    );
+  }, []);
+
+  React.useEffect(() => {
+    const keyboardShowSubscription = Keyboard.addListener("keyboardDidShow", (event) => {
+      if (preWitnessFocusScrollOffsetRef.current === null) return;
+
+      const keyboardHeight = Math.max(
+        0,
+        Number(event?.endCoordinates?.height || 0)
+      );
+      setWitnessKeyboardHeight(keyboardHeight);
+
+      if (witnessFocusScrollTimerRef.current) {
+        clearTimeout(witnessFocusScrollTimerRef.current);
+      }
+      witnessFocusScrollTimerRef.current = setTimeout(() => {
+        formScrollRef.current?.scrollToEnd({ animated: true });
+      }, 80);
+    });
+
+    const keyboardHideSubscription = Keyboard.addListener("keyboardDidHide", () => {
+      if (witnessFocusScrollTimerRef.current) {
+        clearTimeout(witnessFocusScrollTimerRef.current);
+        witnessFocusScrollTimerRef.current = null;
+      }
+
+      setWitnessKeyboardHeight(0);
+
+      const previousOffset = preWitnessFocusScrollOffsetRef.current;
+      if (previousOffset === null) return;
+
+      preWitnessFocusScrollOffsetRef.current = null;
+      witnessFocusScrollTimerRef.current = setTimeout(() => {
+        formScrollRef.current?.scrollTo({ y: previousOffset, animated: true });
+        witnessFocusScrollTimerRef.current = null;
+      }, 80);
+    });
+
+    return () => {
+      keyboardShowSubscription.remove();
+      keyboardHideSubscription.remove();
+      if (witnessFocusScrollTimerRef.current) {
+        clearTimeout(witnessFocusScrollTimerRef.current);
+      }
+    };
+  }, []);
 
   React.useEffect(() => {
     if (!showPreview) return;
@@ -879,7 +975,7 @@ export default function IncidentLogScreen({
   };
 
   const showCameraAttachmentOptions = () => {
-    Alert.alert("Use Camera", "Choose an attachment type:", [
+    showNativeAlert("Use Camera", "Choose an attachment type:", [
       { text: "Take Photo", onPress: () => void takePhoto() },
       { text: "Record Video", onPress: () => void recordVideo() },
       { text: "Cancel", style: "cancel" },
@@ -898,7 +994,7 @@ export default function IncidentLogScreen({
         return;
       }
 
-      Alert.alert("Add Attachment", "Choose a source:", [
+      showNativeAlert("Add Attachment", "Choose a source:", [
         { text: "Use Camera", onPress: showCameraAttachmentOptions },
         { text: "Upload from Gallery", onPress: () => void pickAttachmentsFromGallery() },
         { text: "Cancel", style: "cancel" },
@@ -927,7 +1023,7 @@ export default function IncidentLogScreen({
       details,
       offenderName,
       witnessName: includeWitness ? witnessName : "",
-      witnessType: includeWitness ? witnessType : "",
+      witnessType: includeWitness ? resolvedWitnessType : "",
       dateStr,
       timeStr,
       locationStr: shareLocation ? locationStr : "",
@@ -948,6 +1044,8 @@ export default function IncidentLogScreen({
     setOffenderName("");
     setWitnessName("");
     setWitnessType("");
+    setWitnessOtherType("");
+    setWitnessRelationshipOpen(false);
     setPhotos([]);
     setVideos([]);
     setPreviewVideoUri(null);
@@ -984,7 +1082,7 @@ export default function IncidentLogScreen({
       details,
       offenderName,
       witnessName: includeWitness ? witnessName : "",
-      witnessType: includeWitness ? witnessType : "",
+      witnessType: includeWitness ? resolvedWitnessType : "",
       dateStr,
       timeStr,
       locationStr: shareLocation ? locationStr : "",
@@ -1151,11 +1249,33 @@ export default function IncidentLogScreen({
             ]}
           >
             <ScrollView
+              ref={formScrollRef}
               style={styles.formScroll}
               showsVerticalScrollIndicator={false}
+              scrollEventThrottle={16}
+              onScroll={(event) => {
+                formScrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+              }}
+              onContentSizeChange={() => {
+                if (
+                  witnessKeyboardHeight > 0 &&
+                  preWitnessFocusScrollOffsetRef.current !== null
+                ) {
+                  formScrollRef.current?.scrollToEnd({ animated: true });
+                }
+              }}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-              contentContainerStyle={[styles.scrollContent, { paddingBottom: CONTENT_BOTTOM_PAD }]}
+              contentContainerStyle={[
+                styles.scrollContent,
+                {
+                  paddingBottom:
+                    CONTENT_BOTTOM_PAD +
+                    (Platform.OS === "android" && witnessKeyboardHeight > 0
+                      ? witnessKeyboardHeight + 24
+                      : 0),
+                },
+              ]}
         >
           <View style={styles.card}>
             <View style={styles.fieldHeaderRow}>
@@ -1300,7 +1420,7 @@ export default function IncidentLogScreen({
                 value={shareLocation}
                 disabled={submitting || aiLoading || locationLoading}
                 onValueChange={(value) => void toggleShareLocation(value)}
-                trackColor={{ false: "#111111", true: "#00223E" }}
+                trackColor={{ false: "#D8DEE7", true: "#111827" }}
                 thumbColor="#FFFFFF"
               />
             </View>
@@ -1350,16 +1470,18 @@ export default function IncidentLogScreen({
                   if (!value) {
                     setWitnessName("");
                     setWitnessType("");
+                    setWitnessOtherType("");
+                    setWitnessRelationshipOpen(false);
                   }
                 }}
-                trackColor={{ false: "#111111", true: "#00223E" }}
+                trackColor={{ false: "#D8DEE7", true: "#111827" }}
                 thumbColor="#FFFFFF"
               />
             </View>
 
             {includeWitness && (
               <View style={styles.witnessFields}>
-                <View style={styles.inputBox}>
+                <View style={[styles.inputBox, styles.witnessInputBox]}>
                   <TextInput
                     editable={!submitting && !aiLoading}
                     value={witnessName}
@@ -1369,16 +1491,96 @@ export default function IncidentLogScreen({
                     style={styles.textInput}
                   />
                 </View>
-                <View style={styles.inputBox}>
-                  <TextInput
-                    editable={!submitting && !aiLoading}
-                    value={witnessType}
-                    onChangeText={setWitnessType}
-                    placeholder="Contact number or relationship"
-                    placeholderTextColor="#A9A9A9"
-                    style={styles.textInput}
+
+                <Pressable
+                  disabled={submitting || aiLoading}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setWitnessRelationshipOpen((open) => !open);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Witness relationship"
+                  accessibilityState={{
+                    disabled: submitting || aiLoading,
+                    expanded: witnessRelationshipOpen,
+                  }}
+                  style={({ pressed }) => [
+                    styles.inputBox,
+                    styles.witnessInputBox,
+                    styles.witnessDropdownTrigger,
+                    witnessRelationshipOpen && styles.witnessDropdownTriggerOpen,
+                    pressed && { opacity: 0.88 },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.witnessDropdownText,
+                      !witnessType && styles.witnessDropdownPlaceholder,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {witnessType || "Select relationship"}
+                  </Text>
+                  <Ionicons
+                    name={witnessRelationshipOpen ? "chevron-up" : "chevron-down"}
+                    size={19}
+                    color="#7B7F86"
                   />
-                </View>
+                </Pressable>
+
+                {witnessRelationshipOpen ? (
+                  <View style={styles.witnessDropdownMenu}>
+                    {WITNESS_RELATIONSHIPS.map((relationship, index) => {
+                      const selected = witnessType === relationship;
+                      return (
+                        <Pressable
+                          key={relationship}
+                          onPress={() => {
+                            setWitnessType(relationship);
+                            setWitnessRelationshipOpen(false);
+                            if (relationship !== "Other") setWitnessOtherType("");
+                          }}
+                          accessibilityRole="menuitem"
+                          accessibilityState={{ selected }}
+                          style={({ pressed }) => [
+                            styles.witnessDropdownOption,
+                            index < WITNESS_RELATIONSHIPS.length - 1 &&
+                              styles.witnessDropdownOptionBorder,
+                            selected && styles.witnessDropdownOptionSelected,
+                            pressed && { opacity: 0.82 },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.witnessDropdownOptionText,
+                              selected && styles.witnessDropdownOptionTextSelected,
+                            ]}
+                          >
+                            {relationship}
+                          </Text>
+                          {selected ? (
+                            <Ionicons name="checkmark" size={18} color={Colors.primary} />
+                          ) : null}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
+
+                {witnessType === "Other" ? (
+                  <View style={[styles.inputBox, styles.witnessInputBox]}>
+                    <TextInput
+                      editable={!submitting && !aiLoading}
+                      value={witnessOtherType}
+                      onChangeText={setWitnessOtherType}
+                      placeholder="Please specify"
+                      placeholderTextColor="#A9A9A9"
+                      style={styles.textInput}
+                      autoCapitalize="words"
+                      onFocus={scrollWitnessFieldIntoView}
+                    />
+                  </View>
+                ) : null}
               </View>
             )}
           </View>
@@ -1940,6 +2142,64 @@ const styles = StyleSheet.create({
   witnessFields: {
     gap: 10,
     marginTop: -4,
+  },
+  witnessInputBox: {
+    marginBottom: 0,
+  },
+  witnessDropdownTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  witnessDropdownTriggerOpen: {
+    borderColor: Colors.primary,
+  },
+  witnessDropdownText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "500",
+    color: TEXT_DARK,
+  },
+  witnessDropdownPlaceholder: {
+    color: "#A9A9A9",
+  },
+  witnessDropdownMenu: {
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#D6D6D6",
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    shadowColor: SHADOW,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  witnessDropdownOption: {
+    minHeight: 48,
+    paddingHorizontal: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  witnessDropdownOptionBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#E5E7EB",
+  },
+  witnessDropdownOptionSelected: {
+    backgroundColor: "#EEF6FF",
+  },
+  witnessDropdownOptionText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "600",
+    color: TEXT_DARK,
+  },
+  witnessDropdownOptionTextSelected: {
+    color: Colors.primary,
+    fontWeight: "800",
   },
   draftedText: {
     width: "100%",

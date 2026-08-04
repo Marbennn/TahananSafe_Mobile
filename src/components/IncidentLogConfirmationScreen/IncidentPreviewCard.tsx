@@ -54,9 +54,9 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function displayValue(value?: string) {
+function displayValue(value?: string, fallback = "None") {
   const clean = String(value || "").trim();
-  return clean || "-";
+  return clean || fallback;
 }
 
 export default function IncidentPreviewCard({ data }: Props) {
@@ -119,6 +119,30 @@ export default function IncidentPreviewCard({ data }: Props) {
           </Text>
         </View>
 
+        <View style={styles.witnessRow}>
+          <View style={styles.witnessCol}>
+            <Text style={styles.label} allowFontScaling={false}>
+              Witness
+            </Text>
+            <View style={styles.valueBox}>
+              <Text style={styles.valueText} numberOfLines={2}>
+                {displayValue(data.witnessName)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.witnessCol}>
+            <Text style={styles.label} allowFontScaling={false}>
+              Relationship
+            </Text>
+            <View style={styles.valueBox}>
+              <Text style={styles.valueText} numberOfLines={2}>
+                {displayValue(data.witnessType)}
+              </Text>
+            </View>
+          </View>
+        </View>
+
         <View style={styles.dateTimeRow}>
           <View style={styles.dateTimeCol}>
             <Text style={styles.label} allowFontScaling={false}>
@@ -167,7 +191,9 @@ export default function IncidentPreviewCard({ data }: Props) {
             </Text>
           </Pressable>
         </View>
-        <Text style={styles.locationText}>{displayValue(data.locationStr)}</Text>
+        <Text style={styles.locationText}>
+          {displayValue(data.locationStr, "Not shared")}
+        </Text>
       </View>
 
       <View style={styles.evidenceCard}>
@@ -336,6 +362,14 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: "500",
     color: TEXT_VALUE,
+  },
+  witnessRow: {
+    flexDirection: "row",
+    gap: 18,
+  },
+  witnessCol: {
+    flex: 1,
+    minWidth: 0,
   },
   dateTimeRow: {
     flexDirection: "row",

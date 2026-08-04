@@ -17,6 +17,8 @@ type Props = {
   visible: boolean;
   uri?: string | null;
   title?: string;
+  headers?: Record<string, string>;
+  onError?: () => void;
   onClose: () => void;
 };
 
@@ -29,8 +31,57 @@ function escHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
-function buildVideoHtml(uri: string) {
+function inlineJson(value: unknown) {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026");
+}
+
+function buildVideoHtml(uri: string, headers?: Record<string, string>) {
   const src = escHtml(uri);
+  const shouldFetchWithHeaders = !!headers && Object.keys(headers).length > 0;
+  const videoSource = shouldFetchWithHeaders ? "" : ` src="${src}"`;
+  const loadingMessage = shouldFetchWithHeaders
+    ? '<div id="loading-message">Loading video...</div>'
+    : "";
+  const playbackErrorHandler = `<script>
+    document.getElementById("preview-video").addEventListener("error", function () {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage("video-load-error");
+      }
+    }, { once: true });
+  </script>`;
+  const authenticatedLoader = shouldFetchWithHeaders
+    ? `<script>
+      (async function () {
+        const video = document.getElementById("preview-video");
+        const loading = document.getElementById("loading-message");
+        let objectUrl = "";
+        try {
+          const response = await fetch(${inlineJson(uri)}, {
+            method: "GET",
+            headers: ${inlineJson(headers)},
+            credentials: "omit"
+          });
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          const blob = await response.blob();
+          objectUrl = URL.createObjectURL(blob);
+          video.src = objectUrl;
+          video.load();
+          loading.style.display = "none";
+        } catch (error) {
+          loading.textContent = "Unable to load this video.";
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage("video-load-error");
+          }
+        }
+        window.addEventListener("beforeunload", function () {
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+        });
+      })();
+    </script>`
+    : "";
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -48,6 +99,7 @@ function buildVideoHtml(uri: string) {
       display: flex;
       align-items: center;
       justify-content: center;
+      position: relative;
     }
     video {
       width: 100%;
@@ -55,10 +107,18 @@ function buildVideoHtml(uri: string) {
       object-fit: contain;
       background: #050B12;
     }
+    #loading-message {
+      position: absolute;
+      color: #cbd5e1;
+      font: 600 14px -apple-system, BlinkMacSystemFont, sans-serif;
+    }
   </style>
 </head>
 <body>
-  <video src="${src}" controls playsinline preload="metadata"></video>
+  ${loadingMessage}
+  <video id="preview-video"${videoSource} controls playsinline preload="metadata"></video>
+  ${authenticatedLoader}
+  ${playbackErrorHandler}
 </body>
 </html>`;
 }
@@ -67,9 +127,24 @@ export default function IncidentVideoPreviewModal({
   visible,
   uri,
   title = "Video Evidence",
+  headers,
+  onError,
   onClose,
 }: Props) {
-  const html = useMemo(() => (uri ? buildVideoHtml(uri) : ""), [uri]);
+  const html = useMemo(
+    () => (uri ? buildVideoHtml(uri, headers) : ""),
+    [headers, uri]
+  );
+  const webViewSource = useMemo<{ html: string; baseUrl?: string }>(() => {
+    if (uri && /^https?:\/\//i.test(uri)) {
+      try {
+        return { html, baseUrl: `${new URL(uri).origin}/` };
+      } catch {
+        return { html };
+      }
+    }
+    return { html };
+  }, [html, uri]);
 
   return (
     <Modal
@@ -94,7 +169,7 @@ export default function IncidentVideoPreviewModal({
         <View style={styles.playerFrame}>
           {uri ? (
             <WebView
-              source={{ html }}
+              source={webViewSource}
               originWhitelist={["*"]}
               javaScriptEnabled
               domStorageEnabled
@@ -103,6 +178,13 @@ export default function IncidentVideoPreviewModal({
               allowFileAccess
               allowFileAccessFromFileURLs
               allowUniversalAccessFromFileURLs
+              onError={onError}
+              onHttpError={({ nativeEvent }) => {
+                if (nativeEvent.statusCode >= 400) onError?.();
+              }}
+              onMessage={({ nativeEvent }) => {
+                if (nativeEvent.data === "video-load-error") onError?.();
+              }}
               style={styles.webview}
             />
           ) : (

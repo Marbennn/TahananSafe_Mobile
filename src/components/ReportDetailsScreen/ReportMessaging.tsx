@@ -8,12 +8,14 @@ import {
   Easing,
   Keyboard,
   KeyboardAvoidingView,
+  Image,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -21,20 +23,29 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
+  buildReportThreadAttachmentUrl,
   deleteReportThreadMessage,
   fetchReportThreads,
   fetchReportTyping,
+  type ReportThreadAttachmentInput,
   sendReportThreadMessage,
   setReportTyping,
+  type ThreadAttachmentDto,
+  type ThreadAttachmentKind,
   ThreadDto,
   updateReportThreadMessage,
 } from "../../api/reports";
 import { fetchMyNotifications, toggleNotificationRead } from "../../api/notifications";
+import { useAuth } from "../../auth/AuthContext";
 import { useColors } from "../../theme/colors";
+import { showNativeAlert } from "../AppAlertProvider";
+import IncidentVideoPreviewModal from "../IncidentVideoPreviewModal";
 import LogoutModal from "../LogoutModal";
+import MessageVideoRecorderModal from "./MessageVideoRecorderModal";
 import ReportContextPanel, {
   type ReportContextData,
 } from "./ReportContextPanel";
@@ -43,6 +54,31 @@ const RESPONDER_LABEL = "Barangay Admin";
 const POLL_MS = 4000;
 const BUBBLE_MEASUREMENT_VERSION = 3;
 const BALANCED_MESSAGE_MIN_LENGTH = 33;
+const MAX_CHAT_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_CHAT_VIDEO_DURATION_SECONDS = 60;
+const SUPPORTED_CHAT_ATTACHMENT_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+  "video/mp4",
+  "video/quicktime",
+  "video/x-m4v",
+  "video/3gpp",
+  "video/webm",
+]);
+
+type ThreadAttachment = {
+  kind: ThreadAttachmentKind;
+  uri: string;
+  file?: Blob | null;
+  fileId?: string;
+  fileName: string;
+  mimeType: string;
+  size?: number;
+  isLocal?: boolean;
+};
 
 type ThreadMessage = {
   id: string;
@@ -54,6 +90,7 @@ type ThreadMessage = {
   editedAt?: string | null;
   deletedAt?: string | null;
   deletedByRole?: "resident" | "staff" | null;
+  attachment?: ThreadAttachment | null;
   replyTo?: {
     threadId?: string | null;
     sender?: string;
@@ -61,6 +98,13 @@ type ThreadMessage = {
     text: string;
   } | null;
   pending?: boolean;
+};
+
+type PendingOptimisticMessage = {
+  text: string;
+  createdAtMs: number;
+  side: "left" | "right";
+  attachmentKind?: ThreadAttachmentKind;
 };
 
 type BubbleMeasurement = {
@@ -157,20 +201,149 @@ function getDeletedMessageLabel(message: ThreadMessage) {
     : `${message.sender || RESPONDER_LABEL} deleted a message`;
 }
 
-function dtoToMessage(dto: ThreadDto): ThreadMessage {
+function getAttachmentKind(
+  attachment?: Pick<ThreadAttachmentDto, "kind" | "mimeType" | "fileName"> | null
+): ThreadAttachmentKind {
+  if (attachment?.kind === "video") return "video";
+  if (attachment?.kind === "image") return "image";
+
+  const descriptor = `${attachment?.mimeType || ""} ${
+    attachment?.fileName || ""
+  }`.toLowerCase();
+  return descriptor.includes("video") || /\.(mp4|mov|m4v|3gp|webm)$/i.test(descriptor)
+    ? "video"
+    : "image";
+}
+
+function getAttachmentLabel(kind?: ThreadAttachmentKind | null) {
+  return kind === "video" ? "[Video]" : "[Photo]";
+}
+
+function getMessageDisplayText(message?: ThreadMessage | null) {
+  if (!message) return "";
+  return message.text.trim() || (message.attachment ? getAttachmentLabel(message.attachment.kind) : "");
+}
+
+function getMessageCaption(message: ThreadMessage) {
+  const text = message.text.trim();
+  if (!message.attachment) return text;
+  const attachmentOnlyFallback =
+    message.attachment.kind === "video" ? "sent a video" : "sent a photo";
+  return text === getAttachmentLabel(message.attachment.kind) ||
+    text.toLowerCase() === attachmentOnlyFallback
+    ? ""
+    : text;
+}
+
+function formatAttachmentSize(size?: number) {
+  if (!size || !Number.isFinite(size)) return "";
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
+function fileExtensionForMimeType(mimeType: string, kind: ThreadAttachmentKind) {
+  const normalized = mimeType.toLowerCase();
+  if (normalized === "image/png") return "png";
+  if (normalized === "image/webp") return "webp";
+  if (normalized === "image/heic" || normalized === "image/heif") return "heic";
+  if (normalized === "video/quicktime") return "mov";
+  if (normalized === "video/x-m4v") return "m4v";
+  if (normalized === "video/3gpp") return "3gp";
+  if (normalized === "video/webm") return "webm";
+  return kind === "video" ? "mp4" : "jpg";
+}
+
+function pickerAssetKind(asset: ImagePicker.ImagePickerAsset): ThreadAttachmentKind | null {
+  const descriptor = `${asset.type || ""} ${asset.mimeType || ""} ${
+    asset.fileName || ""
+  } ${asset.uri || ""}`.toLowerCase();
+  if (
+    descriptor.includes("video") ||
+    /\.(mp4|mov|m4v|3gp|3gpp|webm)(?:\?|$)/i.test(descriptor)
+  ) {
+    return "video";
+  }
+  if (
+    descriptor.includes("image") ||
+    descriptor.includes("livephoto") ||
+    /\.(jpe?g|png|webp|heic|heif)(?:\?|$)/i.test(descriptor)
+  ) {
+    return "image";
+  }
+  return null;
+}
+
+function pickerAssetMimeType(
+  asset: ImagePicker.ImagePickerAsset,
+  kind: ThreadAttachmentKind
+) {
+  const rawDeclaredMimeType = String(asset.mimeType || "").trim().toLowerCase();
+  const declaredMimeType =
+    rawDeclaredMimeType === "image/jpg" ? "image/jpeg" : rawDeclaredMimeType;
+  if (SUPPORTED_CHAT_ATTACHMENT_MIME_TYPES.has(declaredMimeType)) {
+    return declaredMimeType;
+  }
+  if (declaredMimeType && declaredMimeType !== "application/octet-stream") return null;
+
+  const sourceName = `${asset.fileName || ""} ${asset.uri || ""}`.toLowerCase();
+  if (/\.png(?:\?|\s|$)/i.test(sourceName)) return "image/png";
+  if (/\.webp(?:\?|\s|$)/i.test(sourceName)) return "image/webp";
+  if (/\.heic(?:\?|\s|$)/i.test(sourceName)) return "image/heic";
+  if (/\.heif(?:\?|\s|$)/i.test(sourceName)) return "image/heif";
+  if (/\.jpe?g(?:\?|\s|$)/i.test(sourceName)) return "image/jpeg";
+  if (/\.mov(?:\?|\s|$)/i.test(sourceName)) return "video/quicktime";
+  if (/\.m4v(?:\?|\s|$)/i.test(sourceName)) return "video/x-m4v";
+  if (/\.3gpp?(?:\?|\s|$)/i.test(sourceName)) return "video/3gpp";
+  if (/\.webm(?:\?|\s|$)/i.test(sourceName)) return "video/webm";
+  if (/\.mp4(?:\?|\s|$)/i.test(sourceName)) return "video/mp4";
+  return kind === "video" ? "video/mp4" : "image/jpeg";
+}
+
+function getPickerAssetSize(asset: ImagePicker.ImagePickerAsset) {
+  if (
+    typeof asset.fileSize === "number" &&
+    Number.isFinite(asset.fileSize) &&
+    asset.fileSize >= 0
+  ) {
+    return asset.fileSize;
+  }
+  return null;
+}
+
+function dtoToMessage(dto: ThreadDto, reportId: string): ThreadMessage {
   const isResident = dto.senderRole === "resident";
   const createdAtMs = dto.createdAt ? new Date(dto.createdAt).getTime() : undefined;
+  const rawAttachment = dto.attachment || null;
+  const attachmentUri = rawAttachment
+    ? buildReportThreadAttachmentUrl(reportId, dto._id, rawAttachment)
+    : null;
+  const attachmentKind = rawAttachment ? getAttachmentKind(rawAttachment) : null;
 
   return {
     id: dto._id,
     side: isResident ? "right" : "left",
     sender: isResident ? undefined : RESPONDER_LABEL,
-    text: dto.text,
+    text: String(dto.text || ""),
     time: dto.createdAt ? formatStamp(new Date(dto.createdAt)) : "",
     createdAtMs,
     editedAt: dto.editedAt || null,
     deletedAt: dto.deletedAt || null,
     deletedByRole: dto.deletedByRole || null,
+    attachment:
+      rawAttachment && attachmentUri && attachmentKind
+        ? {
+            kind: attachmentKind,
+            uri: attachmentUri,
+            fileId: String((rawAttachment as any)?.fileId?.$oid || rawAttachment.fileId || ""),
+            fileName: String(rawAttachment.fileName || getAttachmentLabel(attachmentKind)),
+            mimeType: String(
+              rawAttachment.mimeType ||
+                (attachmentKind === "video" ? "video/mp4" : "image/jpeg")
+            ),
+            size: Number(rawAttachment.size) || undefined,
+            isLocal: false,
+          }
+        : null,
     replyTo: dto.replyTo
       ? {
           threadId: dto.replyTo.threadId || null,
@@ -194,6 +367,7 @@ export default function ReportMessaging({
   modalTitle = "Messages",
   onModalClose,
 }: Props) {
+  const { ensureValidAccessToken } = useAuth();
   const insets = useSafeAreaInsets();
   const { width, height, fontScale } = useWindowDimensions();
   const themeColors = useColors();
@@ -232,7 +406,21 @@ export default function ReportMessaging({
   const [deleteTargetMessageId, setDeleteTargetMessageId] = useState("");
   const [loadingThreads, setLoadingThreads] = useState(false);
   const [sending, setSending] = useState(false);
+  const [pickingAttachment, setPickingAttachment] = useState(false);
+  const [videoRecorderVisible, setVideoRecorderVisible] = useState(false);
   const [adminTyping, setAdminTyping] = useState(false);
+  const [selectedAttachment, setSelectedAttachment] = useState<ThreadAttachment | null>(null);
+  const [previewVideo, setPreviewVideo] = useState<{
+    uri: string;
+    needsAuth: boolean;
+  } | null>(null);
+  const [previewImage, setPreviewImage] = useState<{
+    uri: string;
+    needsAuth: boolean;
+  } | null>(null);
+  const [attachmentAuthHeaders, setAttachmentAuthHeaders] = useState<Record<string, string>>(
+    {}
+  );
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [bubbleMeasurements, setBubbleMeasurements] = useState<
     Record<string, BubbleMeasurement>
@@ -253,15 +441,15 @@ export default function ReportMessaging({
   const composerInputRef = useRef<TextInput | null>(null);
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const preEditDraftRef = useRef("");
+  const preEditAttachmentRef = useRef<ThreadAttachment | null>(null);
   const threadsAbortRef = useRef<AbortController | null>(null);
   const threadsInFlightRef = useRef(false);
   const mountedRef = useRef(true);
+  const mediaErrorAlertOpenRef = useRef(false);
   const isAtBottomRef = useRef(true);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-  const pendingOptimisticRef = useRef<
-    Map<string, { text: string; createdAtMs: number; side: "left" | "right" }>
-  >(new Map());
+  const pendingOptimisticRef = useRef<Map<string, PendingOptimisticMessage>>(new Map());
 
   const selectedMessage = useMemo(
     () => messages.find((message) => message.id === selectedMessageId) ?? null,
@@ -284,6 +472,10 @@ export default function ReportMessaging({
   const chatContentWidth = Math.max(modalPanelWidth - scale(44), scale(120));
   const threadBubbleMaxWidth = Math.round(
     chatContentWidth * (isTablet ? 0.66 : 0.78)
+  );
+  const threadAttachmentWidth = Math.min(
+    threadBubbleMaxWidth,
+    scale(isTablet ? 224 : 190)
   );
   const messagesTranslateX = contextSlide.interpolate({
     inputRange: [0, 1],
@@ -321,6 +513,44 @@ export default function ReportMessaging({
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
   }, []);
+
+  const refreshAttachmentAuthHeaders = useCallback(async () => {
+    const token = await ensureValidAccessToken().catch(() => null);
+    if (mountedRef.current) {
+      const nextAuthorization = token ? `Bearer ${token}` : "";
+      setAttachmentAuthHeaders((current) =>
+        String(current.Authorization || "") === nextAuthorization
+          ? current
+          : nextAuthorization
+            ? { Authorization: nextAuthorization }
+            : {}
+      );
+    }
+    return token;
+  }, [ensureValidAccessToken]);
+
+  useEffect(() => {
+    void refreshAttachmentAuthHeaders();
+  }, [refreshAttachmentAuthHeaders, reportId, visible]);
+
+  const showAttachmentLoadError = useCallback(
+    (kind: ThreadAttachmentKind) => {
+      void refreshAttachmentAuthHeaders();
+      if (mediaErrorAlertOpenRef.current) return;
+
+      mediaErrorAlertOpenRef.current = true;
+      const releaseAlert = () => {
+        mediaErrorAlertOpenRef.current = false;
+      };
+      showNativeAlert(
+        `Unable to load ${kind === "video" ? "video" : "photo"}`,
+        "Check your connection, then try opening the attachment again.",
+        [{ text: "OK", onPress: releaseAlert }],
+        { cancelable: true, onDismiss: releaseAlert }
+      );
+    },
+    [refreshAttachmentAuthHeaders]
+  );
 
   const refreshMessageNotifications = useCallback(async () => {
     if (!reportId) return;
@@ -417,19 +647,24 @@ export default function ReportMessaging({
 
   const findMatchingServerMessage = useCallback(
     (
-      optimistic: { text: string; createdAtMs: number; side: "left" | "right" },
+      optimistic: PendingOptimisticMessage,
       serverMessages: ThreadMessage[]
     ) => {
-      const windowMs = 8000;
+      const windowMs = 15000;
       const wantedText = optimistic.text.trim();
-      if (!wantedText) return null;
+      if (!wantedText && !optimistic.attachmentKind) return null;
 
       let best: ThreadMessage | null = null;
       let bestDelta = Number.POSITIVE_INFINITY;
 
       for (const message of serverMessages) {
         if (message.side !== optimistic.side || message.pending) continue;
-        if (message.text.trim() !== wantedText) continue;
+        if (optimistic.attachmentKind) {
+          if (message.attachment?.kind !== optimistic.attachmentKind) continue;
+          if (wantedText && message.text.trim() !== wantedText) continue;
+        } else if (message.text.trim() !== wantedText) {
+          continue;
+        }
         const timestamp = message.createdAtMs ?? 0;
         if (!timestamp) continue;
         const delta = Math.abs(timestamp - optimistic.createdAtMs);
@@ -446,7 +681,7 @@ export default function ReportMessaging({
 
   const mergeThreadDtos = useCallback(
     (list: ThreadDto[]) => {
-      const incoming = (list || []).map(dtoToMessage);
+      const incoming = (list || []).map((dto) => dtoToMessage(dto, reportId));
 
       setMessages((previous) => {
         const pendingMap = pendingOptimisticRef.current;
@@ -485,7 +720,7 @@ export default function ReportMessaging({
         return merged;
       });
     },
-    [findMatchingServerMessage, scrollToBottom]
+    [findMatchingServerMessage, reportId, scrollToBottom]
   );
 
   const refreshThreads = useCallback(
@@ -556,6 +791,7 @@ export default function ReportMessaging({
     threadsInFlightRef.current = false;
     pendingOptimisticRef.current.clear();
     preEditDraftRef.current = "";
+    preEditAttachmentRef.current = null;
     isAtBottomRef.current = true;
 
     setVisible(false);
@@ -563,8 +799,12 @@ export default function ReportMessaging({
     setBubbleMeasurements({});
     setThreadsError("");
     setLoadingThreads(false);
+    setPickingAttachment(false);
     setNewMessageCount(0);
     setDraft("");
+    setSelectedAttachment(null);
+    setPreviewImage(null);
+    setPreviewVideo(null);
     setEditingMessageId("");
     setReplyingToMessage(null);
     setVisibleMessageMetaId("");
@@ -621,13 +861,208 @@ export default function ReportMessaging({
     [publishTypingStatus]
   );
 
+  const acceptPickedAttachment = useCallback(
+    async (asset?: ImagePicker.ImagePickerAsset) => {
+      if (!asset?.uri) return;
+
+      const kind = pickerAssetKind(asset);
+      if (!kind) {
+        showNativeAlert(
+          "Unsupported attachment",
+          "Only image and video files can be sent."
+        );
+        return;
+      }
+
+      const size = getPickerAssetSize(asset);
+      if (size !== null && size > MAX_CHAT_ATTACHMENT_BYTES) {
+        showNativeAlert(
+          "File too large",
+          "Chat attachments must be 10 MB or smaller."
+        );
+        return;
+      }
+
+      const durationMs = Number(asset.duration);
+      if (
+        kind === "video" &&
+        Number.isFinite(durationMs) &&
+        durationMs > MAX_CHAT_VIDEO_DURATION_SECONDS * 1000
+      ) {
+        showNativeAlert(
+          "Video too long",
+          `Message videos must be ${MAX_CHAT_VIDEO_DURATION_SECONDS} seconds or shorter.`
+        );
+        return;
+      }
+
+      const mimeType = pickerAssetMimeType(asset, kind);
+      if (!mimeType || !mimeType.startsWith(`${kind}/`)) {
+        showNativeAlert(
+          "Unsupported attachment",
+          "Choose a JPEG, PNG, WebP, HEIC, MP4, MOV, M4V, 3GP, or WebM file."
+        );
+        return;
+      }
+      const extension = fileExtensionForMimeType(mimeType, kind);
+      const fileName = String(asset.fileName || `chat_${Date.now()}.${extension}`);
+
+      setSelectedAttachment({
+        kind,
+        uri: asset.uri,
+        file: asset.file || undefined,
+        fileName,
+        mimeType,
+        size: size ?? undefined,
+        isLocal: true,
+      });
+      setTimeout(() => scrollToBottom(true), 60);
+    },
+    [scrollToBottom]
+  );
+
+  const takeAttachmentPhoto = useCallback(async () => {
+    if (pickingAttachment || sending || !canChat || editingMessageId) return;
+    setPickingAttachment(true);
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (permission.status !== "granted") {
+        showNativeAlert(
+          "Camera permission needed",
+          "Allow camera access to take a photo for this message."
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 0.8,
+      });
+      if (!result.canceled) await acceptPickedAttachment(result.assets?.[0]);
+    } catch (error: any) {
+      showNativeAlert(
+        "Camera unavailable",
+        error?.message || "The camera could not be opened. Please try again."
+      );
+    } finally {
+      setPickingAttachment(false);
+    }
+  }, [acceptPickedAttachment, canChat, editingMessageId, pickingAttachment, sending]);
+
+  const acceptRecordedVideo = useCallback(
+    async (uri: string) => {
+      setVideoRecorderVisible(false);
+      const normalizedUri = String(uri || "").trim();
+      if (!normalizedUri) return;
+
+      const isQuickTime = /\.mov(?:\?|$)/i.test(normalizedUri);
+      await acceptPickedAttachment({
+        uri: normalizedUri,
+        width: 0,
+        height: 0,
+        type: "video",
+        fileName: `chat_${Date.now()}.${isQuickTime ? "mov" : "mp4"}`,
+        mimeType: isQuickTime ? "video/quicktime" : "video/mp4",
+        duration: null,
+      });
+    },
+    [acceptPickedAttachment]
+  );
+
+  const closeVideoRecorder = useCallback(() => {
+    setVideoRecorderVisible(false);
+  }, []);
+
+  const recordAttachmentVideo = useCallback(() => {
+    if (
+      pickingAttachment ||
+      sending ||
+      !canChat ||
+      editingMessageId ||
+      videoRecorderVisible
+    ) {
+      return;
+    }
+    setVideoRecorderVisible(true);
+  }, [
+    canChat,
+    editingMessageId,
+    pickingAttachment,
+    sending,
+    videoRecorderVisible,
+  ]);
+
+  const pickAttachmentFromGallery = useCallback(async () => {
+    if (pickingAttachment || sending || !canChat || editingMessageId) return;
+    setPickingAttachment(true);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permission.status !== "granted") {
+        showNativeAlert(
+          "Gallery permission needed",
+          "Allow photo and video access to attach a file to this message."
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images", "videos"],
+        allowsEditing: false,
+        allowsMultipleSelection: false,
+        selectionLimit: 1,
+        quality: 0.8,
+        videoMaxDuration: MAX_CHAT_VIDEO_DURATION_SECONDS,
+      });
+      if (!result.canceled) await acceptPickedAttachment(result.assets?.[0]);
+    } catch (error: any) {
+      showNativeAlert(
+        "Gallery unavailable",
+        error?.message || "The gallery could not be opened. Please try again."
+      );
+    } finally {
+      setPickingAttachment(false);
+    }
+  }, [acceptPickedAttachment, canChat, editingMessageId, pickingAttachment, sending]);
+
+  const showCameraAttachmentOptions = useCallback(() => {
+    showNativeAlert("Use Camera", "Choose an attachment type:", [
+      { text: "Take Photo", onPress: () => void takeAttachmentPhoto() },
+      { text: "Record Video", onPress: () => void recordAttachmentVideo() },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }, [recordAttachmentVideo, takeAttachmentPhoto]);
+
+  const handleAttachmentPress = useCallback(() => {
+    if (pickingAttachment || sending || !canChat || editingMessageId) return;
+    Keyboard.dismiss();
+    setIsKeyboardVisible(false);
+    showNativeAlert("Add Attachment", "Choose a source:", [
+      { text: "Camera", onPress: showCameraAttachmentOptions },
+      { text: "Gallery", onPress: () => void pickAttachmentFromGallery() },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }, [
+    canChat,
+    editingMessageId,
+    pickAttachmentFromGallery,
+    pickingAttachment,
+    sending,
+    showCameraAttachmentOptions,
+  ]);
+
   const sendThreadText = useCallback(
     async (
       rawText: string,
-      options?: { manageDraft?: boolean; replyTo?: ThreadMessage | null }
+      options?: {
+        manageDraft?: boolean;
+        replyTo?: ThreadMessage | null;
+        attachment?: ThreadAttachment | null;
+      }
     ) => {
       const text = rawText.trim();
-      if (!text) return false;
+      const attachment = options?.attachment || null;
+      if (!text && !attachment) return false;
 
       if (!reportId) {
         Alert.alert("Missing report id", "Cannot send message because reportId is empty.");
@@ -651,9 +1086,10 @@ export default function ReportMessaging({
               threadId: options.replyTo.id,
               sender: getThreadSenderLabel(options.replyTo),
               side: options.replyTo.side,
-              text: options.replyTo.text,
+              text: getMessageDisplayText(options.replyTo),
             }
           : null,
+        attachment,
         pending: true,
       };
 
@@ -661,18 +1097,41 @@ export default function ReportMessaging({
         text,
         createdAtMs,
         side: "right",
+        attachmentKind: attachment?.kind,
       });
       isAtBottomRef.current = true;
       setNewMessageCount(0);
       setMessages((previous) => [...previous, optimistic]);
-      if (options?.manageDraft) setDraft("");
+      if (options?.manageDraft) {
+        setDraft("");
+        if (attachment) setSelectedAttachment(null);
+      }
       setTimeout(() => scrollToBottom(true), 60);
 
       try {
-        await sendReportThreadMessage(
-          reportId,
-          { text, replyToThreadId: options?.replyTo?.id || undefined }
-        );
+        const uploadAttachment: ReportThreadAttachmentInput | undefined = attachment
+          ? {
+              uri: attachment.uri,
+              name: attachment.fileName,
+              type: attachment.mimeType,
+              file: attachment.file,
+            }
+          : undefined;
+        const data = await sendReportThreadMessage(reportId, {
+          text,
+          replyToThreadId: options?.replyTo?.id || undefined,
+          attachment: uploadAttachment,
+        });
+        const createdThread = data?.thread as ThreadDto | undefined;
+        if (createdThread?._id) {
+          pendingOptimisticRef.current.delete(temporaryId);
+          const createdMessage = dtoToMessage(createdThread, reportId);
+          setMessages((previous) =>
+            previous.map((message) =>
+              message.id === temporaryId ? createdMessage : message
+            )
+          );
+        }
         await refreshThreads({ showLoader: false });
         setTimeout(() => {
           setMessages((previous) => {
@@ -691,7 +1150,10 @@ export default function ReportMessaging({
         setMessages((previous) =>
           previous.filter((message) => message.id !== temporaryId)
         );
-        if (options?.manageDraft) setDraft(text);
+        if (options?.manageDraft) {
+          setDraft(text);
+          if (attachment) setSelectedAttachment(attachment);
+        }
         return false;
       } finally {
         setSending(false);
@@ -716,7 +1178,7 @@ export default function ReportMessaging({
         const data = await updateReportThreadMessage(reportId, messageId, text);
         const updatedThread = data?.thread as ThreadDto | undefined;
         if (updatedThread?._id) {
-          const updatedMessage = dtoToMessage(updatedThread);
+          const updatedMessage = dtoToMessage(updatedThread, reportId);
           setMessages((previous) =>
             previous.map((message) =>
               message.id === updatedMessage.id ? updatedMessage : message
@@ -751,7 +1213,7 @@ export default function ReportMessaging({
         const data = await deleteReportThreadMessage(reportId, messageId);
         const deletedThread = data?.thread as ThreadDto | undefined;
         if (deletedThread?._id) {
-          const deletedMessage = dtoToMessage(deletedThread);
+          const deletedMessage = dtoToMessage(deletedThread, reportId);
           setMessages((previous) =>
             previous.map((message) =>
               message.id === deletedMessage.id ? deletedMessage : message
@@ -765,6 +1227,7 @@ export default function ReportMessaging({
 
         if (editingMessageId === messageId) {
           preEditDraftRef.current = "";
+          preEditAttachmentRef.current = null;
           setEditingMessageId("");
           setDraft("");
         }
@@ -785,25 +1248,38 @@ export default function ReportMessaging({
 
   const handleSend = useCallback(async () => {
     const text = draft.trim();
-    if (!text) return;
 
     if (editingMessageId) {
+      if (!text) return;
       const updated = await updateThreadText(editingMessageId, text);
       if (updated) {
         const restoredDraft = preEditDraftRef.current;
+        const restoredAttachment = preEditAttachmentRef.current;
         preEditDraftRef.current = "";
+        preEditAttachmentRef.current = null;
         setEditingMessageId("");
         setDraft(restoredDraft);
+        setSelectedAttachment(restoredAttachment);
       }
       return;
     }
 
+    if (!text && !selectedAttachment) return;
+
     const sent = await sendThreadText(text, {
       manageDraft: true,
       replyTo: replyingToMessage,
+      attachment: selectedAttachment,
     });
     if (sent) setReplyingToMessage(null);
-  }, [draft, editingMessageId, replyingToMessage, sendThreadText, updateThreadText]);
+  }, [
+    draft,
+    editingMessageId,
+    replyingToMessage,
+    selectedAttachment,
+    sendThreadText,
+    updateThreadText,
+  ]);
 
   const closeMessageMenu = useCallback(() => {
     setMessageMenuVisible(false);
@@ -830,9 +1306,12 @@ export default function ReportMessaging({
 
       if (editingMessageId) {
         const restoredDraft = preEditDraftRef.current;
+        const restoredAttachment = preEditAttachmentRef.current;
         preEditDraftRef.current = "";
+        preEditAttachmentRef.current = null;
         setEditingMessageId("");
         setDraft(restoredDraft);
+        setSelectedAttachment(restoredAttachment);
       }
 
       setReplyingToMessage(target || lastIncomingMessage || null);
@@ -847,10 +1326,22 @@ export default function ReportMessaging({
 
   const handleEditSelectedMessage = useCallback(
     (message: ThreadMessage | null) => {
-      if (!message || message.side !== "right" || message.pending || !canChat) return;
+      if (
+        !message ||
+        message.side !== "right" ||
+        message.pending ||
+        message.attachment ||
+        !canChat
+      ) {
+        return;
+      }
 
-      if (!editingMessageId) preEditDraftRef.current = draft;
+      if (!editingMessageId) {
+        preEditDraftRef.current = draft;
+        preEditAttachmentRef.current = selectedAttachment;
+      }
       setReplyingToMessage(null);
+      setSelectedAttachment(null);
       setEditingMessageId(message.id);
       setDraft(message.text);
       closeMessageMenu();
@@ -859,7 +1350,14 @@ export default function ReportMessaging({
         scrollToBottom(true);
       }, 60);
     },
-    [canChat, closeMessageMenu, draft, editingMessageId, scrollToBottom]
+    [
+      canChat,
+      closeMessageMenu,
+      draft,
+      editingMessageId,
+      scrollToBottom,
+      selectedAttachment,
+    ]
   );
 
   const requestDeleteSelectedMessage = useCallback(() => {
@@ -883,9 +1381,12 @@ export default function ReportMessaging({
 
   const cancelEditingMessage = useCallback(() => {
     const restoredDraft = preEditDraftRef.current;
+    const restoredAttachment = preEditAttachmentRef.current;
     preEditDraftRef.current = "";
+    preEditAttachmentRef.current = null;
     setEditingMessageId("");
     setDraft(restoredDraft);
+    setSelectedAttachment(restoredAttachment);
   }, []);
 
   const cancelReplyMessage = useCallback(() => {
@@ -958,6 +1459,8 @@ export default function ReportMessaging({
     setIsKeyboardVisible(false);
     publishTypingStatus(false);
     closeMessageMenu();
+    setPreviewImage(null);
+    setPreviewVideo(null);
     setActivePanel("messages");
     contextSlide.stopAnimation();
     contextSlide.setValue(0);
@@ -1056,11 +1559,79 @@ export default function ReportMessaging({
     !!selectedMessage &&
     selectedMessage.side === "right" &&
     !selectedMessage.pending &&
+    !selectedMessage.deletedAt &&
+    !selectedMessage.attachment;
+  const selectedMessageCanDelete =
+    !!selectedMessage &&
+    selectedMessage.side === "right" &&
+    !selectedMessage.pending &&
     !selectedMessage.deletedAt;
-  const selectedMessageCanDelete = selectedMessageCanEdit;
+  const canSubmitComposer =
+    canChat &&
+    !sending &&
+    (editingMessageId ? !!draft.trim() : !!draft.trim() || !!selectedAttachment);
 
   return (
     <>
+      <Modal
+        visible={!!previewImage}
+        animationType="fade"
+        statusBarTranslucent={Platform.OS === "android"}
+        onRequestClose={() => setPreviewImage(null)}
+      >
+        <View style={styles.imagePreviewScreen}>
+          <StatusBar barStyle="light-content" backgroundColor="#050B12" />
+          <View
+            style={[
+              styles.imagePreviewHeader,
+              { paddingTop: Math.max(insets.top, vscale(8)) },
+            ]}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close photo preview"
+              onPress={() => setPreviewImage(null)}
+              hitSlop={10}
+              style={styles.imagePreviewClose}
+            >
+              <Ionicons name="chevron-back" size={scale(26)} color="#FFFFFF" />
+            </Pressable>
+            <Text style={styles.imagePreviewTitle}>Message Photo</Text>
+            <View style={styles.imagePreviewHeaderSpacer} />
+          </View>
+
+          {previewImage ? (
+            <Image
+              key={`${previewImage.uri}-${attachmentAuthHeaders.Authorization || "local"}`}
+              source={{
+                uri: previewImage.uri,
+                ...(previewImage.needsAuth ? { headers: attachmentAuthHeaders } : {}),
+              }}
+              style={styles.imagePreviewImage}
+              resizeMode="contain"
+              onError={() => showAttachmentLoadError("image")}
+            />
+          ) : null}
+        </View>
+      </Modal>
+
+      <IncidentVideoPreviewModal
+        visible={!!previewVideo}
+        uri={previewVideo?.uri}
+        title="Message Video"
+        headers={previewVideo?.needsAuth ? attachmentAuthHeaders : undefined}
+        onError={() => showAttachmentLoadError("video")}
+        onClose={() => setPreviewVideo(null)}
+      />
+
+      <MessageVideoRecorderModal
+        visible={videoRecorderVisible}
+        maxDurationSeconds={MAX_CHAT_VIDEO_DURATION_SECONDS}
+        maxFileSizeBytes={MAX_CHAT_ATTACHMENT_BYTES}
+        onCancel={closeVideoRecorder}
+        onRecorded={acceptRecordedVideo}
+      />
+
       <Modal
         visible={messageMenuVisible}
         animationType="fade"
@@ -1096,7 +1667,7 @@ export default function ReportMessaging({
                         : styles.threadMenuPreviewTextLeft,
                     ]}
                   >
-                    {selectedMessage.text}
+                    {getMessageDisplayText(selectedMessage)}
                   </Text>
                 </View>
               </View>
@@ -1344,24 +1915,31 @@ export default function ReportMessaging({
                     {messages.map((message) => {
                       const isLeft = message.side === "left";
                       const showMeta = visibleMessageMetaId === message.id;
+                      const messageCaption = getMessageCaption(message);
                       const shouldBalanceMessage =
-                        Array.from(message.text.trim()).length >=
+                        !message.attachment &&
+                        Array.from(messageCaption).length >=
                         BALANCED_MESSAGE_MIN_LENGTH;
                       const storedMeasurement = bubbleMeasurements[message.id];
                       const bubbleMeasurement =
                         shouldBalanceMessage &&
                         storedMeasurement?.version === BUBBLE_MEASUREMENT_VERSION &&
-                        storedMeasurement.text === message.text &&
+                        storedMeasurement.text === messageCaption &&
                         storedMeasurement.maxWidth === threadBubbleMaxWidth &&
                         storedMeasurement.fontScale === fontScale
                           ? storedMeasurement
                           : null;
-                      const bubbleSizingStyle = bubbleMeasurement
+                      const bubbleSizingStyle = message.attachment
                         ? {
-                            width: bubbleMeasurement.width,
+                            width: threadAttachmentWidth,
                             maxWidth: threadBubbleMaxWidth,
                           }
-                        : { maxWidth: threadBubbleMaxWidth };
+                        : bubbleMeasurement
+                          ? {
+                              width: bubbleMeasurement.width,
+                              maxWidth: threadBubbleMaxWidth,
+                            }
+                          : { maxWidth: threadBubbleMaxWidth };
 
                       return (
                         <View key={message.id} style={styles.messageBlock}>
@@ -1486,9 +2064,33 @@ export default function ReportMessaging({
                                     <Text style={styles.messageSender}>{message.sender}</Text>
                                   ) : null}
                                   <Pressable
-                                    disabled={!canChat || !!message.pending}
+                                    disabled={!!message.pending}
                                     delayLongPress={220}
-                                    onPress={() => toggleMessageMeta(message.id)}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={
+                                      message.attachment?.kind === "video"
+                                        ? "Play attached video"
+                                        : message.attachment?.kind === "image"
+                                          ? "Attached photo"
+                                          : "Message"
+                                    }
+                                    onPress={() => {
+                                      if (message.attachment?.kind === "video") {
+                                        setPreviewVideo({
+                                          uri: message.attachment.uri,
+                                          needsAuth: !message.attachment.isLocal,
+                                        });
+                                        return;
+                                      }
+                                      if (message.attachment?.kind === "image") {
+                                        setPreviewImage({
+                                          uri: message.attachment.uri,
+                                          needsAuth: !message.attachment.isLocal,
+                                        });
+                                        return;
+                                      }
+                                      toggleMessageMeta(message.id);
+                                    }}
                                     onLongPress={() => openMessageMenu(message)}
                                     style={({ pressed }) => [
                                       styles.bubblePressable,
@@ -1505,35 +2107,106 @@ export default function ReportMessaging({
                                         styles.bubble,
                                         bubbleSizingStyle,
                                         isLeft ? styles.bubbleLeft : styles.bubbleRight,
+                                        message.attachment && styles.bubbleWithAttachment,
                                         message.pending && { opacity: 0.72 },
                                       ]}
                                     >
-                                      <Text
-                                        style={[
-                                          styles.bubbleText,
-                                          isLeft
-                                            ? styles.bubbleTextLeft
-                                            : styles.bubbleTextRight,
-                                        ]}
-                                        textBreakStrategy={
-                                          shouldBalanceMessage ? "balanced" : "simple"
-                                        }
-                                        onTextLayout={
-                                          !shouldBalanceMessage || bubbleMeasurement
-                                            ? undefined
-                                            : (event) => {
-                                                updateBubbleMeasurement(
-                                                  message.id,
-                                                  message.text,
-                                                  (event.nativeEvent.lines || []).map(
-                                                    (line: any) => Number(line?.width || 0)
-                                                  )
-                                                );
-                                              }
-                                        }
-                                      >
-                                        {message.text}
-                                      </Text>
+                                      {message.attachment ? (
+                                        <View style={styles.threadAttachmentWrap}>
+                                          {message.attachment.kind === "image" ? (
+                                            <Image
+                                              key={`${message.attachment.uri}-${
+                                                message.attachment.isLocal
+                                                  ? "local"
+                                                  : attachmentAuthHeaders.Authorization || "auth"
+                                              }`}
+                                              source={{
+                                                uri: message.attachment.uri,
+                                                ...(message.attachment.isLocal
+                                                  ? {}
+                                                  : { headers: attachmentAuthHeaders }),
+                                              }}
+                                              style={styles.threadAttachmentImage}
+                                              resizeMode="cover"
+                                              onError={() => {
+                                                if (!message.attachment?.isLocal) {
+                                                  void refreshAttachmentAuthHeaders();
+                                                }
+                                              }}
+                                            />
+                                          ) : (
+                                            <View
+                                              style={[
+                                                styles.threadAttachmentVideo,
+                                                isLeft
+                                                  ? styles.threadAttachmentVideoLeft
+                                                  : styles.threadAttachmentVideoRight,
+                                              ]}
+                                            >
+                                              <View style={styles.threadAttachmentPlayButton}>
+                                                <Ionicons
+                                                  name="play"
+                                                  size={styles._attachmentPlayIcon}
+                                                  color="#FFFFFF"
+                                                />
+                                              </View>
+                                              <Text
+                                                style={[
+                                                  styles.threadAttachmentFileName,
+                                                  isLeft
+                                                    ? styles.bubbleTextLeft
+                                                    : styles.bubbleTextRight,
+                                                ]}
+                                                numberOfLines={1}
+                                              >
+                                                {message.attachment.fileName || "Video"}
+                                              </Text>
+                                            </View>
+                                          )}
+
+                                          {messageCaption ? (
+                                            <View style={styles.threadAttachmentCaption}>
+                                              <Text
+                                                style={[
+                                                  styles.bubbleText,
+                                                  isLeft
+                                                    ? styles.bubbleTextLeft
+                                                    : styles.bubbleTextRight,
+                                                ]}
+                                              >
+                                                {messageCaption}
+                                              </Text>
+                                            </View>
+                                          ) : null}
+                                        </View>
+                                      ) : (
+                                        <Text
+                                          style={[
+                                            styles.bubbleText,
+                                            isLeft
+                                              ? styles.bubbleTextLeft
+                                              : styles.bubbleTextRight,
+                                          ]}
+                                          textBreakStrategy={
+                                            shouldBalanceMessage ? "balanced" : "simple"
+                                          }
+                                          onTextLayout={
+                                            !shouldBalanceMessage || bubbleMeasurement
+                                              ? undefined
+                                              : (event) => {
+                                                  updateBubbleMeasurement(
+                                                    message.id,
+                                                    messageCaption,
+                                                    (event.nativeEvent.lines || []).map(
+                                                      (line: any) => Number(line?.width || 0)
+                                                    )
+                                                  );
+                                                }
+                                          }
+                                        >
+                                          {messageCaption}
+                                        </Text>
+                                      )}
                                     </View>
                                   </Pressable>
                                   <Text
@@ -1556,7 +2229,13 @@ export default function ReportMessaging({
                   </ScrollView>
 
                   {newMessageCount > 0 ? (
-                    <View style={styles.newMessagePillWrap} pointerEvents="box-none">
+                    <View
+                      style={[
+                        styles.newMessagePillWrap,
+                        selectedAttachment && { bottom: vscale(142) },
+                      ]}
+                      pointerEvents="box-none"
+                    >
                       <Pressable
                         onPress={() => {
                           isAtBottomRef.current = true;
@@ -1596,7 +2275,7 @@ export default function ReportMessaging({
                           Replying to {getThreadSenderLabel(replyingToMessage)}
                         </Text>
                         <Text style={styles.replyBannerText} numberOfLines={1}>
-                          {replyingToMessage.text}
+                          {getMessageDisplayText(replyingToMessage)}
                         </Text>
                       </View>
                       <Pressable
@@ -1684,17 +2363,108 @@ export default function ReportMessaging({
                       },
                     ]}
                   >
+                    {selectedAttachment ? (
+                      <View style={styles.composerAttachmentPreview}>
+                        {selectedAttachment.kind === "image" ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Preview selected photo"
+                            onPress={() =>
+                              setPreviewImage({
+                                uri: selectedAttachment.uri,
+                                needsAuth: false,
+                              })
+                            }
+                            style={({ pressed }) => [pressed && { opacity: 0.82 }]}
+                          >
+                            <Image
+                              source={{ uri: selectedAttachment.uri }}
+                              style={styles.composerAttachmentThumb}
+                              resizeMode="cover"
+                            />
+                          </Pressable>
+                        ) : (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Preview selected video"
+                            onPress={() =>
+                              setPreviewVideo({
+                                uri: selectedAttachment.uri,
+                                needsAuth: false,
+                              })
+                            }
+                            style={({ pressed }) => [
+                              styles.composerAttachmentVideoThumb,
+                              pressed && { opacity: 0.82 },
+                            ]}
+                          >
+                            <Ionicons
+                              name="play"
+                              size={styles._attachmentPreviewIcon}
+                              color="#FFFFFF"
+                            />
+                          </Pressable>
+                        )}
+
+                        <View style={styles.composerAttachmentDetails}>
+                          <Text style={styles.composerAttachmentName} numberOfLines={1}>
+                            {selectedAttachment.fileName}
+                          </Text>
+                          <Text style={styles.composerAttachmentMeta} numberOfLines={1}>
+                            {selectedAttachment.kind === "video" ? "Video" : "Photo"}
+                            {formatAttachmentSize(selectedAttachment.size)
+                              ? ` • ${formatAttachmentSize(selectedAttachment.size)}`
+                              : ""}
+                          </Text>
+                        </View>
+
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Remove selected attachment"
+                          onPress={() => setSelectedAttachment(null)}
+                          hitSlop={8}
+                          style={({ pressed }) => [
+                            styles.composerAttachmentRemove,
+                            pressed && { opacity: 0.72 },
+                          ]}
+                        >
+                          <Ionicons name="close" size={styles._inputIcon} color="#64748B" />
+                        </Pressable>
+                      </View>
+                    ) : null}
+
                     <View style={styles.composerRow}>
                       <View style={styles.composerInputWrap}>
-                        <Ionicons
-                          name="attach-outline"
-                          size={styles._inputIcon}
-                          color="#6E7B8A"
-                        />
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Add a photo or video"
+                          disabled={
+                            pickingAttachment || sending || !canChat || !!editingMessageId
+                          }
+                          onPress={handleAttachmentPress}
+                          hitSlop={8}
+                          style={({ pressed }) => [
+                            styles.composerAttachmentButton,
+                            pressed && styles.composerAttachmentButtonPressed,
+                            (pickingAttachment || sending || !canChat || !!editingMessageId) &&
+                              styles.composerAttachmentButtonDisabled,
+                          ]}
+                        >
+                          {pickingAttachment ? (
+                            <ActivityIndicator size="small" color="#6E7B8A" />
+                          ) : (
+                            <Ionicons
+                              name="attach-outline"
+                              size={styles._inputIcon}
+                              color="#6E7B8A"
+                            />
+                          )}
+                        </Pressable>
                         <TextInput
                           ref={composerInputRef}
                           value={draft}
                           onChangeText={handleComposerTextChange}
+                          maxLength={4000}
                           placeholder={
                             editingMessage ? "Edit your message..." : "Write a message..."
                           }
@@ -1717,14 +2487,16 @@ export default function ReportMessaging({
 
                       <Pressable
                         onPress={handleSend}
-                        disabled={sending || !canChat}
+                        disabled={!canSubmitComposer}
+                        accessibilityRole="button"
+                        accessibilityLabel={editingMessage ? "Save message" : "Send message"}
                         style={({ pressed }) => [
                           styles.sendButton,
                           pressed && {
                             transform: [{ scale: 0.98 }],
                             opacity: 0.95,
                           },
-                          (sending || !canChat) && { opacity: 0.7 },
+                          !canSubmitComposer && { opacity: 0.55 },
                         ]}
                       >
                         {sending ? (
@@ -1861,6 +2633,8 @@ function makeStyles({
   const _emptyIcon = scale(isTablet ? 52 : 44);
   const _inputIcon = scale(18);
   const _sendIcon = scale(18);
+  const _attachmentPlayIcon = scale(24);
+  const _attachmentPreviewIcon = scale(18);
   const _messageFabIcon = scale(24);
   const _typingIndicatorIcon = scale(24);
   const _contextIcon = scale(14);
@@ -2224,6 +2998,91 @@ function makeStyles({
         backgroundColor: "#000000",
         borderColor: "#000000",
       },
+      bubbleWithAttachment: {
+        paddingHorizontal: scale(4),
+        paddingVertical: vscale(4),
+        overflow: "hidden",
+      },
+      imagePreviewScreen: {
+        flex: 1,
+        backgroundColor: "#050B12",
+      },
+      imagePreviewHeader: {
+        minHeight: vscale(58),
+        paddingHorizontal: scale(16),
+        paddingBottom: vscale(8),
+        borderBottomWidth: 1,
+        borderBottomColor: "rgba(255,255,255,0.12)",
+        flexDirection: "row",
+        alignItems: "center",
+      },
+      imagePreviewClose: {
+        width: scale(42),
+        height: scale(42),
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      imagePreviewTitle: {
+        flex: 1,
+        textAlign: "center",
+        fontSize: scale(isTablet ? 17 : 16),
+        fontWeight: "800",
+        color: "#FFFFFF",
+      },
+      imagePreviewHeaderSpacer: {
+        width: scale(42),
+        height: scale(42),
+      },
+      imagePreviewImage: {
+        flex: 1,
+        width: "100%",
+        backgroundColor: "#050B12",
+      },
+      threadAttachmentWrap: {
+        width: "100%",
+        minWidth: 0,
+      },
+      threadAttachmentImage: {
+        width: "100%",
+        aspectRatio: 4 / 3,
+        borderRadius: scale(9),
+        backgroundColor: "#CBD5E1",
+      },
+      threadAttachmentVideo: {
+        width: "100%",
+        minHeight: vscale(112),
+        borderRadius: scale(9),
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: scale(10),
+        gap: vscale(9),
+      },
+      threadAttachmentVideoLeft: {
+        backgroundColor: "#D5DAE1",
+      },
+      threadAttachmentVideoRight: {
+        backgroundColor: "#151A22",
+      },
+      threadAttachmentPlayButton: {
+        width: scale(48),
+        height: scale(48),
+        borderRadius: scale(24),
+        alignItems: "center",
+        justifyContent: "center",
+        paddingLeft: scale(2),
+        backgroundColor: "rgba(50,175,230,0.96)",
+      },
+      threadAttachmentFileName: {
+        width: "100%",
+        textAlign: "center",
+        fontSize: scale(isTablet ? 12 : 11),
+        fontWeight: "700",
+      },
+      threadAttachmentCaption: {
+        paddingHorizontal: scale(10),
+        paddingTop: vscale(8),
+        paddingBottom: vscale(7),
+      },
       bubbleText: {
         flexShrink: 1,
         fontSize: scale(isTablet ? 13 : 12),
@@ -2348,6 +3207,58 @@ function makeStyles({
         borderRadius: scale(3),
         backgroundColor: "#526D82",
       },
+      composerAttachmentPreview: {
+        marginHorizontal: scale(28),
+        marginBottom: vscale(3),
+        minHeight: vscale(64),
+        borderRadius: scale(14),
+        borderWidth: 1,
+        borderColor: "#D7DCE3",
+        backgroundColor: inputBackground,
+        padding: scale(7),
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(10),
+      },
+      composerAttachmentThumb: {
+        width: scale(50),
+        height: scale(50),
+        borderRadius: scale(9),
+        backgroundColor: "#E2E8F0",
+      },
+      composerAttachmentVideoThumb: {
+        width: scale(50),
+        height: scale(50),
+        borderRadius: scale(9),
+        backgroundColor: "#25364A",
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      composerAttachmentDetails: {
+        flex: 1,
+        minWidth: 0,
+        gap: vscale(3),
+      },
+      composerAttachmentName: {
+        fontSize: scale(isTablet ? 12 : 11),
+        fontWeight: "800",
+        color: textDark,
+      },
+      composerAttachmentMeta: {
+        fontSize: scale(isTablet ? 11 : 10),
+        fontWeight: "600",
+        color: mutedText,
+      },
+      composerAttachmentRemove: {
+        width: scale(30),
+        height: scale(30),
+        borderRadius: scale(15),
+        borderWidth: 1,
+        borderColor: border,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: isDark ? "#1E293B" : "#FFFFFF",
+      },
       composerDock: {
         backgroundColor: chatBackground,
         paddingTop: vscale(8),
@@ -2375,6 +3286,19 @@ function makeStyles({
         flexDirection: "row",
         alignItems: "center",
         gap: scale(8),
+      },
+      composerAttachmentButton: {
+        width: scale(30),
+        height: scale(30),
+        borderRadius: scale(15),
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      composerAttachmentButtonPressed: {
+        backgroundColor: isDark ? "#26344A" : "#EDF3F8",
+      },
+      composerAttachmentButtonDisabled: {
+        opacity: 0.46,
       },
       composerInput: {
         flex: 1,
@@ -2557,6 +3481,8 @@ function makeStyles({
       _emptyIcon,
       _inputIcon,
       _sendIcon,
+      _attachmentPlayIcon,
+      _attachmentPreviewIcon,
       _messageFabIcon,
       _typingIndicatorIcon,
       _contextIcon,
