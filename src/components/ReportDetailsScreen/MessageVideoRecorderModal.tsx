@@ -9,6 +9,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Linking,
   Modal,
   Platform,
@@ -47,8 +48,9 @@ export default function MessageVideoRecorderModal({
   onCancel,
   onRecorded,
 }: Props) {
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [microphonePermission, requestMicrophonePermission] =
+  const [cameraPermission, requestCameraPermission, getCameraPermission] =
+    useCameraPermissions();
+  const [microphonePermission, requestMicrophonePermission, getMicrophonePermission] =
     useMicrophonePermissions();
 
   const cameraRef = useRef<CameraView | null>(null);
@@ -60,6 +62,8 @@ export default function MessageVideoRecorderModal({
   const stoppingRef = useRef(false);
   const processingRef = useRef(false);
   const permissionRequestRef = useRef(false);
+  const permissionAlertVisibleRef = useRef(false);
+  const settingsOpenedRef = useRef(false);
   const autoPermissionAttemptedRef = useRef(false);
   const recordingSessionRef = useRef(0);
   const recordingStartedAtRef = useRef(0);
@@ -70,7 +74,7 @@ export default function MessageVideoRecorderModal({
   const [isRecording, setIsRecording] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [requestingPermission, setRequestingPermission] = useState(false);
+  const [permissionSessionReady, setPermissionSessionReady] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const durationLimit = useMemo(() => {
@@ -85,9 +89,6 @@ export default function MessageVideoRecorderModal({
 
   const hasRequiredPermissions =
     cameraPermission?.granted === true && microphonePermission?.granted === true;
-  const permissionsLoaded = cameraPermission !== null && microphonePermission !== null;
-  const permissionsBlocked =
-    cameraPermission?.canAskAgain === false || microphonePermission?.canAskAgain === false;
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) {
@@ -141,70 +142,187 @@ export default function MessageVideoRecorderModal({
     if (visible) {
       closeRequestedRef.current = false;
       autoPermissionAttemptedRef.current = false;
+      permissionAlertVisibleRef.current = false;
+      settingsOpenedRef.current = false;
+      setPermissionSessionReady(false);
       recordingSessionRef.current += 1;
       setFacing("back");
       setCameraReady(false);
       setIsRecording(false);
       setIsStopping(false);
       setIsProcessing(false);
-      setRequestingPermission(permissionRequestRef.current);
       setElapsedSeconds(0);
       return;
     }
 
     closeRequestedRef.current = true;
+    setPermissionSessionReady(false);
     invalidateAndStopRecording();
   }, [invalidateAndStopRecording, visible]);
+
+  const handleCancel = useCallback(() => {
+    if (closeRequestedRef.current) return;
+
+    permissionAlertVisibleRef.current = false;
+    settingsOpenedRef.current = false;
+    setPermissionSessionReady(false);
+    closeRequestedRef.current = true;
+    visibleRef.current = false;
+    invalidateAndStopRecording();
+    onCancel();
+  }, [invalidateAndStopRecording, onCancel]);
+
+  const showNativeErrorAlert = useCallback(
+    (title: string, message: string) => {
+      if (
+        permissionAlertVisibleRef.current ||
+        !visibleRef.current ||
+        closeRequestedRef.current
+      ) {
+        return;
+      }
+
+      permissionAlertVisibleRef.current = true;
+      Alert.alert(
+        title,
+        message,
+        [
+          {
+            text: "Close",
+            onPress: () => {
+              permissionAlertVisibleRef.current = false;
+              handleCancel();
+            },
+          },
+        ],
+        {
+          cancelable: false,
+          onDismiss: () => {
+            permissionAlertVisibleRef.current = false;
+          },
+        }
+      );
+    },
+    [handleCancel]
+  );
+
+  const openSettings = useCallback(async () => {
+    settingsOpenedRef.current = true;
+    try {
+      await Linking.openSettings();
+    } catch (error: any) {
+      settingsOpenedRef.current = false;
+      if (visibleRef.current && !closeRequestedRef.current) {
+        showNativeErrorAlert(
+          "Settings unavailable",
+          error?.message || "Open your device settings to enable camera access."
+        );
+      }
+    }
+  }, [showNativeErrorAlert]);
+
+  const showNativePermissionAlert = useCallback(
+    (cameraGranted: boolean, microphoneGranted: boolean) => {
+      if (
+        permissionAlertVisibleRef.current ||
+        !visibleRef.current ||
+        closeRequestedRef.current
+      ) {
+        return;
+      }
+
+      const missingPermissions = [
+        !cameraGranted ? "camera" : "",
+        !microphoneGranted ? "microphone" : "",
+      ].filter(Boolean);
+      const missingLabel = missingPermissions.join(" and ");
+
+      permissionAlertVisibleRef.current = true;
+      Alert.alert(
+        "Permission required",
+        `Allow ${missingLabel} access in your device settings to record a message video.`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+            onPress: () => {
+              permissionAlertVisibleRef.current = false;
+              handleCancel();
+            },
+          },
+          {
+            text: "Open Settings",
+            onPress: () => {
+              permissionAlertVisibleRef.current = false;
+              void openSettings();
+            },
+          },
+        ],
+        {
+          cancelable: false,
+          onDismiss: () => {
+            permissionAlertVisibleRef.current = false;
+          },
+        }
+      );
+    },
+    [handleCancel, openSettings]
+  );
 
   const requestRequiredPermissions = useCallback(async () => {
     if (permissionRequestRef.current || !visibleRef.current) return;
 
     permissionRequestRef.current = true;
-    if (mountedRef.current && visibleRef.current) setRequestingPermission(true);
 
     try {
-      const nextCameraPermission = cameraPermission?.granted
-        ? cameraPermission
+      const [currentCameraPermission, currentMicrophonePermission] = await Promise.all([
+        getCameraPermission(),
+        getMicrophonePermission(),
+      ]);
+      if (!visibleRef.current || closeRequestedRef.current) return;
+
+      const nextCameraPermission = currentCameraPermission.granted
+        ? currentCameraPermission
         : await requestCameraPermission();
       if (!visibleRef.current || closeRequestedRef.current) return;
 
-      const nextMicrophonePermission = microphonePermission?.granted
-        ? microphonePermission
+      const nextMicrophonePermission = currentMicrophonePermission.granted
+        ? currentMicrophonePermission
         : await requestMicrophonePermission();
       if (!visibleRef.current || closeRequestedRef.current) return;
 
       if (!nextCameraPermission.granted || !nextMicrophonePermission.granted) {
-        Alert.alert(
-          "Permission required",
-          "Camera and microphone access are required to record a message video."
+        setPermissionSessionReady(false);
+        showNativePermissionAlert(
+          nextCameraPermission.granted,
+          nextMicrophonePermission.granted
         );
+      } else {
+        setPermissionSessionReady(true);
       }
     } catch (error: any) {
+      if (mountedRef.current) setPermissionSessionReady(false);
       if (visibleRef.current && !closeRequestedRef.current) {
-        Alert.alert(
+        showNativeErrorAlert(
           "Permission error",
           error?.message || "Camera permissions could not be requested."
         );
       }
     } finally {
       permissionRequestRef.current = false;
-      if (mountedRef.current && visibleRef.current && !closeRequestedRef.current) {
-        setRequestingPermission(false);
-      }
     }
   }, [
-    cameraPermission,
-    microphonePermission,
+    getCameraPermission,
+    getMicrophonePermission,
     requestCameraPermission,
     requestMicrophonePermission,
+    showNativeErrorAlert,
+    showNativePermissionAlert,
   ]);
 
   useEffect(() => {
     if (
       !visible ||
-      !permissionsLoaded ||
-      hasRequiredPermissions ||
-      permissionsBlocked ||
       autoPermissionAttemptedRef.current
     ) {
       return;
@@ -213,34 +331,59 @@ export default function MessageVideoRecorderModal({
     autoPermissionAttemptedRef.current = true;
     void requestRequiredPermissions();
   }, [
-    hasRequiredPermissions,
-    permissionsBlocked,
-    permissionsLoaded,
     requestRequiredPermissions,
     visible,
   ]);
 
-  const openSettings = useCallback(async () => {
-    try {
-      await Linking.openSettings();
-    } catch (error: any) {
-      if (visibleRef.current && !closeRequestedRef.current) {
-        Alert.alert(
-          "Settings unavailable",
-          error?.message || "Open your device settings to enable camera access."
-        );
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (
+        nextState !== "active" ||
+        !settingsOpenedRef.current ||
+        permissionRequestRef.current ||
+        !visibleRef.current ||
+        closeRequestedRef.current
+      ) {
+        return;
       }
-    }
-  }, []);
 
-  const handleCancel = useCallback(() => {
-    if (closeRequestedRef.current) return;
+      settingsOpenedRef.current = false;
+      permissionRequestRef.current = true;
 
-    closeRequestedRef.current = true;
-    visibleRef.current = false;
-    invalidateAndStopRecording();
-    onCancel();
-  }, [invalidateAndStopRecording, onCancel]);
+      void Promise.all([getCameraPermission(), getMicrophonePermission()])
+        .then(([nextCameraPermission, nextMicrophonePermission]) => {
+          if (!visibleRef.current || closeRequestedRef.current) return;
+          const permissionsGranted =
+            nextCameraPermission.granted && nextMicrophonePermission.granted;
+          setPermissionSessionReady(permissionsGranted);
+          if (!permissionsGranted) {
+            showNativePermissionAlert(
+              nextCameraPermission.granted,
+              nextMicrophonePermission.granted
+            );
+          }
+        })
+        .catch((error: any) => {
+          if (mountedRef.current) setPermissionSessionReady(false);
+          if (visibleRef.current && !closeRequestedRef.current) {
+            showNativeErrorAlert(
+              "Permission error",
+              error?.message || "Camera permissions could not be checked."
+            );
+          }
+        })
+        .finally(() => {
+          permissionRequestRef.current = false;
+        });
+    });
+
+    return () => subscription.remove();
+  }, [
+    getCameraPermission,
+    getMicrophonePermission,
+    showNativeErrorAlert,
+    showNativePermissionAlert,
+  ]);
 
   const startRecording = useCallback(async () => {
     const camera = cameraRef.current;
@@ -397,7 +540,7 @@ export default function MessageVideoRecorderModal({
 
   return (
     <Modal
-      visible={visible}
+      visible={visible && permissionSessionReady && hasRequiredPermissions}
       animationType="fade"
       presentationStyle="fullScreen"
       statusBarTranslucent={Platform.OS === "android"}
@@ -407,7 +550,7 @@ export default function MessageVideoRecorderModal({
       <View style={styles.root}>
         <StatusBar barStyle="light-content" backgroundColor="#000000" />
 
-        {permissionsLoaded && hasRequiredPermissions ? (
+        {hasRequiredPermissions ? (
           <CameraView
             key={facing}
             ref={cameraRef}
@@ -426,51 +569,7 @@ export default function MessageVideoRecorderModal({
         ) : null}
 
         <SafeAreaView style={styles.safeArea}>
-          {!permissionsLoaded ? (
-            <View style={styles.permissionScreen}>
-              <ActivityIndicator size="large" color="#FFFFFF" />
-              <Text style={styles.permissionTitle}>Preparing camera…</Text>
-              <Pressable
-                onPress={handleCancel}
-                style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
-              >
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
-              </Pressable>
-            </View>
-          ) : !hasRequiredPermissions ? (
-            <View style={styles.permissionScreen}>
-              <View style={styles.permissionIcon}>
-                <Ionicons name="videocam-outline" size={38} color="#FFFFFF" />
-              </View>
-              <Text style={styles.permissionTitle}>Camera access required</Text>
-              <Text style={styles.permissionCopy}>
-                Allow camera and microphone access to record a video for this message.
-              </Text>
-              <Pressable
-                onPress={permissionsBlocked ? openSettings : requestRequiredPermissions}
-                disabled={requestingPermission}
-                style={({ pressed }) => [
-                  styles.permissionButton,
-                  pressed && styles.pressed,
-                  requestingPermission && styles.disabled,
-                ]}
-              >
-                {requestingPermission ? (
-                  <ActivityIndicator color="#071B2E" />
-                ) : (
-                  <Text style={styles.permissionButtonText}>
-                    {permissionsBlocked ? "Open Settings" : "Allow Access"}
-                  </Text>
-                )}
-              </Pressable>
-              <Pressable
-                onPress={handleCancel}
-                style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
-              >
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
-              </Pressable>
-            </View>
-          ) : (
+          {permissionSessionReady && hasRequiredPermissions ? (
             <View style={styles.cameraOverlay}>
               <View style={styles.topBar}>
                 <Pressable
@@ -550,7 +649,7 @@ export default function MessageVideoRecorderModal({
                 </Pressable>
               </View>
             </View>
-          )}
+          ) : null}
         </SafeAreaView>
       </View>
     </Modal>
@@ -669,67 +768,6 @@ const styles = StyleSheet.create({
     height: 30,
     borderRadius: 6,
     backgroundColor: "#EF4444",
-  },
-  permissionScreen: {
-    flex: 1,
-    paddingHorizontal: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#071B2E",
-  },
-  permissionIcon: {
-    width: 76,
-    height: 76,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-    backgroundColor: "rgba(255,255,255,0.1)",
-  },
-  permissionTitle: {
-    marginTop: 16,
-    color: "#FFFFFF",
-    fontSize: 21,
-    lineHeight: 27,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  permissionCopy: {
-    maxWidth: 380,
-    marginTop: 10,
-    color: "#B8C8D8",
-    fontSize: 14,
-    lineHeight: 21,
-    fontWeight: "500",
-    textAlign: "center",
-  },
-  permissionButton: {
-    minWidth: 176,
-    minHeight: 48,
-    marginTop: 24,
-    paddingHorizontal: 22,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFFFFF",
-  },
-  permissionButtonText: {
-    color: "#071B2E",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  secondaryButton: {
-    minHeight: 44,
-    marginTop: 12,
-    paddingHorizontal: 22,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  secondaryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "800",
   },
   pressed: {
     opacity: 0.76,
