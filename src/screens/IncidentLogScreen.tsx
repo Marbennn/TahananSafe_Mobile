@@ -1016,13 +1016,48 @@ export default function IncidentLogScreen({
     });
   };
 
+  const validateIncidentForm = () => {
+    if (!safeTrim(details)) {
+      Alert.alert("Incomplete", "Please fill in the required fields.");
+      return false;
+    }
+
+    if (!includeWitness) return true;
+
+    if (!safeTrim(witnessName)) {
+      Alert.alert(
+        "Witness name required",
+        "Enter the witness name before reviewing the report."
+      );
+      return false;
+    }
+
+    if (!witnessType) {
+      Alert.alert(
+        "Relationship required",
+        "Select the witness's relationship before reviewing the report."
+      );
+      return false;
+    }
+
+    if (witnessType === "Other" && !safeTrim(witnessOtherType)) {
+      Alert.alert(
+        "Relationship required",
+        "Please specify the witness's relationship before reviewing the report."
+      );
+      return false;
+    }
+
+    return true;
+  };
+
   /** ✅ UPDATED: preview uses AI incident type */
   const buildPreviewData = (): IncidentPreviewData =>
     ({
       incidentType: getDisplayIncidentType(),
       details,
       offenderName,
-      witnessName: includeWitness ? witnessName : "",
+      witnessName: includeWitness ? safeTrim(witnessName) : "",
       witnessType: includeWitness ? resolvedWitnessType : "",
       dateStr,
       timeStr,
@@ -1081,7 +1116,7 @@ export default function IncidentLogScreen({
       incidentType: incidentTypeToSend,
       details,
       offenderName,
-      witnessName: includeWitness ? witnessName : "",
+      witnessName: includeWitness ? safeTrim(witnessName) : "",
       witnessType: includeWitness ? resolvedWitnessType : "",
       dateStr,
       timeStr,
@@ -1140,10 +1175,7 @@ export default function IncidentLogScreen({
       return;
     }
 
-    if (!details.trim()) {
-      Alert.alert("Incomplete", "Please fill in the required fields.");
-      return;
-    }
+    if (!validateIncidentForm()) return;
 
     if (onProceedConfirm) {
       onProceedConfirm(buildPreviewData());
@@ -1177,6 +1209,11 @@ export default function IncidentLogScreen({
 
   const onConfirmComplaint = async () => {
     if (submitting || aiLoading) return;
+
+    if (!validateIncidentForm()) {
+      closePreview();
+      return null as any;
+    }
 
     const blocked = await blockIfCoolingDown("submit a report");
     if (blocked) return null as any;
@@ -1486,7 +1523,7 @@ export default function IncidentLogScreen({
                     editable={!submitting && !aiLoading}
                     value={witnessName}
                     onChangeText={setWitnessName}
-                    placeholder="Witness name"
+                    placeholder="Witness name *"
                     placeholderTextColor="#A9A9A9"
                     style={styles.textInput}
                   />
@@ -1519,7 +1556,7 @@ export default function IncidentLogScreen({
                     ]}
                     numberOfLines={1}
                   >
-                    {witnessType || "Select relationship"}
+                    {witnessType || "Select relationship *"}
                   </Text>
                   <Ionicons
                     name={witnessRelationshipOpen ? "chevron-up" : "chevron-down"}
@@ -1573,7 +1610,7 @@ export default function IncidentLogScreen({
                       editable={!submitting && !aiLoading}
                       value={witnessOtherType}
                       onChangeText={setWitnessOtherType}
-                      placeholder="Please specify"
+                      placeholder="Please specify *"
                       placeholderTextColor="#A9A9A9"
                       style={styles.textInput}
                       autoCapitalize="words"

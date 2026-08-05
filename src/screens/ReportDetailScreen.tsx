@@ -212,6 +212,20 @@ function isObjectId24(v: string) {
   return /^[a-fA-F0-9]{24}$/.test(String(v || "").trim());
 }
 
+function cleanReportFieldValue(value: unknown) {
+  const cleaned = String(value ?? "").trim();
+  if (!cleaned || /^[\u002D\u2013\u2014]+$/.test(cleaned)) return "";
+  return cleaned;
+}
+
+function firstReportFieldValue(values: unknown[]) {
+  for (const value of values) {
+    const cleaned = cleanReportFieldValue(value);
+    if (cleaned) return cleaned;
+  }
+  return "";
+}
+
 export default function ReportDetailScreen({
   report,
   initialTab = "Reports",
@@ -445,27 +459,37 @@ export default function ReportDetailScreen({
     "Incident";
 
   const incidentNarrative =
-    detail?.details ||
-    (detail as any)?.narrative ||
-    (report as any)?.details ||
-    report.detail ||
-    "No details provided.";
+    firstReportFieldValue([
+      detail?.details,
+      (detail as any)?.narrative,
+      (report as any)?.details,
+      report.detail,
+    ]) || "None";
 
-  const complaintName =
-    detail?.offenderName ||
-    (detail as any)?.complaint ||
-    (report as any)?.offenderName ||
-    (report as any)?.complaint ||
-    "-";
+  const complaintValue = firstReportFieldValue([
+    detail?.offenderName,
+    (detail as any)?.complaint,
+    (report as any)?.offenderName,
+    (report as any)?.complaint,
+  ]);
+  const complaintName = complaintValue || "None";
 
-  const witnessName = String(
-    detail?.witnessName || (report as any)?.witnessName || ""
-  ).trim();
-  const witnessRole = String(
-    detail?.witnessType || (report as any)?.witnessRole || (report as any)?.witnessType || ""
-  ).trim();
+  const witnessName = firstReportFieldValue([
+    detail?.witnessName,
+    (report as any)?.witnessName,
+  ]);
+  const witnessRole = firstReportFieldValue([
+    detail?.witnessType,
+    (report as any)?.witnessRole,
+    (report as any)?.witnessType,
+  ]);
 
-  const locationLabel = detail?.locationStr || (report as any)?.locationStr || (report as any)?.location || "—";
+  const locationValue = firstReportFieldValue([
+    detail?.locationStr,
+    (report as any)?.locationStr,
+    (report as any)?.location,
+  ]);
+  const locationLabel = locationValue || "Not shared";
   const locationLatitude = Number(detail?.latitude ?? (report as any)?.latitude);
   const locationLongitude = Number(detail?.longitude ?? (report as any)?.longitude);
   const hasLocationCoords =
@@ -493,8 +517,18 @@ export default function ReportDetailScreen({
   const accent = useMemo(() => statusColor(statusUpper, PRIMARY), [statusUpper, PRIMARY]);
   const sIcon = useMemo(() => statusIconName(statusUpper), [statusUpper]);
 
-  const dateLabel = detail?.dateStr || (report as any)?.dateStr || report.dateLeft || "—";
-  const timeLabel = detail?.timeStr || (report as any)?.timeStr || report.timeLeft || "—";
+  const dateValue = firstReportFieldValue([
+    detail?.dateStr,
+    (report as any)?.dateStr,
+    report.dateLeft,
+  ]);
+  const timeValue = firstReportFieldValue([
+    detail?.timeStr,
+    (report as any)?.timeStr,
+    report.timeLeft,
+  ]);
+  const dateLabel = dateValue || "None";
+  const timeLabel = timeValue || "None";
 
   const photosRaw = ((detail?.photos ?? (report as any)?.photos) || []) as any[];
   const videosRaw = ((detail?.videos ?? (report as any)?.videos) || []) as any[];
@@ -538,14 +572,14 @@ export default function ReportDetailScreen({
       incidentDate: dateLabel,
       incidentTime: timeLabel,
       location: locationLabel,
-      reportedPerson: complaintName,
+      reportedPerson: complaintValue,
       witnessName,
       witnessType: witnessRole,
       evidenceCount,
     }),
     [
       accent,
-      complaintName,
+      complaintValue,
       dateLabel,
       evidenceCount,
       incidentNarrative,
@@ -563,7 +597,7 @@ export default function ReportDetailScreen({
   const timelineEntries = useMemo(() => {
     const submittedAt =
       formatTimelineStamp(detail?.createdAt || (report as any)?.createdAt) ||
-      [dateLabel, timeLabel].filter((v) => v && v !== "—" && v !== "â€”").join(" • ");
+      [dateValue, timeValue].filter(Boolean).join(" • ");
     const updatedAt = formatTimelineStamp(detail?.updatedAt || (report as any)?.updatedAt);
 
     return [
@@ -578,11 +612,11 @@ export default function ReportDetailScreen({
         body: "Current case status based on the latest report update.",
       },
     ];
-  }, [dateLabel, detail?.createdAt, detail?.updatedAt, report, statusLabel, timeLabel]);
+  }, [dateValue, detail?.createdAt, detail?.updatedAt, report, statusLabel, timeValue]);
 
   const submittedTimelineMeta =
     formatTimelineStamp(detail?.createdAt || (report as any)?.createdAt) ||
-    [dateLabel, timeLabel].filter((v) => v && v !== "—" && v !== "â€”").join(" • ") ||
+    [dateValue, timeValue].filter(Boolean).join(" • ") ||
     "Pending";
   const latestTimelineMeta =
     formatTimelineStamp(detail?.updatedAt || (report as any)?.updatedAt) || submittedTimelineMeta;
