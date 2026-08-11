@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "../../theme/colors";
+import { Typography } from "../../theme/typography";
 
 export type TutorialStep = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -237,9 +238,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerTitle: {
+    ...Typography.sectionTitle,
     flex: 1,
-    fontSize: 16,
-    fontWeight: "800",
     color: "#1A3C6E",
   },
   stepsList: {
@@ -270,26 +270,21 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   stepLabel: {
-    fontSize: 11,
-    fontWeight: "700",
+    ...Typography.overline,
     color: "#999",
     textTransform: "uppercase",
-    letterSpacing: 1,
     marginBottom: 6,
   },
   cardTitle: {
-    fontSize: 18,
-    fontWeight: "800",
+    ...Typography.modalTitle,
     color: "#1A3C6E",
     textAlign: "center",
     marginBottom: 10,
   },
   cardDesc: {
-    fontSize: 14,
-    fontWeight: "500",
+    ...Typography.body,
     color: "#555",
     textAlign: "center",
-    lineHeight: 21,
   },
   dotsRow: {
     flexDirection: "row",
@@ -330,8 +325,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   navBtnSecondaryText: {
-    fontSize: 14,
-    fontWeight: "700",
+    ...Typography.button,
     color: "#1A3C6E",
   },
   navBtnPrimary: {
@@ -344,8 +338,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   navBtnPrimaryText: {
-    fontSize: 14,
-    fontWeight: "700",
+    ...Typography.button,
     color: "#FFF",
   },
 });

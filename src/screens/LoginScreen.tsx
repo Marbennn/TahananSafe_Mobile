@@ -26,6 +26,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NavigationProp, ParamListBase } from "@react-navigation/native";
 
 import { useColors } from "../theme/colors";
+import { createTypography } from "../theme/typography";
 import LoginCard from "../components/LoginScreen/LoginCard";
 
 // ✅ Login OTP modal
@@ -1041,6 +1042,7 @@ function createStyles(
   scale: (n: number) => number,
   vscale: (n: number) => number
 ) {
+  const typography = createTypography(scale);
   return StyleSheet.create({
     flex: { flex: 1 },
     safe: { flex: 1, backgroundColor: "#FFFFFF" },
@@ -1082,10 +1084,9 @@ function createStyles(
     },
 
     termsText: {
-      fontSize: scale(11),
+      ...typography.micro,
       color: "#6B7280",
       textAlign: "center",
-      lineHeight: scale(14),
     },
 
     termsRow: {
@@ -1097,11 +1098,9 @@ function createStyles(
     },
 
     termsLink: {
-      fontSize: scale(11),
+      ...typography.microStrong,
       color: "#1D4ED8",
-      fontWeight: "700",
       textDecorationLine: "underline",
-      lineHeight: scale(14),
     },
   });
 }

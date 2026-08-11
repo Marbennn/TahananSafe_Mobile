@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { IncidentPreviewData } from "../components/IncidentLogConfirmationScreen/IncidentPreviewCard";
 import ConfirmedCheckSvg from "../../assets/ConfirmedCheck.svg";
 import { PRIMARY_ACTION_COLOR } from "../theme/colors";
+import { FontWeight, Typography } from "../theme/typography";
 
 type Props = {
   alertNo: string;
@@ -322,17 +323,13 @@ const styles = StyleSheet.create({
     marginBottom: 22,
   },
   title: {
-    fontSize: 18,
-    lineHeight: 19,
-    fontWeight: "900",
+    ...Typography.modalTitle,
     color: TEXT_DARK,
     textAlign: "center",
   },
   subtitle: {
+    ...Typography.caption,
     marginTop: 8,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: "500",
     color: TEXT_MUTED,
     textAlign: "center",
   },
@@ -362,8 +359,7 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   refText: {
-    fontSize: 11,
-    fontWeight: "800",
+    ...Typography.overline,
     color: "#515B67",
     marginBottom: 7,
   },
@@ -373,10 +369,8 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   summaryDetail: {
+    ...Typography.body,
     flex: 1,
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: "500",
     color: "#001F3F",
   },
   viewDetailsBtn: {
@@ -392,9 +386,7 @@ const styles = StyleSheet.create({
     minHeight: 40,
   },
   viewDetailsText: {
-    fontSize: 14,
-    lineHeight: 17,
-    fontWeight: "800",
+    ...Typography.button,
     color: "#000000",
     textAlign: "center",
   },
@@ -405,8 +397,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   nextTitle: {
-    fontSize: 14,
-    fontWeight: "900",
+    ...Typography.cardTitle,
     color: "#515151",
   },
   timeline: {
@@ -445,21 +436,17 @@ const styles = StyleSheet.create({
     marginTop: 7,
   },
   timelineText: {
+    ...Typography.bodyStrong,
     flex: 1,
-    fontSize: 14,
-    lineHeight: 22,
-    fontWeight: "700",
     color: "#444444",
   },
   timelineTextMuted: {
+    ...Typography.body,
     flex: 1,
-    fontSize: 14,
-    lineHeight: 22,
-    fontWeight: "600",
     color: "#777777",
   },
   bold: {
-    fontWeight: "900",
+    fontWeight: FontWeight.semibold,
     color: "#333333",
   },
   actions: {
@@ -474,8 +461,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   aiBtnText: {
-    fontSize: 16,
-    fontWeight: "500",
+    ...Typography.button,
     color: "#FFFFFF",
   },
   homeBtn: {
@@ -488,8 +474,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   homeBtnText: {
-    fontSize: 16,
-    fontWeight: "500",
+    ...Typography.button,
     color: NAVY,
   },
   analysisHeader: {
@@ -510,14 +495,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   analysisTitle: {
+    ...Typography.numeric,
     flex: 1,
     textAlign: "center",
-    fontSize: 20,
-    fontWeight: "800",
     color: TEXT_DARK,
   },
   analysisTitleCompact: {
-    fontSize: 18,
+    ...Typography.modalTitle,
   },
   analysisHeaderSpacer: {
     width: 38,
@@ -538,9 +522,7 @@ const styles = StyleSheet.create({
     paddingVertical: 19,
   },
   analysisIntroText: {
-    fontSize: 14,
-    lineHeight: 22,
-    fontWeight: "500",
+    ...Typography.body,
     color: TEXT_DARK,
   },
   insightsCard: {
@@ -561,8 +543,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   insightsTitle: {
-    fontSize: 17,
-    fontWeight: "800",
+    ...Typography.sectionTitle,
     color: TEXT_DARK,
   },
   insightsBody: {
@@ -571,9 +552,8 @@ const styles = StyleSheet.create({
     paddingBottom: 9,
   },
   analysisLabel: {
+    ...Typography.captionStrong,
     marginBottom: 8,
-    fontSize: 12,
-    fontWeight: "800",
     color: "#7A7A7A",
   },
   categoryRow: {
@@ -593,15 +573,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   categoryText: {
-    fontSize: 12,
-    fontWeight: "900",
+    ...Typography.captionStrong,
     color: TEXT_DARK,
   },
   analysisSummary: {
+    ...Typography.sectionTitle,
     marginBottom: 18,
-    fontSize: 16,
-    lineHeight: 23,
-    fontWeight: "800",
     color: TEXT_DARK,
   },
   bulletRow: {
@@ -611,24 +588,19 @@ const styles = StyleSheet.create({
     marginBottom: 7,
   },
   bullet: {
-    fontSize: 18,
-    lineHeight: 20,
-    fontWeight: "900",
+    ...Typography.modalTitle,
     color: "#111111",
   },
   bulletText: {
+    ...Typography.bodyLarge,
     flex: 1,
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: "800",
     color: "#545454",
   },
   frameworkTitle: {
+    ...Typography.sectionTitle,
     marginTop: 12,
     marginLeft: 7,
     marginBottom: 3,
-    fontSize: 16,
-    fontWeight: "900",
     color: TEXT_DARK,
   },
   frameworkCard: {
@@ -655,22 +627,17 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   frameworkLaw: {
-    fontSize: 14,
-    fontWeight: "900",
+    ...Typography.cardTitle,
     color: "#111111",
   },
   frameworkName: {
+    ...Typography.bodyLarge,
     marginTop: 9,
-    fontSize: 16,
-    lineHeight: 21,
-    fontWeight: "500",
     color: "#111111",
   },
   frameworkDescription: {
+    ...Typography.captionStrong,
     marginTop: 10,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: "700",
     color: TEXT_DARK,
   },
   analysisHomeBtn: {
@@ -682,8 +649,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   analysisHomeText: {
-    fontSize: 16,
-    fontWeight: "500",
+    ...Typography.button,
     color: "#FFFFFF",
   },
   secureFooter: {
@@ -696,17 +662,14 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   secureText: {
-    fontSize: 11,
-    fontWeight: "500",
+    ...Typography.micro,
     color: "#7A7A7A",
   },
   analysisDisclaimer: {
+    ...Typography.micro,
     marginTop: 10,
     textAlign: "center",
-    fontSize: 8,
-    lineHeight: 10,
     fontStyle: "italic",
-    fontWeight: "500",
     color: "#8A8A8A",
   },
 });

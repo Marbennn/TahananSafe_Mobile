@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useColors } from "../theme/colors";
+import { createTypography } from "../theme/typography";
 import SavedModal from "../components/SavedModal";
 
 import {
@@ -314,6 +315,7 @@ function createStyles(
   width: number,
   height: number
 ) {
+  const typography = createTypography(scale);
   const contentWidth = Math.min(width, 480);
   const hPad = scale(24);
   const keyGap = clamp(scale(16), 10, 18);
@@ -370,17 +372,15 @@ function createStyles(
     },
 
     screenTitle: {
-      fontSize: scale(24),
-      fontWeight: "800",
+      ...typography.flowTitle,
       color: "#111827",
       marginBottom: vscale(8),
       textAlign: "center",
     },
 
     screenSub: {
+      ...typography.bodySmall,
       maxWidth: scale(320),
-      fontSize: scale(13),
-      lineHeight: scale(20),
       color: "#6B7280",
       textAlign: "center",
       marginBottom: vscale(24),
@@ -443,8 +443,7 @@ function createStyles(
     },
 
     keyText: {
-      fontSize: scale(20),
-      fontWeight: "700",
+      ...typography.numeric,
       color: "#07519C",
     },
 
@@ -491,9 +490,8 @@ function createStyles(
     },
 
     ctaText: {
+      ...typography.button,
       color: "#FFFFFF",
-      fontSize: scale(14),
-      fontWeight: "800",
     },
 
     skipWrap: {
@@ -502,8 +500,7 @@ function createStyles(
     },
 
     skipText: {
-      fontSize: scale(13),
-      fontWeight: "600",
+      ...typography.bodySmall,
       color: "#6B7280",
     },
   });

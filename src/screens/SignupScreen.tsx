@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import { Colors, useColors } from "../theme/colors";
+import { createTypography } from "../theme/typography";
 
 // ✅ popups
 import EnterVerificationModal from "../components/SignupScreen/EnterVerificationModal";
@@ -287,6 +288,7 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
 }
 
 function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+  const typography = createTypography(scale);
   return StyleSheet.create({
     flex: { flex: 1 },
     safe: { flex: 1, backgroundColor: "#FFFFFF" },
@@ -308,15 +310,13 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     titleBlock: { marginTop: vscale(18), marginBottom: vscale(22) },
 
     screenTitle: {
-      fontSize: scale(26),
-      fontWeight: "800",
+      ...typography.authTitle,
       color: Colors.text,
     },
 
     screenSub: {
+      ...typography.bodySmall,
       marginTop: vscale(8),
-      fontSize: scale(13),
-      lineHeight: scale(18),
       color: Colors.muted,
       maxWidth: scale(360),
     },
@@ -325,22 +325,21 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     fieldBlock: { marginBottom: vscale(14) },
 
     label: {
+      ...typography.label,
       marginBottom: vscale(8),
-      fontSize: scale(13),
-      fontWeight: "700",
       color: Colors.text,
     },
 
     inputWrap: { position: "relative" },
 
     input: {
+      ...typography.input,
       minHeight: Math.max(44, vscale(50)),
       borderRadius: scale(14),
       paddingHorizontal: scale(14),
       borderWidth: 1,
       borderColor: Colors.border,
       backgroundColor: "#FFFFFF",
-      fontSize: scale(14),
       color: Colors.text,
     },
 
@@ -355,10 +354,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     errorText: {
+      ...typography.microStrong,
       marginTop: vscale(2),
-      fontSize: scale(11),
       color: "#DC2626",
-      fontWeight: "700",
     },
 
     ctaOuter: {
@@ -383,7 +381,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       justifyContent: "center",
     },
 
-    ctaText: { color: "#FFFFFF", fontSize: scale(14), fontWeight: "800" },
+    ctaText: { ...typography.button, color: "#FFFFFF" },
 
     footer: {
       flexDirection: "row",
@@ -392,9 +390,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       marginTop: vscale(18),
     },
 
-    footerText: { fontSize: scale(12), color: Colors.muted },
+    footerText: { ...typography.caption, color: Colors.muted },
 
-    footerLink: { fontSize: scale(12), fontWeight: "800", color: Colors.link },
+    footerLink: { ...typography.captionStrong, color: Colors.link },
 
     termsWrap: {
       marginTop: "auto",
@@ -404,10 +402,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     termsText: {
-      fontSize: scale(11),
+      ...typography.micro,
       color: "#6B7280",
       textAlign: "center",
-      lineHeight: scale(14),
     },
 
     termsRow: {
@@ -419,11 +416,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     termsLink: {
-      fontSize: scale(11),
+      ...typography.microStrong,
       color: Colors.link,
-      fontWeight: "700",
       textDecorationLine: "underline",
-      lineHeight: scale(14),
     },
   });
 }

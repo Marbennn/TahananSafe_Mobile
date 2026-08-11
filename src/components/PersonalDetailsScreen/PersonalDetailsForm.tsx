@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 
 type GenderOption = { id: "male" | "female"; label: string };
 
@@ -109,6 +110,7 @@ export default function PersonalDetailsForm({
   setGender,
 }: Props) {
   const TC = useColors();
+  const typography = createTypography(scale);
   const genderOptions: GenderOption[] = useMemo(
     () => [
       { id: "male", label: "Male" },
@@ -307,7 +309,7 @@ export default function PersonalDetailsForm({
           >
             <Text
               style={{
-                fontSize: scale(14),
+                ...typography.input,
                 color: dob?.trim()?.length ? Colors.text : Colors.placeholder,
               }}
               numberOfLines={1}
@@ -377,9 +379,8 @@ export default function PersonalDetailsForm({
           >
             <Text
               style={{
-                fontSize: scale(14),
+                ...typography.label,
                 color: Colors.text,
-                fontWeight: "700",
                 marginRight: scale(10),
               }}
             >
@@ -394,8 +395,8 @@ export default function PersonalDetailsForm({
               placeholderTextColor={Colors.placeholder}
               keyboardType="number-pad"
               style={{
+                ...typography.input,
                 flex: 1,
-                fontSize: scale(14),
                 color: Colors.text,
                 paddingVertical: 0,
               }}

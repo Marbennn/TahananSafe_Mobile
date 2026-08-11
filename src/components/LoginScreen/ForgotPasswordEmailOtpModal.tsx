@@ -15,6 +15,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 
 type Props = {
   visible: boolean;
@@ -397,6 +398,7 @@ export default function ForgotPasswordEmailOtpModal({
 }
 
 function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+  const typography = createTypography(scale);
   const cardW = clamp(scale(332), 292, 396);
   const inputH = clamp(vscale(46), 42, 54);
 
@@ -447,26 +449,24 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       borderRadius: 999,
     },
     title: {
+      ...typography.sectionTitle,
       textAlign: "center",
-      fontSize: clamp(scale(14), 13, 16),
-      fontWeight: "900",
       color: "#111827",
       marginBottom: vscale(6),
     },
     subtitle: {
+      ...typography.caption,
       textAlign: "center",
-      fontSize: clamp(scale(10.5), 10, 12),
-      lineHeight: clamp(scale(14), 13, 16),
       color: "#6B7280",
       marginBottom: vscale(12),
     },
     label: {
-      fontSize: clamp(scale(11), 10, 12),
-      fontWeight: "800",
+      ...typography.label,
       color: "#111827",
       marginBottom: vscale(8),
     },
     input: {
+      ...typography.input,
       width: "100%",
       height: inputH,
       borderRadius: clamp(scale(12), 10, 14),
@@ -474,7 +474,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       borderWidth: 1.2,
       borderColor: "#93C5FD",
       backgroundColor: "#FFFFFF",
-      fontSize: clamp(scale(13), 12, 14),
       color: "#111827",
     },
     otpBlock: {
@@ -496,14 +495,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       flexShrink: 1,
     },
     smallText: {
-      fontSize: clamp(scale(9.5), 9, 11),
+      ...typography.micro,
       color: "#6B7280",
-      fontWeight: "700",
     },
     resendText: {
-      fontSize: clamp(scale(9.5), 9, 11),
+      ...typography.microStrong,
       color: "#1D4ED8",
-      fontWeight: "900",
       textDecorationLine: "underline",
     },
     otpRow: {
@@ -514,6 +511,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       gap: otpGap,
     },
     otpBox: {
+      ...typography.numeric,
       flex: 1,
       height: otpSize,
       minWidth: 0,
@@ -521,8 +519,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       borderWidth: 1.2,
       borderColor: "#93C5FD",
       textAlign: "center",
-      fontSize: clamp(scale(18), 16, 22),
-      fontWeight: "900",
       color: "#111827",
       backgroundColor: "#FFFFFF",
       paddingTop: 0,
@@ -550,17 +546,15 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       borderRadius: clamp(scale(14), 12, 16),
     },
     btnText: {
+      ...typography.button,
       color: "#FFFFFF",
-      fontSize: clamp(scale(12), 11, 13),
-      fontWeight: "900",
     },
     backLink: {
       marginTop: vscale(10),
       alignItems: "center",
     },
     backText: {
-      fontSize: clamp(scale(11), 10, 12),
-      fontWeight: "900",
+      ...typography.captionStrong,
       color: "#1D4ED8",
     },
   });

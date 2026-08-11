@@ -22,6 +22,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { useAuth } from "../auth/AuthContext";
 import { useColors } from "../theme/colors";
+import { createTypography } from "../theme/typography";
 
 type Hotline = {
   id?: string;
@@ -800,6 +801,7 @@ function makeStyles(
   dims: { SEARCH_H: number; contentWidth: number; compactHeight: boolean; modalMaxHeight: number }
 ) {
   const { SEARCH_H, contentWidth, compactHeight, modalMaxHeight } = dims;
+  const type = createTypography(scale, vscale);
   const filterOptionsMaxHeight = Math.max(96, Math.min(vscale(280), modalMaxHeight - vscale(150)));
 
   return StyleSheet.create({
@@ -815,11 +817,9 @@ function makeStyles(
       paddingBottom: vscale(compactHeight ? 7 : 10),
     },
     title: {
+      ...type.screenTitle,
       marginBottom: vscale(compactHeight ? 12 : 16),
-      fontSize: scale(28),
-      fontWeight: "700",
       color: TEXT,
-      letterSpacing: -0.2,
     },
     // ✅ unbold regular text
     searchRow: {
@@ -871,10 +871,9 @@ function makeStyles(
     },
     // ✅ unbold regular text
     searchInput: {
+      ...type.input,
       flex: 1,
       minWidth: 0,
-      fontSize: scale(14),
-      fontWeight: "400",
       color: TEXT,
       paddingVertical: 0,
     },
@@ -899,10 +898,8 @@ function makeStyles(
     },
     // ✅ unbold regular text
     sectionTitle: {
-      fontSize: scale(11.5),
-      fontWeight: "500",
+      ...type.captionStrong,
       color: "#FFFFFF",
-      letterSpacing: 0.1,
     },
 
     card: {
@@ -927,19 +924,14 @@ function makeStyles(
     },
     // ✅ unbold regular text (number is not a label)
     cardNumber: {
-      fontSize: scale(17),
-      fontWeight: "800",
+      ...type.bodyLarge,
       color: TEXT,
-      lineHeight: compactScale(21),
-      letterSpacing: 0.2,
     },
     // ✅ KEEP labels bold
     cardLabel: {
+      ...type.caption,
       marginTop: vscale(3),
-      fontSize: scale(11.5),
-      fontWeight: "400",
       color: MUTED,
-      lineHeight: compactScale(15),
     },
 
     callButton: {
@@ -1002,9 +994,8 @@ function makeStyles(
       marginBottom: vscale(16),
     },
     modalTitle: {
+      ...type.modalTitle,
       flex: 1,
-      fontSize: scale(19),
-      fontWeight: "900",
     },
     modalTitleWrap: {
       flex: 1,
@@ -1012,9 +1003,8 @@ function makeStyles(
       paddingRight: scale(12),
     },
     modalSubtitle: {
+      ...type.caption,
       marginTop: vscale(3),
-      fontSize: scale(12),
-      fontWeight: "400",
     },
     filterOptionsScroll: {
       maxHeight: filterOptionsMaxHeight,
@@ -1032,10 +1022,9 @@ function makeStyles(
       gap: scale(10),
     },
     filterOptionText: {
+      ...type.label,
       flex: 1,
       minWidth: 0,
-      fontSize: scale(13),
-      fontWeight: "700",
     },
     addContactOption: {
       minHeight: compactScale(44),
@@ -1048,22 +1037,20 @@ function makeStyles(
       gap: scale(7),
     },
     addContactOptionText: {
+      ...type.label,
       color: "#FFFFFF",
-      fontSize: scale(13),
-      fontWeight: "800",
     },
     inputLabel: {
+      ...type.captionStrong,
       marginBottom: vscale(6),
-      fontSize: scale(12),
-      fontWeight: "700",
     },
     modalInput: {
+      ...type.input,
       height: vscale(46),
       borderWidth: 1,
       borderRadius: scale(12),
       paddingHorizontal: scale(13),
       marginBottom: vscale(14),
-      fontSize: scale(15),
     },
     saveButton: {
       height: vscale(46),
@@ -1073,9 +1060,8 @@ function makeStyles(
       marginTop: vscale(2),
     },
     saveButtonText: {
+      ...type.button,
       color: "#FFFFFF",
-      fontSize: scale(14),
-      fontWeight: "900",
     },
 
     emptyWrap: {
@@ -1090,19 +1076,16 @@ function makeStyles(
     },
     // ✅ unbold regular text
     emptyTitle: {
+      ...type.sectionTitle,
       marginTop: vscale(10),
-      fontSize: scale(16),
-      fontWeight: "400",
       color: TEXT,
     },
     // ✅ unbold regular text
     emptyText: {
+      ...type.bodySmall,
       marginTop: vscale(6),
-      fontSize: scale(13),
-      fontWeight: "400",
       color: MUTED,
       textAlign: "center",
-      lineHeight: scale(18),
     },
   });
 }

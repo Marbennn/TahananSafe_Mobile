@@ -19,6 +19,7 @@ import * as SecureStore from "expo-secure-store";
 
 import AdminBotNav, { TabKey } from "../../components/AdminComponents/AdminBotNav";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 import { useAuth } from "../../auth/AuthContext";
 import LogoutModal from "../../components/LogoutModal";
 
@@ -551,6 +552,7 @@ function makeStyles(
   height: number
 ) {
   const CARD_R = scale(18);
+  const type = createTypography(scale, vscale);
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: BG },
@@ -564,8 +566,8 @@ function makeStyles(
       paddingTop: vscale(6),
       paddingBottom: vscale(8),
     },
-    title: { fontSize: scale(28), fontWeight: "900", color: TEXT },
-    subtitle: { marginTop: vscale(4), fontSize: scale(12), fontWeight: "500", color: "#6B7280", lineHeight: scale(16) },
+    title: { ...type.screenTitle, color: TEXT },
+    subtitle: { ...type.caption, marginTop: vscale(4), color: "#6B7280" },
 
     content: {
       width: "100%",
@@ -592,15 +594,15 @@ function makeStyles(
       width: scale(48), height: scale(48), borderRadius: scale(24),
       backgroundColor: Colors.primary, alignItems: "center", justifyContent: "center",
     },
-    avatarText: { fontSize: scale(18), fontWeight: "800", color: "#FFFFFF" },
-    profileName: { fontSize: scale(15), fontWeight: "800", color: TEXT },
-    profileEmail: { marginTop: vscale(2), fontSize: scale(12), fontWeight: "400", color: "#6B7280" },
+    avatarText: { ...type.modalTitle, color: "#FFFFFF" },
+    profileName: { ...type.cardTitle, color: TEXT },
+    profileEmail: { ...type.caption, marginTop: vscale(2), color: "#6B7280" },
     rolePill: {
       flexDirection: "row", alignItems: "center", alignSelf: "flex-start",
       backgroundColor: CHIP_BG, borderRadius: scale(999),
       paddingHorizontal: scale(8), paddingVertical: vscale(3), marginTop: vscale(4),
     },
-    roleText: { fontSize: scale(11), fontWeight: "700", color: Colors.primary },
+    roleText: { ...type.microStrong, color: Colors.primary },
 
     // Main list card
     oneCard: {
@@ -622,8 +624,8 @@ function makeStyles(
       width: vscale(40), height: vscale(40), borderRadius: vscale(14),
       alignItems: "center", justifyContent: "center",
     },
-    settingTitle: { fontSize: scale(14), fontWeight: "600", color: TEXT },
-    settingSub: { marginTop: vscale(2), fontSize: scale(11), fontWeight: "400", color: "#6B7280", lineHeight: scale(15) },
+    settingTitle: { ...type.bodyStrong, color: TEXT },
+    settingSub: { ...type.micro, marginTop: vscale(2), color: "#6B7280" },
 
     // Modal overlay + sheets
     overlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.35)", justifyContent: "flex-end" },
@@ -649,7 +651,7 @@ function makeStyles(
       paddingHorizontal: scale(14), paddingVertical: vscale(12),
       flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: scale(10),
     },
-    sheetTitle: { fontSize: scale(16), fontWeight: "900" },
+    sheetTitle: { ...type.sectionTitle },
     closeBtn: {
       width: vscale(36), height: vscale(36), borderRadius: vscale(18),
       alignItems: "center", justifyContent: "center",
@@ -666,13 +668,13 @@ function makeStyles(
       width: vscale(40), height: vscale(40), borderRadius: vscale(20),
       alignItems: "center", justifyContent: "center",
     },
-    currentTitle: { fontSize: scale(12), fontWeight: "900" },
-    currentSub: { marginTop: vscale(2), fontSize: scale(12), fontWeight: "500" },
+    currentTitle: { ...type.captionStrong },
+    currentSub: { ...type.caption, marginTop: vscale(2) },
     currentPill: {
       paddingHorizontal: scale(10), paddingVertical: vscale(6),
       borderRadius: vscale(14), flexDirection: "row", alignItems: "center", gap: scale(6),
     },
-    currentPillText: { fontSize: scale(12), fontWeight: "900" },
+    currentPillText: { ...type.captionStrong },
 
     sheetContent: { paddingHorizontal: scale(14), paddingBottom: vscale(16), gap: vscale(10) },
 
@@ -689,15 +691,15 @@ function makeStyles(
       width: vscale(40), height: vscale(40), borderRadius: vscale(14),
       alignItems: "center", justifyContent: "center",
     },
-    modalItemTitle: { fontSize: scale(14), fontWeight: "600" },
-    modalItemSub: { marginTop: vscale(2), fontSize: scale(11), fontWeight: "400", lineHeight: scale(15) },
+    modalItemTitle: { ...type.bodyStrong },
+    modalItemSub: { ...type.micro, marginTop: vscale(2) },
 
     // Status chip
     statusChip: {
       paddingHorizontal: scale(10), paddingVertical: vscale(6),
       borderRadius: vscale(14), alignItems: "center", justifyContent: "center", minWidth: scale(72),
     },
-    statusChipText: { fontSize: scale(12), fontWeight: "900" },
+    statusChipText: { ...type.captionStrong },
 
     // Expanded card (biometrics / PIN / toggle cards)
     expandCard: {
@@ -713,12 +715,12 @@ function makeStyles(
       paddingHorizontal: scale(14), paddingVertical: vscale(12),
       flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: scale(12),
     },
-    toggleTitle: { fontSize: scale(13), fontWeight: "700" },
-    toggleSub: { marginTop: vscale(3), fontSize: scale(11), fontWeight: "400", lineHeight: scale(15) },
+    toggleTitle: { ...type.label },
+    toggleSub: { ...type.micro, marginTop: vscale(3) },
     infoRow: {
       paddingHorizontal: scale(14), paddingVertical: vscale(10),
       flexDirection: "row", alignItems: "center", gap: scale(8),
     },
-    infoText: { flex: 1, fontSize: scale(11), fontWeight: "500", lineHeight: scale(15) },
+    infoText: { ...type.micro, flex: 1 },
   });
 }

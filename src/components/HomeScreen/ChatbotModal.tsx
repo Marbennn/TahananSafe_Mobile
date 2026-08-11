@@ -21,6 +21,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 import { useAuth } from "../../auth/AuthContext";
 import {
   ChatbotConversation,
@@ -675,6 +676,7 @@ export default function ChatbotModal({ visible, onClose }: Props) {
 }
 
 function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+  const type = createTypography(scale, vscale);
   return StyleSheet.create({
     modalRoot: {
       flex: 1,
@@ -740,14 +742,11 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingTop: scale(1),
     },
     title: {
-      fontSize: scale(17),
-      fontWeight: "900",
-      lineHeight: scale(21),
+      ...type.sectionTitle,
       marginBottom: scale(4),
     },
     subtitle: {
-      fontSize: scale(12),
-      lineHeight: scale(18),
+      ...type.caption,
     },
     headerIconRow: {
       flexDirection: "row",
@@ -774,8 +773,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       gap: scale(6),
     },
     headerPillText: {
-      fontSize: scale(12),
-      fontWeight: "800",
+      ...type.captionStrong,
     },
     iconBtn: {
       width: scale(34),
@@ -795,10 +793,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       marginBottom: scale(12),
     },
     errorText: {
+      ...type.captionStrong,
       flex: 1,
-      fontSize: scale(12),
-      lineHeight: scale(17),
-      fontWeight: "600",
     },
     body: {
       flex: 1,
@@ -811,14 +807,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingHorizontal: scale(24),
     },
     emptyTitle: {
-      fontSize: scale(16),
-      fontWeight: "900",
+      ...type.sectionTitle,
       marginTop: scale(10),
       marginBottom: scale(6),
     },
     stateText: {
-      fontSize: scale(12),
-      lineHeight: scale(18),
+      ...type.caption,
       textAlign: "center",
       marginTop: scale(8),
     },
@@ -843,17 +837,14 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       marginBottom: scale(6),
     },
     historyTitle: {
+      ...type.label,
       flex: 1,
-      fontSize: scale(13),
-      fontWeight: "800",
     },
     historyTime: {
-      fontSize: scale(11),
-      fontWeight: "700",
+      ...type.microStrong,
     },
     historyPreview: {
-      fontSize: scale(12),
-      lineHeight: scale(18),
+      ...type.caption,
       marginBottom: scale(10),
     },
     historyFooter: {
@@ -863,8 +854,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       gap: scale(8),
     },
     historyMeta: {
-      fontSize: scale(11),
-      fontWeight: "700",
+      ...type.microStrong,
     },
     messagesScroll: {
       flex: 1,
@@ -888,8 +878,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingVertical: scale(9),
     },
     promptText: {
-      fontSize: scale(12),
-      fontWeight: "700",
+      ...type.captionStrong,
     },
     messageRow: {
       width: "100%",
@@ -915,13 +904,11 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       paddingVertical: scale(12),
     },
     assistantLabel: {
-      fontSize: scale(11),
-      fontWeight: "900",
+      ...type.overline,
       marginBottom: scale(6),
     },
     messageText: {
-      fontSize: scale(13),
-      lineHeight: scale(19),
+      ...type.bodySmall,
     },
     typingBubble: {
       flexDirection: "row",
@@ -929,8 +916,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       gap: scale(8),
     },
     typingText: {
-      fontSize: scale(12),
-      fontWeight: "700",
+      ...type.captionStrong,
     },
     inputWrap: {
       borderTopWidth: 1,
@@ -949,10 +935,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       gap: scale(8),
     },
     input: {
+      ...type.input,
       flex: 1,
       maxHeight: vscale(110),
-      fontSize: scale(13),
-      lineHeight: scale(18),
       paddingTop: scale(4),
       paddingBottom: scale(4),
     },

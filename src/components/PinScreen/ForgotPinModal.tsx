@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 import {
   forgotPinSendOtp,
   forgotPinVerifyOtp,
@@ -249,7 +250,7 @@ export default function ForgotPinModal({
       <Text style={styles.title}>Enter Verification Code</Text>
       <Text style={styles.sub}>
         We sent a 4-digit code to{"\n"}
-        <Text style={{ fontWeight: "700", color: TC.textDark }}>{email}</Text>
+        <Text style={[styles.emailStrong, { color: TC.textDark }]}>{email}</Text>
       </Text>
 
       <TextInput
@@ -535,6 +536,7 @@ function createStyles(
   vscale: (n: number) => number,
   TC: ReturnType<typeof useColors>,
 ) {
+  const typography = createTypography(scale);
   return StyleSheet.create({
     modalRoot: {
       flex: 1,
@@ -589,21 +591,23 @@ function createStyles(
     },
 
     title: {
+      ...typography.modalTitle,
       textAlign: "center",
-      fontSize: scale(17),
-      fontWeight: "900",
       color: TC.textDark,
       marginBottom: scale(8),
     },
     sub: {
+      ...typography.caption,
       textAlign: "center",
-      fontSize: scale(12.5),
-      lineHeight: scale(18),
       color: TC.muted,
       marginBottom: scale(20),
     },
+    emailStrong: {
+      ...typography.captionStrong,
+    },
 
     input: {
+      ...typography.input,
       width: "100%",
       height: vscale(48),
       borderRadius: scale(14),
@@ -611,19 +615,16 @@ function createStyles(
       borderColor: TC.border,
       backgroundColor: TC.inputBg,
       paddingHorizontal: scale(14),
-      fontSize: scale(14),
       color: TC.textDark,
     },
     otpInput: {
+      ...typography.numeric,
       textAlign: "center",
-      fontSize: scale(22),
       letterSpacing: 10,
-      fontWeight: "700",
     },
 
     pinLabel: {
-      fontSize: scale(12),
-      fontWeight: "700",
+      ...typography.captionStrong,
       marginBottom: scale(8),
     },
     pinBoxRow: {
@@ -632,6 +633,7 @@ function createStyles(
       gap: scale(12),
     },
     pinBox: {
+      ...typography.numeric,
       width: scale(52),
       height: scale(56),
       borderRadius: scale(14),
@@ -639,15 +641,12 @@ function createStyles(
       borderColor: TC.border,
       backgroundColor: TC.inputBg,
       textAlign: "center",
-      fontSize: scale(22),
-      fontWeight: "700",
       color: TC.textDark,
     },
 
     error: {
+      ...typography.captionStrong,
       color: "#DC2626",
-      fontSize: scale(12),
-      fontWeight: "600",
       textAlign: "center",
       marginTop: scale(8),
     },
@@ -671,8 +670,7 @@ function createStyles(
       }),
     },
     primaryBtnText: {
-      fontSize: scale(14),
-      fontWeight: "900",
+      ...typography.button,
       color: "#FFFFFF",
     },
 
@@ -681,8 +679,7 @@ function createStyles(
       paddingVertical: scale(4),
     },
     linkText: {
-      fontSize: scale(12),
-      fontWeight: "700",
+      ...typography.captionStrong,
       color: Colors.primary,
     },
   });

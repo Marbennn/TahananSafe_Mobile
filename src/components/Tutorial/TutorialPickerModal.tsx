@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Typography } from "../../theme/typography";
 
 type TutorialOption = {
   key: string;
@@ -108,14 +109,12 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   title: {
-    fontSize: 17,
-    fontWeight: "900",
+    ...Typography.sectionTitle,
     color: "#0F172A",
   },
   subtitle: {
+    ...Typography.caption,
     marginTop: 4,
-    fontSize: 12,
-    fontWeight: "500",
     color: "#64748B",
   },
   closeBtn: {
@@ -150,15 +149,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   optionTitle: {
-    fontSize: 14,
-    fontWeight: "800",
+    ...Typography.cardTitle,
     color: "#0F172A",
   },
   optionDesc: {
+    ...Typography.caption,
     marginTop: 3,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: "500",
     color: "#64748B",
   },
 });

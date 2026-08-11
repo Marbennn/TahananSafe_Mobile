@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 import { fetchAdminIncidents, AdminIncident } from "../../api/admin";
 import AdminBotNav, { TabKey } from "../../components/AdminComponents/AdminBotNav";
 
@@ -501,6 +502,7 @@ function makeStyles(
   const _iconSize = scale(18);
   const _miniIcon = scale(13);
   const _emptyIcon= scale(44);
+  const type = createTypography(scale, vscale);
 
   return Object.assign(
     StyleSheet.create({
@@ -530,18 +532,14 @@ function makeStyles(
       },
 
       headerTitle: {
-        fontSize: scale(28),
-        fontWeight: "900",
+        ...type.screenTitle,
         color: TEXT_DARK,
-        letterSpacing: -0.2,
       },
 
       headerSub: {
+        ...type.caption,
         marginTop: vscale(4),
-        fontSize: scale(12),
-        fontWeight: "400",
         color: MUTED,
-        lineHeight: scale(16),
       },
 
       searchWrap: {
@@ -558,11 +556,10 @@ function makeStyles(
       },
 
       searchInput: {
+        ...type.input,
         flex: 1,
         minWidth: 0,
-        fontSize: scale(12),
         color: TEXT_DARK,
-        fontWeight: "400",
       },
 
       clearBtn: {
@@ -599,7 +596,7 @@ function makeStyles(
 
       segmentInner: { flexDirection: "row", alignItems: "center", gap: scale(5) },
       segmentDot: { width: scale(7), height: scale(7), borderRadius: scale(99) },
-      segmentText: { fontSize: scale(10), fontWeight: "600" },
+      segmentText: { ...type.badge },
 
       listContent: {
         width: "100%",
@@ -674,24 +671,19 @@ function makeStyles(
       },
 
       sosText: {
-        fontSize: scale(9),
-        fontWeight: "900",
+        ...type.badge,
         color: "#DC2626",
       },
 
       cardTitle: {
+        ...type.cardTitle,
         flex: 1,
-        fontSize: scale(15),
-        fontWeight: "900",
         color: TEXT_DARK,
-        letterSpacing: -0.1,
       },
 
       cardDetail: {
-        fontSize: scale(12),
-        fontWeight: "400",
+        ...type.caption,
         color: MUTED,
-        lineHeight: vscale(16),
       },
 
       riskPill: {
@@ -705,7 +697,7 @@ function makeStyles(
       },
 
       riskDot: { width: scale(6), height: scale(6), borderRadius: scale(99) },
-      riskText: { fontSize: scale(10), fontWeight: "900" },
+      riskText: { ...type.badge },
 
       metaGrid: { gap: vscale(5), marginTop: vscale(8) },
       metaRow:  { flexDirection: "row", alignItems: "center", gap: scale(6) },
@@ -717,9 +709,9 @@ function makeStyles(
         alignItems: "center", justifyContent: "center",
       },
 
-      avatarText:    { fontSize: scale(9), fontWeight: "900", color: PRIMARY },
-      metaText:      { flex: 1, fontSize: scale(12), fontWeight: "600", color: "#516477" },
-      metaTextMuted: { flex: 1, fontSize: scale(11), fontWeight: "400", color: "#94A3B8" },
+      avatarText:    { ...type.badge, color: PRIMARY },
+      metaText:      { ...type.captionStrong, flex: 1, color: "#516477" },
+      metaTextMuted: { ...type.micro, flex: 1, color: "#94A3B8" },
 
       aiWrap: { flexDirection: "row", flexWrap: "wrap", gap: scale(6), marginTop: vscale(8) },
 
@@ -733,7 +725,7 @@ function makeStyles(
         paddingVertical: vscale(3),
       },
 
-      aiBadgeText: { fontSize: scale(10), fontWeight: "700" },
+      aiBadgeText: { ...type.badge },
 
       cardBottomRow: {
         marginTop: vscale(10),
@@ -745,7 +737,7 @@ function makeStyles(
       },
 
       cardMetaRow: { flexDirection: "row", alignItems: "center", gap: scale(5) },
-      metaTimeText:  { fontSize: scale(10), fontWeight: "400", color: "#94A3B8" },
+      metaTimeText:  { ...type.micro, color: "#94A3B8" },
 
       statusPill: {
         flexDirection: "row",
@@ -758,7 +750,7 @@ function makeStyles(
       },
 
       statusDot:     { width: scale(7), height: scale(7), borderRadius: scale(99) },
-      statusPillText:{ fontSize: scale(10), fontWeight: "900" },
+      statusPillText:{ ...type.badge },
 
       // Center states
       centerBox: {
@@ -774,18 +766,18 @@ function makeStyles(
       },
 
       centerHint: {
-        fontSize: scale(13), fontWeight: "400",
+        ...type.bodySmall,
         color: MUTED, textAlign: "center",
       },
 
       centerSubHint: {
-        fontSize: scale(12), fontWeight: "400",
+        ...type.caption,
         color: "#94A3B8", textAlign: "center",
         marginTop: vscale(-4),
       },
 
       errorText: {
-        fontSize: scale(13), fontWeight: "400",
+        ...type.bodySmall,
         color: "#B91C1C", textAlign: "center",
       },
 
@@ -797,7 +789,7 @@ function makeStyles(
         borderRadius: scale(999),
       },
 
-      retryText: { color: "#FFFFFF", fontWeight: "900", fontSize: scale(12) },
+      retryText: { ...type.button, color: "#FFFFFF" },
     }),
     { _iconSize, _miniIcon, _emptyIcon }
   ) as any;

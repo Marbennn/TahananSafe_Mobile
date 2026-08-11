@@ -24,6 +24,7 @@ import { WebView } from "react-native-webview";
 import * as Location from "expo-location";
 
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography, Typography } from "../../theme/typography";
 import AdminBotNav, { TabKey } from "../../components/AdminComponents/AdminBotNav";
 import GreetingCard from "../../components/HomeScreen/GreetingCard";
 import HomeScreenLogo from "../../../assets/HomeScreen/NewLogo.svg";
@@ -158,7 +159,11 @@ function buildLeafletHtml(
     html, body, #map { width: 100%; height: 100%; }
     .legend {
       background: #fff; padding: 8px 12px; border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.2); font: 13px/1.4 sans-serif;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      font-family: "${Typography.bodySmall.fontFamily}", sans-serif;
+      font-size: ${Typography.bodySmall.fontSize}px;
+      line-height: ${Typography.bodySmall.lineHeight}px;
+      font-weight: ${Typography.bodySmall.fontWeight};
     }
     .legend-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
     .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
@@ -706,6 +711,22 @@ const AdminHomeScreen: React.FC<Props> = ({
     return "#35B56A";
   };
 
+  const type = useMemo(() => {
+    const fontScale = (value: number) =>
+      clamp(
+        Math.round(value * fs),
+        Math.max(9, Math.round(value * 0.9)),
+        Math.round(value * 1.18)
+      );
+    return createTypography(fontScale, fontScale);
+  }, [fs]);
+
+  const statType = useMemo(() => {
+    const cappedMetricScale = (value: number) =>
+      Math.min(value, Math.round(value * fs));
+    return createTypography(cappedMetricScale, cappedMetricScale);
+  }, [fs]);
+
   // ── Styles ────────────────────────────────────────────────────────
   const styles = useMemo(
     () =>
@@ -750,10 +771,8 @@ const AdminHomeScreen: React.FC<Props> = ({
           justifyContent: "center",
         },
         badgeText: {
-          fontSize: clamp(Math.round(11 * fs), 10, 13),
-          fontWeight: "900",
+          ...type.badge,
           color: "#fff",
-          lineHeight: clamp(Math.round(13 * fs), 11, 15),
         },
 
         scroll: { flex: 1 },
@@ -787,13 +806,11 @@ const AdminHomeScreen: React.FC<Props> = ({
           justifyContent: "center",
         },
         sectionTitle: {
-          fontSize: clamp(Math.round(14 * fs), 13, 16),
-          fontWeight: "900",
+          ...type.sectionTitle,
           color: TEXT_DARK,
         },
         seeMore: {
-          fontSize: clamp(Math.round(13 * fs), 12, 15),
-          fontWeight: "600",
+          ...type.label,
           color: Colors.primary,
         },
 
@@ -825,15 +842,12 @@ const AdminHomeScreen: React.FC<Props> = ({
           marginBottom: 10,
         },
         statValue: {
-          fontSize: clamp(Math.round(24 * fs), 20, 28),
-          fontWeight: "900",
+          ...statType.metric,
           color: TEXT_DARK,
         },
         statLabel: {
-          fontSize: clamp(Math.round(12 * fs), 11, 13),
+          ...type.captionStrong,
           color: "#5B6B7A",
-          fontWeight: "600",
-          lineHeight: 17,
         },
 
         // Reports list
@@ -857,22 +871,20 @@ const AdminHomeScreen: React.FC<Props> = ({
         reportMainContent: { flex: 1 },
         reportTopRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 4 },
         reportTitle: {
+          ...type.cardTitle,
           flex: 1,
-          fontSize: clamp(Math.round(14 * fs), 13, 15),
-          fontWeight: "800",
           color: TEXT_DARK,
         },
         riskPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
-        riskPillText: { fontSize: clamp(Math.round(11 * fs), 10, 12), fontWeight: "800" },
+        riskPillText: { ...type.badge },
         reportSubtitle: {
-          fontSize: clamp(Math.round(12 * fs), 11, 13),
+          ...type.caption,
           color: "#657586",
-          lineHeight: 18,
           marginBottom: 8,
         },
         reportBottomRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-        reportDate: { fontSize: clamp(Math.round(12 * fs), 11, 13), color: "#7B8794", fontWeight: "500" },
-        reportTime: { fontSize: clamp(Math.round(12 * fs), 11, 13), color: "#7B8794", fontWeight: "500" },
+        reportDate: { ...type.caption, color: "#7B8794" },
+        reportTime: { ...type.caption, color: "#7B8794" },
 
         // Quick actions (emergency-card style)
         actionsWrap: {
@@ -906,13 +918,11 @@ const AdminHomeScreen: React.FC<Props> = ({
           justifyContent: "center",
         },
         actionCardLabel: {
-          fontSize: clamp(Math.round(14 * fs), 13, 16),
-          fontWeight: "800",
+          ...type.cardTitle,
           color: "#FFFFFF",
         },
         actionCardSub: {
-          fontSize: clamp(Math.round(11 * fs), 10, 12),
-          fontWeight: "600",
+          ...type.microStrong,
           color: "rgba(255,255,255,0.7)",
         },
 
@@ -997,7 +1007,7 @@ const AdminHomeScreen: React.FC<Props> = ({
           justifyContent: "center",
           marginBottom: clamp(Math.round(12 * s), 10, 12),
         },
-        actionText: { fontSize: clamp(Math.round(16 * fs), 14, 18), fontWeight: "900", color: "#FFFFFF" },
+        actionText: { ...type.button, color: "#FFFFFF" },
         actionIcon: { marginTop: 1, marginRight: 10 },
         dangerBtn: { backgroundColor: "#0B2B45" },
 
@@ -1011,8 +1021,7 @@ const AdminHomeScreen: React.FC<Props> = ({
           gap: 8,
         },
         emptyAlertsText: {
-          fontSize: clamp(Math.round(13 * fs), 12, 14),
-          fontWeight: "600" as const,
+          ...type.bodyStrong,
           color: "#94A3B8",
         },
         modalHeader: {
@@ -1059,6 +1068,8 @@ const AdminHomeScreen: React.FC<Props> = ({
       bottomPad,
       CONTENT_BOTTOM_PAD,
       height,
+      type,
+      statType,
     ]
   );
 
@@ -1264,10 +1275,10 @@ const AdminHomeScreen: React.FC<Props> = ({
                   <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
                 </Pressable>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 16, fontWeight: "900", color: "#FFFFFF" }} allowFontScaling={false} numberOfLines={1}>
+                  <Text style={[Typography.modalTitle, { color: "#FFFFFF" }]} allowFontScaling={false} numberOfLines={1}>
                     {selectedAlert?.title ?? "SOS Alert"}
                   </Text>
-                  <Text style={{ fontSize: 12, fontWeight: "600", color: "rgba(255,255,255,0.8)", marginTop: 2 }} allowFontScaling={false}>
+                  <Text style={[Typography.captionStrong, { color: "rgba(255,255,255,0.8)", marginTop: 2 }]} allowFontScaling={false}>
                     {selectedAlert?.date ?? ""} {selectedAlert?.time ? `• ${selectedAlert.time}` : ""}
                   </Text>
                 </View>
@@ -1305,11 +1316,11 @@ const AdminHomeScreen: React.FC<Props> = ({
                     <Ionicons name="warning" size={20} color="#DC2626" />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: "800", color: TEXT_DARK }} allowFontScaling={false} numberOfLines={1}>
+                    <Text style={[Typography.cardTitle, { color: TEXT_DARK }]} allowFontScaling={false} numberOfLines={1}>
                       {selectedAlert?.senderName ?? "Unknown Sender"}
                     </Text>
                     <Text
-                      style={{ fontSize: 12, fontWeight: "500", color: "#64748B", marginTop: 2 }}
+                      style={[Typography.caption, { color: "#64748B", marginTop: 2 }]}
                       allowFontScaling={false}
                     >
                       {selectedAlert?.subtitle ?? ""}
@@ -1321,7 +1332,7 @@ const AdminHomeScreen: React.FC<Props> = ({
                 {selectedAlert?.address ? (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 }}>
                     <Ionicons name="location" size={16} color={Colors.primary} />
-                    <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: "#334155" }} allowFontScaling={false} numberOfLines={2}>
+                    <Text style={[Typography.label, { flex: 1, color: "#334155" }]} allowFontScaling={false} numberOfLines={2}>
                       {selectedAlert.address}
                     </Text>
                   </View>
@@ -1330,7 +1341,7 @@ const AdminHomeScreen: React.FC<Props> = ({
                 {selectedAlert?.latitude == null || selectedAlert?.longitude == null ? (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10, backgroundColor: "#FEF3C7", borderRadius: 8, padding: 10 }}>
                     <Ionicons name="alert-circle" size={16} color="#D97706" />
-                    <Text style={{ flex: 1, fontSize: 12, fontWeight: "600", color: "#92400E" }} allowFontScaling={false}>
+                    <Text style={[Typography.captionStrong, { flex: 1, color: "#92400E" }]} allowFontScaling={false}>
                       Location coordinates not available for this alert.
                     </Text>
                   </View>
@@ -1348,7 +1359,7 @@ const AdminHomeScreen: React.FC<Props> = ({
                     marginTop: 4,
                   }]}
                 >
-                  <Text style={{ fontSize: 14, fontWeight: "800", color: "#FFFFFF" }} allowFontScaling={false}>
+                  <Text style={[Typography.button, { color: "#FFFFFF" }]} allowFontScaling={false}>
                     Dismiss
                   </Text>
                 </Pressable>

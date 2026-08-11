@@ -30,6 +30,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 
 import { Colors, useColors } from "../theme/colors";
+import { FontFamily, FontSize, FontWeight } from "../theme/typography";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import LogoutModal from "../components/LogoutModal";
 
@@ -1137,8 +1138,13 @@ export default function HomeScreen({
           justifyContent: "center",
         },
         badgeText: {
-          fontSize: clamp(Math.round(11 * fs), 10, 13),
-          fontWeight: "900",
+          fontFamily: FontFamily,
+          fontSize: clamp(
+            Math.round(FontSize.overline * fs),
+            FontSize.micro,
+            FontSize.label,
+          ),
+          fontWeight: FontWeight.bold,
           color: "#fff",
           lineHeight: clamp(Math.round(13 * fs), 11, 15),
         },
@@ -1160,8 +1166,26 @@ export default function HomeScreen({
           justifyContent: "space-between",
         },
 
-        sectionTitle: { fontSize: clamp(Math.round(14 * fs), 13, 16), fontWeight: "900", color: TEXT_DARK },
-        seeMore: { fontSize: clamp(Math.round(13 * fs), 12, 15), fontWeight: "600", color: Colors.link },
+        sectionTitle: {
+          fontFamily: FontFamily,
+          fontSize: clamp(
+            Math.round(FontSize.sectionTitle * fs),
+            FontSize.bodyLarge,
+            FontSize.modalTitle,
+          ),
+          fontWeight: FontWeight.bold,
+          color: TEXT_DARK,
+        },
+        seeMore: {
+          fontFamily: FontFamily,
+          fontSize: clamp(
+            Math.round(FontSize.label * fs),
+            FontSize.caption,
+            FontSize.bodyLarge,
+          ),
+          fontWeight: FontWeight.semibold,
+          color: Colors.link,
+        },
 
         logsWrap: { paddingHorizontal: PAD, paddingTop: clamp(Math.round(10 * s), 8, 12) },
         logsGap: { height: GAP },
@@ -1214,16 +1238,22 @@ export default function HomeScreen({
           opacity: 0.92,
         },
         emergencyContactNumber: {
+          fontFamily: FontFamily,
           flexShrink: 1,
           color: "#FFFFFF",
-          fontSize: clamp(Math.round(29 * fs), 25, 33),
-          fontWeight: "900",
+          fontSize: clamp(Math.round(FontSize.screenTitle * fs), 25, FontSize.display),
+          fontWeight: FontWeight.bold,
           lineHeight: clamp(Math.round(34 * fs), 30, 38),
         },
         emergencyContactLabel: {
+          fontFamily: FontFamily,
           color: "#FFFFFF",
-          fontSize: clamp(Math.round(11 * fs), 10, 12),
-          fontWeight: "700",
+          fontSize: clamp(
+            Math.round(FontSize.overline * fs),
+            FontSize.micro,
+            FontSize.caption,
+          ),
+          fontWeight: FontWeight.semibold,
           opacity: 0.94,
         },
 
@@ -1262,8 +1292,13 @@ export default function HomeScreen({
           borderRadius: 4,
         },
         safetyChipText: {
-          fontSize: clamp(Math.round(12 * fs), 11, 13),
-          fontWeight: "700",
+          fontFamily: FontFamily,
+          fontSize: clamp(
+            Math.round(FontSize.caption * fs),
+            FontSize.overline,
+            FontSize.label,
+          ),
+          fontWeight: FontWeight.semibold,
           color: "#334155",
         },
 
@@ -1302,13 +1337,23 @@ export default function HomeScreen({
           marginBottom: clamp(Math.round(2 * s), 1, 4),
         },
         emptyLogsTitle: {
-          fontSize: clamp(Math.round(12 * fs), 11, 13),
-          fontWeight: "600",
+          fontFamily: FontFamily,
+          fontSize: clamp(
+            Math.round(FontSize.caption * fs),
+            FontSize.overline,
+            FontSize.label,
+          ),
+          fontWeight: FontWeight.semibold,
           color: TEXT_DARK,
         },
         emptyLogsText: {
-          fontSize: clamp(Math.round(12 * fs), 11, 13),
-          fontWeight: "400",
+          fontFamily: FontFamily,
+          fontSize: clamp(
+            Math.round(FontSize.caption * fs),
+            FontSize.overline,
+            FontSize.label,
+          ),
+          fontWeight: FontWeight.regular,
           color: "#94A3B8",
           textAlign: "center",
         },
@@ -1323,15 +1368,25 @@ export default function HomeScreen({
           borderRadius: 999,
         },
         emptyLogsBtnText: {
-          fontSize: clamp(Math.round(12 * fs), 11, 13),
-          fontWeight: "800",
+          fontFamily: FontFamily,
+          fontSize: clamp(
+            Math.round(FontSize.caption * fs),
+            FontSize.overline,
+            FontSize.label,
+          ),
+          fontWeight: FontWeight.bold,
           color: "#FFFFFF",
         },
 
         miniCenter: { paddingHorizontal: PAD, paddingTop: 10, alignItems: "center", justifyContent: "center" },
         emptyHint: {
-          fontSize: clamp(Math.round(12 * fs), 11, 14),
-          fontWeight: "800",
+          fontFamily: FontFamily,
+          fontSize: clamp(
+            Math.round(FontSize.caption * fs),
+            FontSize.overline,
+            FontSize.body,
+          ),
+          fontWeight: FontWeight.semibold,
           color: "#64748B",
           textAlign: "center",
         },
@@ -1376,9 +1431,14 @@ export default function HomeScreen({
           justifyContent: "center",
         },
         sosTitle: {
+          fontFamily: FontFamily,
           textAlign: "center",
-          fontSize: clamp(Math.round(16 * fs), 15, 18),
-          fontWeight: "900",
+          fontSize: clamp(
+            Math.round(FontSize.sectionTitle * fs),
+            FontSize.bodyLarge,
+            FontSize.modalTitle,
+          ),
+          fontWeight: FontWeight.bold,
           color: "#111827",
           marginBottom: clamp(Math.round(24 * s), 20, 26),
         },
@@ -1393,14 +1453,24 @@ export default function HomeScreen({
           marginBottom: clamp(Math.round(16 * s), 14, 18),
         },
         sosGuideTitle: {
-          fontSize: clamp(Math.round(12 * fs), 11, 13),
-          fontWeight: "800",
+          fontFamily: FontFamily,
+          fontSize: clamp(
+            Math.round(FontSize.caption * fs),
+            FontSize.overline,
+            FontSize.label,
+          ),
+          fontWeight: FontWeight.semibold,
           color: "#111827",
           marginBottom: clamp(Math.round(6 * s), 4, 8),
         },
         sosGuideLine: {
-          fontSize: clamp(Math.round(11 * fs), 10, 12),
-          fontWeight: "500",
+          fontFamily: FontFamily,
+          fontSize: clamp(
+            Math.round(FontSize.overline * fs),
+            FontSize.micro,
+            FontSize.caption,
+          ),
+          fontWeight: FontWeight.regular,
           lineHeight: clamp(Math.round(16 * fs), 14, 18),
           color: "#6B7280",
         },
@@ -1438,10 +1508,15 @@ export default function HomeScreen({
           overflow: "hidden",
         },
         sosSliderLabel: {
+          fontFamily: FontFamily,
           zIndex: 1,
           textAlign: "center",
-          fontSize: clamp(Math.round(13 * fs), 12, 14),
-          fontWeight: "800",
+          fontSize: clamp(
+            Math.round(FontSize.label * fs),
+            FontSize.caption,
+            FontSize.body,
+          ),
+          fontWeight: FontWeight.semibold,
           color: "#374151",
           paddingHorizontal: sosThumbSize + clamp(Math.round(18 * s), 16, 20),
         },
@@ -1454,8 +1529,13 @@ export default function HomeScreen({
           paddingHorizontal: sosThumbSize + clamp(Math.round(18 * s), 16, 20),
         },
         sosSendingText: {
-          fontSize: clamp(Math.round(13 * fs), 12, 14),
-          fontWeight: "800",
+          fontFamily: FontFamily,
+          fontSize: clamp(
+            Math.round(FontSize.label * fs),
+            FontSize.caption,
+            FontSize.body,
+          ),
+          fontWeight: FontWeight.semibold,
           color: "#374151",
         },
         sosSliderThumb: {

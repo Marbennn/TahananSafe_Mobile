@@ -15,6 +15,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors, useColors } from "../../theme/colors";
+import { Typography } from "../../theme/typography";
 import { fetchAdminStats, fetchAdminIncidents, AdminStats, AdminIncident } from "../../api/admin";
 
 type Props = {
@@ -462,14 +463,12 @@ function makeStyles(horizontalPadding: number, statGap: number) {
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: "800",
+    ...Typography.modalTitle,
     color: "#0E2B4D",
   },
   headerSub: {
-    fontSize: 12,
+    ...Typography.caption,
     color: "#6B7A8D",
-    fontWeight: "500",
     marginTop: 1,
   },
   headerBadge: {
@@ -487,14 +486,12 @@ function makeStyles(horizontalPadding: number, statGap: number) {
     gap: 12,
   },
   loadingText: {
-    fontSize: 14,
+    ...Typography.bodyStrong,
     color: "#6B7A8D",
-    fontWeight: "600",
   },
   errorText: {
-    fontSize: 14,
+    ...Typography.bodyStrong,
     color: "#F04452",
-    fontWeight: "600",
     textAlign: "center",
     paddingHorizontal: 32,
   },
@@ -505,9 +502,8 @@ function makeStyles(horizontalPadding: number, statGap: number) {
     borderRadius: 12,
   },
   retryText: {
+    ...Typography.button,
     color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 14,
   },
   content: {
     width: "100%",
@@ -528,16 +524,13 @@ function makeStyles(horizontalPadding: number, statGap: number) {
     justifyContent: "space-between",
   },
   heroLabel: {
+    ...Typography.label,
     color: "#D9ECFF",
-    fontSize: 13,
-    fontWeight: "600",
     marginBottom: 4,
   },
   heroValue: {
+    ...Typography.display,
     color: "#FFFFFF",
-    fontSize: 42,
-    fontWeight: "800",
-    lineHeight: 48,
   },
   heroIconWrap: {
     width: 52,
@@ -562,9 +555,8 @@ function makeStyles(horizontalPadding: number, statGap: number) {
     borderRadius: 999,
   },
   heroMetaText: {
+    ...Typography.captionStrong,
     color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700",
   },
   statsGrid: {
     flexDirection: "row",
@@ -575,10 +567,8 @@ function makeStyles(horizontalPadding: number, statGap: number) {
     gap: 10,
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: "800",
+    ...Typography.sectionTitle,
     color: "#213547",
-    letterSpacing: 0.3,
     textTransform: "uppercase",
   },
   chartCard: {
@@ -612,14 +602,12 @@ function makeStyles(horizontalPadding: number, statGap: number) {
     gap: 4,
   },
   gaugePct: {
-    fontSize: 28,
-    fontWeight: "800",
+    ...Typography.metric,
     color: "#35B56A",
   },
   gaugeDesc: {
-    fontSize: 13,
+    ...Typography.bodySmall,
     color: "#6B7A8D",
-    fontWeight: "500",
   },
   gaugeLegend: {
     flexDirection: "row",
@@ -637,9 +625,8 @@ function makeStyles(horizontalPadding: number, statGap: number) {
     borderRadius: 5,
   },
   legendText: {
-    fontSize: 12,
+    ...Typography.captionStrong,
     color: "#6B7A8D",
-    fontWeight: "600",
   },
   });
 }
@@ -663,19 +650,15 @@ const statStyles = StyleSheet.create({
     marginBottom: 6,
   },
   value: {
-    fontSize: 26,
-    fontWeight: "800",
-    lineHeight: 30,
+    ...Typography.metric,
   },
   label: {
-    fontSize: 12,
+    ...Typography.captionStrong,
     color: "#6B7A8D",
-    fontWeight: "600",
   },
   sub: {
-    fontSize: 11,
+    ...Typography.micro,
     color: "#9AA4B2",
-    fontWeight: "500",
   },
 });
 
@@ -689,10 +672,9 @@ const chartStyles = StyleSheet.create({
     gap: 10,
   },
   barLabel: {
+    ...Typography.captionStrong,
     width: 90,
-    fontSize: 12,
     color: "#5B6B7A",
-    fontWeight: "600",
   },
   barLabelCompact: {
     width: 62,
@@ -710,9 +692,8 @@ const chartStyles = StyleSheet.create({
     minWidth: 4,
   },
   barValue: {
+    ...Typography.label,
     width: 32,
-    fontSize: 13,
-    fontWeight: "800",
     textAlign: "right",
   },
 });

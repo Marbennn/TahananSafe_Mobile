@@ -20,6 +20,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Typography } from "../../theme/typography";
 
 type Props = {
   visible: boolean;
@@ -705,10 +706,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#F43F5E",
   },
   timerText: {
+    ...Typography.numeric,
     color: "#FFFFFF",
-    fontSize: 17,
-    fontWeight: "800",
-    fontVariant: ["tabular-nums"],
   },
   cameraLoading: {
     ...StyleSheet.absoluteFillObject,
@@ -718,9 +717,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.3)",
   },
   cameraLoadingText: {
+    ...Typography.button,
     color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
   },
   bottomPanel: {
     paddingHorizontal: 22,
@@ -730,18 +728,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.56)",
   },
   limitText: {
+    ...Typography.captionStrong,
     maxWidth: 420,
     color: "rgba(255,255,255,0.84)",
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: "600",
     textAlign: "center",
   },
   recordingStateText: {
+    ...Typography.label,
     marginTop: 7,
     color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "800",
   },
   recordButtonOuter: {
     width: 82,

@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useColors } from "../theme/colors";
+import { createTypography } from "../theme/typography";
 import { useNavigation } from "@react-navigation/native";
 
 import {
@@ -939,6 +940,7 @@ export default function NotificationsScreen({ onBack }: Props) {
 }
 
 function makeStyles(scale: (n: number) => number, vscale: (n: number) => number, TC: ReturnType<typeof useColors>) {
+  const type = createTypography(scale, vscale);
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: TC.screenBg },
     page: { flex: 1, backgroundColor: TC.screenBg },
@@ -977,17 +979,13 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       flexWrap: "wrap",
     },
     topTitle: {
-      fontSize: scale(28),
-      fontWeight: "900",
+      ...type.screenTitle,
       color: TC.textDark,
-      letterSpacing: -0.2,
     },
     subTitle: {
+      ...type.caption,
       marginTop: vscale(4),
-      fontSize: scale(12),
-      fontWeight: "400",
       color: TC.muted,
-      lineHeight: scale(16),
     },
 
     unreadPill: {
@@ -999,8 +997,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       borderColor: TC.divider,
     },
     unreadPillText: {
-      fontSize: scale(10),
-      fontWeight: "900",
+      ...type.badge,
       color: TC.primary,
     },
 
@@ -1027,8 +1024,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       elevation: 5,
     },
     caughtPillText: {
-      fontSize: scale(13),
-      fontWeight: "900",
+      ...type.label,
       color: TC.isDark ? "#6EE7B7" : "#166534",
     },
 
@@ -1063,11 +1059,10 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       gap: scale(8),
     },
     searchInput: {
+      ...type.input,
       flex: 1,
-      fontSize: scale(13),
       color: TC.textDark,
       paddingVertical: 0,
-      fontWeight: "600",
     },
     clearQueryBtn: {
       alignItems: "center",
@@ -1099,8 +1094,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       backgroundColor: TC.isDark ? TC.primaryDark : "#06223F",
     },
     pillText: {
-      fontSize: scale(12),
-      fontWeight: "800",
+      ...type.captionStrong,
       color: TC.isDark ? TC.muted : "#4B5563",
     },
     pillTextActive: {
@@ -1134,8 +1128,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       borderRadius: scale(999),
     },
     sectionTitle: {
-      fontSize: scale(11),
-      fontWeight: "900",
+      ...type.overline,
       color: TC.muted,
     },
 
@@ -1194,9 +1187,8 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       gap: scale(8),
     },
     cardTitle: {
+      ...type.cardTitle,
       flex: 1,
-      fontSize: scale(15),
-      fontWeight: "900",
       color: TC.textDark,
     },
     cardTitleUnread: {
@@ -1210,12 +1202,10 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
     },
 
     cardMsg: {
+      ...type.caption,
       marginTop: vscale(3),
-      fontSize: scale(12),
-      fontWeight: "400",
       fontStyle: "italic",
       color: TC.muted,
-      lineHeight: vscale(18),
     },
 
     metaRow: {
@@ -1225,8 +1215,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       gap: scale(6),
     },
     cardTime: {
-      fontSize: scale(10),
-      fontWeight: "500",
+      ...type.micro,
       color: TC.muted,
     },
 
@@ -1242,17 +1231,14 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       gap: vscale(6),
     },
     emptyTitle: {
+      ...type.cardTitle,
       marginTop: vscale(6),
-      fontSize: scale(14),
-      fontWeight: "900",
       color: TC.textDark,
     },
     emptyText: {
-      fontSize: scale(11),
-      fontWeight: "700",
+      ...type.microStrong,
       color: TC.muted,
       textAlign: "center",
-      lineHeight: vscale(16),
     },
 
     centerBox: {
@@ -1263,20 +1249,17 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       gap: vscale(10),
     },
     centerHint: {
-      fontSize: scale(13),
-      fontWeight: "800",
+      ...type.bodySmall,
       color: TC.muted,
       textAlign: "center",
     },
     smallHint: {
-      fontSize: scale(11),
-      fontWeight: "700",
+      ...type.microStrong,
       color: TC.muted,
       textAlign: "center",
     },
     errorText: {
-      fontSize: scale(13),
-      fontWeight: "900",
+      ...type.bodyStrong,
       color: "#B91C1C",
       textAlign: "center",
     },
@@ -1288,9 +1271,8 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       borderRadius: scale(999),
     },
     retryText: {
+      ...type.captionStrong,
       color: "#FFFFFF",
-      fontWeight: "900",
-      fontSize: scale(12),
     },
 
     // Menu modal shared
@@ -1320,8 +1302,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       marginBottom: vscale(10),
     },
     menuTitle: {
-      fontSize: scale(13),
-      fontWeight: "900",
+      ...type.label,
       color: TC.textDark,
       marginBottom: vscale(10),
     },
@@ -1338,8 +1319,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       marginBottom: vscale(10),
     },
     menuItemText: {
-      fontSize: scale(12),
-      fontWeight: "900",
+      ...type.captionStrong,
       color: TC.textDark,
     },
     menuCancel: {
@@ -1352,8 +1332,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       borderColor: TC.divider,
     },
     menuCancelText: {
-      fontSize: scale(12),
-      fontWeight: "900",
+      ...type.captionStrong,
       color: TC.muted,
     },
 
@@ -1368,16 +1347,13 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       marginBottom: vscale(10),
     },
     previewTitle: {
-      fontSize: scale(12),
-      fontWeight: "900",
+      ...type.captionStrong,
       color: TC.textDark,
     },
     previewMsg: {
+      ...type.microStrong,
       marginTop: vscale(4),
-      fontSize: scale(10),
-      fontWeight: "700",
       color: TC.muted,
-      lineHeight: vscale(14),
     },
     previewMeta: {
       marginTop: vscale(8),
@@ -1386,8 +1362,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       gap: scale(6),
     },
     previewTime: {
-      fontSize: scale(9),
-      fontWeight: "800",
+      ...type.badge,
       color: TC.muted,
     },
   });

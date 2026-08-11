@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 import ChecklistBadge from "../ChecklistBadge";
 
 type Props = {
@@ -82,6 +83,7 @@ export default function ForgotPasswordSuccessModal({
 }
 
 function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+  const typography = createTypography(scale);
   const cardW = clamp(scale(332), 292, 396);
 
   // ✅ make it taller but still safe on small screens
@@ -138,9 +140,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     successTitle: {
+      ...typography.sectionTitle,
       textAlign: "center",
-      fontSize: clamp(scale(14.5), 13, 17),
-      fontWeight: "900",
       color: "#111827",
       marginBottom: vscale(6),
     },
@@ -173,9 +174,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     btnText: {
+      ...typography.button,
       color: "#FFFFFF",
-      fontSize: clamp(scale(12), 11, 13),
-      fontWeight: "900",
     },
   });
 }

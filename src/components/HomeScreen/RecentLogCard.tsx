@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, Pressable, useWindowDimensions } from "react-na
 import { Ionicons } from "@expo/vector-icons";
 import { useColors } from "../../theme/colors";
 import { getReportStatusMeta, type ReportStatus } from "../../utils/reportStatus";
+import { FontFamily, FontSize, FontWeight } from "../../theme/typography";
 
 export type LogItem = {
   id: string;
@@ -104,7 +105,11 @@ function makeStyles(s: number, fs: number, TC: ReturnType<typeof useColors>) {
   const R = clamp(Math.round(14 * s), 12, 16);
   const PAD_X = clamp(Math.round(16 * s), 14, 18);
   const PAD_Y = clamp(Math.round(12 * s), 10, 14);
-  const detailFont = clamp(Math.round(14 * fs), 12, 15);
+  const detailFont = clamp(
+    Math.round(FontSize.body * fs),
+    FontSize.caption,
+    FontSize.bodyLarge,
+  );
   const detailLine = clamp(Math.round(21 * fs), 18, 23);
 
   return StyleSheet.create({
@@ -136,9 +141,10 @@ function makeStyles(s: number, fs: number, TC: ReturnType<typeof useColors>) {
     },
 
     reportNo: {
+      fontFamily: FontFamily,
       flex: 1,
-      fontSize: clamp(Math.round(10 * fs), 9, 11),
-      fontWeight: "500",
+      fontSize: clamp(Math.round(FontSize.micro * fs), FontSize.micro, FontSize.overline),
+      fontWeight: FontWeight.regular,
       color: "#9CA3AF",
     },
 
@@ -150,23 +156,34 @@ function makeStyles(s: number, fs: number, TC: ReturnType<typeof useColors>) {
     },
 
     statusText: {
-      fontSize: clamp(Math.round(11 * fs), 10, 12),
-      fontWeight: "800",
+      fontFamily: FontFamily,
+      fontSize: clamp(
+        Math.round(FontSize.overline * fs),
+        FontSize.micro,
+        FontSize.caption,
+      ),
+      fontWeight: FontWeight.bold,
       color: "#374151",
     },
 
     title: {
-      fontSize: clamp(Math.round(18 * fs), 16, 20),
-      fontWeight: "900",
+      fontFamily: FontFamily,
+      fontSize: clamp(
+        Math.round(FontSize.modalTitle * fs),
+        FontSize.sectionTitle,
+        FontSize.numeric,
+      ),
+      fontWeight: FontWeight.bold,
       color: "#0B2B45",
       lineHeight: clamp(Math.round(22 * fs), 20, 24),
     },
 
     detail: {
+      fontFamily: FontFamily,
       marginTop: clamp(Math.round(2 * s), 1, 4),
       fontSize: detailFont,
       lineHeight: detailLine,
-      fontWeight: "400",
+      fontWeight: FontWeight.regular,
       fontStyle: "italic",
       color: "#8A8F98",
     },
@@ -180,9 +197,14 @@ function makeStyles(s: number, fs: number, TC: ReturnType<typeof useColors>) {
     },
 
     dateText: {
+      fontFamily: FontFamily,
       flex: 1,
-      fontSize: clamp(Math.round(12 * fs), 11, 13),
-      fontWeight: "500",
+      fontSize: clamp(
+        Math.round(FontSize.caption * fs),
+        FontSize.overline,
+        FontSize.label,
+      ),
+      fontWeight: FontWeight.regular,
       color: "#9CA3AF",
     },
 
@@ -193,8 +215,13 @@ function makeStyles(s: number, fs: number, TC: ReturnType<typeof useColors>) {
     },
 
     viewDetailsText: {
-      fontSize: clamp(Math.round(12 * fs), 11, 14),
-      fontWeight: "900",
+      fontFamily: FontFamily,
+      fontSize: clamp(
+        Math.round(FontSize.caption * fs),
+        FontSize.overline,
+        FontSize.body,
+      ),
+      fontWeight: FontWeight.bold,
       color: TC.primary,
     },
   });

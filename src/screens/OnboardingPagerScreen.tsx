@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { Colors, useColors } from "../theme/colors";
+import { createTypography } from "../theme/typography";
 import OnboardingSlide from "../components/OnBoarding/OnboardingSlide";
 import { setOnboardingSeen } from "../auth/session";
 
@@ -236,6 +237,7 @@ function createStyles(
   vscale: (n: number) => number,
   bottomInset: number
 ) {
+  const typography = createTypography(scale);
   return StyleSheet.create({
     safe: {
       flex: 1,
@@ -325,9 +327,8 @@ function createStyles(
     },
 
     ctaText: {
+      ...typography.button,
       color: "#FFFFFF",
-      fontSize: scale(13),
-      fontWeight: "800",
     },
   });
 }

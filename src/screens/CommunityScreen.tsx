@@ -22,6 +22,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useColors } from "../theme/colors";
+import { FontFamily, FontSize, FontWeight, Typography } from "../theme/typography";
 import { useAuth } from "../auth/AuthContext";
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import LogoutModal from "../components/LogoutModal";
@@ -126,8 +127,9 @@ function AvatarImage({
       <Text
         style={{
           color: avatarColor,
-          fontSize: Math.max(12, Math.round(size * 0.34)),
-          fontWeight: "800",
+          fontFamily: FontFamily,
+          fontSize: Math.max(FontSize.caption, Math.round(size * 0.34)),
+          fontWeight: FontWeight.bold,
         }}
       >
         {initials}
@@ -657,7 +659,7 @@ function CreatePostModal({
           {/* Modal Header */}
           <View style={[styles.modalHeader, { borderBottomColor: colors.divider }]}>
             <Pressable onPress={handleClose}>
-              <Text style={{ color: colors.muted, fontSize: 16 }}>Cancel</Text>
+              <Text style={[Typography.bodyLarge, { color: colors.muted }]}>Cancel</Text>
             </Pressable>
             <Text style={[styles.modalTitle, { color: colors.text }]}>
               New Post
@@ -828,7 +830,7 @@ function EditPostModal({
         >
           <View style={[styles.modalHeader, { borderBottomColor: colors.divider }]}>
             <Pressable onPress={handleClose} disabled={saving}>
-              <Text style={{ color: colors.muted, fontSize: 16 }}>Cancel</Text>
+              <Text style={[Typography.bodyLarge, { color: colors.muted }]}>Cancel</Text>
             </Pressable>
             <Text style={[styles.modalTitle, { color: colors.text }]}>
               Edit Post
@@ -1682,7 +1684,11 @@ export default function CommunityScreen({
             <Text
               style={[
                 styles.headerTitle,
-                { color: colors.textDark, fontSize: scale(28), letterSpacing: 0.2 },
+                {
+                  color: colors.textDark,
+                  fontSize: scale(FontSize.screenTitle),
+                  lineHeight: scale(34),
+                },
               ]}
             >
               Community
@@ -1690,7 +1696,12 @@ export default function CommunityScreen({
             <Text
               style={[
                 styles.headerSubtitle,
-                { color: colors.muted, marginTop: vscale(4), fontSize: scale(13) },
+                {
+                  color: colors.muted,
+                  marginTop: vscale(4),
+                  fontSize: scale(FontSize.label),
+                  lineHeight: scale(18),
+                },
               ]}
             >
               Share updates, photos, and neighborhood conversations
@@ -1902,8 +1913,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   headerCopy: { flex: 1 },
-  headerTitle: { fontWeight: "900" },
-  headerSubtitle: { fontWeight: "400" },
+  headerTitle: { ...Typography.screenTitle },
+  headerSubtitle: { ...Typography.bodySmall },
 
   /* Loading */
   loadingWrap: { flex: 1, justifyContent: "center", alignItems: "center" },
@@ -1927,8 +1938,8 @@ const styles = StyleSheet.create({
   },
   createBarLeft: { flex: 1 },
   createPromptRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  createPromptTitle: { fontSize: 14, fontWeight: "700", marginBottom: 8, marginLeft: 44 },
-  createPromptText: { fontSize: 13, fontWeight: "500" },
+  createPromptTitle: { ...Typography.cardTitle, marginBottom: 8, marginLeft: 44 },
+  createPromptText: { ...Typography.bodySmall },
   createInputPlaceholder: {
     flex: 1,
     borderRadius: 16,
@@ -1944,7 +1955,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
-  chipText: { fontSize: 12, fontWeight: "700" },
+  chipText: { ...Typography.captionStrong },
 
   /* Post card */
   postCard: { borderRadius: 18, marginBottom: 14, overflow: "hidden", borderWidth: 1 },
@@ -1957,13 +1968,12 @@ const styles = StyleSheet.create({
   },
   postAvatar: { marginRight: 10 },
   postUserInfo: { flex: 1, minWidth: 0 },
-  postUserName: { fontSize: 14, fontWeight: "700" },
-  postUserRole: { fontSize: 11, marginTop: 2 },
-  postTime: { fontSize: 11, marginRight: 6 },
+  postUserName: { ...Typography.cardTitle },
+  postUserRole: { ...Typography.micro, marginTop: 2 },
+  postTime: { ...Typography.micro, marginRight: 6 },
   postMenu: { padding: 4 },
   postContent: {
-    fontSize: 13,
-    lineHeight: 19,
+    ...Typography.bodySmall,
     paddingHorizontal: 14,
     paddingBottom: 12,
   },
@@ -2000,7 +2010,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "rgba(15, 23, 42, 0.72)",
   },
-  expandImageText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
+  expandImageText: { ...Typography.microStrong, color: "#FFFFFF" },
   postActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -2017,7 +2027,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
-  actionText: { fontSize: 12, fontWeight: "600" },
+  actionText: { ...Typography.captionStrong },
 
   /* Comments preview (under post) */
   commentsPreview: {
@@ -2027,9 +2037,9 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   commentRow: { flexDirection: "row", marginBottom: 4, flexWrap: "wrap" },
-  commentUser: { fontSize: 12, fontWeight: "700", marginRight: 6 },
-  commentText: { fontSize: 12 },
-  viewAllComments: { fontSize: 12, marginTop: 4, fontWeight: "600" },
+  commentUser: { ...Typography.captionStrong, marginRight: 6 },
+  commentText: { ...Typography.caption },
+  viewAllComments: { ...Typography.captionStrong, marginTop: 4 },
 
   /* Empty */
   emptyWrap: { alignItems: "center", paddingTop: 48, paddingHorizontal: 20 },
@@ -2041,8 +2051,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 12,
   },
-  emptyTitle: { fontSize: 17, fontWeight: "800", marginBottom: 6 },
-  emptyText: { fontSize: 13, textAlign: "center", lineHeight: 18 },
+  emptyTitle: { ...Typography.sectionTitle, marginBottom: 6 },
+  emptyText: { ...Typography.bodySmall, textAlign: "center" },
 
   /* ── Modal shared ── */
   modalOverlay: {
@@ -2073,7 +2083,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  modalTitle: { fontSize: 16, fontWeight: "800" },
+  modalTitle: { ...Typography.sectionTitle },
 
   /* Create post modal */
   postBtn: {
@@ -2081,7 +2091,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 18,
   },
-  postBtnText: { color: "#FFF", fontWeight: "700", fontSize: 13 },
+  postBtnText: { ...Typography.label, color: "#FFF" },
   composeArea: {
     flexDirection: "row",
     paddingTop: 14,
@@ -2092,8 +2102,8 @@ const styles = StyleSheet.create({
   },
   composeAvatar: { marginRight: 10 },
   composeInput: {
+    ...Typography.bodyLarge,
     flex: 1,
-    fontSize: 15,
     minHeight: 104,
     textAlignVertical: "top",
     borderWidth: 1,
@@ -2102,7 +2112,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   photoPreviewWrap: { paddingHorizontal: 14, marginBottom: 10 },
-  photoPreviewTitle: { fontSize: 12, fontWeight: "700", marginBottom: 10 },
+  photoPreviewTitle: { ...Typography.captionStrong, marginBottom: 10 },
   photoPreviewRow: { gap: 10, paddingRight: 14 },
   photoPreviewItem: { position: "relative" },
   photoPreview: { width: 148, height: 148, borderRadius: 14, borderWidth: 1 },
@@ -2116,13 +2126,13 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   composeActionBtn: { flexDirection: "row", alignItems: "center", gap: 6 },
-  composeActionLabel: { fontSize: 13, fontWeight: "600" },
+  composeActionLabel: { ...Typography.label },
   editPostBody: {
     padding: 14,
   },
   editPostInput: {
+    ...Typography.bodyLarge,
     minHeight: 180,
-    fontSize: 15,
     textAlignVertical: "top",
     borderWidth: 1,
     borderRadius: 16,
@@ -2157,9 +2167,8 @@ const styles = StyleSheet.create({
     }),
   },
   postOptionsTitle: {
+    ...Typography.sectionTitle,
     textAlign: "center",
-    fontSize: 16,
-    fontWeight: "900",
     marginBottom: 18,
   },
   postOptionsActions: {
@@ -2178,12 +2187,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF2F2",
   },
   postOptionLabel: {
-    fontSize: 13,
-    fontWeight: "700",
+    ...Typography.label,
   },
   postOptionDangerLabel: {
-    fontSize: 13,
-    fontWeight: "800",
+    ...Typography.label,
     color: "#DC2626",
   },
 
@@ -2212,9 +2219,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 10,
   },
-  commentBubbleName: { fontSize: 12, fontWeight: "700", marginBottom: 2 },
-  commentBubbleText: { fontSize: 13, lineHeight: 18 },
-  commentTime: { fontSize: 10, marginTop: 4 },
+  commentBubbleName: { ...Typography.captionStrong, marginBottom: 2 },
+  commentBubbleText: { ...Typography.bodySmall },
+  commentTime: { ...Typography.micro, marginTop: 4 },
   commentActionsRow: {
     marginTop: 4,
     marginLeft: 40,
@@ -2223,8 +2230,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   replyBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
+    ...Typography.captionStrong,
   },
   commentReactionSummary: {
     flexDirection: "row",
@@ -2235,11 +2241,10 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   commentReactionEmojis: {
-    fontSize: 12,
+    ...Typography.caption,
   },
   commentReactionCount: {
-    fontSize: 11,
-    fontWeight: "700",
+    ...Typography.microStrong,
   },
   reactionPickerWrap: {
     flexDirection: "row",
@@ -2265,7 +2270,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.16)",
   },
   reactionPickerEmoji: {
-    fontSize: 24,
+    ...Typography.flowTitle,
   },
   replyList: {
     marginTop: 8,
@@ -2295,19 +2300,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   replyTargetText: {
-    fontSize: 12,
-    fontWeight: "700",
+    ...Typography.captionStrong,
   },
   commentComposerRow: {
     flexDirection: "row",
     alignItems: "center",
   },
   commentInput: {
+    ...Typography.input,
     flex: 1,
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    fontSize: 13,
     maxHeight: 80,
     borderWidth: 1,
   },
@@ -2337,9 +2341,8 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   imageViewerCounter: {
+    ...Typography.label,
     color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "700",
     backgroundColor: "rgba(255,255,255,0.14)",
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -2385,13 +2388,12 @@ const styles = StyleSheet.create({
     opacity: 0.35,
   },
   imageViewerHint: {
+    ...Typography.captionStrong,
     position: "absolute",
     left: 0,
     right: 0,
     textAlign: "center",
     color: "rgba(255,255,255,0.78)",
-    fontSize: 12,
-    fontWeight: "600",
   },
   expandedImage: {
     width: "100%",

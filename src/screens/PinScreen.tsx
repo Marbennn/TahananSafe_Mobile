@@ -18,6 +18,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, useColors } from "../theme/colors";
+import { createTypography } from "../theme/typography";
 
 import NewLogo from "../../assets/NewLogo.svg";
 
@@ -403,22 +404,22 @@ export default function PinScreen({
               <Ionicons name="lock-closed" size={scale(34)} color="#DC2626" />
             </View>
 
-            <Text style={{ textAlign: "center", fontSize: scale(16), fontWeight: "900", color: TC.textDark, marginBottom: scale(10) }}>
+            <Text style={[styles.lockoutTitle, { color: TC.textDark }]}>
               Too Many Attempts
             </Text>
 
-            <Text style={{ textAlign: "center", fontSize: scale(12), lineHeight: scale(18), color: TC.muted, marginBottom: scale(8) }}>
+            <Text style={[styles.lockoutBody, { color: TC.muted }]}>
               You've entered the wrong PIN too many times.{"\n"}Please wait before trying again.
             </Text>
 
             {/* Countdown */}
             <View style={{ backgroundColor: TC.isDark ? "#1E293B" : "#F1F5F9", borderRadius: scale(12), paddingVertical: vscale(12), paddingHorizontal: scale(20), marginBottom: scale(20), alignItems: "center" }}>
-              <Text style={{ fontSize: scale(28), fontWeight: "900", color: "#DC2626", fontVariant: ["tabular-nums"] }}>
+              <Text style={styles.lockoutCountdown}>
                 {Math.floor(lockSeconds / 60)}:{String(lockSeconds % 60).padStart(2, "0")}
               </Text>
             </View>
 
-            <Text style={{ textAlign: "center", fontSize: scale(11), color: TC.muted }}>
+            <Text style={[styles.lockoutCaption, { color: TC.muted }]}>
               The keypad will unlock automatically
             </Text>
           </Animated.View>
@@ -434,6 +435,7 @@ function createStyles(
   width: number,
   height: number
 ) {
+  const typography = createTypography(scale);
   const contentWidth = Math.min(width, 480);
   const hPad = scale(22);
   const keyGap = clamp(scale(20), 12, 22);
@@ -494,8 +496,7 @@ function createStyles(
       gap: vscale(10),
     },
     loadingText: {
-      fontSize: scale(12),
-      fontWeight: "800",
+      ...typography.captionStrong,
       color: "#6B7280",
     },
 
@@ -506,8 +507,7 @@ function createStyles(
 
 
     title: {
-      fontSize: scale(15),
-      fontWeight: "800",
+      ...typography.sectionTitle,
       color: "#111827",
       marginBottom: spaceTitleToDots,
     },
@@ -542,8 +542,7 @@ function createStyles(
       borderRadius: scale(10),
     },
     forgotText: {
-      fontSize: scale(12),
-      fontWeight: "900",
+      ...typography.captionStrong,
       color: BLUE,
     },
 
@@ -579,8 +578,7 @@ function createStyles(
     },
 
     keyText: {
-      fontSize: scale(20),
-      fontWeight: "700",
+      ...typography.numeric,
       color: BLUE,
     },
 
@@ -595,6 +593,25 @@ function createStyles(
       borderRadius: btnSize / 2,
       alignItems: "center",
       justifyContent: "center",
+    },
+
+    lockoutTitle: {
+      ...typography.sectionTitle,
+      textAlign: "center",
+      marginBottom: scale(10),
+    },
+    lockoutBody: {
+      ...typography.caption,
+      textAlign: "center",
+      marginBottom: scale(8),
+    },
+    lockoutCountdown: {
+      ...typography.metric,
+      color: "#DC2626",
+    },
+    lockoutCaption: {
+      ...typography.micro,
+      textAlign: "center",
     },
   });
 }

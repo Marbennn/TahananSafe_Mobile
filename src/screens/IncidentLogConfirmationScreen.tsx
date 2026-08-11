@@ -19,6 +19,7 @@ import IncidentPreviewCard, {
 import IncidentLogConfirmedScreen from "./IncidentLogConfirmedScreen";
 import IncidentProgressHeader from "../components/IncidentLogScreen/IncidentProgressHeader";
 import { PRIMARY_ACTION_COLOR } from "../theme/colors";
+import { Typography } from "../theme/typography";
 
 type ConfirmResult = {
   incidentId: string;
@@ -197,13 +198,11 @@ const styles = StyleSheet.create({
     gap: 15,
   },
   reviewCopy: {
+    ...Typography.bodyLarge,
     width: "100%",
     maxWidth: 680,
     alignSelf: "center",
     paddingHorizontal: 11,
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: "500",
     color: TEXT_MUTED,
   },
   footerSurface: {
@@ -237,8 +236,7 @@ const styles = StyleSheet.create({
     width: 82,
   },
   editText: {
-    fontSize: 18,
-    fontWeight: "500",
+    ...Typography.button,
     color: NAVY,
   },
   confirmBtn: {
@@ -252,8 +250,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   confirmText: {
-    fontSize: 18,
-    fontWeight: "500",
+    ...Typography.button,
     color: "#FFFFFF",
   },
 });

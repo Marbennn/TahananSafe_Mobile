@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Colors, useColors } from "../theme/colors";
+import { createTypography } from "../theme/typography";
 
 type Props = {
   visible: boolean;
@@ -133,6 +134,7 @@ export default function SavedModal({
 }
 
 function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+  const type = createTypography(scale, vscale);
   return StyleSheet.create({
     modalRoot: {
       flex: 1,
@@ -171,9 +173,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     title: {
+      ...type.sectionTitle,
       textAlign: "center",
-      fontSize: scale(16),
-      fontWeight: "900",
       color: Colors.text,
       marginBottom: scale(10),
     },
@@ -184,9 +185,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       marginBottom: 0,
     },
     sub: {
+      ...type.caption,
       textAlign: "center",
-      fontSize: scale(12),
-      lineHeight: scale(18),
       color: "#6B7280",
       marginBottom: scale(22),
     },
@@ -213,9 +213,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       justifyContent: "center",
     },
     btnText: {
+      ...type.label,
       color: "#FFFFFF",
-      fontSize: scale(13),
-      fontWeight: "900",
     },
   });
 }

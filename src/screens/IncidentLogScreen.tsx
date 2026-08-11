@@ -47,6 +47,7 @@ import IncidentVideoPreviewModal from "../components/IncidentVideoPreviewModal";
 import IncidentProgressHeader from "../components/IncidentLogScreen/IncidentProgressHeader";
 import { showNativeAlert } from "../components/AppAlertProvider";
 import { Colors, PRIMARY_ACTION_COLOR } from "../theme/colors";
+import { Typography } from "../theme/typography";
 
 type IncidentSubmittedPayload = {
   incidentId: string;
@@ -1734,8 +1735,7 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: "900",
+    ...Typography.cardTitle,
     color: TEXT_DARK,
   },
   fieldHeaderRow: {
@@ -1747,17 +1747,15 @@ const styles = StyleSheet.create({
     marginBottom: 9,
   },
   fieldLabel: {
-    fontSize: 16,
-    fontWeight: "800",
+    ...Typography.label,
     color: TEXT_DARK,
   },
   required: {
+    ...Typography.label,
     color: "#E11D48",
-    fontWeight: "900",
   },
   optionalText: {
-    fontSize: 16,
-    fontWeight: "500",
+    ...Typography.caption,
     color: TEXT_MUTED,
   },
 
@@ -1777,8 +1775,7 @@ const styles = StyleSheet.create({
     borderColor: "#EF4444",
   },
   micText: {
-    fontSize: 12,
-    fontWeight: "900",
+    ...Typography.captionStrong,
     color: "#0B5C94",
   },
   voiceBtn: {
@@ -1793,31 +1790,27 @@ const styles = StyleSheet.create({
     backgroundColor: "#E11D48",
   },
   errorText: {
+    ...Typography.captionStrong,
     marginTop: -4,
     marginBottom: 8,
-    fontSize: 12,
-    fontWeight: "700",
     color: "#E11D48",
   },
   helperText: {
+    ...Typography.caption,
     marginTop: 8,
     marginBottom: 13,
-    fontSize: 12,
-    fontWeight: "600",
     color: "#677586",
   },
   speechHint: {
+    ...Typography.microStrong,
     marginTop: -4,
     marginBottom: 10,
-    fontSize: 11,
-    fontWeight: "800",
     color: "#52677A",
   },
   speechErrorText: {
+    ...Typography.microStrong,
     marginTop: -6,
     marginBottom: 10,
-    fontSize: 11,
-    fontWeight: "900",
     color: "#E11D48",
   },
 
@@ -1843,8 +1836,7 @@ const styles = StyleSheet.create({
   },
 
   textInput: {
-    fontSize: 15,
-    fontWeight: "500",
+    ...Typography.bodyLarge,
     color: TEXT_DARK,
     paddingVertical: Platform.OS === "android" ? 0 : 13,
   },
@@ -1854,10 +1846,8 @@ const styles = StyleSheet.create({
     paddingBottom: 13,
   },
   descriptionInput: {
+    ...Typography.bodyLarge,
     flex: 1,
-    fontSize: 15,
-    fontWeight: "500",
-    lineHeight: 21,
     color: TEXT_DARK,
     padding: 0,
   },
@@ -1868,19 +1858,16 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   textAreaInput: {
+    ...Typography.body,
     flex: 1,
-    fontSize: 14,
-    fontWeight: "700",
     color: TEXT_DARK,
     padding: 0,
-    lineHeight: 20,
   },
 
   aiErrorText: {
+    ...Typography.microStrong,
     marginTop: -4,
     marginBottom: 10,
-    fontSize: 11,
-    fontWeight: "900",
     color: "#E11D48",
   },
 
@@ -1902,14 +1889,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   photoBtnText: {
-    fontSize: 13,
-    fontWeight: "900",
+    ...Typography.label,
     color: "#0B5C94",
   },
   maxText: {
+    ...Typography.captionStrong,
     marginLeft: 12,
-    fontSize: 12,
-    fontWeight: "800",
     color: "#9AA7B5",
   },
 
@@ -1966,8 +1951,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   evidenceText: {
-    fontSize: 13,
-    fontWeight: "800",
+    ...Typography.label,
     color: TEXT_DARK,
   },
   attachmentWrap: {
@@ -2014,8 +1998,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   videoPreviewText: {
-    fontSize: 10,
-    fontWeight: "800",
+    ...Typography.badge,
     color: TEXT_DARK,
   },
   removeBadge: {
@@ -2050,14 +2033,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   locationBtnText: {
-    fontSize: 13,
-    fontWeight: "900",
+    ...Typography.label,
     color: "#0B5C94",
   },
   locationHintSolo: {
+    ...Typography.microStrong,
     marginTop: 8,
-    fontSize: 11,
-    fontWeight: "800",
     color: "#9AA7B5",
   },
   locationMapCard: {
@@ -2073,8 +2054,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   locationMapTitle: {
-    fontSize: 13,
-    fontWeight: "900",
+    ...Typography.label,
     color: TEXT_DARK,
   },
   locationMapFrame: {
@@ -2096,12 +2076,11 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   metaText: {
-    fontSize: 13,
-    fontWeight: "800",
+    ...Typography.label,
     color: TEXT_DARK,
   },
   metaLabel: {
-    fontWeight: "900",
+    ...Typography.label,
     color: "#52677A",
   },
   cardCompact: {
@@ -2131,21 +2110,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   toggleTitle: {
-    fontSize: 16,
-    fontWeight: "800",
+    ...Typography.sectionTitle,
     color: TEXT_DARK,
   },
   toggleSubtitle: {
+    ...Typography.caption,
     marginTop: 2,
-    fontSize: 12,
-    fontWeight: "500",
     color: TEXT_MUTED,
   },
   locationStatus: {
+    ...Typography.captionStrong,
     marginTop: 0,
-    fontSize: 12,
-    fontWeight: "600",
-    lineHeight: 17,
     color: "#5C6673",
   },
   locationBlock: {
@@ -2169,8 +2144,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F5F9",
   },
   showMapText: {
-    fontSize: 13,
-    fontWeight: "800",
+    ...Typography.label,
     color: "#00518D",
   },
   showMapTextDisabled: {
@@ -2193,9 +2167,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   witnessDropdownText: {
+    ...Typography.bodyLarge,
     flex: 1,
-    fontSize: 15,
-    fontWeight: "500",
     color: TEXT_DARK,
   },
   witnessDropdownPlaceholder: {
@@ -2229,22 +2202,20 @@ const styles = StyleSheet.create({
     backgroundColor: "#EEF6FF",
   },
   witnessDropdownOptionText: {
+    ...Typography.bodyLarge,
     flex: 1,
-    fontSize: 15,
-    fontWeight: "600",
     color: TEXT_DARK,
   },
   witnessDropdownOptionTextSelected: {
     color: Colors.primary,
-    fontWeight: "800",
+    ...Typography.bodyStrong,
   },
   draftedText: {
+    ...Typography.body,
     width: "100%",
     maxWidth: 680,
     marginTop: -6,
     textAlign: "center",
-    fontSize: 14,
-    fontWeight: "500",
     color: "#858585",
   },
 
@@ -2277,8 +2248,7 @@ const styles = StyleSheet.create({
     backgroundColor: NAVY,
   },
   submitText: {
+    ...Typography.button,
     color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "500",
   },
 });

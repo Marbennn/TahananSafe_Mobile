@@ -21,6 +21,7 @@ import Svg, {
 } from "react-native-svg";
 
 import { useColors } from "../../theme/colors";
+import { FontFamily, FontSize, FontWeight } from "../../theme/typography";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -322,12 +323,17 @@ export default function QuickActions({
           justifyContent: "center",
         },
         actionLabel: {
+          fontFamily: FontFamily,
           width: actionLabelWidth,
           marginTop: actionLabelGap,
           color: TC.textDark,
-          fontSize: clamp(Math.round(12 * menuFontScale), 10, 14),
+          fontSize: clamp(
+            Math.round(FontSize.caption * menuFontScale),
+            FontSize.micro,
+            FontSize.body,
+          ),
           lineHeight: actionLabelLineHeight,
-          fontWeight: "700",
+          fontWeight: FontWeight.semibold,
           textAlign: "center",
           includeFontPadding: false,
         },

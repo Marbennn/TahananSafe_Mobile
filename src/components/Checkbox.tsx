@@ -3,6 +3,7 @@ import React from "react";
 import { View, Text, Pressable, StyleSheet, GestureResponderEvent } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, useColors } from "../theme/colors";
+import { Typography } from "../theme/typography";
 
 type Props = {
   value: boolean;
@@ -35,5 +36,5 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   boxChecked: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  text: { fontSize: 12, color: "#9AA4B2" },
+  text: { ...Typography.caption, color: "#9AA4B2" },
 });

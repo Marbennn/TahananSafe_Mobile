@@ -14,6 +14,7 @@ import { AuthProvider, useAuth } from "./src/auth/AuthContext";
 
 // ✅ Theme
 import { ThemeProvider } from "./src/theme/ThemeContext";
+import { Typography } from "./src/theme/typography";
 
 // ✅ SecureStore (for local PIN enable/disable toggle)
 import * as SecureStore from "expo-secure-store";
@@ -1032,14 +1033,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5FAFE",
   },
   placeholderTitle: {
-    fontSize: 22,
-    fontWeight: "900",
+    ...Typography.flowTitle,
     color: "#0B2B45",
     marginBottom: 8,
   },
   placeholderText: {
-    fontSize: 12,
-    fontWeight: "700",
+    ...Typography.captionStrong,
     color: "#6B7280",
   },
 });

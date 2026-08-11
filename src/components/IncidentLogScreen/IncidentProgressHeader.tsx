@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { PRIMARY_ACTION_COLOR } from "../../theme/colors";
+import { Typography } from "../../theme/typography";
 
 type Props = {
   screenTitle: string;
@@ -151,10 +152,9 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
   screenTitle: {
+    ...Typography.authTitle,
     flex: 1,
     textAlign: "center",
-    fontSize: 26,
-    fontWeight: "800",
     color: TEXT_DARK,
   },
   headerSpacer: {
@@ -173,14 +173,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   stepEyebrow: {
-    fontSize: 12,
-    fontWeight: "600",
+    ...Typography.captionStrong,
     color: "#858B94",
     marginBottom: 3,
   },
   stepTitle: {
-    fontSize: 20,
-    fontWeight: "800",
+    ...Typography.numeric,
     color: TEXT_DARK,
     marginBottom: 10,
   },

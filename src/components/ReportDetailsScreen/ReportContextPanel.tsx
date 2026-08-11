@@ -9,6 +9,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 
 export type ReportContextData = {
   reference: string;
@@ -273,6 +274,7 @@ function makeStyles(
   compact: boolean
 ) {
   const size = (value: number) => Math.round(value * scale);
+  const type = createTypography(size, size);
   const cardBorder = colors.isDark ? "#334155" : "#DFE9F3";
   const softSurface = colors.isDark ? "#172033" : "#F7FAFD";
 
@@ -322,24 +324,17 @@ function makeStyles(
       minWidth: 0,
     },
     heroEyebrow: {
-      fontSize: size(9),
-      lineHeight: size(13),
-      letterSpacing: 1.1,
-      fontWeight: "900",
+      ...type.overline,
       color: "#BBD5EB",
     },
     heroTitle: {
+      ...type.modalTitle,
       marginTop: size(2),
-      fontSize: size(18),
-      lineHeight: size(23),
-      fontWeight: "900",
       color: "#FFFFFF",
     },
     heroReference: {
+      ...type.microStrong,
       marginTop: size(4),
-      fontSize: size(11),
-      lineHeight: size(15),
-      fontWeight: "700",
       color: "#C8D8E8",
     },
     heroMetaRow: {
@@ -363,9 +358,8 @@ function makeStyles(
       borderRadius: size(3),
     },
     statusText: {
+      ...type.badge,
       flexShrink: 1,
-      fontSize: size(10),
-      fontWeight: "900",
     },
     sectionCard: {
       borderRadius: size(18),
@@ -395,17 +389,12 @@ function makeStyles(
       backgroundColor: colors.isDark ? "#1E3A5F" : "#EEF6FF",
     },
     sectionTitle: {
+      ...type.cardTitle,
       flex: 1,
-      fontSize: size(14),
-      lineHeight: size(19),
-      fontWeight: "900",
       color: colors.textDark,
     },
     fieldLabel: {
-      fontSize: size(9),
-      lineHeight: size(13),
-      letterSpacing: 0.7,
-      fontWeight: "900",
+      ...type.overline,
       color: colors.muted,
     },
     descriptionBox: {
@@ -417,9 +406,7 @@ function makeStyles(
       borderColor: cardBorder,
     },
     descriptionText: {
-      fontSize: size(12),
-      lineHeight: size(19),
-      fontWeight: "600",
+      ...type.captionStrong,
       color: colors.textDark,
     },
     detailRow: {
@@ -442,17 +429,12 @@ function makeStyles(
       gap: size(2),
     },
     detailLabel: {
-      fontSize: size(9),
-      lineHeight: size(12),
-      letterSpacing: 0.45,
-      fontWeight: "900",
+      ...type.overline,
       textTransform: "uppercase",
       color: colors.muted,
     },
     detailValue: {
-      fontSize: size(12),
-      lineHeight: size(17),
-      fontWeight: "700",
+      ...type.captionStrong,
       color: colors.textDark,
     },
     rowDivider: {

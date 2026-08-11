@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, useColors } from "../../theme/colors";
+import { FontFamily, FontSize, FontWeight } from "../../theme/typography";
 
 export type TabKey =
   | "Home"
@@ -72,7 +73,12 @@ export default function AdminBotNav({
 
   const iconSize = useMemo(() => clamp(Math.round(22 * s), 19, 26), [s]);
   const labelFont = useMemo(
-    () => clamp(Math.round(10 * s), compact ? 8 : 9, 12),
+    () =>
+      clamp(
+        Math.round(FontSize.micro * s),
+        compact ? FontSize.micro - 2 : FontSize.micro - 1,
+        FontSize.caption
+      ),
     [s, compact]
   );
   const labelMarginTop = useMemo(() => clamp(Math.round(3 * s), 2, 4), [s]);
@@ -181,13 +187,14 @@ export default function AdminBotNav({
         label: {
           marginTop: labelMarginTop,
           fontSize: labelFont,
+          fontFamily: FontFamily,
           color: INACTIVE,
-          fontWeight: "600",
+          fontWeight: FontWeight.semibold,
           includeFontPadding: false,
         },
         labelActive: {
           color: Colors.primary,
-          fontWeight: "800",
+          fontWeight: FontWeight.bold,
         },
       }),
     [

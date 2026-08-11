@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { WebView } from "react-native-webview";
 import AdminBotNav, { TabKey } from "../../components/AdminComponents/AdminBotNav";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography, Typography } from "../../theme/typography";
 import { fetchMyNotificationsCombined } from "../../api/notifications";
 
 type Props = {
@@ -86,22 +87,35 @@ function buildHeatmapHtml(points: AlertPoint[]): string {
     html, body, #map { width: 100%; height: 100%; }
     .legend {
       background: #fff; padding: 10px 14px; border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.18); font: 13px/1.5 sans-serif;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+      font-family: "${Typography.bodySmall.fontFamily}", sans-serif;
+      font-size: ${Typography.bodySmall.fontSize}px;
+      line-height: ${Typography.bodySmall.lineHeight}px;
+      font-weight: ${Typography.bodySmall.fontWeight};
     }
-    .legend-title { font-weight: 800; margin-bottom: 4px; font-size: 13px; }
+    .legend-title { font-weight: ${Typography.label.fontWeight}; margin-bottom: 4px; font-size: ${Typography.label.fontSize}px; }
     .legend-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
     .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
     .gradient-bar {
       width: 120px; height: 12px; border-radius: 6px;
       background: linear-gradient(to right, #00f, #0ff, #0f0, #ff0, #f00);
     }
-    .gradient-labels { display: flex; justify-content: space-between; font-size: 10px; color: #666; margin-top: 2px; }
+    .gradient-labels { display: flex; justify-content: space-between; font-size: ${Typography.badge.fontSize}px; font-weight: ${Typography.badge.fontWeight}; color: #666; margin-top: 2px; }
     .info-popup { max-width: 220px; }
     .info-popup b { display: block; margin-bottom: 2px; }
-    .info-popup .meta { color: #666; font-size: 11px; margin-top: 4px; }
+    .info-popup .meta, .legend-meta { color: #666; font-size: ${Typography.micro.fontSize}px; line-height: ${Typography.micro.lineHeight}px; font-weight: ${Typography.micro.fontWeight}; margin-top: 4px; }
     @media (max-width: 360px), (max-height: 480px) {
-      .legend { padding: 7px 9px; border-radius: 8px; font-size: 11px; }
-      .legend-title { font-size: 11px; }
+      .legend {
+        padding: 7px 9px;
+        border-radius: 8px;
+        font-size: ${Typography.micro.fontSize}px;
+        line-height: ${Typography.micro.lineHeight}px;
+      }
+      .legend-title {
+        font-size: ${Typography.caption.fontSize}px;
+        line-height: ${Typography.caption.lineHeight}px;
+        font-weight: ${Typography.captionStrong.fontWeight};
+      }
       .gradient-bar { width: 88px; height: 9px; }
       .legend-row { gap: 5px; margin: 2px 0; }
       .dot { width: 9px; height: 9px; }
@@ -167,7 +181,7 @@ function buildHeatmapHtml(points: AlertPoint[]): string {
         '<div class="gradient-labels"><span>Low</span><span>High</span></div>' +
         '<div style="margin-top:8px">' +
         '<div class="legend-row"><span class="dot" style="background:#DC2626"></span> Alert Location</div>' +
-        '<div class="legend-row" style="color:#888;font-size:11px">' + alertData.length + ' alerts total</div>' +
+        '<div class="legend-row legend-meta">' + alertData.length + ' alerts total</div>' +
         '</div>';
       return div;
     };
@@ -325,6 +339,10 @@ export default function AdminMapScreen({ onTabChange, initialTab = "Map" }: Prop
 function makeStyles(width: number, height: number, mapBottomInset: number) {
   const compact = width < 360;
   const compactHeight = height < 500;
+  const compactType = createTypography(
+    (value) => Math.round(value * 0.82),
+    (value) => Math.round(value * 0.82)
+  );
   return StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F5FAFE" },
   page: { flex: 1, backgroundColor: "#F5FAFE" },
@@ -351,15 +369,12 @@ function makeStyles(width: number, height: number, mapBottomInset: number) {
     paddingRight: 12,
   },
   title: {
-    fontSize: compact ? 19 : 22,
-    fontWeight: "900",
+    ...(compact ? compactType.screenTitle : Typography.screenTitle),
     color: "#0B2B45",
-    letterSpacing: 0.2,
   },
   subtitle: {
+    ...Typography.caption,
     marginTop: 2,
-    fontSize: compact ? 11 : 13,
-    fontWeight: "400",
     color: "#6B7280",
   },
   refreshBtn: {
@@ -386,9 +401,8 @@ function makeStyles(width: number, height: number, mapBottomInset: number) {
     paddingHorizontal: 32,
   },
   loadingText: {
+    ...Typography.bodyStrong,
     marginTop: 12,
-    fontSize: 14,
-    fontWeight: "600",
     color: "#6B7280",
     textAlign: "center",
   },
@@ -400,8 +414,7 @@ function makeStyles(width: number, height: number, mapBottomInset: number) {
     backgroundColor: Colors.actionPrimary,
   },
   retryText: {
-    fontSize: 14,
-    fontWeight: "700",
+    ...Typography.button,
     color: "#FFFFFF",
   },
   });

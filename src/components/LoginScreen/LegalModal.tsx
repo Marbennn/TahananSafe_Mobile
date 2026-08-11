@@ -11,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 
 export type LegalMode = "terms" | "privacy";
 
@@ -241,6 +242,7 @@ By checking the box below, you confirm you have read and understood this Privacy
 }
 
 function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+  const typography = createTypography(scale);
   return StyleSheet.create({
     overlay: {
       flex: 1,
@@ -271,8 +273,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     title: {
-      fontSize: scale(14),
-      fontWeight: "800",
+      ...typography.sectionTitle,
       color: "#111827",
       maxWidth: "85%",
     },
@@ -292,8 +293,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     text: {
-      fontSize: scale(12),
-      lineHeight: scale(18),
+      ...typography.caption,
       color: "#374151",
     },
 
@@ -327,11 +327,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     checkText: {
+      ...typography.captionStrong,
       flex: 1,
-      fontSize: scale(12),
-      lineHeight: scale(16),
       color: "#111827",
-      fontWeight: "700",
     },
 
     footer: {
@@ -355,9 +353,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     primaryBtnText: {
+      ...typography.button,
       color: "#FFFFFF",
-      fontSize: scale(13),
-      fontWeight: "800",
     },
 
     disabledPressable: {

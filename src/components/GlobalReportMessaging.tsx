@@ -31,6 +31,7 @@ import {
   type ReportStatus,
 } from "../utils/reportStatus";
 import { useColors } from "../theme/colors";
+import { Typography } from "../theme/typography";
 import ReportMessaging from "./ReportDetailsScreen/ReportMessaging";
 
 type MessagingReport = {
@@ -1234,14 +1235,11 @@ function makeStyles(
       gap: 2,
     },
     modalTitle: {
-      fontSize: 19,
-      fontWeight: "900",
+      ...Typography.modalTitle,
       color: colors.heading,
     },
     modalSubtitle: {
-      fontSize: 11.5,
-      lineHeight: 16,
-      fontWeight: "500",
+      ...Typography.caption,
       color: colors.muted,
     },
     closeButton: {
@@ -1288,9 +1286,8 @@ function makeStyles(
       marginBottom: 4,
     },
     reportNumber: {
+      ...Typography.micro,
       flex: 1,
-      fontSize: 9.5,
-      fontWeight: "500",
       color: colors.muted,
     },
     reportMetaActions: {
@@ -1300,17 +1297,13 @@ function makeStyles(
       gap: 6,
     },
     reportTitle: {
-      fontSize: 16.5,
-      lineHeight: 20,
-      fontWeight: "700",
+      ...Typography.sectionTitle,
       color: colors.textDark,
     },
     reportDetail: {
+      ...Typography.bodySmall,
       marginTop: 0,
-      fontSize: 13.25,
-      lineHeight: 19.5,
       fontStyle: "italic",
-      fontWeight: "400",
       color: colors.muted,
     },
     reportBottomRow: {
@@ -1321,10 +1314,9 @@ function makeStyles(
       gap: 10,
     },
     reportDate: {
+      ...Typography.micro,
       flex: 1,
       minWidth: 0,
-      fontSize: 11,
-      fontWeight: "400",
       color: colors.muted,
     },
     statusPill: {
@@ -1334,8 +1326,7 @@ function makeStyles(
       paddingVertical: 5,
     },
     statusText: {
-      fontSize: 10,
-      fontWeight: "700",
+      ...Typography.badge,
     },
     viewMessagesRow: {
       flexShrink: 0,
@@ -1344,8 +1335,7 @@ function makeStyles(
       gap: 4,
     },
     viewMessagesText: {
-      fontSize: 11.5,
-      fontWeight: "700",
+      ...Typography.captionStrong,
       color: colors.primary,
     },
     unreadPill: {
@@ -1358,8 +1348,7 @@ function makeStyles(
       backgroundColor: "#E11D48",
     },
     unreadPillText: {
-      fontSize: 9,
-      fontWeight: "900",
+      ...Typography.badge,
       color: "#FFFFFF",
     },
     centerState: {
@@ -1380,16 +1369,13 @@ function makeStyles(
       backgroundColor: colors.chipBg,
     },
     stateTitle: {
+      ...Typography.cardTitle,
       marginTop: 4,
-      fontSize: 15,
-      fontWeight: "900",
       color: colors.heading,
       textAlign: "center",
     },
     stateText: {
-      fontSize: 12,
-      lineHeight: 17,
-      fontWeight: "500",
+      ...Typography.caption,
       color: colors.muted,
       textAlign: "center",
     },
@@ -1403,8 +1389,7 @@ function makeStyles(
       backgroundColor: colors.actionPrimary,
     },
     retryText: {
-      fontSize: 12,
-      fontWeight: "900",
+      ...Typography.captionStrong,
       color: "#FFFFFF",
     },
     floatingBoundaryTooltipPosition: {
@@ -1430,9 +1415,7 @@ function makeStyles(
       elevation: 10,
     },
     floatingBoundaryTooltipText: {
-      fontSize: 11,
-      lineHeight: 15,
-      fontWeight: "800",
+      ...Typography.microStrong,
       color: "#FFFFFF",
       textAlign: "center",
     },
@@ -1509,8 +1492,7 @@ function makeStyles(
       borderColor: colors.surface,
     },
     floatingBadgeText: {
-      fontSize: 9,
-      fontWeight: "900",
+      ...Typography.badge,
       color: "#FFFFFF",
     },
     pressed: {

@@ -5,9 +5,9 @@ import {
   Text,
   StyleSheet,
   useWindowDimensions,
-  Platform,
 } from "react-native";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -56,6 +56,7 @@ function createStyles(
   scale: (n: number) => number,
   vscale: (n: number) => number
 ) {
+  const typography = createTypography(scale);
   return StyleSheet.create({
     slide: {
       flex: 1,
@@ -73,17 +74,15 @@ function createStyles(
     },
 
     title: {
+      ...typography.sectionTitle,
       textAlign: "center",
-      fontSize: scale(16),
-      fontWeight: Platform.select({ ios: "800", android: "800" }) as any,
       color: Colors.text,
       marginBottom: vscale(6),
     },
 
     desc: {
+      ...typography.caption,
       textAlign: "center",
-      fontSize: scale(11.5),
-      lineHeight: scale(16),
       color: Colors.muted,
       maxWidth: scale(300),
     },

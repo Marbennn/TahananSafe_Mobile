@@ -2,6 +2,7 @@
 import React from "react";
 import { Pressable, Text, StyleSheet, GestureResponderEvent } from "react-native";
 import { Colors, useColors } from "../theme/colors";
+import { Typography } from "../theme/typography";
 
 type Props = {
   title: string;
@@ -42,9 +43,7 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.55 },
   text: {
+    ...Typography.button,
     color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-    letterSpacing: 0.2,
   },
 });

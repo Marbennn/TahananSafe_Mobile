@@ -25,6 +25,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { createTypography } from "../../theme/typography";
 
 import {
   buildReportThreadAttachmentUrl,
@@ -2617,6 +2618,7 @@ function makeStyles({
   isTablet: boolean;
   contentMaxWidth: number;
 }) {
+  const type = createTypography(scale, vscale);
   const border = isDark ? "#334155" : "#E7EEF7";
   const background = isDark ? "#1E293B" : "#FFFFFF";
   const textDark = isDark ? "#F1F5F9" : "#0B2B45";
@@ -2700,8 +2702,7 @@ function makeStyles({
         borderColor: background,
       },
       messageFabBadgeText: {
-        fontSize: scale(9),
-        fontWeight: "900",
+        ...type.badge,
         color: "#FFFFFF",
       },
       messageModalLayer: {
@@ -2768,8 +2769,7 @@ function makeStyles({
         backgroundColor: isDark ? "#1E3A5F" : "#EEF6FF",
       },
       contextButtonText: {
-        fontSize: scale(10),
-        fontWeight: "800",
+        ...type.badge,
         color: primary,
       },
       contextButtonMessages: {
@@ -2815,13 +2815,11 @@ function makeStyles({
         gap: vscale(6),
       },
       emptyChatTitle: {
-        fontSize: scale(isTablet ? 13 : 12),
-        fontWeight: "900",
+        ...type.captionStrong,
         color: textDark,
       },
       emptyChatSubtitle: {
-        fontSize: scale(10.5),
-        fontWeight: "400",
+        ...type.micro,
         color: mutedText,
         textAlign: "center",
       },
@@ -2834,8 +2832,7 @@ function makeStyles({
         marginBottom: vscale(18),
       },
       chatDatePillText: {
-        fontSize: scale(10),
-        fontWeight: "900",
+        ...type.badge,
         color: "#9AA0A8",
       },
       messageBlock: {
@@ -2843,16 +2840,14 @@ function makeStyles({
         marginBottom: vscale(12),
       },
       messageSender: {
-        fontSize: scale(10),
-        fontWeight: "900",
+        ...type.badge,
         color: "#718093",
         marginBottom: vscale(5),
         marginLeft: scale(2),
       },
       messageTime: {
+        ...type.microStrong,
         marginTop: vscale(4),
-        fontSize: scale(9.5),
-        fontWeight: "800",
         color: "#8F99A5",
       },
       messageTimeLeft: { alignSelf: "flex-start" },
@@ -2864,8 +2859,7 @@ function makeStyles({
       messageMetaWrapLeft: { alignItems: "flex-start" },
       messageMetaWrapRight: { alignItems: "flex-end" },
       messageMetaText: {
-        fontSize: scale(9.5),
-        fontWeight: "500",
+        ...type.micro,
         color: "#94A3B8",
       },
       messageStack: {
@@ -2908,8 +2902,7 @@ function makeStyles({
         justifyContent: "flex-end",
       },
       replyMetaText: {
-        fontSize: scale(9.5),
-        fontWeight: "600",
+        ...type.microStrong,
         color: "#94A3B8",
         maxWidth: scale(isTablet ? 240 : 190),
       },
@@ -2929,9 +2922,7 @@ function makeStyles({
         borderColor: "#1F2937",
       },
       replyPreviewText: {
-        fontSize: scale(10.5),
-        fontWeight: "500",
-        lineHeight: vscale(14),
+        ...type.micro,
       },
       replyPreviewTextLeft: { color: "#334155" },
       replyPreviewTextRight: { color: "#F8FAFC" },
@@ -2948,8 +2939,7 @@ function makeStyles({
         paddingVertical: vscale(7),
       },
       deletedMessageText: {
-        fontSize: scale(10.5),
-        fontWeight: "500",
+        ...type.micro,
         color: "#E5E7EB",
       },
       messageRow: {
@@ -3023,10 +3013,9 @@ function makeStyles({
         justifyContent: "center",
       },
       imagePreviewTitle: {
+        ...type.sectionTitle,
         flex: 1,
         textAlign: "center",
-        fontSize: scale(isTablet ? 17 : 16),
-        fontWeight: "800",
         color: "#FFFFFF",
       },
       imagePreviewHeaderSpacer: {
@@ -3073,10 +3062,9 @@ function makeStyles({
         backgroundColor: "rgba(50,175,230,0.96)",
       },
       threadAttachmentFileName: {
+        ...type.captionStrong,
         width: "100%",
         textAlign: "center",
-        fontSize: scale(isTablet ? 12 : 11),
-        fontWeight: "700",
       },
       threadAttachmentCaption: {
         paddingHorizontal: scale(10),
@@ -3084,10 +3072,8 @@ function makeStyles({
         paddingBottom: vscale(7),
       },
       bubbleText: {
+        ...type.captionStrong,
         flexShrink: 1,
-        fontSize: scale(isTablet ? 13 : 12),
-        fontWeight: "800",
-        lineHeight: vscale(isTablet ? 18 : 17),
       },
       bubbleTextLeft: { color: "#4D5662" },
       bubbleTextRight: { color: "#FFFFFF" },
@@ -3112,13 +3098,11 @@ function makeStyles({
         gap: vscale(2),
       },
       replyBannerTitle: {
-        fontSize: scale(10.5),
-        fontWeight: "900",
+        ...type.microStrong,
         color: "#334155",
       },
       replyBannerText: {
-        fontSize: scale(10.5),
-        fontWeight: "400",
+        ...type.micro,
         color: "#64748B",
       },
       replyBannerClose: {
@@ -3152,13 +3136,11 @@ function makeStyles({
         gap: vscale(2),
       },
       editingBannerTitle: {
-        fontSize: scale(10.5),
-        fontWeight: "900",
+        ...type.microStrong,
         color: primary,
       },
       editingBannerText: {
-        fontSize: scale(10.5),
-        fontWeight: "400",
+        ...type.micro,
         color: "#475569",
       },
       editingBannerClose: {
@@ -3240,13 +3222,11 @@ function makeStyles({
         gap: vscale(3),
       },
       composerAttachmentName: {
-        fontSize: scale(isTablet ? 12 : 11),
-        fontWeight: "800",
+        ...type.captionStrong,
         color: textDark,
       },
       composerAttachmentMeta: {
-        fontSize: scale(isTablet ? 11 : 10),
-        fontWeight: "600",
+        ...type.microStrong,
         color: mutedText,
       },
       composerAttachmentRemove: {
@@ -3301,11 +3281,10 @@ function makeStyles({
         opacity: 0.46,
       },
       composerInput: {
+        ...type.input,
         flex: 1,
         height: vscale(40),
         paddingVertical: 0,
-        fontSize: scale(isTablet ? 13 : 12),
-        fontWeight: "800",
         color: isDark ? "#F1F5F9" : "#111827",
       },
       sendButton: {
@@ -3321,8 +3300,8 @@ function makeStyles({
         paddingBottom: vscale(6),
       },
       disabledMessagingText: {
+        ...type.caption,
         textAlign: "center",
-        fontSize: scale(12),
         color: "#94A3B8",
         fontStyle: "italic",
       },
@@ -3339,8 +3318,7 @@ function makeStyles({
         paddingVertical: vscale(10),
       },
       bannerNeutralText: {
-        fontSize: scale(10.5),
-        fontWeight: "400",
+        ...type.micro,
         color: "#6E7D90",
       },
       bannerDanger: {
@@ -3357,9 +3335,8 @@ function makeStyles({
         paddingVertical: vscale(10),
       },
       bannerDangerText: {
+        ...type.micro,
         flex: 1,
-        fontSize: scale(10.5),
-        fontWeight: "400",
         color: "#B91C1C",
       },
       bannerButton: {
@@ -3371,8 +3348,7 @@ function makeStyles({
         backgroundColor: "#FFFFFF",
       },
       bannerButtonText: {
-        fontSize: scale(10.5),
-        fontWeight: "900",
+        ...type.microStrong,
         color: primary,
       },
       newMessagePillWrap: {
@@ -3395,8 +3371,7 @@ function makeStyles({
         borderColor: "rgba(255,255,255,0.25)",
       },
       newMessagePillText: {
-        fontSize: scale(10.5),
-        fontWeight: "900",
+        ...type.microStrong,
         color: "#FFFFFF",
       },
       threadMenuBackdrop: {
@@ -3434,9 +3409,7 @@ function makeStyles({
         borderColor: "#D7E3F4",
       },
       threadMenuPreviewText: {
-        fontSize: scale(isTablet ? 12 : 11),
-        fontWeight: "500",
-        lineHeight: vscale(isTablet ? 16 : 15),
+        ...type.caption,
       },
       threadMenuPreviewTextLeft: { color: "#334155" },
       threadMenuPreviewTextRight: { color: "#0F172A" },
@@ -3466,8 +3439,7 @@ function makeStyles({
       },
       threadMenuActionLast: { borderBottomWidth: 0 },
       threadMenuActionText: {
-        fontSize: scale(12),
-        fontWeight: "700",
+        ...type.captionStrong,
         color: "#FFFFFF",
       },
       threadMenuDeleteAction: {

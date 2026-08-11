@@ -13,6 +13,7 @@ import {
 } from "react-native";
 
 import { useColors } from "../../theme/colors";
+import { FontFamily, FontSize, FontWeight } from "../../theme/typography";
 import GreetingCardSvg from "../../../assets/HomeScreen/GreetingCard.svg";
 import Carousel2Svg from "../../../assets/HomeScreen/Carousel2.svg";
 
@@ -323,17 +324,27 @@ export default function GreetingCard({ greeting, dateLine, userName = "User" }: 
         },
 
         title: {
+          fontFamily: FontFamily,
           color: "#fff",
-          fontSize: clamp(Math.round(16 * fs), 14, 19),
-          fontWeight: "900",
+          fontSize: clamp(
+            Math.round(FontSize.sectionTitle * fs),
+            FontSize.body,
+            FontSize.modalTitle,
+          ),
+          fontWeight: FontWeight.bold,
           marginBottom: clamp(Math.round(4 * s), 3, 6),
           lineHeight: clamp(Math.round(20 * fs), 18, 24),
         },
 
         sub: {
+          fontFamily: FontFamily,
           color: "rgba(255,255,255,0.85)",
-          fontSize: clamp(Math.round(11 * fs), 10, 13),
-          fontWeight: "700",
+          fontSize: clamp(
+            Math.round(FontSize.overline * fs),
+            FontSize.micro,
+            FontSize.label,
+          ),
+          fontWeight: FontWeight.semibold,
           lineHeight: clamp(Math.round(14 * fs), 12, 17),
         },
 

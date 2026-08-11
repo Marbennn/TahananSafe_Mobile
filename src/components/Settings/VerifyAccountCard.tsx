@@ -19,6 +19,7 @@ import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 import { getAccessToken } from "../../auth/session";
 import {
   getVerificationStatusApi,
@@ -790,6 +791,7 @@ export default function VerifyAccountCard({
 }
 
 function makeStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+  const type = createTypography(scale, vscale);
   const CARD_R = scale(22);
 
   return StyleSheet.create({
@@ -858,9 +860,8 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
     justifyContent: "center",
   },
   avatarFallbackInitials: {
+    ...type.numeric,
     color: "rgba(255,255,255,0.92)",
-    fontSize: scale(20),
-    fontWeight: "900",
   },
 
     infoBlock: {
@@ -868,16 +869,13 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       minWidth: 0,
     },
     nameText: {
+      ...type.sectionTitle,
       color: "#FFFFFF",
-      fontSize: scale(17),
-      fontWeight: "800",
-      letterSpacing: 0.3,
     },
     emailText: {
+      ...type.caption,
       marginTop: vscale(2),
       color: "rgba(255,255,255,0.7)",
-      fontSize: scale(12),
-      fontWeight: "500",
     },
 
     statusBadge: {
@@ -891,10 +889,8 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       borderColor: "rgba(255,255,255,0.15)",
     },
     statusBadgeText: {
+      ...type.badge,
       color: "#FFFFFF",
-      fontSize: scale(10),
-      fontWeight: "800",
-      letterSpacing: 0.3,
     },
 
     nodesRow: {
@@ -907,15 +903,14 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       flex: 1,
     },
     nodeLabel: {
+      ...type.badge,
       marginTop: vscale(6),
       color: "rgba(255,255,255,0.45)",
-      fontSize: scale(10),
-      fontWeight: "600",
       textAlign: "center",
     },
     nodeLabelDone: {
       color: "rgba(255,255,255,0.9)",
-      fontWeight: "800",
+      ...type.badge,
     },
     nodeLabelActive: {
       color: "rgba(255,255,255,0.7)",
@@ -933,10 +928,9 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       backgroundColor: "rgba(248,113,113,0.12)",
     },
     rejectedText: {
+      ...type.microStrong,
       flex: 1,
       color: "#FCA5A5",
-      fontSize: scale(11),
-      fontWeight: "600",
     },
 
     /* ── CTA Button ── */
@@ -957,10 +951,8 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       borderColor: "rgba(255,255,255,0.15)",
     },
     ctaText: {
+      ...type.label,
       color: "#FFFFFF",
-      fontSize: scale(13),
-      fontWeight: "800",
-      letterSpacing: 0.3,
     },
     ctaArrow: {
       width: scale(24),
@@ -1000,8 +992,8 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       alignItems: "center",
       justifyContent: "center",
     },
-    centerTitle: { fontSize: scale(16), fontWeight: "900" },
-    centerSub: { marginTop: vscale(2), fontSize: scale(11), fontWeight: "500", lineHeight: scale(15) },
+    centerTitle: { ...type.sectionTitle },
+    centerSub: { ...type.micro, marginTop: vscale(2) },
     centerCloseBtn: {
       width: vscale(36),
       height: vscale(36),
@@ -1016,7 +1008,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       borderRadius: vscale(12),
       padding: scale(12),
     },
-    typeTitle: { fontSize: scale(12), fontWeight: "900", marginBottom: vscale(10) },
+    typeTitle: { ...type.captionStrong, marginBottom: vscale(10) },
     typeOptions: { gap: vscale(8) },
     typeOption: {
       borderWidth: 1,
@@ -1028,8 +1020,8 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       justifyContent: "space-between",
       gap: scale(10),
     },
-    typeOptionLabel: { fontSize: scale(12), fontWeight: "900" },
-    typeOptionSub: { marginTop: vscale(2), fontSize: scale(11), fontWeight: "500", lineHeight: scale(15) },
+    typeOptionLabel: { ...type.captionStrong },
+    typeOptionSub: { ...type.micro, marginTop: vscale(2) },
 
     previewWrap: { marginTop: vscale(12) },
     previewImg: {
@@ -1047,7 +1039,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       justifyContent: "center",
       gap: vscale(6),
     },
-    previewText: { fontSize: scale(12), fontWeight: "600" },
+    previewText: { ...type.captionStrong },
 
     uploadRow: {
       marginTop: vscale(12),
@@ -1066,7 +1058,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       paddingHorizontal: scale(12),
       paddingVertical: vscale(8),
     },
-    uploadBtnText: { fontSize: scale(12), fontWeight: "900" },
+    uploadBtnText: { ...type.captionStrong },
 
     centerActions: {
       marginTop: vscale(14),
@@ -1085,13 +1077,11 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number)
       paddingHorizontal: scale(14),
     },
     actionGhost: { backgroundColor: "transparent" },
-    actionBtnText: { fontSize: scale(14), fontWeight: "900" },
+    actionBtnText: { ...type.button },
 
     centerFoot: {
+      ...type.micro,
       marginTop: vscale(10),
-      fontSize: scale(11),
-      fontWeight: "500",
-      lineHeight: scale(15),
     },
   });
 }

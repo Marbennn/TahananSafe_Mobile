@@ -19,6 +19,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 
 import {
   fetchMyNotificationsCombined,
@@ -777,6 +778,7 @@ function makeStyles(
   height: number
 ) {
   const SEARCH_H = vscale(40);
+  const type = createTypography(scale, vscale);
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: BG },
@@ -812,14 +814,12 @@ function makeStyles(
       flexWrap: "wrap",
     },
     topTitle: {
-      fontSize: scale(22),
-      fontWeight: "900",
+      ...type.flowTitle,
       color: TEXT_DARK,
     },
     subTitle: {
+      ...type.microStrong,
       marginTop: vscale(2),
-      fontSize: scale(11),
-      fontWeight: "700",
       color: "#94A3B8",
     },
 
@@ -832,8 +832,7 @@ function makeStyles(
       borderColor: "#D8E9FF",
     },
     unreadPillText: {
-      fontSize: scale(10),
-      fontWeight: "900",
+      ...type.badge,
       color: Colors.primary,
     },
 
@@ -849,8 +848,7 @@ function makeStyles(
       borderColor: "#BBF7D0",
     },
     caughtPillText: {
-      fontSize: scale(10),
-      fontWeight: "900",
+      ...type.badge,
       color: "#166534",
     },
 
@@ -885,12 +883,11 @@ function makeStyles(
       gap: scale(8),
     },
     searchInput: {
+      ...type.input,
       flex: 1,
       minWidth: 0,
-      fontSize: scale(13),
       color: "#111827",
       paddingVertical: 0,
-      fontWeight: "600",
     },
     clearQueryBtn: {
       alignItems: "center",
@@ -920,8 +917,7 @@ function makeStyles(
       borderColor: "#D8E9FF",
     },
     pillText: {
-      fontSize: scale(11),
-      fontWeight: "900",
+      ...type.microStrong,
       color: "#475569",
     },
     pillTextActive: {
@@ -945,8 +941,7 @@ function makeStyles(
       gap: scale(10),
     },
     sectionTitle: {
-      fontSize: scale(12),
-      fontWeight: "900",
+      ...type.overline,
       color: "#334155",
     },
     sectionLine: {
@@ -1005,9 +1000,8 @@ function makeStyles(
       gap: scale(8),
     },
     cardTitle: {
+      ...type.cardTitle,
       flex: 1,
-      fontSize: scale(12),
-      fontWeight: "900",
       color: "#1F2A37",
     },
     cardTitleUnread: {
@@ -1021,11 +1015,9 @@ function makeStyles(
     },
 
     cardMsg: {
+      ...type.caption,
       marginTop: vscale(3),
-      fontSize: scale(10),
-      fontWeight: "700",
       color: "#6B7280",
-      lineHeight: vscale(14),
     },
 
     metaRow: {
@@ -1035,8 +1027,7 @@ function makeStyles(
       gap: scale(6),
     },
     cardTime: {
-      fontSize: scale(9),
-      fontWeight: "800",
+      ...type.micro,
       color: "#94A3B8",
     },
 
@@ -1052,17 +1043,14 @@ function makeStyles(
       gap: vscale(6),
     },
     emptyTitle: {
+      ...type.cardTitle,
       marginTop: vscale(6),
-      fontSize: scale(14),
-      fontWeight: "900",
       color: "#1F2A37",
     },
     emptyText: {
-      fontSize: scale(11),
-      fontWeight: "700",
+      ...type.bodySmall,
       color: "#6B7280",
       textAlign: "center",
-      lineHeight: vscale(16),
     },
 
     centerBox: {
@@ -1076,20 +1064,17 @@ function makeStyles(
       gap: vscale(10),
     },
     centerHint: {
-      fontSize: scale(13),
-      fontWeight: "800",
+      ...type.bodyStrong,
       color: "#64748B",
       textAlign: "center",
     },
     smallHint: {
-      fontSize: scale(11),
-      fontWeight: "700",
+      ...type.caption,
       color: "#94A3B8",
       textAlign: "center",
     },
     errorText: {
-      fontSize: scale(13),
-      fontWeight: "900",
+      ...type.bodyStrong,
       color: "#B91C1C",
       textAlign: "center",
     },
@@ -1101,9 +1086,8 @@ function makeStyles(
       borderRadius: scale(999),
     },
     retryText: {
+      ...type.button,
       color: "#FFFFFF",
-      fontWeight: "900",
-      fontSize: scale(12),
     },
 
     menuOverlay: {
@@ -1136,8 +1120,7 @@ function makeStyles(
       marginBottom: vscale(10),
     },
     menuTitle: {
-      fontSize: scale(13),
-      fontWeight: "900",
+      ...type.cardTitle,
       color: "#0F172A",
       marginBottom: vscale(10),
     },
@@ -1154,8 +1137,7 @@ function makeStyles(
       marginBottom: vscale(10),
     },
     menuItemText: {
-      fontSize: scale(12),
-      fontWeight: "900",
+      ...type.bodyStrong,
       color: "#0F172A",
     },
     menuCancel: {
@@ -1168,8 +1150,7 @@ function makeStyles(
       borderColor: BORDER,
     },
     menuCancelText: {
-      fontSize: scale(12),
-      fontWeight: "900",
+      ...type.button,
       color: "#334155",
     },
 
@@ -1183,16 +1164,13 @@ function makeStyles(
       marginBottom: vscale(10),
     },
     previewTitle: {
-      fontSize: scale(12),
-      fontWeight: "900",
+      ...type.cardTitle,
       color: "#0F172A",
     },
     previewMsg: {
+      ...type.caption,
       marginTop: vscale(4),
-      fontSize: scale(10),
-      fontWeight: "700",
       color: "#475569",
-      lineHeight: vscale(14),
     },
     previewMeta: {
       marginTop: vscale(8),
@@ -1201,8 +1179,7 @@ function makeStyles(
       gap: scale(6),
     },
     previewTime: {
-      fontSize: scale(9),
-      fontWeight: "800",
+      ...type.micro,
       color: "#94A3B8",
     },
   });

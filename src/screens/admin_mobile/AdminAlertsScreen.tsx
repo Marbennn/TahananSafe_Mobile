@@ -18,6 +18,7 @@ import { WebView } from "react-native-webview";
 import * as Location from "expo-location";
 import AdminBotNav, { TabKey } from "../../components/AdminComponents/AdminBotNav";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography, Typography } from "../../theme/typography";
 import {
   fetchMyNotificationsCombined,
   toggleNotificationReadCombined,
@@ -208,7 +209,11 @@ function buildLeafletHtml(
     html, body, #map { width: 100%; height: 100%; }
     .legend {
       background: #fff; padding: 8px 12px; border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.2); font: 13px/1.4 sans-serif;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      font-family: "${Typography.bodySmall.fontFamily}", sans-serif;
+      font-size: ${Typography.bodySmall.fontSize}px;
+      line-height: ${Typography.bodySmall.lineHeight}px;
+      font-weight: ${Typography.bodySmall.fontWeight};
     }
     .legend-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
     .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
@@ -592,10 +597,10 @@ export default function AdminAlertsScreen({
                   <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
                 </Pressable>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 16, fontWeight: "900", color: "#FFFFFF" }} allowFontScaling={false} numberOfLines={1}>
+                  <Text style={[Typography.modalTitle, { color: "#FFFFFF" }]} allowFontScaling={false} numberOfLines={1}>
                     {selectedAlert?.title ?? "SOS Alert"}
                   </Text>
-                  <Text style={{ fontSize: 12, fontWeight: "600", color: "rgba(255,255,255,0.8)", marginTop: 2 }} allowFontScaling={false}>
+                  <Text style={[Typography.captionStrong, { color: "rgba(255,255,255,0.8)", marginTop: 2 }]} allowFontScaling={false}>
                     {selectedAlert?.date ?? ""} {selectedAlert?.time ? `• ${selectedAlert.time}` : ""}
                   </Text>
                 </View>
@@ -632,11 +637,11 @@ export default function AdminAlertsScreen({
                     <Ionicons name="warning" size={20} color="#DC2626" />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: "800", color: TEXT }} allowFontScaling={false} numberOfLines={1}>
+                    <Text style={[Typography.cardTitle, { color: TEXT }]} allowFontScaling={false} numberOfLines={1}>
                       {selectedAlert?.senderName ?? "Unknown Sender"}
                     </Text>
                     <Text
-                      style={{ fontSize: 12, fontWeight: "500", color: "#64748B", marginTop: 2 }}
+                      style={[Typography.caption, { color: "#64748B", marginTop: 2 }]}
                       allowFontScaling={false}
                     >
                       {selectedAlert?.description ?? ""}
@@ -647,7 +652,7 @@ export default function AdminAlertsScreen({
                 {selectedAlert?.address ? (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 }}>
                     <Ionicons name="location" size={16} color={Colors.primary} />
-                    <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: "#334155" }} allowFontScaling={false} numberOfLines={2}>
+                    <Text style={[Typography.label, { flex: 1, color: "#334155" }]} allowFontScaling={false} numberOfLines={2}>
                       {selectedAlert.address}
                     </Text>
                   </View>
@@ -656,7 +661,7 @@ export default function AdminAlertsScreen({
                 {selectedAlert?.latitude == null || selectedAlert?.longitude == null ? (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10, backgroundColor: "#FEF3C7", borderRadius: 8, padding: 10 }}>
                     <Ionicons name="alert-circle" size={16} color="#D97706" />
-                    <Text style={{ flex: 1, fontSize: 12, fontWeight: "600", color: "#92400E" }} allowFontScaling={false}>
+                    <Text style={[Typography.captionStrong, { flex: 1, color: "#92400E" }]} allowFontScaling={false}>
                       Location coordinates not available for this alert.
                     </Text>
                   </View>
@@ -673,7 +678,7 @@ export default function AdminAlertsScreen({
                     marginTop: 4,
                   }]}
                 >
-                  <Text style={{ fontSize: 14, fontWeight: "800", color: "#FFFFFF" }} allowFontScaling={false}>
+                  <Text style={[Typography.button, { color: "#FFFFFF" }]} allowFontScaling={false}>
                     Dismiss
                   </Text>
                 </Pressable>
@@ -704,6 +709,8 @@ function makeStyles(
   vscale: (n: number) => number,
   height: number
 ) {
+  const type = createTypography(scale, vscale);
+
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: BG },
     page: { flex: 1, backgroundColor: BG },
@@ -722,15 +729,12 @@ function makeStyles(
       justifyContent: "space-between",
     },
     title: {
-      fontSize: scale(28),
-      fontWeight: "900",
+      ...type.screenTitle,
       color: TEXT,
-      letterSpacing: 0.2,
     },
     subtitle: {
+      ...type.bodySmall,
       marginTop: vscale(3),
-      fontSize: scale(13),
-      fontWeight: "400",
       color: MUTED,
     },
     markAllBtn: {
@@ -742,8 +746,7 @@ function makeStyles(
       borderColor: BORDER,
     },
     markAllText: {
-      fontSize: scale(12),
-      fontWeight: "600",
+      ...type.captionStrong,
       color: Colors.primary,
     },
 
@@ -772,8 +775,7 @@ function makeStyles(
       borderColor: Colors.primary,
     },
     filterLabel: {
-      fontSize: scale(13),
-      fontWeight: "600",
+      ...type.label,
       color: MUTED,
     },
     filterLabelActive: {
@@ -789,8 +791,7 @@ function makeStyles(
       paddingHorizontal: scale(4),
     },
     badgeText: {
-      fontSize: scale(10),
-      fontWeight: "800",
+      ...type.badge,
       color: "#FFFFFF",
     },
 
@@ -812,14 +813,12 @@ function makeStyles(
       gap: scale(10),
     },
     errorText: {
+      ...type.microStrong,
       flex: 1,
-      fontSize: scale(11),
-      fontWeight: "700",
       color: "#B91C1C",
     },
     errorRetry: {
-      fontSize: scale(12),
-      fontWeight: "800",
+      ...type.captionStrong,
       color: "#B91C1C",
     },
 
@@ -879,13 +878,12 @@ function makeStyles(
       marginBottom: vscale(3),
     },
     cardTitle: {
+      ...type.cardTitle,
       flex: 1,
-      fontSize: scale(14),
-      fontWeight: "600",
       color: TEXT,
     },
     cardTitleUnread: {
-      fontWeight: "800",
+      ...type.button,
     },
     severityPill: {
       paddingHorizontal: scale(8),
@@ -894,14 +892,11 @@ function makeStyles(
       flexShrink: 0,
     },
     severityLabel: {
-      fontSize: scale(10),
-      fontWeight: "700",
+      ...type.badge,
     },
     cardDesc: {
-      fontSize: scale(13),
-      fontWeight: "400",
+      ...type.bodySmall,
       color: MUTED,
-      lineHeight: scale(18),
       marginBottom: vscale(6),
     },
     cardMeta: {
@@ -912,12 +907,11 @@ function makeStyles(
       marginTop: vscale(6),
     },
     metaText: {
-      fontSize: scale(11),
-      fontWeight: "400",
+      ...type.micro,
       color: SUBTLE,
     },
     metaDot: {
-      fontSize: scale(11),
+      ...type.micro,
       color: SUBTLE,
     },
 
@@ -932,15 +926,13 @@ function makeStyles(
       borderRadius: scale(14),
     },
     emptyTitle: {
+      ...type.sectionTitle,
       marginTop: vscale(10),
-      fontSize: scale(16),
-      fontWeight: "600",
       color: TEXT,
     },
     emptyText: {
+      ...type.bodySmall,
       marginTop: vscale(4),
-      fontSize: scale(13),
-      fontWeight: "400",
       color: MUTED,
       textAlign: "center",
     },

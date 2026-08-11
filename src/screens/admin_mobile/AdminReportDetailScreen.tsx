@@ -19,6 +19,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography, Typography } from "../../theme/typography";
 import {
   fetchAdminIncidentById,
   AdminIncident,
@@ -393,8 +394,9 @@ export default function AdminReportDetailScreen({ reportId, onBack }: Props) {
                         </View>
                         <Text style={[
                           s.stepLabel,
-                          done && { color: TEXT_DARK, fontWeight: "700" },
-                          active && { color, fontWeight: "900" },
+                          done && s.stepLabelDone,
+                          active && s.stepLabelActive,
+                          active && { color },
                         ]}>
                           {step.label}
                         </Text>
@@ -675,6 +677,10 @@ function makeStyles(width: number, height: number, compact: boolean) {
   const horizontalPadding = compact ? 10 : 14;
   const viewerWidth = Math.max(1, Math.min(width - 24, 900));
   const viewerHeight = Math.max(1, Math.min(height - 120, viewerWidth, 900));
+  const compactType = createTypography(
+    (value) => Math.round(value * 0.9),
+    (value) => Math.round(value * 0.9)
+  );
 
   return StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
@@ -714,11 +720,9 @@ function makeStyles(width: number, height: number, compact: boolean) {
     justifyContent: "center",
   },
   heroTitle: {
+    ...(compact ? compactType.modalTitle : Typography.modalTitle),
     flex: 1,
-    fontSize: compact ? 15 : 16.5,
-    fontWeight: "900",
     color: TEXT_DARK,
-    letterSpacing: 0.1,
     textAlign: "left",
   },
   riskBadge: {
@@ -730,7 +734,7 @@ function makeStyles(width: number, height: number, compact: boolean) {
     borderRadius: 999,
     borderWidth: 1,
   },
-  riskBadgeText: { fontSize: 10.5, fontWeight: "900" },
+  riskBadgeText: { ...Typography.badge },
   heroStatusCenterRow: {
     marginTop: 8,
     flexDirection: "row",
@@ -747,7 +751,7 @@ function makeStyles(width: number, height: number, compact: boolean) {
     borderRadius: 999,
     borderWidth: 1,
   },
-  statusPillText: { fontSize: 10.5, fontWeight: "900" },
+  statusPillText: { ...Typography.badge },
   dot: { width: 7, height: 7, borderRadius: 99 },
 
   // States
@@ -761,9 +765,9 @@ function makeStyles(width: number, height: number, compact: boolean) {
     gap: 12,
     paddingHorizontal: compact ? 20 : 32,
   },
-  loadingText: { fontSize: 11, color: TEXT_MUTED, fontWeight: "400" },
-  errorTitle: { fontSize: 16, fontWeight: "900", color: TEXT_DARK, marginTop: 8 },
-  errorText: { fontSize: 12, color: TEXT_MUTED, fontWeight: "400", textAlign: "center" },
+  loadingText: { ...Typography.bodySmall, color: TEXT_MUTED },
+  errorTitle: { ...Typography.sectionTitle, color: TEXT_DARK, marginTop: 8 },
+  errorText: { ...Typography.bodySmall, color: TEXT_MUTED, textAlign: "center" },
   retryBtn: {
     paddingHorizontal: 20,
     paddingVertical: 10,
@@ -773,7 +777,7 @@ function makeStyles(width: number, height: number, compact: boolean) {
     backgroundColor: SURFACE,
     marginTop: 4,
   },
-  retryText: { fontSize: 12, fontWeight: "900", color: PRIMARY },
+  retryText: { ...Typography.button, color: PRIMARY },
 
   // Scroll
   content: {
@@ -802,12 +806,11 @@ function makeStyles(width: number, height: number, compact: boolean) {
     marginBottom: 10,
   },
   sectionTitle: {
+    ...Typography.sectionTitle,
     flex: 1,
-    fontSize: 12,
-    fontWeight: "900",
     color: TEXT_DARK,
   },
-  sectionHint: { fontSize: 10, fontWeight: "900", color: "#94A3B8" },
+  sectionHint: { ...Typography.overline, color: "#94A3B8" },
 
   // Mode chip
   modeRow: { marginBottom: 8 },
@@ -822,14 +825,12 @@ function makeStyles(width: number, height: number, compact: boolean) {
   },
   modeEmergency: { backgroundColor: "#FEF2F2" },
   modeComplain: { backgroundColor: "#EEF3FF" },
-  modeChipText: { fontSize: 11, fontWeight: "900" },
+  modeChipText: { ...Typography.microStrong },
 
   // Narrative
   narrativeText: {
-    fontSize: 11.5,
-    fontWeight: "400",
+    ...Typography.bodySmall,
     color: TEXT_MUTED,
-    lineHeight: 16,
     fontStyle: "italic",
   },
 
@@ -845,15 +846,13 @@ function makeStyles(width: number, height: number, compact: boolean) {
     paddingVertical: 12,
   },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  metaLabel: { fontSize: 10, fontWeight: "900", color: "#94A3B8" },
-  metaValue: { marginTop: 6, fontSize: 11.5, fontWeight: "400", color: TEXT_DARK },
+  metaLabel: { ...Typography.overline, color: "#94A3B8" },
+  metaValue: { ...Typography.bodySmall, marginTop: 6, color: TEXT_DARK },
 
   // Location
   locationText: {
-    fontSize: 11.5,
-    fontWeight: "400",
+    ...Typography.bodySmall,
     color: TEXT_MUTED,
-    lineHeight: 16,
   },
 
   // Witness / Reporter rows
@@ -877,12 +876,11 @@ function makeStyles(width: number, height: number, compact: boolean) {
     justifyContent: "center",
   },
   reporterInitials: {
-    fontSize: 15,
-    fontWeight: "900",
+    ...Typography.bodyLarge,
     color: "#FFFFFF",
   },
-  witnessName: { fontSize: 12, fontWeight: "900", color: TEXT_DARK },
-  witnessRole: { marginTop: 2, fontSize: 10.5, fontWeight: "400", color: "#94A3B8" },
+  witnessName: { ...Typography.cardTitle, color: TEXT_DARK },
+  witnessRole: { ...Typography.micro, marginTop: 2, color: "#94A3B8" },
 
   // Divider
   divider: {
@@ -908,7 +906,9 @@ function makeStyles(width: number, height: number, compact: boolean) {
     justifyContent: "center",
   },
   stepDotInner: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#D0DAEA" },
-  stepLabel: { fontSize: compact ? 9 : 10.5, fontWeight: "400", color: "#B0BECA", textAlign: "center" },
+  stepLabel: { ...(compact ? compactType.micro : Typography.micro), color: "#B0BECA", textAlign: "center" },
+  stepLabelDone: { ...(compact ? compactType.microStrong : Typography.microStrong), color: TEXT_DARK },
+  stepLabelActive: { ...(compact ? compactType.overline : Typography.overline) },
   stepConnector: {
     flex: 0.6,
     justifyContent: "center",
@@ -931,17 +931,15 @@ function makeStyles(width: number, height: number, compact: boolean) {
     backgroundColor: SURFACE,
   },
   aiChipLabel: {
-    fontSize: 9,
+    ...Typography.overline,
     color: "#94A3B8",
-    fontWeight: "900",
     textTransform: "uppercase",
-    letterSpacing: 0.3,
   },
-  aiChipValue: { fontSize: 13, fontWeight: "900", marginTop: 1 },
+  aiChipValue: { ...Typography.label, marginTop: 1 },
   confidenceWrap: { gap: 8 },
   confidenceHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
-  confidenceLabel: { flex: 1, fontSize: 11.5, color: TEXT_MUTED, fontWeight: "400" },
-  confidencePct: { fontSize: 13, fontWeight: "900", color: PRIMARY },
+  confidenceLabel: { ...Typography.bodySmall, flex: 1, color: TEXT_MUTED },
+  confidencePct: { ...Typography.label, color: PRIMARY },
   confTrack: { height: 6, backgroundColor: "#F1F5F9", borderRadius: 999, overflow: "hidden" },
   confFill: { height: 6, borderRadius: 999 },
   flagsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
@@ -956,7 +954,7 @@ function makeStyles(width: number, height: number, compact: boolean) {
     borderWidth: 1,
     borderColor: "#FECACA",
   },
-  flagText: { fontSize: 11, color: "#DC2626", fontWeight: "900" },
+  flagText: { ...Typography.microStrong, color: "#DC2626" },
 
   // Photos (matching ReportDetailScreen gallery)
   galleryRow: { gap: 10, paddingRight: 6 },
@@ -992,7 +990,7 @@ function makeStyles(width: number, height: number, compact: boolean) {
     borderColor: BORDER,
     backgroundColor: SURFACE,
   },
-  emptyEvidenceText: { fontSize: 11, fontWeight: "400", color: "#94A3B8" },
+  emptyEvidenceText: { ...Typography.bodySmall, color: "#94A3B8" },
 
   // Timeline
   timelineItem: {
@@ -1010,8 +1008,8 @@ function makeStyles(width: number, height: number, compact: boolean) {
   },
   timelineDotInner: { width: 10, height: 10, borderRadius: 5 },
   timelineContent: { flex: 1, gap: 2 },
-  timelineLabel: { fontSize: 12, fontWeight: "900", color: TEXT_DARK },
-  timelineDate: { fontSize: 10.5, fontWeight: "400", color: "#94A3B8" },
+  timelineLabel: { ...Typography.label, color: TEXT_DARK },
+  timelineDate: { ...Typography.caption, color: "#94A3B8" },
   timelineConnector: {
     width: 2,
     height: 18,
@@ -1022,14 +1020,13 @@ function makeStyles(width: number, height: number, compact: boolean) {
 
   // Footer
   footerNote: {
+    ...Typography.caption,
     paddingTop: 2,
     paddingBottom: 12,
     textAlign: "center",
-    fontSize: 10.5,
-    fontWeight: "400",
     color: "#94A3B8",
   },
-  footerCode: { color: PRIMARY, fontWeight: "900" },
+  footerCode: { ...Typography.captionStrong, color: PRIMARY },
 
   // Photo viewer modal (matching ReportDetailScreen)
   viewerBackdrop: {
@@ -1064,12 +1061,11 @@ function makeStyles(width: number, height: number, compact: boolean) {
     borderRadius: 12,
   },
   viewerHint: {
+    ...Typography.caption,
     position: "absolute",
     left: 0,
     right: 0,
     textAlign: "center",
-    fontSize: 10.5,
-    fontWeight: "400",
     color: "rgba(255,255,255,0.72)",
   },
   });

@@ -17,6 +17,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import BottomNavBar, { TabKey } from "../../components/BottomNavBar";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 
 type Hotline = {
   number: string;
@@ -267,6 +268,7 @@ function makeStyles(
   dims: { SEARCH_H: number; FILTER_SIZE: number }
 ) {
   const { SEARCH_H, FILTER_SIZE } = dims;
+  const type = createTypography(scale, vscale);
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: BG },
@@ -281,16 +283,13 @@ function makeStyles(
       paddingBottom: vscale(6),
     },
     title: {
-      fontSize: scale(28),
-      fontWeight: "900",
+      ...type.screenTitle,
       color: TEXT,
-      letterSpacing: 0.2,
     },
     // ✅ unbold regular text
     subtitle: {
+      ...type.bodySmall,
       marginTop: vscale(4),
-      fontSize: scale(13),
-      fontWeight: "400",
       color: MUTED,
     },
 
@@ -319,10 +318,9 @@ function makeStyles(
     },
     // ✅ unbold regular text
     searchInput: {
+      ...type.input,
       flex: 1,
       minWidth: 0,
-      fontSize: scale(15),
-      fontWeight: "400",
       color: TEXT,
       paddingVertical: 0,
     },
@@ -355,10 +353,8 @@ function makeStyles(
     },
     // ✅ unbold regular text
     sectionTitle: {
-      fontSize: scale(13),
-      fontWeight: "400",
+      ...type.overline,
       color: "#334155",
-      letterSpacing: 0.3,
       textTransform: "uppercase",
     },
     sectionLine: {
@@ -396,17 +392,14 @@ function makeStyles(
     },
     // ✅ unbold regular text (number is not a label)
     cardNumber: {
-      fontSize: scale(17),
-      fontWeight: "400",
+      ...type.bodyLarge,
       color: TEXT,
     },
     // ✅ KEEP labels bold
     cardLabel: {
+      ...type.label,
       marginTop: vscale(4),
-      fontSize: scale(13),
-      fontWeight: "900",
       color: MUTED,
-      lineHeight: scale(18),
     },
 
     callPill: {
@@ -422,10 +415,8 @@ function makeStyles(
     },
     // ✅ KEEP label bold
     callText: {
-      fontSize: scale(13),
-      fontWeight: "900",
+      ...type.button,
       color: Colors.primary,
-      letterSpacing: 0.2,
     },
 
     emptyWrap: {
@@ -440,19 +431,16 @@ function makeStyles(
     },
     // ✅ unbold regular text
     emptyTitle: {
+      ...type.sectionTitle,
       marginTop: vscale(10),
-      fontSize: scale(16),
-      fontWeight: "400",
       color: TEXT,
     },
     // ✅ unbold regular text
     emptyText: {
+      ...type.bodySmall,
       marginTop: vscale(6),
-      fontSize: scale(13),
-      fontWeight: "400",
       color: MUTED,
       textAlign: "center",
-      lineHeight: scale(18),
     },
   });
 }

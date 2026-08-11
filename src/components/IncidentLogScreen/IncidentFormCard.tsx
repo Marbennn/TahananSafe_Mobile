@@ -2,6 +2,7 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable, TextInput, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { Typography } from "../../theme/typography";
 import { Colors, useColors } from "../../theme/colors";
 
 type Mode = "complain" | "emergency";
@@ -160,14 +161,13 @@ const styles = StyleSheet.create({
 
   // ✅ bigger labels
   sectionLabel: {
-    fontSize: 14,
-    fontWeight: "900",
+    ...Typography.cardTitle,
     color: TEXT_DARK,
     marginBottom: 12,
   },
   req: {
+    ...Typography.cardTitle,
     color: "#EF4444",
-    fontWeight: "900",
   },
 
   // ✅ input shell (bigger + nicer padding)
@@ -188,20 +188,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   dropdownText: {
-    fontSize: 14,
-    fontWeight: "800",
+    ...Typography.bodyStrong,
     color: "#111827",
     paddingRight: 10,
   },
   placeholderText: {
     color: "#9AA4B2",
-    fontWeight: "700",
+    ...Typography.body,
   },
 
   // ✅ normal text input bigger
   textInput: {
-    fontSize: 14,
-    fontWeight: "800",
+    ...Typography.input,
     color: "#111827",
     paddingVertical: Platform.OS === "android" ? 0 : 12,
   },
@@ -213,12 +211,10 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   textAreaInput: {
+    ...Typography.body,
     flex: 1,
-    fontSize: 14,
-    fontWeight: "700",
     color: "#111827",
     padding: 0,
-    lineHeight: 20,
   },
 
   photoRow: {
@@ -242,13 +238,11 @@ const styles = StyleSheet.create({
   },
   // ✅ bigger photo text
   photoText: {
-    fontSize: 13,
-    fontWeight: "900",
+    ...Typography.label,
     color: TEXT_DARK,
   },
   photoLimit: {
-    fontSize: 12,
-    fontWeight: "800",
+    ...Typography.captionStrong,
     color: "#9AA4B2",
   },
 
@@ -268,14 +262,12 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   metaLabel: {
-    fontSize: 13,
-    fontWeight: "900",
+    ...Typography.label,
     color: "#6B7280",
     marginRight: 6,
   },
   metaValue: {
-    fontSize: 13,
-    fontWeight: "900",
+    ...Typography.label,
     color: TEXT_DARK,
   },
 });

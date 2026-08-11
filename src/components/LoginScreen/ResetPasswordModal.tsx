@@ -15,6 +15,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 
 // ✅ use your existing badge (check icon)
 import ChecklistBadge from "../ChecklistBadge";
@@ -465,6 +466,7 @@ export default function ResetPasswordModal({
 }
 
 function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+  const typography = createTypography(scale);
   const cardW = clamp(scale(320), 280, 380);
   const inputH = clamp(vscale(44), 42, 52);
   const radius = clamp(scale(16), 14, 20);
@@ -516,29 +518,27 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     title: {
+      ...typography.sectionTitle,
       textAlign: "center",
-      fontSize: clamp(scale(14), 13, 16),
-      fontWeight: "900",
       color: "#111827",
       marginBottom: vscale(6),
     },
 
     subtitle: {
+      ...typography.caption,
       textAlign: "center",
-      fontSize: clamp(scale(10.5), 10, 12),
-      lineHeight: clamp(scale(14), 13, 16),
       color: "#6B7280",
       marginBottom: vscale(12),
     },
 
     label: {
-      fontSize: clamp(scale(11), 10, 12),
-      fontWeight: "800",
+      ...typography.label,
       color: "#111827",
       marginBottom: vscale(8),
     },
 
     input: {
+      ...typography.input,
       width: "100%",
       height: inputH,
       borderRadius: clamp(scale(12), 10, 14),
@@ -546,7 +546,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       borderWidth: 1.2,
       borderColor: "#E5E7EB",
       backgroundColor: "#FFFFFF",
-      fontSize: clamp(scale(13), 12, 14),
       color: "#111827",
     },
 
@@ -566,9 +565,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     errorText: {
+      ...typography.microStrong,
       marginTop: vscale(6),
-      fontSize: clamp(scale(10), 9, 11),
-      fontWeight: "800",
       color: "#DC2626",
       textAlign: "center",
     },
@@ -588,9 +586,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     infoText: {
-      fontSize: clamp(scale(9.5), 9, 11),
+      ...typography.micro,
       color: "#6B7280",
-      fontWeight: "700",
     },
 
     resendWrap: {
@@ -601,9 +598,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     resendText: {
-      fontSize: clamp(scale(9.5), 9, 11),
+      ...typography.microStrong,
       color: "#1D4ED8",
-      fontWeight: "900",
       textDecorationLine: "underline",
     },
 
@@ -617,6 +613,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     otpBox: {
+      ...typography.numeric,
       flex: 1,
       minWidth: otpMin,
       height: otpMin,
@@ -624,8 +621,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       borderWidth: 1.2,
       borderColor: "#93C5FD",
       textAlign: "center",
-      fontSize: clamp(scale(18), 16, 22),
-      fontWeight: "900",
       color: "#111827",
       backgroundColor: "#FFFFFF",
       paddingTop: 0,
@@ -656,9 +651,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     btnText: {
+      ...typography.button,
       color: "#FFFFFF",
-      fontSize: clamp(scale(12), 11, 13),
-      fontWeight: "900",
     },
 
     backLink: {
@@ -667,8 +661,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     backText: {
-      fontSize: clamp(scale(11), 10, 12),
-      fontWeight: "900",
+      ...typography.captionStrong,
       color: "#1D4ED8",
     },
 
@@ -680,10 +673,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     successTitle: {
+      ...typography.sectionTitle,
       marginTop: vscale(6),
       textAlign: "center",
-      fontSize: clamp(scale(14), 13, 16),
-      fontWeight: "900",
       color: "#111827",
       marginBottom: vscale(8),
     },

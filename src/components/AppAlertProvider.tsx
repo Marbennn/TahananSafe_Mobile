@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { Colors, useColors } from "../theme/colors";
+import { createTypography } from "../theme/typography";
 
 type Props = {
   children: React.ReactNode;
@@ -310,6 +311,7 @@ function createStyles(
   vscale: (n: number) => number,
   cardMaxHeight: number
 ) {
+  const type = createTypography(scale, vscale);
   return StyleSheet.create({
     modalRoot: {
       flex: 1,
@@ -343,9 +345,8 @@ function createStyles(
       }),
     },
     title: {
+      ...type.sectionTitle,
       textAlign: "center",
-      fontSize: scale(16),
-      fontWeight: "900",
       color: "#111827",
       marginBottom: scale(10),
     },
@@ -353,9 +354,8 @@ function createStyles(
       marginBottom: scale(24),
     },
     sub: {
+      ...type.caption,
       textAlign: "center",
-      fontSize: scale(12),
-      lineHeight: scale(18),
       color: "#6B7280",
     },
     messageScroll: {
@@ -417,19 +417,16 @@ function createStyles(
       borderWidth: 1,
     },
     btnTextBase: {
+      ...type.label,
       textAlign: "center",
-      fontSize: scale(13),
     },
     btnCancelText: {
-      fontWeight: "700",
       color: "#374151",
     },
     btnConfirmText: {
-      fontWeight: "900",
       color: "#FFFFFF",
     },
     btnStackDefaultText: {
-      fontWeight: "800",
       color: Colors.primary,
     },
   });

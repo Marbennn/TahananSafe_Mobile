@@ -98,7 +98,12 @@ npx eas-cli build --platform android --profile preview
 ```bash
 cd android
 # Windows:
-cmd /c "set "JAVA_HOME=C:\Program Files\Java\jdk-17.0.2" && set "PATH=%JAVA_HOME%\bin;%PATH%" && gradlew.bat :app:installDebug"
+$env:JAVA_HOME = "C:\Program Files\Java\jdk-21"
+$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+$env:NODE_ENV = "development"
+
+.\gradlew.bat :app:installDebug
+
 # macOS/Linux:
 ./gradlew :app:installDebug
 ```
@@ -203,7 +208,7 @@ TahananSafe_Mobile/
 
 ## Related Repositories
 
-| Project                 | Description                         1    |
+| Project                 | Description 1                           |
 | ----------------------- | --------------------------------------- |
 | **TahananSafe_Backend** | Node.js/Express API server with MongoDB |
 | **TahananSafe_Web**     | React web dashboard for administrators  |

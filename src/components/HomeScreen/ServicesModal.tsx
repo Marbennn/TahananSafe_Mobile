@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 
 type Props = {
   visible: boolean;
@@ -240,6 +241,7 @@ function createStyles(
   scale: (n: number) => number,
   vscale: (n: number) => number
 ) {
+  const type = createTypography(scale, vscale);
   return StyleSheet.create({
     modalRoot: {
       flex: 1,
@@ -300,14 +302,11 @@ function createStyles(
       paddingTop: scale(1),
     },
     title: {
-      fontSize: scale(17),
-      fontWeight: "900",
-      lineHeight: scale(21),
+      ...type.sectionTitle,
       marginBottom: scale(4),
     },
     subtitle: {
-      fontSize: scale(12),
-      lineHeight: scale(18),
+      ...type.caption,
     },
     closeBtn: {
       width: scale(34),
@@ -345,13 +344,11 @@ function createStyles(
       minWidth: 0,
     },
     serviceTitle: {
-      fontSize: scale(14),
-      fontWeight: "800",
+      ...type.cardTitle,
       marginBottom: scale(3),
     },
     serviceDesc: {
-      fontSize: scale(12),
-      lineHeight: scale(17),
+      ...type.caption,
     },
   });
 }

@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { WebView } from "react-native-webview";
+import { Typography } from "../theme/typography";
 
 export type IncidentMapCoords = {
   latitude: number;
@@ -181,10 +182,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: {
+    ...Typography.modalTitle,
     flex: 1,
     textAlign: "center",
-    fontSize: 18,
-    fontWeight: "800",
     color: "#FFFFFF",
   },
   headerSpacer: {
@@ -206,17 +206,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
   },
   emptyTitle: {
+    ...Typography.sectionTitle,
     marginTop: 12,
-    fontSize: 17,
-    fontWeight: "800",
     color: "#344052",
   },
   emptyText: {
+    ...Typography.body,
     marginTop: 6,
     textAlign: "center",
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "500",
     color: "#6B7280",
   },
   locationBar: {
@@ -231,10 +228,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   locationText: {
+    ...Typography.bodyStrong,
     flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "600",
     color: "#344052",
   },
 });

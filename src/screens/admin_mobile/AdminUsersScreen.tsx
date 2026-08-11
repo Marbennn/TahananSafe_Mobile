@@ -15,6 +15,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, useColors } from "../../theme/colors";
+import { Typography } from "../../theme/typography";
 import { fetchAdminUsers, AdminUser } from "../../api/admin";
 
 type RoleFilter = "All" | "Resident" | "Barangay Official" | "Staff";
@@ -389,14 +390,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: "800",
+    ...Typography.modalTitle,
     color: "#0E2B4D",
   },
   headerSub: {
-    fontSize: 12,
+    ...Typography.caption,
     color: "#6B7A8D",
-    fontWeight: "500",
     marginTop: 1,
   },
   headerBadge: {
@@ -426,14 +425,12 @@ const styles = StyleSheet.create({
     minWidth: 80,
   },
   summaryValue: {
-    fontSize: 22,
-    fontWeight: "800",
+    ...Typography.numeric,
     color: "#102A43",
   },
   summaryLabel: {
-    fontSize: 11,
+    ...Typography.microStrong,
     color: "#6B7A8D",
-    fontWeight: "600",
     marginTop: 2,
   },
   searchWrap: {
@@ -450,9 +447,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   searchInput: {
+    ...Typography.input,
     flex: 1,
     minWidth: 0,
-    fontSize: 14,
     color: "#1E2E3E",
     padding: 0,
   },
@@ -477,8 +474,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   chipText: {
-    fontSize: 13,
-    fontWeight: "700",
+    ...Typography.label,
     color: "#5B6B7A",
   },
   chipTextActive: {
@@ -491,14 +487,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    fontSize: 14,
+    ...Typography.bodyStrong,
     color: "#6B7A8D",
-    fontWeight: "600",
   },
   errorText: {
-    fontSize: 14,
+    ...Typography.bodyStrong,
     color: "#F04452",
-    fontWeight: "600",
     textAlign: "center",
     paddingHorizontal: 32,
   },
@@ -509,9 +503,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   retryText: {
+    ...Typography.button,
     color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 14,
   },
   list: {
     width: "100%",
@@ -530,15 +523,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: "800",
+    ...Typography.sectionTitle,
     color: "#5B6B7A",
   },
   emptyText: {
-    fontSize: 13,
+    ...Typography.bodySmall,
     color: "#9AA4B2",
     textAlign: "center",
-    fontWeight: "500",
   },
   userCard: {
     flexDirection: "row",
@@ -560,8 +551,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   avatarText: {
-    fontSize: 17,
-    fontWeight: "800",
+    ...Typography.modalTitle,
   },
   userInfo: {
     flex: 1,
@@ -574,15 +564,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   userName: {
+    ...Typography.cardTitle,
     flex: 1,
-    fontSize: 15,
-    fontWeight: "800",
     color: "#1E2E3E",
   },
   userEmail: {
-    fontSize: 12.5,
+    ...Typography.caption,
     color: "#6B7A8D",
-    fontWeight: "500",
   },
   userBottomRow: {
     flexDirection: "row",
@@ -599,14 +587,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   rolePillText: {
-    fontSize: 11,
-    fontWeight: "700",
+    ...Typography.microStrong,
     color: Colors.primary,
     textTransform: "capitalize",
   },
   joinedText: {
-    fontSize: 11,
+    ...Typography.micro,
     color: "#9AA4B2",
-    fontWeight: "500",
   },
 });

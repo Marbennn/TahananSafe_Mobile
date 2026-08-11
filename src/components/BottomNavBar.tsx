@@ -15,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path } from "react-native-svg";
 
 import { Colors, useColors } from "../theme/colors";
+import { FontFamily, FontSize, FontWeight } from "../theme/typography";
 import { closeAndRemoveFromRecents } from "../utils/hideApp";
 import QuickActions from "./HomeScreen/QuickActions";
 
@@ -97,7 +98,15 @@ export default function BottomNavBar({
   );
 
   const iconSize = useMemo(() => clamp(Math.round(22 * s), 19, 26), [s]);
-  const labelFont = useMemo(() => clamp(Math.round(10 * s), 9, 12), [s]);
+  const labelFont = useMemo(
+    () =>
+      clamp(
+        Math.round(FontSize.micro * s),
+        FontSize.micro - 1,
+        FontSize.caption
+      ),
+    [s]
+  );
   const labelMarginTop = useMemo(() => clamp(Math.round(3 * s), 2, 4), [s]);
   const centerLabelDrop = useMemo(
     () => clamp(Math.round(4 * s), 3, 5),
@@ -360,18 +369,20 @@ export default function BottomNavBar({
         label: {
           marginTop: labelMarginTop,
           fontSize: labelFont,
+          fontFamily: FontFamily,
           color: INACTIVE,
-          fontWeight: "600",
+          fontWeight: FontWeight.semibold,
           includeFontPadding: false,
         },
         labelActive: {
           color: Colors.primary,
-          fontWeight: "800",
+          fontWeight: FontWeight.bold,
         },
         centerLabel: {
           marginTop: labelMarginTop,
           fontSize: labelFont,
-          fontWeight: "600",
+          fontFamily: FontFamily,
+          fontWeight: FontWeight.semibold,
           includeFontPadding: false,
           transform: [{ translateY: centerLabelDrop }],
         },

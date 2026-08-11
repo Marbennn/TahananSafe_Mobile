@@ -17,6 +17,7 @@ import IncidentLocationMapModal, {
   hasValidLocationCoords,
   type IncidentMapCoords,
 } from "../IncidentLocationMapModal";
+import { Typography } from "../../theme/typography";
 
 export type IncidentPreviewData = {
   incidentType: string;
@@ -322,15 +323,13 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   cardTitle: {
-    fontSize: 21,
-    fontWeight: "800",
+    ...Typography.modalTitle,
     color: TEXT_DARK,
   },
   label: {
+    ...Typography.label,
     marginTop: 20,
     marginBottom: 8,
-    fontSize: 15,
-    fontWeight: "800",
     color: TEXT_MUTED,
   },
   descriptionBox: {
@@ -343,9 +342,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   descriptionText: {
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: "500",
+    ...Typography.bodyLarge,
     color: TEXT_VALUE,
   },
   valueBox: {
@@ -358,9 +355,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   valueText: {
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: "500",
+    ...Typography.bodyLarge,
     color: TEXT_VALUE,
   },
   witnessRow: {
@@ -379,9 +374,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   plainValue: {
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: "500",
+    ...Typography.bodyLarge,
     color: TEXT_VALUE,
   },
   locationHeaderRow: {
@@ -397,9 +390,7 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   locationText: {
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: "500",
+    ...Typography.bodyLarge,
     color: TEXT_VALUE,
   },
   showMapBtn: {
@@ -418,8 +409,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F5F9",
   },
   showMapText: {
-    fontSize: 12,
-    fontWeight: "800",
+    ...Typography.captionStrong,
     color: "#00518D",
   },
   showMapTextDisabled: {
@@ -433,8 +423,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   fileCount: {
-    fontSize: 15,
-    fontWeight: "500",
+    ...Typography.bodyLarge,
     color: TEXT_MUTED,
   },
   evidenceRow: {
@@ -466,8 +455,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   emptyEvidence: {
-    fontSize: 14,
-    fontWeight: "500",
+    ...Typography.body,
     color: TEXT_MUTED,
   },
   modalContainer: {

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 
 type Props = {
   visible: boolean;
@@ -110,6 +111,7 @@ export default function InvalidPinModal({
 }
 
 function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+  const typography = createTypography(scale);
   return StyleSheet.create({
     modalRoot: {
       flex: 1,
@@ -155,16 +157,14 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     title: {
+      ...typography.sectionTitle,
       textAlign: "center",
-      fontSize: scale(16),
-      fontWeight: "900",
       color: "#111827",
       marginBottom: scale(10),
     },
     sub: {
+      ...typography.caption,
       textAlign: "center",
-      fontSize: scale(12),
-      lineHeight: scale(18),
       color: "#6B7280",
       marginBottom: scale(24),
     },
@@ -189,9 +189,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       }),
     },
     btnConfirmText: {
+      ...typography.button,
       color: "#FFFFFF",
-      fontSize: scale(13),
-      fontWeight: "900",
     },
   });
 }

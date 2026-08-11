@@ -27,6 +27,7 @@ import * as Location from "expo-location";
 
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { Colors } from "../theme/colors";
+import { createTypography, FontWeight } from "../theme/typography";
 import { useTheme, ThemeMode } from "../theme/ThemeContext";
 
 // ✅ Auth context (for current account email)
@@ -1685,7 +1686,7 @@ export default function SettingsScreen({
                       <Ionicons name={isDark ? "moon" : "sunny"} size={iconSize} color={primary} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.settingTitleInner, { color: textDark, fontWeight: "600" }]}>Appearance</Text>
+                      <Text style={[styles.settingTitleInner, { color: textDark, fontWeight: FontWeight.semibold }]}>Appearance</Text>
                       <Text style={[styles.settingSub, { color: muted }]}>Choose your preferred theme</Text>
                     </View>
                   </View>
@@ -1725,7 +1726,10 @@ export default function SettingsScreen({
                         </View>
                         <Text style={[
                           styles.themeOptionLabel,
-                          { color: isActive ? primary : textDark, fontWeight: isActive ? "800" : "500" },
+                          {
+                            color: isActive ? primary : textDark,
+                            fontWeight: isActive ? FontWeight.bold : FontWeight.regular,
+                          },
                         ]}>
                           {opt.label}
                         </Text>
@@ -2234,7 +2238,7 @@ export default function SettingsScreen({
                         color="#EF4444"
                         style={styles.settingsRowIcon}
                       />
-                      <Text style={[styles.settingsRowTitle, { color: textDark, fontWeight: "700" }]}>Emergency Alerts</Text>
+                      <Text style={[styles.settingsRowTitle, { color: textDark, fontWeight: FontWeight.semibold }]}>Emergency Alerts</Text>
                     </View>
                     <Switch
                       value={emergencyAlertsEnabled}
@@ -2535,6 +2539,7 @@ function makeStyles(
   compactScale: (n: number) => number,
   compactHeight: boolean
 ) {
+  const type = createTypography(scale, vscale);
   const CARD_R = compactScale(14);
   const SEARCH_CONTROL_SIZE = compactScale(40);
 
@@ -2566,11 +2571,10 @@ function makeStyles(
       gap: scale(8),
     },
     settingsSearchInput: {
+      ...type.input,
       flex: 1,
       minWidth: 0,
       paddingVertical: 0,
-      fontSize: scale(14),
-      fontWeight: "400",
     },
     settingsSearchClear: {
       width: compactScale(28),
@@ -2601,8 +2605,7 @@ function makeStyles(
       gap: vscale(6),
     },
     settingsEmptyText: {
-      fontSize: scale(13),
-      fontWeight: "600",
+      ...type.bodyStrong,
     },
     settingsProfileCard: {
       minHeight: vscale(88),
@@ -2642,9 +2645,8 @@ function makeStyles(
       justifyContent: "center",
     },
     settingsAvatarInitials: {
+      ...type.modalTitle,
       color: "#0B4F7A",
-      fontSize: scale(18),
-      fontWeight: "900",
     },
     settingsVerifiedBadge: {
       position: "absolute",
@@ -2660,23 +2662,16 @@ function makeStyles(
       justifyContent: "center",
     },
     settingsProfileName: {
-      fontSize: scale(16),
-      fontWeight: "600",
-      lineHeight: scale(21),
+      ...type.sectionTitle,
     },
     settingsProfileMeta: {
+      ...type.captionStrong,
       marginTop: vscale(2),
-      fontSize: scale(12),
-      fontWeight: "700",
-      lineHeight: scale(16),
     },
     settingsSectionLabel: {
+      ...type.overline,
       marginTop: vscale(2),
       marginLeft: scale(4),
-      fontSize: scale(11),
-      fontWeight: "500",
-      lineHeight: scale(15),
-      letterSpacing: 0.7,
     },
     settingsCard: {
       borderRadius: compactScale(12),
@@ -2715,16 +2710,12 @@ function makeStyles(
       textAlign: "center",
     },
     settingsRowTitle: {
+      ...type.body,
       flexShrink: 1,
-      fontSize: scale(14),
-      fontWeight: "500",
-      lineHeight: scale(19),
     },
     settingsRowSubtitle: {
+      ...type.bodySmall,
       marginTop: vscale(2),
-      fontSize: scale(13),
-      fontWeight: "400",
-      lineHeight: scale(17),
     },
     settingsDivider: {
       height: StyleSheet.hairlineWidth,
@@ -2748,9 +2739,7 @@ function makeStyles(
       gap: scale(8),
     },
     settingsHelpText: {
-      fontSize: scale(13),
-      fontWeight: "500",
-      lineHeight: scale(18),
+      ...type.bodySmall,
     },
     settingsAiCard: {
       minHeight: vscale(98),
@@ -2767,16 +2756,12 @@ function makeStyles(
       gap: scale(8),
     },
     settingsAiTitle: {
+      ...type.bodyLarge,
       color: "#E5F4FF",
-      fontSize: scale(15),
-      fontWeight: "600",
-      lineHeight: scale(19),
     },
     settingsAiBody: {
+      ...type.micro,
       color: "#B9C5D3",
-      fontSize: scale(11),
-      fontWeight: "400",
-      lineHeight: scale(16),
     },
     settingsFeedbackCard: {
       minHeight: vscale(210),
@@ -2799,10 +2784,8 @@ function makeStyles(
       gap: scale(8),
     },
     settingsFeedbackTitle: {
+      ...type.body,
       flex: 1,
-      fontSize: scale(14),
-      fontWeight: "500",
-      lineHeight: scale(18),
     },
     settingsStars: {
       flexDirection: "row",
@@ -2810,15 +2793,13 @@ function makeStyles(
       gap: scale(3),
     },
     settingsFeedbackInput: {
+      ...type.input,
       minHeight: vscale(76),
       borderWidth: 1,
       borderRadius: compactScale(10),
       backgroundColor: "#F1F3F6",
       paddingHorizontal: scale(12),
       paddingVertical: vscale(10),
-      fontSize: scale(13),
-      fontWeight: "400",
-      lineHeight: scale(18),
     },
     settingsFeedbackButton: {
       minHeight: vscale(44),
@@ -2829,10 +2810,8 @@ function makeStyles(
       paddingHorizontal: scale(14),
     },
     settingsFeedbackButtonText: {
+      ...type.button,
       color: "#FFFFFF",
-      fontSize: scale(14),
-      fontWeight: "600",
-      lineHeight: scale(18),
     },
     settingsSignOutButton: {
       minHeight: vscale(48),
@@ -2847,10 +2826,8 @@ function makeStyles(
       marginHorizontal: scale(4),
     },
     settingsSignOutText: {
+      ...type.button,
       color: "#EF4444",
-      fontSize: scale(14),
-      fontWeight: "500",
-      lineHeight: scale(18),
     },
     headerWrap: {
       width: "100%",
@@ -2870,7 +2847,7 @@ function makeStyles(
       marginBottom: vscale(compactHeight ? 12 : 16),
     },
     // ✅ CHANGED: from scale(30) -> scale(28) to match Hotlines + Reports
-    title: { fontSize: scale(28), fontWeight: "700", letterSpacing: -0.2 },
+    title: { ...type.screenTitle },
 
     content: {
       paddingHorizontal: scale(16),
@@ -2911,14 +2888,12 @@ function makeStyles(
       justifyContent: "center",
     },
 
-    settingTitle: { fontSize: scale(14), fontWeight: "600" },
-    settingTitleInner: { fontSize: scale(14), fontWeight: "400" },
+    settingTitle: { ...type.bodyStrong },
+    settingTitleInner: { ...type.body },
 
     settingSub: {
+      ...type.micro,
       marginTop: vscale(2),
-      fontSize: scale(11),
-      fontWeight: "400",
-      lineHeight: scale(15),
     },
 
     // Status chip used in modal cards
@@ -2930,7 +2905,7 @@ function makeStyles(
       justifyContent: "center",
       minWidth: scale(82),
     },
-    statusChipText: { fontSize: scale(12), fontWeight: "900" },
+    statusChipText: { ...type.captionStrong },
 
     toggleWrap: {
       paddingHorizontal: scale(14),
@@ -2940,12 +2915,10 @@ function makeStyles(
       justifyContent: "space-between",
       gap: scale(12),
     },
-    toggleTitle: { fontSize: scale(14), fontWeight: "900" },
+    toggleTitle: { ...type.cardTitle },
     toggleSub: {
+      ...type.micro,
       marginTop: vscale(4),
-      fontSize: scale(11),
-      fontWeight: "500",
-      lineHeight: scale(15),
     },
 
     emptyState: {
@@ -2955,7 +2928,7 @@ function makeStyles(
       alignItems: "center",
       gap: scale(10),
     },
-    emptyText: { flex: 1, fontSize: scale(12), fontWeight: "500", lineHeight: scale(16) },
+    emptyText: { ...type.caption, flex: 1 },
 
     accountFoot: {
       paddingHorizontal: scale(14),
@@ -2964,7 +2937,7 @@ function makeStyles(
       alignItems: "center",
       gap: scale(8),
     },
-    accountFootText: { fontSize: scale(11), fontWeight: "500" },
+    accountFootText: { ...type.micro },
 
     // PIN Modal
     modalOverlay: {
@@ -3004,8 +2977,8 @@ function makeStyles(
       alignItems: "center",
       justifyContent: "center",
     },
-    modalTitle: { fontSize: scale(17), fontWeight: "900" },
-    modalHint: { marginTop: vscale(3), fontSize: scale(11), fontWeight: "500", lineHeight: scale(16) },
+    modalTitle: { ...type.sectionTitle },
+    modalHint: { ...type.micro, marginTop: vscale(3) },
     modalCloseBtn: {
       width: scale(40),
       height: scale(40),
@@ -3014,14 +2987,13 @@ function makeStyles(
       justifyContent: "center",
     },
     modalField: { marginTop: vscale(12) },
-    modalLabel: { fontSize: scale(12), fontWeight: "900", marginBottom: vscale(6) },
+    modalLabel: { ...type.captionStrong, marginBottom: vscale(6) },
     modalInput: {
+      ...type.input,
       height: vscale(48),
       borderWidth: 1,
       borderRadius: scale(12),
       paddingHorizontal: scale(12),
-      fontSize: scale(16),
-      fontWeight: "600",
     },
     modalActions: {
       marginTop: vscale(14),
@@ -3040,14 +3012,14 @@ function makeStyles(
       paddingHorizontal: scale(14),
     },
     modalBtnGhost: { backgroundColor: "transparent" },
-    modalBtnText: { fontSize: scale(14), fontWeight: "900" },
+    modalBtnText: { ...type.button },
     modalFoot: {
       marginTop: vscale(10),
       flexDirection: "row",
       alignItems: "center",
       gap: scale(8),
     },
-    modalFootText: { fontSize: scale(11), fontWeight: "500" },
+    modalFootText: { ...type.micro },
 
     // Centered settings dialogs
     accountModalOverlay: {
@@ -3146,12 +3118,10 @@ function makeStyles(
       justifyContent: "center",
     },
     accountModalHeaderCopy: { flex: 1 },
-    accountModalTitle: { fontSize: scale(17), fontWeight: "900", lineHeight: scale(21) },
+    accountModalTitle: { ...type.sectionTitle },
     accountModalSubtitle: {
+      ...type.micro,
       marginTop: vscale(3),
-      fontSize: scale(11),
-      fontWeight: "500",
-      lineHeight: scale(15),
     },
     accountModalClose: {
       width: scale(40),
@@ -3181,8 +3151,8 @@ function makeStyles(
       alignItems: "center",
       justifyContent: "center",
     },
-    currentTitle: { fontSize: scale(12), fontWeight: "900" },
-    currentSub: { marginTop: vscale(2), fontSize: scale(12), fontWeight: "500" },
+    currentTitle: { ...type.captionStrong },
+    currentSub: { ...type.caption, marginTop: vscale(2) },
 
     currentPill: {
       paddingHorizontal: scale(10),
@@ -3192,7 +3162,7 @@ function makeStyles(
       alignItems: "center",
       gap: scale(6),
     },
-    currentPillText: { fontSize: scale(12), fontWeight: "900" },
+    currentPillText: { ...type.captionStrong },
 
     accountModalContent: {
       paddingHorizontal: scale(16),
@@ -3253,20 +3223,16 @@ function makeStyles(
       justifyContent: "center",
     },
     profileAvatarFallbackText: {
-      fontSize: scale(28),
-      fontWeight: "900",
+      ...type.screenTitle,
     },
     profileHeroTitle: {
-      fontSize: scale(16),
-      fontWeight: "900",
+      ...type.sectionTitle,
       textAlign: "center",
     },
     profileHeroSub: {
+      ...type.caption,
       marginTop: vscale(4),
-      fontSize: scale(12),
-      fontWeight: "500",
       textAlign: "center",
-      lineHeight: scale(18),
     },
     profilePhotoBtn: {
       marginTop: vscale(12),
@@ -3279,8 +3245,7 @@ function makeStyles(
       gap: scale(8),
     },
     profilePhotoBtnText: {
-      fontSize: scale(12),
-      fontWeight: "800",
+      ...type.captionStrong,
     },
     profileFormCard: {
       borderRadius: scale(18),
@@ -3293,16 +3258,14 @@ function makeStyles(
       gap: vscale(6),
     },
     profileFieldLabel: {
-      fontSize: scale(12),
-      fontWeight: "900",
+      ...type.captionStrong,
     },
     profileInput: {
+      ...type.input,
       minHeight: vscale(48),
       borderWidth: 1,
       borderRadius: scale(12),
       paddingHorizontal: scale(12),
-      fontSize: scale(14),
-      fontWeight: "600",
     },
     profilePhoneInputWrap: {
       flexDirection: "row",
@@ -3311,19 +3274,16 @@ function makeStyles(
       gap: scale(10),
     },
     profilePhonePrefix: {
-      fontSize: scale(14),
-      fontWeight: "700",
+      ...type.bodyStrong,
     },
     profilePhoneInput: {
+      ...type.input,
       flex: 1,
-      fontSize: scale(14),
-      fontWeight: "600",
       paddingVertical: 0,
     },
     profileFieldError: {
+      ...type.captionStrong,
       marginTop: vscale(2),
-      fontSize: scale(12),
-      fontWeight: "600",
       color: "#DC2626",
     },
     profileModalActions: {
@@ -3340,12 +3300,10 @@ function makeStyles(
       paddingHorizontal: scale(14),
     },
     profileActionBtnText: {
-      fontSize: scale(13),
-      fontWeight: "800",
+      ...type.label,
     },
     profileActionPrimaryText: {
-      fontSize: scale(13),
-      fontWeight: "900",
+      ...type.label,
       color: "#FFFFFF",
     },
     sessionCard: {
@@ -3369,8 +3327,7 @@ function makeStyles(
       justifyContent: "center",
     },
     sessionBadgeText: {
-      fontSize: scale(12),
-      fontWeight: "900",
+      ...type.captionStrong,
     },
     sessionDetails: {
       gap: vscale(8),
@@ -3382,14 +3339,12 @@ function makeStyles(
       gap: scale(12),
     },
     sessionDetailLabel: {
+      ...type.captionStrong,
       flex: 0.9,
-      fontSize: scale(12),
-      fontWeight: "700",
     },
     sessionDetailValue: {
+      ...type.captionStrong,
       flex: 1.2,
-      fontSize: scale(12),
-      fontWeight: "600",
       textAlign: "right",
     },
     sessionHintCard: {
@@ -3400,13 +3355,10 @@ function makeStyles(
       gap: vscale(6),
     },
     sessionHintTitle: {
-      fontSize: scale(13),
-      fontWeight: "800",
+      ...type.label,
     },
     sessionHintText: {
-      fontSize: scale(12),
-      fontWeight: "500",
-      lineHeight: scale(17),
+      ...type.caption,
     },
     helpIntroCard: {
       borderRadius: scale(18),
@@ -3425,14 +3377,11 @@ function makeStyles(
       justifyContent: "center",
     },
     helpIntroTitle: {
-      fontSize: scale(14),
-      fontWeight: "800",
+      ...type.cardTitle,
     },
     helpIntroSub: {
+      ...type.caption,
       marginTop: vscale(4),
-      fontSize: scale(12),
-      lineHeight: scale(18),
-      fontWeight: "500",
     },
     helpInfoCard: {
       borderRadius: scale(16),
@@ -3449,14 +3398,11 @@ function makeStyles(
       flex: 1,
     },
     helpInfoTitle: {
-      fontSize: scale(13),
-      fontWeight: "800",
+      ...type.label,
     },
     helpInfoSub: {
+      ...type.caption,
       marginTop: vscale(4),
-      fontSize: scale(12),
-      lineHeight: scale(18),
-      fontWeight: "500",
     },
 
     // Expanded cards inside Privacy & Security modal
@@ -3519,8 +3465,7 @@ function makeStyles(
       justifyContent: "center",
     },
     themeOptionLabel: {
-      fontSize: scale(12),
-      fontWeight: "600",
+      ...type.captionStrong,
     },
     themeCheckBadge: {
       position: "absolute" as const,

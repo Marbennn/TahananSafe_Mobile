@@ -14,6 +14,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, useColors } from "../theme/colors";
+import { Typography } from "../theme/typography";
 
 type TabKey = "Domestic" | "Emergency";
 
@@ -288,10 +289,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: {
+    ...Typography.modalTitle,
     flex: 1,
     textAlign: "center",
-    fontSize: 18,
-    fontWeight: "700",
     color: Colors.heading,
   },
   headerRightSpacer: {
@@ -327,8 +327,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   tabText: {
-    fontSize: 12,
-    fontWeight: "700",
+    ...Typography.captionStrong,
   },
   tabTextActive: {
     color: "#fff",
@@ -354,13 +353,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   cardTitle: {
-    fontSize: 13,
-    fontWeight: "800",
+    ...Typography.label,
     color: Colors.heading,
     marginBottom: 8,
   },
 
   textArea: {
+    ...Typography.input,
     minHeight: 96,
     borderRadius: 10,
     borderWidth: 1,
@@ -368,13 +367,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 13,
     color: Colors.body,
   },
   helperText: {
+    ...Typography.micro,
     marginTop: 8,
-    fontSize: 11,
-    lineHeight: 15,
     color: Colors.muted,
   },
 
@@ -396,19 +393,18 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   actionBtnLightText: {
-    fontSize: 12,
-    fontWeight: "800",
+    ...Typography.captionStrong,
     color: Colors.primary,
   },
 
   input: {
+    ...Typography.input,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#E5E7EB",
     backgroundColor: "#FFFFFF",
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 13,
     color: Colors.body,
   },
 
@@ -420,8 +416,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   metaLabel: {
-    fontSize: 11,
-    fontWeight: "700",
+    ...Typography.microStrong,
     color: Colors.muted,
     marginBottom: 6,
   },
@@ -434,8 +429,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   metaValue: {
-    fontSize: 12,
-    fontWeight: "800",
+    ...Typography.captionStrong,
     color: Colors.heading,
   },
 
@@ -450,9 +444,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   primaryBtnText: {
+    ...Typography.button,
     color: "#fff",
-    fontSize: 13,
-    fontWeight: "900",
-    letterSpacing: 0.2,
   },
 });

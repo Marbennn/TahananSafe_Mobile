@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Colors, useColors } from "../theme/colors";
+import { createTypography } from "../theme/typography";
 
 type Props = {
   visible: boolean;
@@ -128,6 +129,7 @@ export default function LogoutModal({
 }
 
 function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+  const type = createTypography(scale, vscale);
   return StyleSheet.create({
     modalRoot: {
       flex: 1,
@@ -160,9 +162,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     title: {
+      ...type.sectionTitle,
       textAlign: "center",
-      fontSize: scale(16),
-      fontWeight: "900",
       color: "#111827",
       marginBottom: scale(10),
     },
@@ -170,9 +171,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       marginBottom: scale(24),
     },
     sub: {
+      ...type.caption,
       textAlign: "center",
-      fontSize: scale(12),
-      lineHeight: scale(18),
       color: "#6B7280",
       marginBottom: scale(24),
     },
@@ -192,8 +192,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       justifyContent: "center",
     },
     btnCancelText: {
-      fontSize: scale(13),
-      fontWeight: "700",
+      ...type.label,
       color: "#374151",
     },
 
@@ -215,8 +214,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       }),
     },
     btnConfirmText: {
-      fontSize: scale(13),
-      fontWeight: "900",
+      ...type.label,
       color: "#FFFFFF",
     },
   });

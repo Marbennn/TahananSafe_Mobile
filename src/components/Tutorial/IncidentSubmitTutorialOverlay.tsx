@@ -3,6 +3,7 @@ import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../theme/colors";
+import { FontFamily, FontSize, FontWeight } from "../../theme/typography";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -124,21 +125,24 @@ export default function IncidentSubmitTutorialOverlay({
           borderColor: "rgba(255,255,255,0.9)",
         },
         title: {
-          fontSize: clamp(Math.round(13 * s), 12, 15),
-          fontWeight: "900",
+          fontFamily: FontFamily,
+          fontSize: clamp(Math.round(FontSize.label * s), FontSize.caption, FontSize.bodyLarge),
+          fontWeight: FontWeight.bold,
           color: "#0B2B45",
         },
         text: {
+          fontFamily: FontFamily,
           marginTop: 6,
-          fontSize: clamp(Math.round(12 * s), 11, 14),
-          fontWeight: "700",
+          fontSize: clamp(Math.round(FontSize.caption * s), FontSize.overline, FontSize.body),
+          fontWeight: FontWeight.regular,
           color: "#244A66",
           lineHeight: clamp(Math.round(16 * s), 14, 18),
         },
         hint: {
+          fontFamily: FontFamily,
           marginTop: 10,
-          fontSize: clamp(Math.round(11 * s), 10, 12),
-          fontWeight: "800",
+          fontSize: clamp(Math.round(FontSize.overline * s), FontSize.micro, FontSize.caption),
+          fontWeight: FontWeight.semibold,
           color: Colors.link,
           alignSelf: "flex-end",
         },

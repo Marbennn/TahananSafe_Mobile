@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, TextInputProps } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, useColors } from "../theme/colors";
+import { Typography } from "../theme/typography";
 
 type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -70,10 +71,9 @@ export default function InputField({
 const styles = StyleSheet.create({
   block: { marginBottom: 14 },
   label: {
-    fontSize: 13,
+    ...Typography.label,
     color: Colors.text,
     marginBottom: 8,
-    fontWeight: "600",
   },
   inputWrap: {
     height: 44,
@@ -86,6 +86,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   focused: { borderColor: Colors.link },
-  input: { flex: 1, fontSize: 14, color: Colors.text, paddingVertical: 0 },
+  input: { flex: 1, ...Typography.input, color: Colors.text, paddingVertical: 0 },
   eyeBtn: { paddingLeft: 10, paddingVertical: 6 },
 });

@@ -20,6 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import BottomNavBar, { TabKey } from "../components/BottomNavBar";
 import { Colors, useColors } from "../theme/colors";
+import { createTypography } from "../theme/typography";
 import { useAuth } from "../auth/AuthContext";
 import {
   getReportStatusMeta,
@@ -720,6 +721,7 @@ export default function ReportScreen({
 }
 
 function makeStyles(scale: (n: number) => number, vscale: (n: number) => number, compactHeight: boolean) {
+  const type = createTypography(scale, vscale);
   const compactScale = (n: number) => Math.min(scale(n), vscale(n));
   const CARD_R = compactScale(14);
   const SEARCH_CONTROL_SIZE = compactScale(40);
@@ -753,10 +755,8 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       },
 
       headerTitle: {
-        fontSize: scale(28),
-        fontWeight: "700",
+        ...type.screenTitle,
         color: TEXT_DARK,
-        letterSpacing: -0.2,
       },
 
       searchRow: {
@@ -801,12 +801,11 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       },
 
       searchInput: {
+        ...type.input,
         flex: 1,
         minWidth: 0,
         paddingVertical: 0,
-        fontSize: scale(14),
         color: TEXT_DARK,
-        fontWeight: "400",
       },
 
       clearBtn: {
@@ -844,8 +843,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       },
 
       segmentText: {
-        fontSize: scale(12.5),
-        fontWeight: "700",
+        ...type.captionStrong,
       },
 
       segmentTextActive: {
@@ -898,26 +896,21 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       },
 
       reportNo: {
+        ...type.micro,
         flex: 1,
-        fontSize: scale(9.5),
-        fontWeight: "500",
         color: "#9CA3AF",
       },
 
       cardTitle: {
-        fontSize: scale(16.5),
-        fontWeight: "700",
+        ...type.sectionTitle,
         color: TEXT_DARK,
-        lineHeight: compactScale(20),
       },
 
       cardDetail: {
+        ...type.bodySmall,
         marginTop: 0,
-        fontSize: scale(13.25),
         fontStyle: "italic",
-        fontWeight: "400",
         color: MUTED,
-        lineHeight: compactScale(19.5),
       },
 
       cardBottomRow: {
@@ -936,16 +929,14 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       },
 
       statusPillText: {
-        fontSize: scale(10),
-        fontWeight: "700",
+        ...type.badge,
         color: "#374151",
       },
 
       metaText: {
+        ...type.micro,
         flex: 1,
         minWidth: 0,
-        fontSize: scale(11),
-        fontWeight: "400",
         color: "#9CA3AF",
       },
 
@@ -957,8 +948,7 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       },
 
       viewDetailsText: {
-        fontSize: scale(11.5),
-        fontWeight: "700",
+        ...type.captionStrong,
       },
 
       // Center states
@@ -972,23 +962,20 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       },
 
       centerHint: {
-        fontSize: scale(13),
-        fontWeight: "400",
+        ...type.bodySmall,
         color: MUTED,
         textAlign: "center",
       },
 
       centerSubHint: {
-        fontSize: scale(12),
-        fontWeight: "400",
+        ...type.caption,
         color: "#94A3B8",
         textAlign: "center",
         marginTop: vscale(-4),
       },
 
       errorText: {
-        fontSize: scale(13),
-        fontWeight: "400",
+        ...type.bodySmall,
         color: "#B91C1C",
         textAlign: "center",
       },
@@ -1002,9 +989,8 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       },
 
       retryText: {
+        ...type.captionStrong,
         color: "#FFFFFF",
-        fontWeight: "900",
-        fontSize: scale(12),
       },
     }),
     { _iconSize, _filterIcon, _emptyIcon, _chevron }

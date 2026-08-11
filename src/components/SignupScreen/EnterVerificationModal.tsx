@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 
 // ✅ separated badge component
 import ChecklistBadge from "../ChecklistBadge";
@@ -396,6 +397,7 @@ export default function EnterVerificationModal({
 }
 
 function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+  const typography = createTypography(scale);
   return StyleSheet.create({
     modalRoot: {
       flex: 1,
@@ -446,24 +448,20 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       marginBottom: scale(10),
     },
     noticeText: {
+      ...typography.microStrong,
       textAlign: "center",
-      fontSize: scale(10.8),
-      lineHeight: scale(14),
       color: "#1D4ED8",
-      fontWeight: "800",
     },
 
     title: {
+      ...typography.sectionTitle,
       textAlign: "center",
-      fontSize: scale(13.5),
-      fontWeight: "900",
       color: Colors.text,
       marginBottom: scale(6),
     },
     sub: {
+      ...typography.caption,
       textAlign: "center",
-      fontSize: scale(10.5),
-      lineHeight: scale(14),
       color: "#6B7280",
       marginBottom: scale(12),
     },
@@ -489,18 +487,16 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
     otpBoxActive: { borderColor: "#A7C6E6" },
     otpChar: {
-      fontSize: scale(16),
-      fontWeight: "900",
+      ...typography.numeric,
       color: Colors.text,
     },
     errorText: {
+      ...typography.microStrong,
       textAlign: "left",
       paddingHorizontal: scale(6),
       marginTop: scale(5),
       marginBottom: scale(0),
-      fontSize: scale(10.5),
       color: "#DC2626",
-      fontWeight: "800",
     },
     hiddenInput: {
       ...StyleSheet.absoluteFillObject,
@@ -515,23 +511,20 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       marginBottom: scale(20),
     },
     timer: {
-      fontSize: scale(10),
+      ...typography.micro,
       color: "#6B7280",
-      fontWeight: "400",
     },
     timerStrong: {
+      ...typography.microStrong,
       color: Colors.primary,
-      fontWeight: "900",
     },
     resendRow: { flexDirection: "row", alignItems: "center" },
     mutedSmall: {
-      fontSize: scale(10),
+      ...typography.micro,
       color: "#6B7280",
-      fontWeight: "400",
     },
     resend: {
-      fontSize: scale(10),
-      fontWeight: "900",
+      ...typography.microStrong,
       color: Colors.link,
       textDecorationLine: "underline",
     },
@@ -560,9 +553,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       justifyContent: "center",
     },
     btnText: {
+      ...typography.button,
       color: "#FFFFFF",
-      fontSize: scale(12.8),
-      fontWeight: "900",
     },
     closeBtn: {
       position: "absolute",

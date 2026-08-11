@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { Colors, useColors } from "../theme/colors";
+import { createTypography } from "../theme/typography";
 import PersonalDetailsForm from "../components/PersonalDetailsScreen/PersonalDetailsForm";
 import SavedModal from "../components/SavedModal";
 
@@ -254,6 +255,7 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
 }
 
 function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+  const typography = createTypography(scale);
   return StyleSheet.create({
     flex: { flex: 1 },
     safe: { flex: 1, backgroundColor: "#FFFFFF" },
@@ -275,12 +277,11 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
 
     titleBlock: { marginTop: vscale(18), marginBottom: vscale(22) },
 
-    screenTitle: { fontSize: scale(26), fontWeight: "800", color: Colors.text },
+    screenTitle: { ...typography.authTitle, color: Colors.text },
 
     screenSub: {
+      ...typography.bodySmall,
       marginTop: vscale(8),
-      fontSize: scale(13),
-      lineHeight: scale(18),
       color: Colors.muted,
       maxWidth: scale(360),
     },
@@ -288,15 +289,15 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     form: {},
     fieldBlock: { marginBottom: vscale(14) },
 
-    label: { marginBottom: vscale(8), fontSize: scale(13), fontWeight: "700", color: Colors.text },
+    label: { ...typography.label, marginBottom: vscale(8), color: Colors.text },
 
     input: {
+      ...typography.input,
       minHeight: Math.max(44, vscale(50)),
       borderRadius: scale(14),
       paddingHorizontal: scale(14),
       borderWidth: 1.4,
       backgroundColor: "#FFFFFF",
-      fontSize: scale(14),
       color: Colors.text,
       justifyContent: "center",
     },
@@ -306,10 +307,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
 
     // ✅ NEW: red validation text style
     errorText: {
+      ...typography.captionStrong,
       marginTop: vscale(6),
-      fontSize: scale(12),
       color: "#DC2626",
-      fontWeight: "700",
     },
 
     select: {
@@ -331,8 +331,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     selectText: {
+      ...typography.input,
       flex: 1,
-      fontSize: scale(14),
       color: Colors.text,
     },
 
@@ -371,10 +371,10 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
       justifyContent: "center",
     },
 
-    ctaText: { color: "#FFFFFF", fontSize: scale(14), fontWeight: "800" },
+    ctaText: { ...typography.button, color: "#FFFFFF" },
 
     loadingRow: { flexDirection: "row", alignItems: "center", gap: scale(10) },
-    loadingText: { color: "#FFFFFF", fontSize: scale(14), fontWeight: "800" },
+    loadingText: { ...typography.button, color: "#FFFFFF" },
 
     genderSheet: {
       width: "100%",
@@ -402,8 +402,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     genderSheetTitle: {
-      fontSize: scale(16),
-      fontWeight: "800",
+      ...typography.sectionTitle,
       color: Colors.text,
       marginBottom: scale(14),
     },
@@ -440,8 +439,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     genderOptionText: {
-      fontSize: scale(15),
-      fontWeight: "700",
+      ...typography.bodyStrong,
       color: Colors.text,
     },
 
@@ -450,7 +448,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     genderOptionSub: {
-      fontSize: scale(12),
+      ...typography.caption,
       color: Colors.muted,
       marginTop: scale(2),
     },
@@ -472,8 +470,7 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     genderCancelText: {
-      fontSize: scale(14),
-      fontWeight: "700",
+      ...typography.bodyStrong,
       color: Colors.muted,
     },
   });

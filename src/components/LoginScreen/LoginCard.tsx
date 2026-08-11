@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors, useColors } from "../../theme/colors";
+import { createTypography } from "../../theme/typography";
 
 type Props = {
   // ✅ UPDATED: now receives email + password (supports async)
@@ -220,21 +221,20 @@ export default function LoginCard({
 }
 
 function createStyles(scale: (n: number) => number, vscale: (n: number) => number) {
+  const typography = createTypography(scale);
   return StyleSheet.create({
     container: {
       marginTop: vscale(18),
     },
 
     title: {
-      fontSize: scale(26),
-      fontWeight: "800",
+      ...typography.authTitle,
       color: Colors.text,
     },
 
     subtitle: {
+      ...typography.bodySmall,
       marginTop: vscale(8),
-      fontSize: scale(13),
-      lineHeight: scale(18),
       color: Colors.muted,
       maxWidth: scale(360),
       marginBottom: vscale(22),
@@ -245,22 +245,21 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     label: {
+      ...typography.label,
       marginBottom: vscale(8),
-      fontSize: scale(13),
-      fontWeight: "700",
       color: Colors.text,
     },
 
     inputWrap: { position: "relative" },
 
     input: {
+      ...typography.input,
       minHeight: Math.max(44, vscale(50)),
       borderRadius: scale(14),
       paddingHorizontal: scale(14),
       borderWidth: 1,
       borderColor: Colors.border,
       backgroundColor: "#FFFFFF",
-      fontSize: scale(14),
       color: Colors.text,
     },
 
@@ -306,13 +305,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     rememberText: {
-      fontSize: scale(12),
+      ...typography.caption,
       color: Colors.muted,
     },
 
     forgotText: {
-      fontSize: scale(12),
-      fontWeight: "700",
+      ...typography.captionStrong,
       color: Colors.link,
     },
 
@@ -330,10 +328,9 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     bioAutofillText: {
+      ...typography.captionStrong,
       flexShrink: 1,
       textAlign: "center",
-      fontSize: scale(12),
-      fontWeight: "800",
     },
 
     ctaOuter: {
@@ -362,9 +359,8 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     ctaText: {
+      ...typography.button,
       color: "#FFFFFF",
-      fontSize: scale(14),
-      fontWeight: "800",
     },
 
     footer: {
@@ -375,13 +371,12 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     },
 
     footerText: {
-      fontSize: scale(12),
+      ...typography.caption,
       color: Colors.muted,
     },
 
     footerLink: {
-      fontSize: scale(12),
-      fontWeight: "800",
+      ...typography.captionStrong,
       color: Colors.link,
     },
   });
