@@ -97,6 +97,10 @@ const FAB_TUTORIAL_SEEN_KEY = "tahanansafe_fab_tutorial_seen_v1";
 // âœ… local "seen notifications" marker (kept, not removed)
 const NOTIF_LAST_SEEN_KEY = "tahanansafe_notif_last_seen_v1";
 
+// Matches the report-submission cooldown used by IncidentLogScreen.
+const INCIDENT_SUBMIT_COOLDOWN_MS = 60_000;
+const INCIDENT_LAST_SUBMIT_KEY = "tahanansafe_last_incident_submit_at_v1";
+
 // âœ… ADDED: must match NotificationsScreen.tsx emit name
 const NOTIF_CHANGED_EVENT = "tahanan:notifChanged";
 
@@ -990,7 +994,24 @@ export default function HomeScreen({
     closeAndRemoveFromRecents();
   }, []);
 
-  const handleFabIncidentLog = useCallback(() => {
+  const handleFabIncidentLog = useCallback(async () => {
+    try {
+      const raw = await AsyncStorage.getItem(INCIDENT_LAST_SUBMIT_KEY);
+      const lastSubmitAt = raw ? Number(raw) : 0;
+      const remainingMs = INCIDENT_SUBMIT_COOLDOWN_MS - (Date.now() - lastSubmitAt);
+
+      if (Number.isFinite(lastSubmitAt) && lastSubmitAt > 0 && remainingMs > 0) {
+        const seconds = Math.ceil(remainingMs / 1000);
+        Alert.alert(
+          "Please wait",
+          `You can submit a report again in ${seconds} second${seconds === 1 ? "" : "s"}.`,
+        );
+        return;
+      }
+    } catch {
+      // If local storage cannot be read, the server-side cooldown still applies.
+    }
+
     navigateToTab("Incident");
   }, [navigateToTab]);
 

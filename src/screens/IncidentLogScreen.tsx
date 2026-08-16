@@ -100,8 +100,8 @@ type SubmitIncidentResponse = {
   };
 };
 
-/* ===================== RATE LIMIT (10 seconds) ===================== */
-const INCIDENT_SUBMIT_COOLDOWN_MS = 10_000;
+/* ===================== RATE LIMIT (1 minute) ===================== */
+const INCIDENT_SUBMIT_COOLDOWN_MS = 60_000;
 const INCIDENT_LAST_SUBMIT_KEY = "tahanansafe_last_incident_submit_at_v1";
 
 function formatSecondsCeil(ms: number) {

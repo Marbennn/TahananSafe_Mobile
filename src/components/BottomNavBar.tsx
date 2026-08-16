@@ -10,7 +10,7 @@ import {
   Animated,
   Easing,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path } from "react-native-svg";
 
@@ -481,9 +481,7 @@ export default function BottomNavBar({
         </View>
 
         <NavItem
-          icon="stats-chart-outline"
-          activeIcon="stats-chart"
-          label="Reports"
+          label="History"
           active={activeTab === "Reports"}
           onPress={() => handleTabPress("Reports")}
           iconSize={iconSize}
@@ -495,6 +493,7 @@ export default function BottomNavBar({
           pressInScale={pressInScale}
           activeColor={activePrimary}
           inactiveColor={inactive}
+          useHistoryIcon
         />
 
         <NavItem
@@ -582,8 +581,9 @@ function NavItem({
   pressInScale,
   activeColor,
   inactiveColor,
+  useHistoryIcon = false,
 }: {
-  icon: IoniconName;
+  icon?: IoniconName;
   activeIcon?: IoniconName;
   label: string;
   active: boolean;
@@ -597,6 +597,7 @@ function NavItem({
   pressInScale: number;
   activeColor?: string;
   inactiveColor?: string;
+  useHistoryIcon?: boolean;
 }) {
   const iconColor = active ? (activeColor ?? Colors.primary) : (inactiveColor ?? "#9AA4B2");
   const handlePressIn = useCallback(() => {
@@ -630,11 +631,15 @@ function NavItem({
       }
     >
       <Animated.View style={[innerStyle, { transform: [{ scale: scaleAnim }] }]}>
-        <Ionicons
-          name={active && activeIcon ? activeIcon : icon}
-          size={iconSize}
-          color={iconColor}
-        />
+        {useHistoryIcon ? (
+          <MaterialCommunityIcons name="history" size={iconSize} color={iconColor} />
+        ) : (
+          <Ionicons
+            name={active && activeIcon ? activeIcon : icon!}
+            size={iconSize}
+            color={iconColor}
+          />
+        )}
         <Text
           style={[labelStyle, active && labelActiveStyle]}
           numberOfLines={1}
