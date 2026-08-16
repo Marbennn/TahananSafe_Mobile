@@ -64,6 +64,7 @@ type FloatingBounds = {
 const FLOATING_BUTTON_SIZE = 56;
 const FLOATING_TOOLTIP_WIDTH = 168;
 const FLOATING_TOOLTIP_HEIGHT = 38;
+const FLOATING_RETURN_DELAY_MS = 5_000;
 
 const REPORT_CARD_STATUS_COLORS: Record<
   ReportStatus,
@@ -210,6 +211,11 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
   const floatingBoundaryTooltip = useRef(new Animated.Value(0)).current;
   const floatingBoundaryTooltipAnimationRef =
     useRef<Animated.CompositeAnimation | null>(null);
+  const floatingReturnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const floatingReturnAnimationRef =
+    useRef<Animated.CompositeAnimation | null>(null);
   const floatingPositionUserRef = useRef("");
   const previousFloatingBoundsRef = useRef<FloatingBounds | null>(null);
   const dotAnimations = useRef([
@@ -235,13 +241,38 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
     floatingBoundaryTooltip.setValue(0);
   }, [floatingBoundaryTooltip, stopFloatingBoundaryTooltipAnimation]);
 
+  const cancelFloatingReturn = useCallback(() => {
+    if (floatingReturnTimerRef.current) {
+      clearTimeout(floatingReturnTimerRef.current);
+      floatingReturnTimerRef.current = null;
+    }
+
+    const runningAnimation = floatingReturnAnimationRef.current;
+    if (!runningAnimation) return;
+
+    runningAnimation.stop();
+    floatingReturnAnimationRef.current = null;
+    floatingPosition.stopAnimation((position) => {
+      floatingPositionRef.current = position;
+    });
+  }, [floatingPosition]);
+
   useEffect(
     () => () => {
+      cancelFloatingReturn();
       floatingBoundaryTooltipAnimationRef.current?.stop();
       floatingBoundaryTooltip.stopAnimation();
     },
-    [floatingBoundaryTooltip]
+    [cancelFloatingReturn, floatingBoundaryTooltip]
   );
+
+  useEffect(() => {
+    const listenerId = floatingPosition.addListener((position) => {
+      floatingPositionRef.current = position;
+    });
+
+    return () => floatingPosition.removeListener(listenerId);
+  }, [floatingPosition]);
 
   useEffect(() => {
     if (!hidden) return;
@@ -256,11 +287,13 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
     reportListMotion.setValue(0);
     floatingBottomImpactRef.current = 0;
     floatingBottomImpact.setValue(0);
+    cancelFloatingReturn();
     resetFloatingBoundaryTooltip();
     setListVisible(false);
     setSelectedReport(null);
   }, [
     floatingBottomImpact,
+    cancelFloatingReturn,
     hidden,
     reportListBackdrop,
     reportListMotion,
@@ -449,6 +482,7 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
 
   const openReportList = useCallback(() => {
     Keyboard.dismiss();
+    cancelFloatingReturn();
     reportListOriginRef.current = {
       x: floatingPositionRef.current.x + FLOATING_BUTTON_SIZE / 2,
       y: floatingPositionRef.current.y + FLOATING_BUTTON_SIZE / 2,
@@ -468,6 +502,7 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
     reportListBackdrop,
     reportListMotion,
     reports.length,
+    cancelFloatingReturn,
     resetFloatingBoundaryTooltip,
   ]);
 
@@ -541,6 +576,55 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
     insets.top,
     width,
   ]);
+
+  const scheduleFloatingReturn = useCallback(() => {
+    cancelFloatingReturn();
+
+    const current = floatingPositionRef.current;
+    const isAtDefaultPosition =
+      Math.abs(current.x - floatingBounds.defaultX) < 1 &&
+      Math.abs(current.y - floatingBounds.defaultY) < 1;
+    if (isAtDefaultPosition) return;
+
+    floatingReturnTimerRef.current = setTimeout(() => {
+      floatingReturnTimerRef.current = null;
+      resetFloatingBoundaryTooltip();
+
+      const target = {
+        x: floatingBounds.defaultX,
+        y: floatingBounds.defaultY,
+      };
+      const animation = Animated.spring(floatingPosition, {
+        toValue: target,
+        stiffness: 185,
+        damping: 21,
+        mass: 0.8,
+        overshootClamping: false,
+        restDisplacementThreshold: 0.001,
+        restSpeedThreshold: 0.001,
+        useNativeDriver: true,
+        isInteraction: false,
+      });
+
+      floatingReturnAnimationRef.current = animation;
+      animation.start(({ finished }) => {
+        if (floatingReturnAnimationRef.current !== animation) return;
+
+        floatingReturnAnimationRef.current = null;
+        if (finished) {
+          floatingPositionRef.current = target;
+          floatingPosition.setValue(target);
+        }
+      });
+    }, FLOATING_RETURN_DELAY_MS);
+  }, [
+    cancelFloatingReturn,
+    floatingBounds.defaultX,
+    floatingBounds.defaultY,
+    floatingPosition,
+    resetFloatingBoundaryTooltip,
+  ]);
+
   const floatingTooltipPosition = useMemo(() => {
     const centerOffset = (FLOATING_TOOLTIP_WIDTH - FLOATING_BUTTON_SIZE) / 2;
     const tooltipMinimumX = floatingBounds.minimumX;
@@ -585,6 +669,8 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
   }, [floatingBounds, floatingPosition.x, floatingPosition.y]);
 
   useEffect(() => {
+    cancelFloatingReturn();
+
     const shouldReset = floatingPositionUserRef.current !== userId;
     const previousBounds = previousFloatingBoundsRef.current;
     floatingPositionUserRef.current = userId;
@@ -636,6 +722,7 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
     floatingBottomImpact.setValue(0);
     resetFloatingBoundaryTooltip();
   }, [
+    cancelFloatingReturn,
     floatingBottomImpact,
     floatingBounds,
     floatingPosition,
@@ -700,6 +787,7 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
         onMoveShouldSetPanResponderCapture: (_, gesture) =>
           Math.abs(gesture.dx) > 5 || Math.abs(gesture.dy) > 5,
         onPanResponderGrant: () => {
+          cancelFloatingReturn();
           floatingDragStartRef.current = floatingPositionRef.current;
           floatingPosition.stopAnimation();
           floatingBottomImpact.stopAnimation();
@@ -741,20 +829,24 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
           floatingPosition.setValue(floatingPositionRef.current);
           releaseFloatingBottomImpact();
           floatingBoundaryTooltipShownRef.current = false;
+          scheduleFloatingReturn();
         },
         onPanResponderTerminate: () => {
           floatingPosition.setValue(floatingPositionRef.current);
           releaseFloatingBottomImpact();
           floatingBoundaryTooltipShownRef.current = false;
+          scheduleFloatingReturn();
         },
         onShouldBlockNativeResponder: () => true,
       }),
     [
+      cancelFloatingReturn,
       floatingBottomImpact,
       floatingBounds,
       floatingPosition,
       releaseFloatingBottomImpact,
       resetFloatingBoundaryTooltip,
+      scheduleFloatingReturn,
       showFloatingBoundaryTooltip,
     ]
   );
@@ -1142,6 +1234,7 @@ export default function GlobalReportMessaging({ hidden = false }: Props) {
                     : "Open messages"
                 }
                 accessibilityHint="Tap to open or drag to reposition"
+                onPressIn={cancelFloatingReturn}
                 onPress={openReportList}
                 style={({ pressed }) => [
                   styles.floatingButton,
