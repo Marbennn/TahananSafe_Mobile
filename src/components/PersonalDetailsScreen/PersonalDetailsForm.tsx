@@ -41,6 +41,7 @@ type Props = {
 };
 
 const PREFIX = "+63";
+const MAX_BIRTH_YEAR = 2011;
 
 function digitsOnly(s: string) {
   return s.replace(/\D/g, "");
@@ -210,7 +211,12 @@ export default function PersonalDetailsForm({
   const [iosInlineOpen, setIosInlineOpen] = useState(false);
 
   const minDobDate = useMemo(() => new Date(1900, 0, 1), []);
-  const maxDobDate = useMemo(() => new Date(), []);
+  const maxDobDate = useMemo(() => new Date(MAX_BIRTH_YEAR, 11, 31), []);
+  const pickerDobDate = useMemo(() => {
+    const parsed = parseDobToDate(dob);
+    if (!parsed) return new Date(2000, 0, 1);
+    return parsed > maxDobDate ? maxDobDate : parsed;
+  }, [dob, maxDobDate]);
 
   const dobDisplay = useMemo(() => {
     if (dob?.trim()?.length) return dob;
@@ -337,7 +343,7 @@ export default function PersonalDetailsForm({
               }}
             >
               <DateTimePicker
-                value={parseDobToDate(dob) ?? new Date(2000, 0, 1)}
+                value={pickerDobDate}
                 mode="date"
                 display="inline"
                 minimumDate={minDobDate}
@@ -353,7 +359,7 @@ export default function PersonalDetailsForm({
         {/* ✅ Android Calendar Popup */}
         {Platform.OS === "android" && androidDobOpen && (
           <DateTimePicker
-            value={parseDobToDate(dob) ?? new Date(2000, 0, 1)}
+            value={pickerDobDate}
             mode="date"
             display="calendar"
             minimumDate={minDobDate}

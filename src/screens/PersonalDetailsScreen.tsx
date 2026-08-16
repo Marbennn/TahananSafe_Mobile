@@ -38,6 +38,8 @@ type Props = {
   progressActiveCount?: 1 | 2 | 3 | 4;
 };
 
+const MAX_BIRTH_YEAR = 2011;
+
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
@@ -132,6 +134,9 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
 
     if (!dob.trim()) return { ok: false, message: "Date of Birth is required." };
     if (!dobDate) return { ok: false, message: "Invalid Date of Birth. Use MM/DD/YYYY (example: 02/24/2000)." };
+    if (dobDate.getFullYear() > MAX_BIRTH_YEAR) {
+      return { ok: false, message: "Birth year must be 2011 or earlier." };
+    }
 
     const age = calcAge(dobDate);
     if (age < 10) return { ok: false, message: "Invalid Date of Birth (age too low)." };

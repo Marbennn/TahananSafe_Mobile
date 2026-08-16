@@ -1318,8 +1318,8 @@ export default function HomeScreen({
 
         // Improved empty state
         emptyLogsCard: {
-          backgroundColor: "#FFFFFF",
           borderRadius: clamp(Math.round(16 * s), 14, 18),
+          backgroundColor: "transparent",
           borderWidth: 1,
           borderColor: "#E7EEF7",
           alignItems: "center",
@@ -1647,33 +1647,43 @@ export default function HomeScreen({
               <View style={styles.miniCenter}>
                 <ActivityIndicator size="small" color={TC.primary} />
               </View>
-            ) : logs.length === 0 ? (
-              <View style={[styles.emptyLogsCard, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
-                <View style={[styles.emptyLogsIconWrap, { backgroundColor: TC.chipBg }]}>
-                  <Ionicons name="document-text-outline" size={14} color={TC.primary} />
-                </View>
-                <Text style={[styles.emptyLogsTitle, { color: TC.textDark }]} allowFontScaling={false}>No reports yet</Text>
-                <Text style={[styles.emptyLogsText, { color: TC.muted }]} allowFontScaling={false}>
-                  Your incident logs will appear here once you submit a report.
-                </Text>
-               
-              </View>
             ) : (
-              logs.map((item, idx) => {
-                const full = recentReports.find((r) => r.id === item.id);
-                return (
-                  <View key={item.id}>
-                    <RecentLogCard
-                      item={item}
-                      onPress={() => {
-                        if (!full) return;
-                        onOpenReport?.(full);
-                      }}
-                    />
-                    {idx !== logs.length - 1 ? <View style={styles.logsGap} /> : null}
-                  </View>
-                );
-              })
+              <>
+                {logs.map((item, idx) => {
+                  const full = recentReports.find((r) => r.id === item.id);
+                  return (
+                    <View key={item.id}>
+                      <RecentLogCard
+                        item={item}
+                        onPress={() => {
+                          if (!full) return;
+                          onOpenReport?.(full);
+                        }}
+                      />
+                      {idx !== logs.length - 1 ? <View style={styles.logsGap} /> : null}
+                    </View>
+                  );
+                })}
+
+                {logs.length < 2 ? (
+                  <>
+                    {logs.length > 0 ? <View style={styles.logsGap} /> : null}
+                    <View style={[styles.emptyLogsCard, { borderColor: TC.divider }]}>
+                      <View style={[styles.emptyLogsIconWrap, { backgroundColor: TC.chipBg }]}>
+                        <Ionicons name="document-text-outline" size={14} color={TC.primary} />
+                      </View>
+                      <Text style={[styles.emptyLogsTitle, { color: TC.textDark }]} allowFontScaling={false}>
+                        {logs.length === 0 ? "No report yet" : "No additional report yet"}
+                      </Text>
+                      {logs.length === 0 ? (
+                        <Text style={[styles.emptyLogsText, { color: TC.muted }]} allowFontScaling={false}>
+                          Your incident logs will appear here once you submit a report.
+                        </Text>
+                      ) : null}
+                    </View>
+                  </>
+                ) : null}
+              </>
             )}
           </View>
 

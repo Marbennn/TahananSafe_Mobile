@@ -115,7 +115,7 @@ export default function IncidentLogConfirmationScreen({
         ]}
       >
         <Text style={styles.reviewCopy}>
-          Please verify the information below before submitting for AI analysis and mediation scheduling.
+          Please verify the information below before submitting
         </Text>
 
         <IncidentPreviewCard data={data} />
