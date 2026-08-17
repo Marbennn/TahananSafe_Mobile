@@ -171,9 +171,15 @@ function formatAddressFromReverseGeocode(
 
 // Speech-to-text helpers
 const SPEECH_LANG = "en-US";
+const INCIDENT_DESCRIPTION_MAX_LENGTH = 150;
+const COMPLAINT_MAX_LENGTH = 15;
 
 function safeTrim(s: string) {
   return (s ?? "").replace(/\s+/g, " ").trim();
+}
+
+function limitText(value: string, maxLength: number) {
+  return String(value ?? "").slice(0, maxLength);
 }
 
 function joinWithSpace(a: string, b: string) {
@@ -557,7 +563,10 @@ export default function IncidentLogScreen({
     const isFinal = event?.isFinal === true;
 
     if (isFinal) {
-      const newBase = joinWithSpace(speechBaseRef.current, t);
+      const newBase = limitText(
+        joinWithSpace(speechBaseRef.current, t),
+        INCIDENT_DESCRIPTION_MAX_LENGTH
+      );
 
       speechBaseRef.current = newBase;
       lastFinalRef.current = t;
@@ -568,7 +577,12 @@ export default function IncidentLogScreen({
     }
 
     setSpeechPreview(t);
-    setDetails(joinWithSpace(speechBaseRef.current, t));
+    setDetails(
+      limitText(
+        joinWithSpace(speechBaseRef.current, t),
+        INCIDENT_DESCRIPTION_MAX_LENGTH
+      )
+    );
   });
 
   useSpeechRecognitionEvent("error", (event: any) => {
@@ -617,7 +631,10 @@ export default function IncidentLogScreen({
 
       detailsInputRef.current?.focus?.();
 
-      speechBaseRef.current = safeTrim(details);
+      speechBaseRef.current = limitText(
+        safeTrim(details),
+        INCIDENT_DESCRIPTION_MAX_LENGTH
+      );
       lastFinalRef.current = "";
       setSpeechPreview("");
 
@@ -1343,13 +1360,19 @@ export default function IncidentLogScreen({
                 editable={!submitting && !aiLoading}
                 value={details}
                 onChangeText={(t) => {
-                  setDetails(t);
+                  const limitedText = limitText(
+                    t,
+                    INCIDENT_DESCRIPTION_MAX_LENGTH
+                  );
+
+                  setDetails(limitedText);
                   if (!recognizing) {
-                    speechBaseRef.current = safeTrim(t);
+                    speechBaseRef.current = safeTrim(limitedText);
                     lastFinalRef.current = "";
                   }
                   setAiError(null);
                 }}
+                maxLength={INCIDENT_DESCRIPTION_MAX_LENGTH}
                 placeholder="Describe what happened in detail....."
                 placeholderTextColor="#A9A9A9"
                 multiline
@@ -1371,7 +1394,10 @@ export default function IncidentLogScreen({
               <TextInput
                 editable={!submitting && !aiLoading}
                 value={offenderName}
-                onChangeText={setOffenderName}
+                onChangeText={(t) =>
+                  setOffenderName(limitText(t, COMPLAINT_MAX_LENGTH))
+                }
+                maxLength={COMPLAINT_MAX_LENGTH}
                 placeholder="Enter reported person name"
                 placeholderTextColor="#A9A9A9"
                 style={styles.textInput}
