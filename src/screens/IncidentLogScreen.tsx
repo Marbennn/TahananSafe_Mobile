@@ -33,9 +33,10 @@ import {
 
 // ✅ API
 import { submitIncident } from "../api/incidents";
+import { mobileQueryClient } from "../app/queryClient";
+import { reportKeys } from "../features/reports/queries";
 
 // ✅ AI API
-import { analyzeIncident, type AiAnalyzeResponse } from "../api/ai";
 
 // ✅ preview screen
 import IncidentLogConfirmScreen from "./IncidentLogConfirmationScreen";
@@ -217,11 +218,6 @@ function extractTranscriptFromEvent(event: any): string {
 }
 
 /** ✅ Prefer AI incident type for display + saving */
-function normalizeAiIncidentType(v: any) {
-  const s = safeTrim(String(v ?? ""));
-  return s || "";
-}
-
 export default function IncidentLogScreen({
   onBack,
   onProceedConfirm,
@@ -264,10 +260,10 @@ export default function IncidentLogScreen({
   const [speechPreview, setSpeechPreview] = useState("");
   const [speechError, setSpeechError] = useState<string | null>(null);
 
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
-  const [aiResult, setAiResult] = useState<AiAnalyzeResponse | null>(null);
-  const lastAnalyzedTextRef = React.useRef<string>("");
+  // AI analysis is queued by the backend after submission. These compatibility
+  // values keep the form UI stable while ensuring submission never waits on AI.
+  const aiLoading = false;
+  const aiError: string | null = null;
 
   const [photos, setPhotos] = useState<string[]>([]);
   const MAX_PHOTOS = 3;
@@ -380,79 +376,18 @@ export default function IncidentLogScreen({
   }, [previewSlideProgress, showPreview]);
 
   /** ✅ AI staleness */
-  const aiIsStale = useMemo(() => {
-    const cur = safeTrim(details);
-    const last = safeTrim(lastAnalyzedTextRef.current);
-    if (!aiResult) return false;
-    if (!last) return true;
-    return cur !== last;
-  }, [details, aiResult]);
+  // Analysis runs asynchronously in the backend after a report is accepted.
 
   /** ✅ NEW: incident type to use (AI first, fallback to internal) */
   const getDisplayIncidentType = React.useCallback(() => {
     if (mode === "emergency") return "Emergency";
 
-    const aiType = normalizeAiIncidentType((aiResult as any)?.incident_type);
-    if (aiType) return aiType;
-
     return incidentType || "Other";
-  }, [aiResult, incidentType, mode]);
+  }, [incidentType, mode]);
 
   /**
    * ✅ Auto-analyze when user clicks "Secure Complaint"
-   * - Only runs for complain mode
-   * - Only runs if no aiResult OR stale
-   * - Retries automatically until AI responds (no failure alert)
    */
-  const MAX_AI_RETRIES = 10;
-
-  const autoAnalyzeIfNeeded = React.useCallback(async (): Promise<boolean> => {
-    if (mode !== "complain") return true;
-    if (submitting || aiLoading) return false;
-
-    if (recognizing) {
-      Alert.alert("Voice input active", "Please stop voice input before securing the complaint.");
-      return false;
-    }
-
-    const text = safeTrim(details);
-    if (!text) return true; // validation handled elsewhere
-
-    // if we already have AI and it's not stale -> ok
-    if (aiResult && !aiIsStale) return true;
-
-    setAiLoading(true);
-    setAiError(null);
-
-    for (let attempt = 1; attempt <= MAX_AI_RETRIES; attempt++) {
-      try {
-        const res = await analyzeIncident(text);
-        setAiResult(res);
-        lastAnalyzedTextRef.current = text;
-        setAiLoading(false);
-        return true;
-      } catch (e: any) {
-        const msg = e?.message || "AI analyze failed.";
-        setAiError(`Retrying analysis... (attempt ${attempt})`);
-        log(`AI analyze attempt ${attempt} failed`, msg);
-
-        if (attempt >= MAX_AI_RETRIES) {
-          setAiResult(null);
-          setAiError(msg);
-          setAiLoading(false);
-          Alert.alert("AI Analyze Failed", "Could not reach the AI after multiple attempts. Please try again later.");
-          return false;
-        }
-
-        // Wait before retrying (2 seconds between attempts)
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-    }
-
-    setAiLoading(false);
-    return false;
-  }, [mode, submitting, recognizing, details, aiResult, aiIsStale]);
-
   const speechBaseRef = React.useRef("");
   const lastFinalRef = React.useRef("");
 
@@ -1087,7 +1022,6 @@ export default function IncidentLogScreen({
       videoCount: videos.length,
       videos,
       mode,
-      aiResult,
     } as any);
 
   const resetForm = () => {
@@ -1113,10 +1047,6 @@ export default function IncidentLogScreen({
     speechBaseRef.current = "";
     lastFinalRef.current = "";
 
-    setAiLoading(false);
-    setAiError(null);
-    setAiResult(null);
-    lastAnalyzedTextRef.current = "";
   };
 
   const submitToBackend = async (): Promise<SubmitIncidentResponse> => {
@@ -1145,27 +1075,10 @@ export default function IncidentLogScreen({
       videos,
     };
 
-    if (aiResult) {
-      payload.ai_incident_type = aiResult.incident_type ?? "";
-      payload.ai_language = aiResult.language ?? "";
-      payload.ai_risk_level = aiResult.risk_level ?? "";
-      payload.ai_risk_percentage =
-        typeof aiResult.risk_percentage === "number" ? aiResult.risk_percentage : undefined;
-      payload.ai_priority_level = aiResult.priority_level ?? "";
-      payload.ai_children_involved = aiResult.children_involved ?? undefined;
-      payload.ai_weapon_mentioned = aiResult.weapon_mentioned ?? undefined;
-      payload.ai_confidence_score =
-        typeof aiResult.confidence_score === "number" ? aiResult.confidence_score : undefined;
-
-      payload.ai_processing_time_ms =
-        typeof (aiResult as any).processing_time_ms === "number"
-          ? (aiResult as any).processing_time_ms
-          : undefined;
-    }
-
     setSubmitting(true);
     try {
       const res = (await submitIncident(payload)) as SubmitIncidentResponse;
+      await mobileQueryClient.invalidateQueries({ queryKey: reportKeys.all });
 
       await markSubmittedNow();
 
@@ -1370,7 +1283,6 @@ export default function IncidentLogScreen({
                     speechBaseRef.current = safeTrim(limitedText);
                     lastFinalRef.current = "";
                   }
-                  setAiError(null);
                 }}
                 maxLength={INCIDENT_DESCRIPTION_MAX_LENGTH}
                 placeholder="Describe what happened in detail....."

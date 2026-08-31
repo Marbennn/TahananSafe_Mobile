@@ -53,7 +53,7 @@ type Props = {
   onContactPress?: () => void;
   onFeedbackPress?: () => void;
 
-  onLogout?: () => void;
+  onLogout?: () => Promise<void> | void;
   onQuickExit?: () => void;
 
   onTabChange?: (tab: TabKey) => void;
@@ -680,7 +680,7 @@ export default function SettingsScreen({
     setSessionsModalVisible(false);
 
     if (onLogout) {
-      onLogout();
+      await onLogout();
       return;
     }
 

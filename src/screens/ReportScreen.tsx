@@ -23,19 +23,21 @@ import { Colors, useColors } from "../theme/colors";
 import { createTypography } from "../theme/typography";
 import { useAuth } from "../auth/AuthContext";
 import {
-  getReportStatusMeta,
-  isActiveReportStatus,
+  getCaseStatusMeta,
+  normalizeCaseStatus,
   normalizeReportStatus,
+  type CaseStatus,
   type ReportStatus,
 } from "../utils/reportStatus";
 
 // ✅ FIX: Use requestJson with auth for auto token refresh (replaces raw fetch + getAccessToken)
-import { requestJson } from "../api/http";
+import { mobileQueryClient } from "../app/queryClient";
+import { myReportsQuery, reportKeys } from "../features/reports/queries";
 
 // ✅ NEW: local status-change notifications
 import { syncLocalReportStatusNotifications } from "../api/notifications";
 
-type FilterKey = "Active" | "Resolved" | "Archived";
+type FilterKey = "Submitted" | "Active" | "Completed" | "Archived";
 
 export type ReportItem = {
   id: string;
@@ -49,6 +51,8 @@ export type ReportItem = {
   groupLabel?: string;
 
   status?: ReportStatus;
+  caseStatus?: CaseStatus;
+  currentProcessStage?: string;
   witnessName?: string;
   witnessType?: string;
   location?: string;
@@ -70,16 +74,6 @@ const CARD = "#FFFFFF";
 
 // ✅ IMPORTANT: force this to be a normal string (fixes TS literal type error)
 const PRIMARY: string = String((Colors as any).primary ?? "#1E63D0");
-
-const REPORT_SCREEN_STATUS_COLORS: Record<ReportStatus, { backgroundColor: string; textColor: string }> = {
-  SUBMITTED: { backgroundColor: "#AFCDF8", textColor: "#40536B" },
-  UNDER_REVIEW: { backgroundColor: "#FDE7A6", textColor: "#72551C" },
-  MEDIATION_SCHEDULED: { backgroundColor: "#DDC7F7", textColor: "#7652C8" },
-  ONGOING_ASSISTANCE: { backgroundColor: "#F8BB96", textColor: "#4B5563" },
-  RESOLVED: { backgroundColor: "#C7F2D8", textColor: "#18723A" },
-  CERTIFICATION_ISSUED: { backgroundColor: "#F2B0B6", textColor: "#70414C" },
-  ARCHIVED: { backgroundColor: "#DDE2E8", textColor: "#4B5563" },
-};
 
 // ---------------------------
 // Helpers
@@ -147,21 +141,6 @@ function isAbortError(err: any) {
   return name === "AbortError" || msg.toLowerCase().includes("aborted");
 }
 
-function countByStatus(items: ReportItem[]) {
-  let active = 0;
-  let resolved = 0;
-  let archived = 0;
-
-  for (const it of items) {
-    const s = normalizeReportStatus(it.status);
-    if (s === "RESOLVED") resolved++;
-    else if (s === "ARCHIVED") archived++;
-    else active++;
-  }
-
-  return { active, resolved, archived };
-}
-
 function ReportStatusSegment({
   value,
   onChange,
@@ -173,7 +152,7 @@ function ReportStatusSegment({
   styles: ReturnType<typeof makeStyles>;
   TC: ReturnType<typeof useColors>;
 }) {
-  const options: FilterKey[] = ["Active", "Resolved", "Archived"];
+  const options: FilterKey[] = ["Submitted", "Active", "Completed", "Archived"];
   return (
     <View style={styles.segmentWrap}>
       {options.map((k) => {
@@ -209,8 +188,10 @@ function ReportCard({
   styles: ReturnType<typeof makeStyles>;
   TC: ReturnType<typeof useColors>;
 }) {
-  const status = getReportStatusMeta(item.status);
-  const statusColors = REPORT_SCREEN_STATUS_COLORS[normalizeReportStatus(item.status)];
+  const status = getCaseStatusMeta(
+    item.caseStatus,
+    item.currentProcessStage || item.status
+  );
   const cardDate = parseDateSmart(item.dateLeft) ? formatGroupDate(parseDateSmart(item.dateLeft)!) : item.dateLeft || "-";
   const dateLine = `${cardDate}${item.timeLeft && item.timeLeft !== "—" && item.timeLeft !== "-" ? ` • ${item.timeLeft}` : ""}`;
 
@@ -222,8 +203,8 @@ function ReportCard({
             REP {item.alertNo || `#${item.id.slice(-6).toUpperCase()}`}
           </Text>
 
-          <View style={[styles.statusPill, { backgroundColor: statusColors.backgroundColor }]}>
-            <Text style={[styles.statusPillText, { color: statusColors.textColor }]} numberOfLines={1}>{status.shortLabel}</Text>
+          <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
+            <Text style={[styles.statusPillText, { color: status.color }]} numberOfLines={1}>{status.label}</Text>
           </View>
         </View>
 
@@ -285,7 +266,7 @@ export default function ReportScreen({
   const styles = useMemo(() => makeStyles(scale, vscale, compactHeight), [width, height]);
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab ?? "Reports");
-  const [filter, setFilter] = useState<FilterKey>("Active");
+  const [filter, setFilter] = useState<FilterKey>("Submitted");
   const [query, setQuery] = useState<string>("");
 
   useEffect(() => {
@@ -322,19 +303,8 @@ export default function ReportScreen({
   // ✅ FIX: Use requestJson with auth:true for auto token refresh
   const fetchMyReports = useCallback(async (signal?: AbortSignal): Promise<ReportItem[]> => {
     // ✅ FIX: requestJson auto-attaches token AND auto-refreshes on 401
-    let data: any;
-    try {
-      data = await requestJson({
-        method: "GET",
-        path: "/api/mobile/v1/reports/my",
-        auth: true,
-      });
-    } catch (e: any) {
-      if (isAbortError(e)) throw e;
-      throw e;
-    }
-
-    const rawList = Array.isArray(data) ? data : data?.incidents ?? [];
+    const rawList = await mobileQueryClient.fetchQuery(myReportsQuery(userId));
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     const today = new Date();
 
     const mapped: ReportItem[] = rawList.map((doc: any) => {
@@ -370,6 +340,10 @@ export default function ReportScreen({
       const groupLabel = dateObj && isSameDay(dateObj, today) ? "Today" : dateObj ? formatGroupDate(dateObj) : "";
 
       const statusNorm = normalizeReportStatus(doc?.status);
+      const caseStatusNorm = normalizeCaseStatus(
+        doc?.caseStatus,
+        doc?.currentProcessStage || doc?.status
+      );
 
       return {
         id,
@@ -382,6 +356,8 @@ export default function ReportScreen({
         timeRight: rightTime,
 
         status: statusNorm,
+        caseStatus: caseStatusNorm,
+        currentProcessStage: String(doc?.currentProcessStage || doc?.status || "submitted"),
         witnessName: doc?.witnessName ? String(doc.witnessName) : "",
         witnessType: doc?.witnessType ? String(doc.witnessType) : "",
         location: doc?.locationStr ? String(doc.locationStr) : "",
@@ -396,7 +372,7 @@ export default function ReportScreen({
     });
 
     return mapped;
-  }, []); // ✅ FIX: No dependencies needed — requestJson handles token internally
+  }, [userId]);
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = !!opts?.silent;
@@ -428,7 +404,7 @@ export default function ReportScreen({
           list.map((r) => ({
             id: r.id,
             title: r.title,
-            status: r.status,
+            status: r.caseStatus,
             updatedAt: r.updatedAt,
             createdAt: r.createdAt,
           }))
@@ -491,6 +467,10 @@ export default function ReportScreen({
       setRefreshing(true);
       setErrorMsg("");
 
+      await mobileQueryClient.invalidateQueries({
+        queryKey: reportKeys.mine(userId),
+      });
+
       const list = await fetchMyReports(controller.signal);
 
       try {
@@ -498,7 +478,7 @@ export default function ReportScreen({
           list.map((r) => ({
             id: r.id,
             title: r.title,
-            status: r.status,
+            status: r.caseStatus,
             updatedAt: r.updatedAt,
             createdAt: r.createdAt,
           }))
@@ -520,11 +500,14 @@ export default function ReportScreen({
   }, [fetchMyReports, userId]);
 
   const filtered = useMemo(() => {
+    const selectedStatus =
+      normalizeCaseStatus(filter);
     const base = items.filter((x) => {
-      const status = normalizeReportStatus(x.status);
-      if (filter === "Resolved") return status === "RESOLVED";
-      if (filter === "Archived") return status === "ARCHIVED";
-      return isActiveReportStatus(status);
+      const status = normalizeCaseStatus(
+        x.caseStatus,
+        x.currentProcessStage || x.status
+      );
+      return status === selectedStatus;
     });
 
     const q = query.trim().toLowerCase();
@@ -575,8 +558,9 @@ export default function ReportScreen({
 
   const openFilterMenu = useCallback(() => {
     Alert.alert("Filter reports", "Choose which reports to display.", [
+      { text: "Submitted", onPress: () => setFilterAnimated("Submitted") },
       { text: "Active", onPress: () => setFilterAnimated("Active") },
-      { text: "Resolved", onPress: () => setFilterAnimated("Resolved") },
+      { text: "Completed", onPress: () => setFilterAnimated("Completed") },
       { text: "Archived", onPress: () => setFilterAnimated("Archived") },
       { text: "Cancel", style: "cancel" },
     ]);
@@ -821,17 +805,17 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       segmentWrap: {
         flexDirection: "row",
         alignItems: "center",
-        gap: scale(10),
+        gap: scale(6),
       },
 
       segmentBtn: {
-        flexShrink: 1,
-        minWidth: compactScale(90),
+        flex: 1,
+        minWidth: 0,
         height: SEGMENT_HEIGHT,
         borderRadius: scale(999),
         alignItems: "center",
         justifyContent: "center",
-        paddingHorizontal: scale(22),
+        paddingHorizontal: scale(6),
       },
 
       segmentBtnActive: {

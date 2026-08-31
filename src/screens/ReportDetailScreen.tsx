@@ -28,13 +28,16 @@ import { createTypography } from "../theme/typography";
 
 import type { ReportItem } from "./ReportScreen";
 import {
-  fetchReportDetail,
   ReportDetailDto,
   buildReportPhotoUrl,
 } from "../api/reports";
+import { mobileQueryClient } from "../app/queryClient";
+import { reportDetailQuery, reportKeys } from "../features/reports/queries";
+import { getCaseStatusMeta } from "../utils/reportStatus";
 
 // ✅ token + base url for cancel action
 import { getAccessToken } from "../auth/session";
+import { requestJson } from "../api/http";
 
 type ViewKey = "details" | "timeline";
 
@@ -58,8 +61,17 @@ function formatStatusLabel(s?: string) {
   if (!raw) return "Submitted";
 
   const normalized = raw.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+  if (normalized === "for official review") return "For Official Review";
+  if (normalized === "mediation scheduling") return "Mediation Scheduling";
+  if (normalized === "mediation scheduled") return "Mediation Scheduled";
+  if (normalized === "mediation conducted") return "Mediation Conducted";
+  if (normalized === "settlement documentation") return "Settlement Documentation";
+  if (normalized === "barangay processing completed") return "Barangay Processing Completed";
+  if (normalized === "barangay processing completed no settlement") {
+    return "Barangay Processing Completed — No Settlement";
+  }
   if (normalized.includes("mediation")) return "Mediation";
-  if (normalized.includes("review")) return "Under Review";
+  if (normalized.includes("review")) return "For Official Review";
   if (normalized.includes("assist") || normalized.includes("ongoing") || normalized.includes("progress")) {
     return "Ongoing";
   }
@@ -164,18 +176,6 @@ const TEXT_DARK = "#0B2B45";
 const TEXT_MUTED = "#6E7D90";
 
 // ✅ API base url helper (same pattern as your other screens)
-function getApiBaseUrl() {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL;
-
-  if (envUrl && typeof envUrl === "string" && envUrl.trim().length > 0) {
-    return envUrl.replace(/\/+$/, "");
-  }
-
-  if (Platform.OS === "android") return "http://10.0.2.2:8000";
-  return "http://localhost:8000";
-}
-const API_BASE_URL = getApiBaseUrl();
-
 function statusColor(statusUpper: string, primary: string) {
   const s = String(statusUpper || "").toUpperCase();
   if (s === "RESOLVED") return "#16A34A";
@@ -190,23 +190,6 @@ function statusIconName(statusUpper: string) {
   if (s === "CANCELLED") return "close-circle-outline" as const;
   if (s === "ONGOING" || s === "ON GOING") return "sync-circle-outline" as const;
   return "time-outline" as const;
-}
-
-async function readJsonSafe(res: Response) {
-  const text = await res.text().catch(() => "");
-  if (!text) return {};
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { message: text };
-  }
-}
-
-function sanitizeApiMessage(msg: any, fallback: string) {
-  const s = String(msg || "").trim();
-  if (!s) return fallback;
-  if (s.includes("<!DOCTYPE") || s.includes("<html")) return fallback;
-  return s;
 }
 
 function isObjectId24(v: string) {
@@ -283,6 +266,17 @@ export default function ReportDetailScreen({
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [detail, setDetail] = useState<ReportDetailDto | null>(null);
+  const [evidenceAuthHeaders, setEvidenceAuthHeaders] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let mounted = true;
+    getAccessToken().then((token) => {
+      if (mounted && token) setEvidenceAuthHeaders({ Authorization: `Bearer ${token}` });
+    }).catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const [cancelling, setCancelling] = useState(false);
   const [cancelReportModalVisible, setCancelReportModalVisible] = useState(false);
@@ -337,7 +331,12 @@ export default function ReportDetailScreen({
       setDetailError("");
 
       try {
-        const d = await fetchReportDetail(reportId, controller.signal);
+        if (force) {
+          await mobileQueryClient.invalidateQueries({
+            queryKey: reportKeys.detail(reportId),
+          });
+        }
+        const d = await mobileQueryClient.fetchQuery(reportDetailQuery(reportId));
 
         if (!mountedRef.current) return;
         if (controller.signal.aborted) return;
@@ -365,9 +364,19 @@ export default function ReportDetailScreen({
     setDetailError("");
     setLoadingDetail(false);
 
-    if (reportId) void loadDetail(true);
+    if (reportId) void loadDetail();
     else setDetailError("Missing report id.");
   }, [reportId, loadDetail]);
+
+  useEffect(() => {
+    if (!reportId) return;
+
+    const timer = setInterval(() => {
+      void loadDetail(true);
+    }, 15_000);
+
+    return () => clearInterval(timer);
+  }, [loadDetail, reportId]);
   const requestCancelReport = useCallback(() => {
     if (!reportId) {
       Alert.alert("Missing report id", "Cannot cancel because reportId is empty.");
@@ -397,48 +406,23 @@ export default function ReportDetailScreen({
         throw new Error("Cannot cancel yet. Please wait for report details to load, then try again.");
       }
 
-      const token = await getAccessToken();
-      if (!token) throw new Error("Please login again. (Missing access token)");
-
-      const headers: Record<string, string> = {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      };
-
-      const res = await fetch(
-        `${API_BASE_URL}/api/mobile/v1/reports/${encodeURIComponent(resolvedReportId)}/cancel`,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ reason: "User cancelled" }),
-        }
-      );
-
-      const data: any = await readJsonSafe(res);
-      if (!res.ok) {
-        if (res.status === 401) {
-          throw new Error("Session expired. Please log in again.");
-        }
-        if (res.status === 403) {
-          throw new Error(
-            sanitizeApiMessage(
-              data?.message,
-              "You are not allowed to cancel this report."
-            )
-          );
-        }
-        throw new Error(
-          sanitizeApiMessage(
-            data?.message || `Cancel failed (${res.status})`,
-            "Could not cancel report on the server."
-          )
-        );
-      }
+      await requestJson({
+        method: "POST",
+        path: `/api/mobile/v1/reports/${encodeURIComponent(resolvedReportId)}/cancel`,
+        body: { reason: "User cancelled" },
+        auth: true,
+      });
+      await mobileQueryClient.invalidateQueries({ queryKey: reportKeys.all });
 
       setDetail((prev) => {
         const base: any = prev ?? {};
-        return { ...base, status: "CANCELLED", updatedAt: new Date().toISOString() } as any;
+        return {
+          ...base,
+          status: "CANCELLED",
+          currentProcessStage: "CANCELLED",
+          caseStatus: "Completed",
+          updatedAt: new Date().toISOString(),
+        } as any;
       });
 
       lastDetailLoadedIdRef.current = "";
@@ -513,8 +497,17 @@ export default function ReportDetailScreen({
     }
   }, [hasLocationCoords, reportId]);
 
-  const statusUpper = prettyStatus(detail?.status || (report as any)?.status);
-  const statusLabel = formatStatusLabel(detail?.status || (report as any)?.status);
+  const processStage =
+    detail?.currentProcessStage ||
+    detail?.status ||
+    (report as any)?.currentProcessStage ||
+    (report as any)?.status;
+  const statusUpper = prettyStatus(processStage);
+  const statusLabel = formatStatusLabel(processStage);
+  const caseStatusMeta = getCaseStatusMeta(
+    detail?.caseStatus || (report as any)?.caseStatus,
+    processStage
+  );
   const accent = useMemo(() => statusColor(statusUpper, PRIMARY), [statusUpper, PRIMARY]);
   const sIcon = useMemo(() => statusIconName(statusUpper), [statusUpper]);
 
@@ -561,7 +554,9 @@ export default function ReportDetailScreen({
   const reportRef = reportCode.trim().toUpperCase().startsWith("REP") ? reportCode : `REP ${reportCode}`;
   const messageReference = reportCode.replace(/^REP\s*/i, "").trim();
   const messageModalTitle = messageReference ? `Report ${messageReference}` : "Report Messages";
-  const canChat = !["CANCELLED", "CANCELED", "RESOLVED"].includes(statusUpper);
+  const canChat =
+    !["Completed", "Archived"].includes(caseStatusMeta.label) &&
+    !["CANCELLED", "CANCELED", "RESOLVED"].includes(statusUpper);
   const reportContext = useMemo<ReportContextData>(
     () => ({
       reference: messageReference || reportRef,
@@ -595,25 +590,36 @@ export default function ReportDetailScreen({
     ]
   );
 
-  const timelineEntries = useMemo(() => {
-    const submittedAt =
-      formatTimelineStamp(detail?.createdAt || (report as any)?.createdAt) ||
-      [dateValue, timeValue].filter(Boolean).join(" • ");
-    const updatedAt = formatTimelineStamp(detail?.updatedAt || (report as any)?.updatedAt);
+  const workflowEvents = useMemo(() => {
+    const events = Array.isArray(detail?.actionLog)
+      ? detail.actionLog
+          .filter((entry) => entry?.status)
+          .map((entry) => ({
+            title: String(entry.status || "Case updated"),
+            meta: formatTimelineStamp(entry.date) || "Time unavailable",
+            body:
+              String(entry.result || "").trim() ||
+              (entry.actorName
+                ? `Recorded by ${entry.actorName}.`
+                : "Case activity recorded by TahananSafe."),
+            timestamp: new Date(entry.date || 0).getTime(),
+          }))
+      : [];
 
-    return [
-      {
-        title: "Report submitted",
-        meta: submittedAt || "Submission date unavailable",
+    if (!events.some((entry) => entry.title.toLowerCase().includes("submitted"))) {
+      events.push({
+        title: "Report Submitted",
+        meta:
+          formatTimelineStamp(detail?.createdAt || (report as any)?.createdAt) ||
+          [dateValue, timeValue].filter(Boolean).join(" • ") ||
+          "Submission date unavailable",
         body: "Your report was recorded and sent to the barangay office.",
-      },
-      {
-        title: statusLabel,
-        meta: updatedAt || "Latest status",
-        body: "Current case status based on the latest report update.",
-      },
-    ];
-  }, [dateValue, detail?.createdAt, detail?.updatedAt, report, statusLabel, timeValue]);
+        timestamp: new Date(detail?.createdAt || (report as any)?.createdAt || 0).getTime(),
+      });
+    }
+
+    return events.sort((left, right) => left.timestamp - right.timestamp);
+  }, [dateValue, detail?.actionLog, detail?.createdAt, report, timeValue]);
 
   const submittedTimelineMeta =
     formatTimelineStamp(detail?.createdAt || (report as any)?.createdAt) ||
@@ -622,32 +628,59 @@ export default function ReportDetailScreen({
   const latestTimelineMeta =
     formatTimelineStamp(detail?.updatedAt || (report as any)?.updatedAt) || submittedTimelineMeta;
 
-  const currentTimelineStatus = statusLabel === "Mediation" ? "Ongoing Mediation" : statusLabel;
+  const currentTimelineStatus = statusLabel;
   const caseProgressIndex = useMemo(() => {
-    const s = `${statusLabel} ${statusUpper}`.toLowerCase();
-    if (s.includes("resolved") || s.includes("complete")) return 4;
-    if (s.includes("ongoing") || s.includes("assist")) return 3;
-    if (s.includes("mediation")) return 2;
-    if (s.includes("review")) return 1;
+    const s = String(processStage || "").toLowerCase().replace(/[_\s]+/g, "-");
+    if (s.includes("archived") || s.includes("barangay-processing-completed") || s.includes("resolved")) return 6;
+    if (s.includes("settlement-documentation")) return 5;
+    if (s.includes("mediation-conducted")) return 4;
+    if (s.includes("mediation-scheduled")) return 3;
+    if (s.includes("mediation-scheduling") || s.includes("initial-mediation")) return 2;
+    if (s.includes("official-review") || s.includes("under-review") || s.includes("reviewing")) return 1;
     return 0;
-  }, [statusLabel, statusUpper]);
+  }, [processStage]);
 
   const caseProgressSteps = useMemo(() => {
-    const fallbackDoneMeta = [
-      submittedTimelineMeta,
-      "June 11, 2026 • 02:30 PM",
-      "June 12, 2026 • 10:15 AM",
-      latestTimelineMeta,
-      latestTimelineMeta,
+    const titles = [
+      "Report Submitted",
+      "For Official Review",
+      "Mediation Scheduling",
+      "Mediation Scheduled",
+      "Mediation Conducted",
+      "Settlement Documentation",
+      "Barangay Processing Completed",
     ];
-    return ["Submitted", "Under Review", "Mediation Scheduled", "Ongoing Assistance", "Resolved"].map(
-      (title, index) => ({
+    return titles.map((title, index) => {
+      const matchingEvent = workflowEvents.find((event) => {
+        const eventTitle = event.title.toLowerCase();
+        const target = title.toLowerCase();
+        if (index === 1) return eventTitle.includes("viewed") || eventTitle.includes("official review");
+        if (index === 2) return eventTitle.includes("mediation selected") || eventTitle.includes("scheduling");
+        if (index === 3) return eventTitle.includes("mediation scheduled");
+        if (index === 4) return eventTitle.includes("mediation record") || eventTitle.includes("mediation conducted");
+        if (index === 5) return eventTitle.includes("outcome confirmed") || eventTitle.includes("settlement");
+        if (index === 6) return eventTitle.includes("processing completed") || eventTitle.includes("archived");
+        return eventTitle.includes(target);
+      });
+      return {
         title,
         complete: index <= caseProgressIndex,
-        meta: index <= caseProgressIndex ? fallbackDoneMeta[index] : "Pending",
-      })
-    );
-  }, [caseProgressIndex, latestTimelineMeta, submittedTimelineMeta]);
+        meta:
+          index <= caseProgressIndex
+            ? matchingEvent?.meta || (index === 0 ? submittedTimelineMeta : latestTimelineMeta)
+            : "Pending",
+      };
+    });
+  }, [caseProgressIndex, latestTimelineMeta, submittedTimelineMeta, workflowEvents]);
+
+  const mediationSchedule = detail?.mediationSchedule;
+  const mediationDate = mediationSchedule?.scheduledAt
+    ? new Date(mediationSchedule.scheduledAt)
+    : null;
+  const validMediationDate = Boolean(mediationDate && !Number.isNaN(mediationDate.getTime()));
+  const releasedDocuments = Array.isArray(detail?.caseDocuments)
+    ? detail.caseDocuments.filter((document) => document.status === "released")
+    : [];
 
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
@@ -674,6 +707,22 @@ export default function ReportDetailScreen({
       return;
     }
 
+    const analysisStatus = String(ai.status || "").toLowerCase();
+    if (["pending", "processing", "retrying"].includes(analysisStatus)) {
+      Alert.alert(
+        "AI Analysis",
+        "Analysis is still processing. The report is already submitted and can be reviewed while this completes."
+      );
+      return;
+    }
+    if (["failed", "skipped"].includes(analysisStatus)) {
+      Alert.alert(
+        "AI Analysis",
+        "Automated analysis is currently unavailable. This does not affect the submitted report."
+      );
+      return;
+    }
+
     const type = ai.incident_type || ai.incidentType || ai.category || "Not specified";
     const risk = ai.risk_level || ai.riskLevel || ai.priority_level || "Not specified";
     const summary = ai.summary || ai.recommendation || ai.explanation || "No AI summary provided.";
@@ -686,8 +735,8 @@ export default function ReportDetailScreen({
   const canCancel =
     !!resolvedReportId &&
     isObjectId24(resolvedReportId) &&
-    statusUpper !== "CANCELLED" &&
-    statusUpper !== "RESOLVED";
+    caseStatusMeta.label === "Submitted" &&
+    statusUpper !== "CANCELLED";
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: TC.screenBg }]} edges={["top"]}>
       <StatusBar barStyle={TC.statusBar} />
@@ -735,7 +784,11 @@ export default function ReportDetailScreen({
               centerContent
             >
               {!!photoUrls[viewerIndex] ? (
-                <Image source={{ uri: photoUrls[viewerIndex] }} style={styles.viewerImage} resizeMode="contain" />
+                <Image
+                  source={{ uri: photoUrls[viewerIndex], headers: evidenceAuthHeaders }}
+                  style={styles.viewerImage}
+                  resizeMode="contain"
+                />
               ) : null}
             </ScrollView>
 
@@ -780,6 +833,7 @@ export default function ReportDetailScreen({
         visible={!!previewVideoUri}
         uri={previewVideoUri}
         title="Video Evidence"
+        headers={evidenceAuthHeaders}
         onClose={() => setPreviewVideoUri(null)}
       />
 
@@ -833,9 +887,16 @@ export default function ReportDetailScreen({
                   {incidentTitle}
                 </Text>
               </View>
-              <View style={styles.reportStatusChip}>
-                <Text style={styles.reportStatusText} numberOfLines={1}>
-                  {statusLabel}
+              <View style={[styles.reportStatusChip, { backgroundColor: caseStatusMeta.bg }]}>
+                <View
+                  accessibilityElementsHidden
+                  style={[styles.reportStatusDot, { backgroundColor: caseStatusMeta.color }]}
+                />
+                <Text
+                  style={[styles.reportStatusText, { color: caseStatusMeta.color }]}
+                  numberOfLines={1}
+                >
+                  {caseStatusMeta.label}
                 </Text>
               </View>
             </View>
@@ -984,7 +1045,7 @@ export default function ReportDetailScreen({
                         style={({ pressed }) => [styles.reportEvidenceThumb, pressed && { opacity: 0.9 }]}
                       >
                         <Image
-                          source={{ uri: item.uri }}
+                          source={{ uri: item.uri, headers: evidenceAuthHeaders }}
                           style={styles.reportEvidenceImage}
                           resizeMode="cover"
                           onError={(e) => {
@@ -1065,7 +1126,7 @@ export default function ReportDetailScreen({
                 <Ionicons name="calendar-number-outline" size={styles._iconSize} color="#111827" />
               </View>
               <View style={styles.currentStatusTextWrap}>
-                <Text style={styles.currentStatusLabel} allowFontScaling={false}>Current Status</Text>
+                <Text style={styles.currentStatusLabel} allowFontScaling={false}>Current Process Stage</Text>
                 <Text style={styles.currentStatusValue} allowFontScaling={false}>{currentTimelineStatus}</Text>
               </View>
             </View>
@@ -1075,56 +1136,91 @@ export default function ReportDetailScreen({
                 <Ionicons name="calendar-outline" size={styles._iconSize} color="#718093" />
                 <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Mediation Schedule</Text>
               </View>
-              <View style={styles.mediationScheduleBox}>
-                <View style={styles.mediationDateBadge}>
-                  <Text style={styles.mediationMonth} allowFontScaling={false}>JUN</Text>
-                  <Text style={styles.mediationDay} allowFontScaling={false}>15</Text>
+              {validMediationDate && mediationDate ? (
+                <View style={styles.mediationScheduleBox}>
+                  <View style={styles.mediationDateBadge}>
+                    <Text style={styles.mediationMonth} allowFontScaling={false}>
+                      {mediationDate.toLocaleDateString(undefined, { month: "short" }).toUpperCase()}
+                    </Text>
+                    <Text style={styles.mediationDay} allowFontScaling={false}>
+                      {mediationDate.getDate()}
+                    </Text>
+                  </View>
+                  <View style={styles.mediationScheduleText}>
+                    <Text style={styles.mediationTime} allowFontScaling={false}>
+                      {mediationDate.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                    </Text>
+                    <Text style={styles.mediationPlace} allowFontScaling={false}>
+                      {mediationSchedule?.venue || "Venue to be announced"}
+                    </Text>
+                    <Text style={styles.certSubtitle} allowFontScaling={false}>
+                      {mediationSchedule?.status === "completed" ? "Session completed" : "Confirmed schedule"}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.mediationScheduleText}>
-                  <Text style={styles.mediationTime} allowFontScaling={false}>2:00 PM</Text>
-                  <Text style={styles.mediationPlace} allowFontScaling={false}>Barangay Hall - Room A</Text>
+              ) : (
+                <View style={styles.emptyEvidence}>
+                  <Ionicons name="calendar-clear-outline" size={styles._emptyIcon} color="#94A3B8" />
+                  <Text style={styles.emptyEvidenceText}>No mediation has been scheduled.</Text>
                 </View>
-              </View>
+              )}
             </View>
 
             <View style={styles.timelineInfoCard}>
-              <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Mediation Updates</Text>
+              <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Case Updates</Text>
               <View style={styles.updateList}>
-                <View style={styles.updateItemPrimary}>
-                  <Text style={styles.updateDate} allowFontScaling={false}>June 15, 2026</Text>
-                  <Text style={styles.updateText} allowFontScaling={false}>
-                    Both parties have confirmed attendance for the scheduled mediation session.
-                  </Text>
-                </View>
-                <View style={styles.updateItem}>
-                  <Text style={styles.updateDate} allowFontScaling={false}>June 10, 2026</Text>
-                  <Text style={styles.updateText} allowFontScaling={false}>
-                    Initial report reviewed by Barangay Captain. Case designated for mediation.
-                  </Text>
-                </View>
+                {workflowEvents.length ? (
+                  [...workflowEvents].reverse().slice(0, 6).map((event, index) => (
+                    <View
+                      key={`${event.title}-${event.timestamp}-${index}`}
+                      style={index === 0 ? styles.updateItemPrimary : styles.updateItem}
+                    >
+                      <Text style={styles.updateDate} allowFontScaling={false}>{event.meta}</Text>
+                      <Text style={styles.updateText} allowFontScaling={false}>
+                        {event.title}{event.body ? ` — ${event.body}` : ""}
+                      </Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.emptyEvidenceText}>No case updates are available yet.</Text>
+                )}
               </View>
             </View>
 
             <View style={styles.timelineInfoCard}>
               <View style={styles.certHeaderRow}>
                 <View style={styles.certHeaderText}>
-                  <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Certification to File Action</Text>
-                  <Text style={styles.certSubtitle} allowFontScaling={false}>Available if mediation fails.</Text>
+                  <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Released Case Documents</Text>
+                  <Text style={styles.certSubtitle} allowFontScaling={false}>Documents released by the Barangay Secretary.</Text>
                 </View>
-                <View style={styles.certBadge}>
-                  <Text style={styles.certBadgeText} allowFontScaling={false}>Not Yet Available</Text>
+                <View style={[styles.certBadge, releasedDocuments.length > 0 && { backgroundColor: "#DCFCE7" }]}>
+                  <Text
+                    style={[styles.certBadgeText, releasedDocuments.length > 0 && { color: "#15803D" }]}
+                    allowFontScaling={false}
+                  >
+                    {releasedDocuments.length > 0 ? `${releasedDocuments.length} Available` : "Not Yet Available"}
+                  </Text>
                 </View>
               </View>
-              <View style={styles.certActionsRow}>
-                <Pressable disabled style={styles.certActionButton}>
-                  <Ionicons name="eye-outline" size={styles._miniIcon} color="#AEB4BD" />
-                  <Text style={styles.certActionText} allowFontScaling={false}>View</Text>
+              {releasedDocuments.map((document, index) => (
+                <Pressable
+                  key={String(document._id || index)}
+                  onPress={() =>
+                    Alert.alert(
+                      document.title || "Case Document",
+                      Object.entries(document.fields || {})
+                        .map(([key, value]) => `${key}: ${String(value ?? "-")}`)
+                        .join("\n") || "This document has been released for your case.",
+                    )
+                  }
+                  style={({ pressed }) => [styles.certActionButton, pressed && { opacity: 0.82 }]}
+                >
+                  <Ionicons name="document-text-outline" size={styles._miniIcon} color={PRIMARY} />
+                  <Text style={[styles.certActionText, { color: PRIMARY }]} allowFontScaling={false}>
+                    {document.title || "View Document"}
+                  </Text>
                 </Pressable>
-                <Pressable disabled style={styles.certActionButton}>
-                  <Ionicons name="download-outline" size={styles._miniIcon} color="#AEB4BD" />
-                  <Text style={styles.certActionText} allowFontScaling={false}>Download PDF</Text>
-                </Pressable>
-              </View>
+              ))}
             </View>
           </ScrollView>
         )}
@@ -1306,14 +1402,20 @@ function makeStyles(args: {
       },
       reportStatusChip: {
         flexShrink: 0,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: scale(6),
         borderRadius: scale(999),
-        backgroundColor: "#DCC7FF",
         paddingHorizontal: scale(9),
         paddingVertical: vscale(4),
       },
+      reportStatusDot: {
+        width: scale(7),
+        height: scale(7),
+        borderRadius: scale(999),
+      },
       reportStatusText: {
         ...type.badge,
-        color: "#5B3B8C",
       },
 
       heroTopBar: {

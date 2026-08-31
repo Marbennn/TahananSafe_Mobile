@@ -6,20 +6,24 @@ const IDLE_MS = 15 * 60 * 1000;
 interface Props {
   onTimeout: () => void | Promise<void>;
   children: React.ReactNode;
+  enabled?: boolean;
 }
 
 /**
  * Wraps authenticated screens and locks them after 15 minutes without touch input.
  * If the app stays in the background for 15+ minutes, it locks as soon as it returns.
  */
-export default function IdleTimerWrapper({ onTimeout, children }: Props) {
+export default function IdleTimerWrapper({ onTimeout, children, enabled = true }: Props) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backgroundAtRef = useRef<number | null>(null);
   const timeoutInFlightRef = useRef(false);
   const onTimeoutRef = useRef(onTimeout);
+  const enabledRef = useRef(enabled);
   onTimeoutRef.current = onTimeout;
+  enabledRef.current = enabled;
 
   const triggerTimeout = useCallback(() => {
+    if (!enabledRef.current) return;
     if (timeoutInFlightRef.current) return;
     timeoutInFlightRef.current = true;
 
@@ -45,11 +49,19 @@ export default function IdleTimerWrapper({ onTimeout, children }: Props) {
   }, [clearTimer, triggerTimeout]);
 
   const handleActivity = useCallback(() => {
+    if (!enabledRef.current) return;
     if (timeoutInFlightRef.current) return;
     resetTimer();
   }, [resetTimer]);
 
   useEffect(() => {
+    if (!enabled) {
+      clearTimer();
+      backgroundAtRef.current = null;
+      timeoutInFlightRef.current = false;
+      return clearTimer;
+    }
+
     resetTimer();
 
     const sub = AppState.addEventListener("change", (state: AppStateStatus) => {
@@ -77,7 +89,7 @@ export default function IdleTimerWrapper({ onTimeout, children }: Props) {
       clearTimer();
       sub.remove();
     };
-  }, [clearTimer, resetTimer, triggerTimeout]);
+  }, [clearTimer, enabled, resetTimer, triggerTimeout]);
 
   return (
     <View

@@ -97,11 +97,11 @@ npx eas-cli build --platform android --profile preview
 
 ```bash
 cd android
-# Windows:
-$env:JAVA_HOME = "C:\Program Files\Java\jdk-21"
+
+$env:JAVA_HOME = "C:\Program Files\Java\jdk-17.0.2"
 $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 $env:NODE_ENV = "development"
-
+java -version
 .\gradlew.bat :app:installDebug
 
 # macOS/Linux:

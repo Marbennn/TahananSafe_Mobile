@@ -1,7 +1,6 @@
 // src/components/PersonalDetailsScreen/PersonalDetailsForm.tsx
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import {
-  Animated,
   Keyboard,
   Modal,
   Pressable,
@@ -41,7 +40,7 @@ type Props = {
 };
 
 const PREFIX = "+63";
-const MAX_BIRTH_YEAR = 2011;
+const MINIMUM_AGE = 17;
 
 function digitsOnly(s: string) {
   return s.replace(/\D/g, "");
@@ -126,6 +125,7 @@ export default function PersonalDetailsForm({
   const [dobFocused, setDobFocused] = useState(false);
   const [contactFocused, setContactFocused] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [ageNoticeOpen, setAgeNoticeOpen] = useState(false);
 
   const firstNameRef = useRef<TextInput | null>(null);
   const lastNameRef = useRef<TextInput | null>(null);
@@ -133,27 +133,8 @@ export default function PersonalDetailsForm({
 
   // modals
   const [genderOpen, setGenderOpen] = useState(false);
-  const genderFade = useRef(new Animated.Value(0)).current;
-  const genderSlide = useRef(new Animated.Value(500)).current;
-
-  const openGender = () => {
-    setGenderOpen(true);
-    genderFade.setValue(0);
-    genderSlide.setValue(500);
-    Animated.parallel([
-      Animated.timing(genderFade, { toValue: 1, duration: 220, useNativeDriver: true }),
-      Animated.spring(genderSlide, { toValue: 0, speed: 16, bounciness: 5, useNativeDriver: true }),
-    ]).start();
-  };
-
-  const closeGender = () => {
-    Animated.parallel([
-      Animated.timing(genderFade, { toValue: 0, duration: 180, useNativeDriver: true }),
-      Animated.timing(genderSlide, { toValue: 500, duration: 180, useNativeDriver: true }),
-    ]).start(({ finished }) => {
-      if (finished) setGenderOpen(false);
-    });
-  };
+  const openGender = () => setGenderOpen(true);
+  const closeGender = () => setGenderOpen(false);
 
   const selectedGender = genderOptions.find((g) => g.id === gender);
   const selectedGenderLabel = selectedGender?.label ?? "Select a gender";
@@ -211,7 +192,12 @@ export default function PersonalDetailsForm({
   const [iosInlineOpen, setIosInlineOpen] = useState(false);
 
   const minDobDate = useMemo(() => new Date(1900, 0, 1), []);
-  const maxDobDate = useMemo(() => new Date(MAX_BIRTH_YEAR, 11, 31), []);
+  const maxDobDate = useMemo(() => {
+    const cutoff = new Date();
+    cutoff.setHours(23, 59, 59, 999);
+    cutoff.setFullYear(cutoff.getFullYear() - MINIMUM_AGE);
+    return cutoff;
+  }, []);
   const pickerDobDate = useMemo(() => {
     const parsed = parseDobToDate(dob);
     if (!parsed) return new Date(2000, 0, 1);
@@ -223,13 +209,23 @@ export default function PersonalDetailsForm({
     return "MM/DD/YYYY";
   }, [dob]);
 
-  const onDobPress = () => {
+  const openDobPicker = () => {
     if (Platform.OS === "android") {
       setAndroidDobOpen(true);
       return;
     }
-    // iOS: toggle inline calendar
-    setIosInlineOpen((v) => !v);
+    // iOS: show the inline calendar after the age notice is acknowledged.
+    setIosInlineOpen(true);
+  };
+
+  const onDobPress = () => {
+    Keyboard.dismiss();
+    setAgeNoticeOpen(true);
+  };
+
+  const continueToDobPicker = () => {
+    setAgeNoticeOpen(false);
+    setTimeout(openDobPicker, Platform.OS === "android" ? 250 : 0);
   };
 
   const onChangeAndroid = (event: DateTimePickerEvent, selected?: Date) => {
@@ -446,37 +442,100 @@ export default function PersonalDetailsForm({
         <View style={{ height: vscale(80) }} />
       </View>
 
-      {/* ---------------- Gender Bottom Sheet ---------------- */}
+      <Modal
+        visible={ageNoticeOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setAgeNoticeOpen(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            paddingHorizontal: scale(24),
+            backgroundColor: "rgba(0,0,0,0.45)",
+          }}
+        >
+          <View
+            style={{
+              width: "100%",
+              maxWidth: scale(360),
+              borderRadius: scale(20),
+              padding: scale(22),
+              backgroundColor: TC.card,
+            }}
+          >
+            <View style={{ alignItems: "center" }}>
+              <Text
+                style={{
+                  ...typography.input,
+                  fontWeight: "700",
+                  color: TC.text,
+                }}
+              >
+                Age requirement
+              </Text>
+              <Text
+                style={{
+                  ...typography.input,
+                  marginTop: vscale(8),
+                  textAlign: "center",
+                  lineHeight: scale(21),
+                  color: TC.muted,
+                }}
+              >
+                Please note: You must be at least 17 years old.
+              </Text>
+            </View>
+
+            <Pressable
+              onPress={continueToDobPicker}
+              style={({ pressed }) => ({
+                minHeight: scale(46),
+                marginTop: vscale(20),
+                borderRadius: scale(12),
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: Colors.primary,
+                opacity: pressed ? 0.86 : 1,
+              })}
+            >
+              <Text style={{ ...typography.input, fontWeight: "700", color: "#FFFFFF" }}>
+                Continue
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ---------------- Centered Gender Modal ---------------- */}
       <Modal
         visible={genderOpen}
         transparent
-        animationType="none"
+        animationType="fade"
+        statusBarTranslucent
         onRequestClose={closeGender}
       >
-        <View style={{ flex: 1, justifyContent: "flex-end" }}>
-          {/* Backdrop */}
-          <Animated.View
-            style={[
-              StyleSheet.absoluteFillObject,
-              { backgroundColor: "rgba(0,0,0,0.4)", opacity: genderFade },
-            ]}
-          >
-            <Pressable style={{ flex: 1 }} onPress={closeGender} />
-          </Animated.View>
+        <View
+          style={{
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            paddingHorizontal: scale(24),
+          }}
+        >
+          <Pressable
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.45)" }]}
+            onPress={closeGender}
+          />
 
-          {/* Sheet */}
-          <Animated.View
-            style={[
-              styles.genderSheet,
-              { transform: [{ translateY: genderSlide }] },
-            ]}
-          >
-            <View style={styles.genderSheetHandle} />
-            <Text style={styles.genderSheetTitle}>Select Gender</Text>
+          <View style={[styles.genderSheet, { backgroundColor: TC.card }]}>
+            <Text style={[styles.genderSheetTitle, { color: TC.text }]}>Select Gender</Text>
 
             {genderOptions.map((opt) => {
               const active = opt.id === gender;
-              const iconName = opt.id === "male" ? "male" : "female";
               const subLabel = opt.id === "male" ? "He / Him" : "She / Her";
               return (
                 <Pressable
@@ -491,13 +550,6 @@ export default function PersonalDetailsForm({
                     pressed && { opacity: 0.88 },
                   ]}
                 >
-                  <View style={[styles.genderIconBadge, active && styles.genderIconBadgeActive]}>
-                    <Ionicons
-                      name={iconName}
-                      size={scale(20)}
-                      color={active ? Colors.primary : "#9CA3AF"}
-                    />
-                  </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.genderOptionText, active && styles.genderOptionTextActive]}>
                       {opt.label}
@@ -519,7 +571,7 @@ export default function PersonalDetailsForm({
             >
               <Text style={styles.genderCancelText}>Cancel</Text>
             </Pressable>
-          </Animated.View>
+          </View>
         </View>
       </Modal>
     </>

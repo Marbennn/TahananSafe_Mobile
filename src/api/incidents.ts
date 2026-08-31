@@ -1,5 +1,5 @@
 // src/api/incidents.ts
-import { getAccessToken } from "../auth/session";
+import { requestRaw } from "./http";
 
 export type IncidentMode = "complain" | "emergency";
 
@@ -22,20 +22,7 @@ export type CreateIncidentPayload = {
   photos?: string[];
   videos?: string[];
 
-  // ✅ NEW: AI fields (match your AI API / README keys)
-  ai_incident_type?: string;
-  ai_language?: string;
-  ai_risk_level?: string;
-  ai_risk_percentage?: number;
-  ai_priority_level?: string;
-  ai_children_involved?: boolean;
-  ai_weapon_mentioned?: boolean;
-  ai_confidence_score?: number;
 };
-
-const API_URL = (process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000")
-  .trim()
-  .replace(/\/+$/, "");
 
 // ✅ SECURITY FIX: Whitelist allowed image MIME types
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -53,8 +40,6 @@ const ALLOWED_VIDEO_TYPES = new Set([
   "video/3gpp",
   "video/webm",
 ]);
-
-const MAX_PHOTO_SIZE_MB = 10;
 
 function guessMimeType(uri: string): string {
   const lower = uri.toLowerCase();
@@ -99,8 +84,6 @@ function appendIfDefined(form: FormData, key: string, value: any) {
 }
 
 export async function submitIncident(payload: CreateIncidentPayload) {
-  const token = await getAccessToken();
-
   const form = new FormData();
 
   form.append("mode", payload.mode);
@@ -119,16 +102,6 @@ export async function submitIncident(payload: CreateIncidentPayload) {
   if (payload.locationStr) form.append("locationStr", payload.locationStr);
   appendIfDefined(form, "latitude", payload.latitude);
   appendIfDefined(form, "longitude", payload.longitude);
-
-  // ✅ AI fields -> backend
-  appendIfDefined(form, "ai_incident_type", payload.ai_incident_type);
-  appendIfDefined(form, "ai_language", payload.ai_language);
-  appendIfDefined(form, "ai_risk_level", payload.ai_risk_level);
-  appendIfDefined(form, "ai_risk_percentage", payload.ai_risk_percentage);
-  appendIfDefined(form, "ai_priority_level", payload.ai_priority_level);
-  appendIfDefined(form, "ai_children_involved", payload.ai_children_involved);
-  appendIfDefined(form, "ai_weapon_mentioned", payload.ai_weapon_mentioned);
-  appendIfDefined(form, "ai_confidence_score", payload.ai_confidence_score);
 
   const uris = (payload.photos || []).slice(0, 3);
   const videoUris = (payload.videos || []).slice(0, 1);
@@ -160,14 +133,12 @@ export async function submitIncident(payload: CreateIncidentPayload) {
     } as any);
   });
 
-  const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await fetch(`${API_URL}/api/mobile/incidents`, {
+  const res = await requestRaw({
+    path: "/api/mobile/incidents",
     method: "POST",
-    headers,
     // NOTE: do NOT set Content-Type manually; fetch will set multipart boundary
     body: form,
+    auth: true,
   });
 
   const text = await res.text();

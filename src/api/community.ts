@@ -1,7 +1,6 @@
 // src/api/community.ts
 import { apiUrl } from "../config/api";
-import { getAccessToken } from "../auth/session";
-import { requestJson } from "./http";
+import { requestJson, requestRaw } from "./http";
 
 export interface CommunityUser {
   _id: string;
@@ -43,13 +42,6 @@ export interface CommunityPost {
   comments: Comment[];
   createdAt: string;
   updatedAt: string;
-}
-
-async function authHeaders(): Promise<Record<string, string>> {
-  const token = await getAccessToken();
-  const h: Record<string, string> = {};
-  if (token) h.Authorization = `Bearer ${token}`;
-  return h;
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
@@ -313,7 +305,6 @@ export async function createPost(
     return normalizePost(unwrapPayload(data, ["post", "item"]));
   }
 
-  const headers = await authHeaders();
   const form = new FormData();
   form.append("content", content);
 
@@ -330,13 +321,12 @@ export async function createPost(
     } as any);
   }
 
-  const res = await fetch(apiUrl("/api/mobile/v1/community/posts"), {
+  const res = await requestRaw({
+    path: "/api/mobile/v1/community/posts",
     method: "POST",
-    headers: {
-      Accept: "application/json",
-      ...headers,
-    },
+    headers: { Accept: "application/json" },
     body: form,
+    auth: true,
   });
 
   const data = await handleResponse<any>(res);

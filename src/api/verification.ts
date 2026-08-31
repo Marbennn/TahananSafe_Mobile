@@ -1,5 +1,6 @@
 // src/api/verification.ts
 import { Platform } from "react-native";
+import { requestRaw } from "./http";
 
 export type VerificationStatus = "none" | "pending" | "approved" | "rejected";
 
@@ -64,12 +65,14 @@ export async function getVerificationStatusApi(args: {
   baseUrl?: string;
 }): Promise<VerificationStatusResponse> {
   const baseUrl = getApiBaseUrl({ baseUrl: args.baseUrl });
-  const res = await fetch(`${baseUrl}/api/mobile/v1/verification/status`, {
+  const res = await requestRaw({
+    url: `${baseUrl}/api/mobile/v1/verification/status`,
     method: "GET",
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${args.accessToken}`,
     },
+    auth: true,
   });
 
   const data = await safeJson(res);
@@ -110,7 +113,8 @@ export async function submitVerificationApi(args: {
     type: mimeFromUri(args.fileUri),
   } as any);
 
-  const res = await fetch(`${baseUrl}/api/mobile/v1/verification/submit`, {
+  const res = await requestRaw({
+    url: `${baseUrl}/api/mobile/v1/verification/submit`,
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -118,6 +122,7 @@ export async function submitVerificationApi(args: {
       // NOTE: Do NOT set Content-Type manually for multipart in RN
     },
     body: form,
+    auth: true,
   });
 
   const data = await safeJson(res);

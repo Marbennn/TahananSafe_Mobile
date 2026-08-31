@@ -11,7 +11,8 @@ import React, {
 import { AppState, AppStateStatus } from "react-native";
 
 import { getMeApi } from "../api/pin";
-import { refreshAccessTokenApi } from "../api/auth";
+import { onSessionExpired, refreshAccessToken } from "../api/http";
+import { mobileQueryClient } from "../app/queryClient";
 
 import {
   getAccessToken,
@@ -189,6 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAccessTokenState(null);
     setRefreshTokenState(null);
     setUser(null);
+    mobileQueryClient.clear();
 
     await clearSession().catch(() => {});
     await setLoggedIn(false).catch(() => {});
@@ -203,33 +205,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const data = await refreshAccessTokenApi(currentRefreshToken);
-
-      const nextAccessToken = data.accessToken;
-      const nextRefreshToken = data.refreshToken || currentRefreshToken;
-
-      await saveTokens({
-        accessToken: nextAccessToken,
-        refreshToken: nextRefreshToken,
-      });
+      const nextAccessToken = await refreshAccessToken();
+      if (!nextAccessToken) return null;
+      const nextRefreshToken = (await getRefreshToken()) || currentRefreshToken;
       await setLoggedIn(true);
 
       setAccessTokenState(nextAccessToken);
       setRefreshTokenState(nextRefreshToken);
 
-      if (data.user) {
-        const normalized = normalizeUser(data.user);
-        if (normalized) {
-          setUser(normalized);
-        }
-      } else {
-        try {
-          const me = await getMeApi();
-          const normalized = normalizeUser(me);
-          if (normalized) setUser(normalized);
-        } catch {
-          // ignore
-        }
+      try {
+        const me = await getMeApi();
+        const normalized = normalizeUser(me);
+        if (normalized) setUser(normalized);
+      } catch {
+        // A refreshed token is still usable even if the profile refresh fails.
       }
 
       return nextAccessToken;
@@ -238,6 +227,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
   }, [refreshToken, setUser]);
+
+  useEffect(() => {
+    return onSessionExpired(async () => {
+      setAccessTokenState(null);
+      setRefreshTokenState(null);
+      setUser(null);
+      mobileQueryClient.clear();
+      await clearSession().catch(() => {});
+      await setLoggedIn(false).catch(() => {});
+    });
+  }, [setUser]);
 
   const ensureValidAccessToken = useCallback(async (): Promise<string | null> => {
     const token = accessToken || (await getAccessToken());

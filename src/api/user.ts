@@ -1,12 +1,9 @@
-// src/api/user.ts
-import { apiUrl } from "../config/api";
-import { getAccessToken } from "../auth/session";
-import { requestJson } from "./http";
+import { requestJson, requestRaw } from "./http";
 
 export type PersonalDetailsPayload = {
   firstName: string;
   lastName: string;
-  dob: string; // MM/DD/YYYY
+  dob: string;
   contactNumber: string;
   gender: "male" | "female";
 };
@@ -38,28 +35,13 @@ function fileNameFromUri(uri: string): string {
 }
 
 export async function savePersonalDetails(
-  payload: PersonalDetailsPayload
+  payload: PersonalDetailsPayload,
 ): Promise<PersonalDetailsResponse> {
-  const token = await getAccessToken();
-  if (!token) throw new Error("Missing access token. Please login again.");
-
-  // ✅ IMPORTANT: must match backend zod personalDetailsSchema exactly:
-  // { firstName, lastName, dob, contactNumber, gender }
-  const body = {
-    firstName: payload.firstName,
-    lastName: payload.lastName,
-    dob: payload.dob, // keep MM/DD/YYYY
-    contactNumber: payload.contactNumber,
-    gender: payload.gender,
-  };
-
   return requestJson<PersonalDetailsResponse>({
     method: "PUT",
     path: "/api/mobile/v1/personal-details",
-    body,
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    body: payload,
+    auth: true,
   });
 }
 
@@ -67,37 +49,31 @@ export async function saveProfileSettings(
   payload: ProfileSettingsPayload,
   profileImageUri?: string,
 ): Promise<PersonalDetailsResponse> {
-  const token = await getAccessToken();
-  if (!token) throw new Error("Missing access token. Please login again.");
-
   const form = new FormData();
   form.append("firstName", payload.firstName);
   form.append("lastName", payload.lastName);
 
-  const normalizedContactNumber = String(payload.contactNumber || "").trim();
-  if (normalizedContactNumber) {
-    form.append("contactNumber", normalizedContactNumber);
-  }
+  const contactNumber = String(payload.contactNumber || "").trim();
+  if (contactNumber) form.append("contactNumber", contactNumber);
 
-  const normalizedUri = String(profileImageUri || "").trim();
-  if (normalizedUri) {
+  const imageUri = String(profileImageUri || "").trim();
+  if (imageUri) {
     form.append("profileImage", {
-      uri: normalizedUri,
-      name: fileNameFromUri(normalizedUri),
-      type: guessMimeType(normalizedUri),
+      uri: imageUri,
+      name: fileNameFromUri(imageUri),
+      type: guessMimeType(imageUri),
     } as any);
   }
 
-  const res = await fetch(apiUrl("/api/mobile/v1/profile"), {
+  const response = await requestRaw({
     method: "PUT",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${token}`,
-    },
+    path: "/api/mobile/v1/profile",
+    headers: { Accept: "application/json" },
     body: form,
+    auth: true,
   });
 
-  const text = await res.text();
+  const text = await response.text();
   let data: any = {};
   try {
     data = text ? JSON.parse(text) : {};
@@ -105,9 +81,8 @@ export async function saveProfileSettings(
     data = { message: text };
   }
 
-  if (!res.ok) {
-    throw new Error(data?.message || `Request failed (${res.status})`);
+  if (!response.ok) {
+    throw new Error(data?.message || `Request failed (${response.status})`);
   }
-
   return data as PersonalDetailsResponse;
 }

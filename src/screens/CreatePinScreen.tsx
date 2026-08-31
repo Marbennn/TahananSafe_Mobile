@@ -7,8 +7,6 @@ import {
   Pressable,
   Platform,
   useWindowDimensions,
-  ActivityIndicator,
-  Alert,
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,20 +14,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useColors } from "../theme/colors";
 import { createTypography } from "../theme/typography";
 
-import {
-  getAccessToken,
-  setHasPin,
-  setLoggedIn,
-  setPinUnlockedThisRun,
-  setPinSkippedForUser,
-} from "../auth/session";
-
-import { getMeApi } from "../api/pin";
-
 type Props = {
   onContinue: (pin: string) => void;
   onBack?: () => void;
-  onSkip?: () => void;
   progressActiveCount?: 1 | 2 | 3 | 4;
 };
 
@@ -39,7 +26,7 @@ function clamp(n: number, min: number, max: number) {
 
 const TAG = "[CreatePinScreen]";
 
-export default function CreatePinScreen({ onContinue, onSkip }: Props) {
+export default function CreatePinScreen({ onContinue }: Props) {
   const TC = useColors();
   const { width, height } = useWindowDimensions();
 
@@ -55,61 +42,30 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
 
   const PIN_LENGTH = 4;
   const [pin, setPin] = useState("");
-  const [loading, setLoading] = useState(false);
 
   const dots = useMemo(
     () => Array.from({ length: PIN_LENGTH }).map((_, i) => i < pin.length),
     [pin]
   );
 
-  const canSubmit = pin.length === PIN_LENGTH && !loading;
+  const canSubmit = pin.length === PIN_LENGTH;
 
   const addDigit = (d: string) => {
-    if (loading) return;
     if (pin.length >= PIN_LENGTH) return;
     setPin((p) => (p + d).slice(0, PIN_LENGTH));
   };
 
   const backspace = () => {
-    if (loading) return;
     if (!pin.length) return;
     setPin((p) => p.slice(0, -1));
   };
 
   const handleSubmit = () => {
     console.log(`${TAG} Continue pressed. pin length:`, pin.length);
-    if (loading) return;
     if (pin.length !== PIN_LENGTH) return;
 
     onContinue(pin);
     setPin("");
-  };
-
-  const handleSkip = async () => {
-    console.log(`${TAG} Skip pressed`);
-    if (loading) return;
-
-    try {
-      setLoading(true);
-
-      const accessToken = await getAccessToken();
-      if (!accessToken) throw new Error("Session missing. Please login again.");
-
-      await setHasPin(false);
-
-      const me = await getMeApi();
-      const userId = String(me.user._id);
-      await setPinSkippedForUser(userId, true);
-
-      await setLoggedIn(true);
-      setPinUnlockedThisRun(true);
-      onSkip?.();
-    } catch (err: any) {
-      console.log(`${TAG} Skip ERROR:`, err?.message || err);
-      Alert.alert("Skip Failed", err?.message || "Something went wrong.");
-    } finally {
-      setLoading(false);
-    }
   };
 
   return (
@@ -157,7 +113,6 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
                 label={d}
                 onPress={() => addDigit(d)}
                 styles={styles}
-                disabled={loading}
               />
             ))}
 
@@ -167,19 +122,14 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
               label="0"
               onPress={() => addDigit("0")}
               styles={styles}
-              disabled={loading}
             />
 
             <Pressable
               onPress={backspace}
-              disabled={loading}
               hitSlop={14}
               style={({ pressed }) => [
                 styles.iconBtn,
-                loading && { opacity: 0.45 },
-                pressed && !loading
-                  ? { transform: [{ scale: 0.93 }], opacity: 0.7 }
-                  : null,
+                pressed ? { transform: [{ scale: 0.93 }], opacity: 0.7 } : null,
               ]}
             >
               <Ionicons
@@ -191,7 +141,7 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
           </View>
         </View>
 
-        {/* ── BOTTOM: continue · skip ── */}
+        {/* ── BOTTOM: continue ── */}
         <View style={styles.bottomArea}>
           <Pressable
             onPress={handleSubmit}
@@ -210,26 +160,9 @@ export default function CreatePinScreen({ onContinue, onSkip }: Props) {
                 end={{ x: 1, y: 1 }}
                 style={styles.ctaGradient}
               >
-                {loading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.ctaText}>Continue</Text>
-                )}
+                <Text style={styles.ctaText}>Continue</Text>
               </LinearGradient>
             </View>
-          </Pressable>
-
-          <Pressable
-            onPress={handleSkip}
-            disabled={loading}
-            hitSlop={10}
-            style={({ pressed }) => [
-              styles.skipWrap,
-              loading && { opacity: 0.45 },
-              pressed && !loading ? { opacity: 0.6 } : null,
-            ]}
-          >
-            <Text style={styles.skipText}>Skip for now</Text>
           </Pressable>
         </View>
 
@@ -463,14 +396,5 @@ function createStyles(
       color: "#FFFFFF",
     },
 
-    skipWrap: {
-      marginTop: vscale(14),
-      paddingVertical: vscale(4),
-    },
-
-    skipText: {
-      ...typography.bodySmall,
-      color: "#6B7280",
-    },
   });
 }

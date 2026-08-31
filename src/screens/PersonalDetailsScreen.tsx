@@ -38,7 +38,7 @@ type Props = {
   progressActiveCount?: 1 | 2 | 3 | 4;
 };
 
-const MAX_BIRTH_YEAR = 2011;
+const MINIMUM_AGE = 17;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -134,12 +134,10 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
 
     if (!dob.trim()) return { ok: false, message: "Date of Birth is required." };
     if (!dobDate) return { ok: false, message: "Invalid Date of Birth. Use MM/DD/YYYY (example: 02/24/2000)." };
-    if (dobDate.getFullYear() > MAX_BIRTH_YEAR) {
-      return { ok: false, message: "Birth year must be 2011 or earlier." };
-    }
-
     const age = calcAge(dobDate);
-    if (age < 10) return { ok: false, message: "Invalid Date of Birth (age too low)." };
+    if (age < MINIMUM_AGE) {
+      return { ok: false, message: "You must be at least 17 years old." };
+    }
     if (age > 120) return { ok: false, message: "Invalid Date of Birth (age too high)." };
 
     if (!phone) return { ok: false, message: "Contact number is required." };
@@ -383,33 +381,22 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
 
     genderSheet: {
       width: "100%",
-      maxWidth: 600,
+      maxWidth: scale(360),
       alignSelf: "center",
       backgroundColor: "#FFFFFF",
-      borderTopLeftRadius: scale(28),
-      borderTopRightRadius: scale(28),
-      paddingHorizontal: scale(20),
-      paddingTop: scale(10),
-      paddingBottom: scale(32),
+      borderRadius: scale(20),
+      padding: scale(22),
       ...Platform.select({
-        ios: { shadowColor: "#000", shadowOpacity: 0.22, shadowRadius: 28, shadowOffset: { width: 0, height: -6 } },
-        android: { elevation: 18 },
+        ios: { shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 20, shadowOffset: { width: 0, height: 8 } },
+        android: { elevation: 12 },
       }),
-    },
-
-    genderSheetHandle: {
-      width: scale(40),
-      height: scale(4),
-      borderRadius: scale(2),
-      backgroundColor: "#E5E7EB",
-      alignSelf: "center",
-      marginBottom: scale(18),
     },
 
     genderSheetTitle: {
       ...typography.sectionTitle,
       color: Colors.text,
-      marginBottom: scale(14),
+      textAlign: "center",
+      marginBottom: scale(18),
     },
 
     genderOption: {
@@ -428,19 +415,6 @@ function createStyles(scale: (n: number) => number, vscale: (n: number) => numbe
     genderOptionActive: {
       borderColor: Colors.primary,
       backgroundColor: "rgba(7, 81, 156, 0.05)",
-    },
-
-    genderIconBadge: {
-      width: scale(44),
-      height: scale(44),
-      borderRadius: scale(22),
-      backgroundColor: "#F3F4F6",
-      alignItems: "center",
-      justifyContent: "center",
-    },
-
-    genderIconBadgeActive: {
-      backgroundColor: "rgba(7, 81, 156, 0.12)",
     },
 
     genderOptionText: {

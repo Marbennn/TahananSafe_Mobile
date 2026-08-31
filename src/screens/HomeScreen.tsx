@@ -79,6 +79,7 @@ import * as Location from "expo-location";
 
 type Props = {
   onQuickExit?: () => void;
+  onLogout?: () => Promise<void> | void;
   onTabChange?: (tab: TabKey) => void;
   initialTab?: TabKey;
   isActive?: boolean;
@@ -231,6 +232,7 @@ function normalizePhoto(p: any): string {
 
 export default function HomeScreen({
   onQuickExit,
+  onLogout,
   onTabChange,
   initialTab = "Home",
   isActive = true,
@@ -250,7 +252,7 @@ export default function HomeScreen({
   const { s, fs } = useMemo(() => makeScale(contentWidth, height), [contentWidth, height]);
 
   // âœ… AuthContext
-  const { user, setUser, accessToken, logout } = useAuth() as any;
+  const { user, setUser, accessToken } = useAuth() as any;
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
@@ -1039,14 +1041,9 @@ export default function HomeScreen({
 
   const handleSharedSignOut = useCallback(
     async () => {
-      try {
-        await logout();
-        onQuickExit?.();
-      } catch {
-        onQuickExit?.();
-      }
+      await onLogout?.();
     },
-    [logout, onQuickExit]
+    [onLogout]
   );
 
   const handleFabSignOut = useCallback(() => {
@@ -1343,19 +1340,12 @@ export default function HomeScreen({
           backgroundColor: "transparent",
           borderWidth: 1,
           borderColor: "#E7EEF7",
+          minHeight: clamp(Math.round(136 * s), 126, 150),
           alignItems: "center",
+          justifyContent: "center",
           paddingVertical: clamp(Math.round(24 * s), 20, 28),
           paddingHorizontal: PAD,
           gap: clamp(Math.round(6 * s), 4, 8),
-        },
-        emptyLogsIconWrap: {
-          width: clamp(Math.round(36 * s), 30, 42),
-          height: clamp(Math.round(36 * s), 30, 42),
-          borderRadius: clamp(Math.round(10 * s), 8, 12),
-          backgroundColor: "#EAF3FF",
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: clamp(Math.round(2 * s), 1, 4),
         },
         emptyLogsTitle: {
           fontFamily: FontFamily,
@@ -1689,19 +1679,21 @@ export default function HomeScreen({
                 {logs.length < 2 ? (
                   <>
                     {logs.length > 0 ? <View style={styles.logsGap} /> : null}
-                    <View style={[styles.emptyLogsCard, { borderColor: TC.divider }]}>
-                      <View style={[styles.emptyLogsIconWrap, { backgroundColor: TC.chipBg }]}>
-                        <Ionicons name="document-text-outline" size={14} color={TC.primary} />
-                      </View>
-                      <Text style={[styles.emptyLogsTitle, { color: TC.textDark }]} allowFontScaling={false}>
-                        {logs.length === 0 ? "No report yet" : "No additional report yet"}
-                      </Text>
-                      {logs.length === 0 ? (
-                        <Text style={[styles.emptyLogsText, { color: TC.muted }]} allowFontScaling={false}>
-                          Your incident logs will appear here once you submit a report.
-                        </Text>
-                      ) : null}
-                    </View>
+                    {Array.from({ length: 2 - logs.length }).map((_, emptyIndex) => {
+                      return (
+                        <React.Fragment key={`empty-log-${emptyIndex}`}>
+                          {emptyIndex > 0 ? <View style={styles.logsGap} /> : null}
+                          <View style={[styles.emptyLogsCard, { borderColor: TC.divider }]}>
+                            <Text style={[styles.emptyLogsTitle, { color: TC.textDark }]} allowFontScaling={false}>
+                              No report yet
+                            </Text>
+                            <Text style={[styles.emptyLogsText, { color: TC.muted }]} allowFontScaling={false}>
+                              Your incident logs will appear here once you submit a report.
+                            </Text>
+                          </View>
+                        </React.Fragment>
+                      );
+                    })}
                   </>
                 ) : null}
               </>

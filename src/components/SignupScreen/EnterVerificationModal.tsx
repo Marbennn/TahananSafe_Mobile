@@ -22,7 +22,8 @@ import { createTypography } from "../../theme/typography";
 import ChecklistBadge from "../ChecklistBadge";
 
 // ✅ IMPORTANT: use the SAME storage keys your app uses everywhere
-import { saveTokens, setLoggedIn } from "../../auth/session";
+import { setLoggedIn } from "../../auth/session";
+import { verifyRegistrationOtp } from "../../api/auth";
 
 type Props = {
   visible: boolean;
@@ -46,46 +47,6 @@ function clamp(n: number, min: number, max: number) {
 }
 
 const TAG = "[Signup EnterVerificationModal]";
-const API_URL = (process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000")
-  .trim()
-  .replace(/\/+$/, "");
-
-// ✅ Signup should verify REGISTRATION OTP (NOT login OTP)
-const VERIFY_REG_OTP_PATH = "/api/mobile/v1/verify-registration-otp";
-
-async function verifyRegistrationOtpRequest(email: string, otp: string) {
-  const url = `${API_URL}${VERIFY_REG_OTP_PATH}`;
-  // ✅ SECURITY: No sensitive data in production logs
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, otp }),
-  });
-
-  const raw = await res.text().catch(() => "");
-  // ✅ SECURITY: status only, no raw response
-
-  let data: any = {};
-  if (raw) {
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      data = {};
-    }
-  }
-
-  if (!res.ok) {
-    throw new Error(data?.message || `OTP verify failed (HTTP ${res.status})`);
-  }
-
-  return data as {
-    message?: string;
-    accessToken: string;
-    refreshToken?: string;
-    user?: any;
-  };
-}
 
 export default function EnterVerificationModal({
   visible,
@@ -204,13 +165,7 @@ export default function EnterVerificationModal({
       setSavingSession(true);
       console.log(`${TAG} verify START`);
 
-      const data = await verifyRegistrationOtpRequest(e, otp);
-
-      // ✅ SAVE TOKENS USING YOUR APP'S OFFICIAL STORAGE KEYS
-      await saveTokens({
-        accessToken: data.accessToken,
-        refreshToken: data.refreshToken,
-      });
+      const data = await verifyRegistrationOtp(e, otp);
 
       // ✅ Mark logged in so Splash won't send you back to onboarding
       await setLoggedIn(true);

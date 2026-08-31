@@ -30,7 +30,6 @@ import { setPinApi, getMeApi } from "../api/pin";
 type Props = {
   expectedPin: string;
   onContinue: (pin: string) => void;
-  onSkip?: () => void;
   progressActiveCount?: 1 | 2 | 3 | 4;
 };
 
@@ -40,7 +39,7 @@ function clamp(n: number, min: number, max: number) {
 
 const TAG = "[VerifyPinScreen]";
 
-export default function VerifyPinScreen({ expectedPin, onContinue, onSkip }: Props) {
+export default function VerifyPinScreen({ expectedPin, onContinue }: Props) {
   const TC = useColors();
   const { width, height } = useWindowDimensions();
 
@@ -117,33 +116,6 @@ export default function VerifyPinScreen({ expectedPin, onContinue, onSkip }: Pro
     } catch (err: any) {
       console.log(`${TAG} ERROR:`, err?.message || err);
       Alert.alert("PIN Setup Failed", err?.message || "Something went wrong.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSkip = async () => {
-    console.log(`${TAG} Skip pressed`);
-    if (loading) return;
-
-    try {
-      setLoading(true);
-
-      const accessToken = await getAccessToken();
-      if (!accessToken) throw new Error("Session missing. Please login again.");
-
-      await setHasPin(false);
-
-      const me = await getMeApi();
-      const userId = String(me.user._id);
-      await setPinSkippedForUser(userId, true);
-
-      await setLoggedIn(true);
-      setPinUnlockedThisRun(true);
-      onSkip?.();
-    } catch (err: any) {
-      console.log(`${TAG} Skip ERROR:`, err?.message || err);
-      Alert.alert("Skip Failed", err?.message || "Something went wrong.");
     } finally {
       setLoading(false);
     }
@@ -262,18 +234,6 @@ export default function VerifyPinScreen({ expectedPin, onContinue, onSkip }: Pro
             </View>
           </Pressable>
 
-          <Pressable
-            onPress={handleSkip}
-            disabled={loading}
-            hitSlop={10}
-            style={({ pressed }) => [
-              styles.skipWrap,
-              loading && { opacity: 0.45 },
-              pressed && !loading ? { opacity: 0.6 } : null,
-            ]}
-          >
-            <Text style={styles.skipText}>Skip</Text>
-          </Pressable>
         </View>
       </ScrollView>
     </View>
@@ -494,14 +454,5 @@ function createStyles(
       color: "#FFFFFF",
     },
 
-    skipWrap: {
-      marginTop: vscale(14),
-      paddingVertical: vscale(4),
-    },
-
-    skipText: {
-      ...typography.bodySmall,
-      color: "#6B7280",
-    },
   });
 }

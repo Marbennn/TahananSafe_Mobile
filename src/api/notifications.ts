@@ -1,8 +1,9 @@
 // src/api/notifications.ts
-import { DeviceEventEmitter, Platform } from "react-native";
+import { DeviceEventEmitter } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAccessToken } from "../auth/session";
-import { getReportStatusMeta, normalizeReportStatus } from "../utils/reportStatus";
+import { getCaseStatusMeta, normalizeCaseStatus } from "../utils/reportStatus";
+import { requestJson } from "./http";
 
 export type NotifType = "alert" | "report" | "system" | "thread";
 
@@ -36,19 +37,6 @@ function normalizeReplyTitle(item: NotificationItem): NotificationItem {
     title: "Reply from admin",
   };
 }
-
-function getApiBaseUrl() {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL;
-
-  if (envUrl && typeof envUrl === "string" && envUrl.trim().length > 0) {
-    return envUrl.replace(/\/+$/, "");
-  }
-
-  if (Platform.OS === "android") return "http://10.0.2.2:8000";
-  return "http://localhost:8000";
-}
-
-const API_BASE_URL = getApiBaseUrl();
 
 /** ------------------------------
  * JWT helpers (no extra libs)
@@ -90,81 +78,40 @@ async function getUserScopeKeySuffix(): Promise<string> {
 /** ------------------------------
  * Backend helpers
  * ------------------------------ */
-async function authHeaders() {
-  const token = await getAccessToken();
-
-  if (!token) {
-    throw new Error("Please login again. (Missing access token)");
-  }
-
-  return {
-    Accept: "application/json",
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  } as Record<string, string>;
-}
-
-async function parseJsonSafe(res: Response) {
-  const text = await res.text().catch(() => "");
-  try {
-    return text ? JSON.parse(text) : {};
-  } catch {
-    return { message: text };
-  }
-}
-
 export async function fetchMyNotifications(limit = 80): Promise<NotificationItem[]> {
-  const headers = await authHeaders();
-  const url = `${API_BASE_URL}/api/mobile/v1/notifications/my?limit=${encodeURIComponent(String(limit))}`;
-
-  let res: Response;
-  try {
-    res = await fetch(url, { method: "GET", headers });
-  } catch {
-    throw new Error(
-      `Network request failed.\n\nCheck EXPO_PUBLIC_API_URL:\n${API_BASE_URL}\n\nBackend port must match (8000).`
-    );
-  }
-
-  const data = await parseJsonSafe(res);
-  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
-
+  const data = await requestJson<any>({
+    path: `/api/mobile/v1/notifications/my?limit=${encodeURIComponent(String(limit))}`,
+    auth: true,
+  });
   const items = Array.isArray(data?.items) ? data.items : [];
   return items as NotificationItem[];
 }
 
 export async function markAllNotificationsRead(): Promise<void> {
-  const headers = await authHeaders();
-  const url = `${API_BASE_URL}/api/mobile/v1/notifications/mark-all`;
-
-  const res = await fetch(url, { method: "POST", headers });
-  const data = await parseJsonSafe(res);
-
-  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
+  await requestJson({
+    method: "POST",
+    path: "/api/mobile/v1/notifications/mark-all",
+    auth: true,
+  });
 }
 
 export async function toggleNotificationRead(id: string): Promise<NotificationItem> {
-  const headers = await authHeaders();
-  const url = `${API_BASE_URL}/api/mobile/v1/notifications/${encodeURIComponent(id)}/toggle`;
-
-  const res = await fetch(url, { method: "PATCH", headers });
-  const data = await parseJsonSafe(res);
-
-  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
-
+  const data = await requestJson<any>({
+    method: "PATCH",
+    path: `/api/mobile/v1/notifications/${encodeURIComponent(id)}/toggle`,
+    auth: true,
+  });
   const item = data?.item;
   if (!item) throw new Error("Unexpected response: missing item");
   return item as NotificationItem;
 }
 
 export async function clearAllNotifications(): Promise<void> {
-  const headers = await authHeaders();
-  const url = `${API_BASE_URL}/api/mobile/v1/notifications/clear`;
-
-  const res = await fetch(url, { method: "DELETE", headers });
-  const data = await parseJsonSafe(res);
-
-  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
+  await requestJson({
+    method: "DELETE",
+    path: "/api/mobile/v1/notifications/clear",
+    auth: true,
+  });
 }
 
 // POST /api/mobile/v1/notifications/send-sos
@@ -173,34 +120,27 @@ export async function sendSosAlert(opts?: {
   latitude?: number;
   longitude?: number;
 }): Promise<{ sent: number; message: string }> {
-  const headers = await authHeaders();
-  const url = `${API_BASE_URL}/api/mobile/v1/notifications/send-sos`;
-
-  const res = await fetch(url, {
+  const data = await requestJson<any>({
     method: "POST",
-    headers,
-    body: JSON.stringify({
+    path: "/api/mobile/v1/notifications/send-sos",
+    body: {
       address: opts?.address ?? null,
       latitude: opts?.latitude ?? null,
       longitude: opts?.longitude ?? null,
-    }),
+    },
+    auth: true,
   });
-  const data = await parseJsonSafe(res);
-
-  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
 
   return { sent: data?.sent ?? 0, message: data?.message ?? "Alert sent." };
 }
 
 // delete one REMOTE notification
 export async function deleteNotification(id: string): Promise<void> {
-  const headers = await authHeaders();
-  const url = `${API_BASE_URL}/api/mobile/v1/notifications/${encodeURIComponent(id)}`;
-
-  const res = await fetch(url, { method: "DELETE", headers });
-  const data = await parseJsonSafe(res);
-
-  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
+  await requestJson({
+    method: "DELETE",
+    path: `/api/mobile/v1/notifications/${encodeURIComponent(id)}`,
+    auth: true,
+  });
 }
 
 /**
@@ -209,21 +149,10 @@ export async function deleteNotification(id: string): Promise<void> {
  * Returns: { report: incident }
  */
 export async function fetchMyReportDetailById(reportId: string): Promise<any | null> {
-  const headers = await authHeaders();
-  const url = `${API_BASE_URL}/api/mobile/v1/reports/${encodeURIComponent(reportId)}`;
-
-  let res: Response;
-  try {
-    res = await fetch(url, { method: "GET", headers });
-  } catch {
-    throw new Error(
-      `Network request failed.\n\nCheck EXPO_PUBLIC_API_URL:\n${API_BASE_URL}\n\nBackend port must match (8000).`
-    );
-  }
-
-  const data = await parseJsonSafe(res);
-  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
-
+  const data = await requestJson<any>({
+    path: `/api/mobile/v1/reports/${encodeURIComponent(reportId)}`,
+    auth: true,
+  });
   return (data?.report ?? null) as any | null;
 }
 
@@ -236,11 +165,11 @@ const NOTIFICATION_CHANGED_EVENT = "tahanan:notifChanged";
 type ReportStatusSnapshotItem = { id: string; status?: string };
 
 function normalizeStatusKey(s?: string) {
-  return normalizeReportStatus(s);
+  return normalizeCaseStatus(s, s);
 }
 
 function statusLabel(s?: string) {
-  return getReportStatusMeta(s).label;
+  return getCaseStatusMeta(s, s).label;
 }
 
 async function readJsonSafe<T>(key: string, fallback: T): Promise<T> {

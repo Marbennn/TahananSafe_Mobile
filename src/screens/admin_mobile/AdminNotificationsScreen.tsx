@@ -31,7 +31,7 @@ import {
   type NotifType,
 } from "../../api/notifications";
 
-import { getAccessToken } from "../../auth/session";
+import { fetchAdminIncidentById } from "../../api/admin";
 import type { ReportItem } from "../ReportScreen";
 import { normalizeReportStatus } from "../../utils/reportStatus";
 
@@ -114,17 +114,6 @@ function groupLabelFromDate(isoOrAny: string) {
   return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
-function getApiBaseUrl() {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL;
-  if (envUrl && typeof envUrl === "string" && envUrl.trim().length > 0) {
-    return envUrl.replace(/\/+$/, "");
-  }
-  if (Platform.OS === "android") return "http://10.0.2.2:8000";
-  return "http://localhost:8000";
-}
-
-const API_BASE_URL = getApiBaseUrl();
-
 function normalizeStatus(dbStatus?: string): ReportItem["status"] {
   return normalizeReportStatus(dbStatus);
 }
@@ -139,32 +128,8 @@ function normalizePhoto(p: any): string {
   return "";
 }
 
-async function parseJsonSafe(res: Response) {
-  const text = await res.text().catch(() => "");
-  try {
-    return text ? JSON.parse(text) : {};
-  } catch {
-    return { message: text };
-  }
-}
-
 async function fetchMyReportDetailAsReportItem(incidentId: string): Promise<ReportItem> {
-  const token = await getAccessToken();
-  if (!token) throw new Error("Please login again. (Missing access token)");
-
-  const url = `${API_BASE_URL}/api/mobile/v1/reports/${encodeURIComponent(incidentId)}`;
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  const data = await parseJsonSafe(res);
-  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
-
-  const doc = data?.report ?? data?.incident ?? data;
+  const doc = await fetchAdminIncidentById(incidentId);
   if (!doc?._id && !doc?.id) throw new Error("Unexpected response: missing report");
 
   const id = String(doc?._id ?? doc?.id ?? "");

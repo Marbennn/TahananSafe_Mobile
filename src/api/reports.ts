@@ -1,5 +1,5 @@
 // src/api/reports.ts
-import { getAccessToken } from "../auth/session";
+import { requestRaw } from "./http";
 
 const API_URL = (process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000")
   .trim()
@@ -64,6 +64,38 @@ export type ReportDetailDto = {
   latitude?: number | null;
   longitude?: number | null;
   status?: string; // "submitted" | "reviewing" | "resolved"
+  caseStatus?: "Submitted" | "Active" | "Completed" | "Archived" | string;
+  currentProcessStage?: string;
+  firstViewedByOfficialAt?: string | null;
+  mediationSchedule?: {
+    type?: string;
+    status?: string;
+    scheduledAt?: string;
+    venue?: string;
+    rescheduleCount?: number;
+  } | null;
+  mediationRecord?: {
+    outcome?: "settlement-reached" | "no-settlement" | "rescheduled" | "did-not-proceed" | string;
+    status?: "confirmed" | string;
+    confirmedAt?: string | null;
+    captainRemarks?: string;
+  } | null;
+  caseDocuments?: Array<{
+    _id?: string;
+    type?: string;
+    title?: string;
+    status?: string;
+    fields?: Record<string, unknown>;
+    releasedAt?: string | null;
+  }>;
+  actionLog?: Array<{
+    status?: string;
+    action?: string;
+    result?: string;
+    actorName?: string;
+    actorRole?: string;
+    date?: string;
+  }>;
   photos?: any[]; // [{ fileId, url, fileName, mimeType, size }]
   videos?: any[]; // [{ fileId, url, fileName, mimeType, size }]
   createdAt?: string;
@@ -86,15 +118,12 @@ async function parseJsonSafe(res: Response) {
  * ✅ UPDATED: accepts optional AbortSignal
  */
 export async function fetchMyReports(signal?: AbortSignal): Promise<ReportDetailDto[]> {
-  const token = await getAccessToken();
-
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await fetch(`${API_URL}/api/mobile/v1/reports/my`, {
+  const res = await requestRaw({
+    path: "/api/mobile/v1/reports/my",
     method: "GET",
-    headers,
+    headers: { Accept: "application/json" },
     signal,
+    auth: true,
   });
 
   const data = await parseJsonSafe(res);
@@ -119,24 +148,23 @@ export async function fetchReportDetail(
   reportId: string,
   signal?: AbortSignal
 ): Promise<ReportDetailDto> {
-  const token = await getAccessToken();
-
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
   // Try: GET /api/mobile/incidents/:id  (you mounted incidentRoute at /api/mobile/incidents)
-  let res = await fetch(`${API_URL}/api/mobile/incidents/${encodeURIComponent(reportId)}`, {
+  let res = await requestRaw({
+    path: `/api/mobile/incidents/${encodeURIComponent(reportId)}`,
     method: "GET",
-    headers,
+    headers: { Accept: "application/json" },
     signal,
+    auth: true,
   });
 
   // Fallback: GET /api/mobile/v1/reports/:id  (if you later add it)
   if (res.status === 404) {
-    res = await fetch(`${API_URL}/api/mobile/v1/reports/${encodeURIComponent(reportId)}`, {
+    res = await requestRaw({
+      path: `/api/mobile/v1/reports/${encodeURIComponent(reportId)}`,
       method: "GET",
-      headers,
+      headers: { Accept: "application/json" },
       signal,
+      auth: true,
     });
   }
 
@@ -160,20 +188,14 @@ export async function fetchReportThreads(
   reportId: string,
   signal?: AbortSignal
 ): Promise<ThreadDto[]> {
-  const token = await getAccessToken();
-
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
   // You mounted threads at: app.use("/api/mobile/reports", reportThreadRoute);
-  const res = await fetch(
-    `${API_URL}/api/mobile/reports/${encodeURIComponent(reportId)}/threads`,
-    {
+  const res = await requestRaw({
+      path: `/api/mobile/reports/${encodeURIComponent(reportId)}/threads`,
       method: "GET",
-      headers,
+      headers: { Accept: "application/json" },
       signal,
-    }
-  );
+      auth: true,
+    });
 
   const data = await parseJsonSafe(res);
 
@@ -188,14 +210,13 @@ export async function fetchReportTyping(
   reportId: string,
   signal?: AbortSignal
 ): Promise<{ isTyping: boolean; role?: "staff" | "resident" | null }> {
-  const token = await getAccessToken();
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await fetch(
-    `${API_URL}/api/mobile/reports/${encodeURIComponent(reportId)}/typing`,
-    { method: "GET", headers, signal }
-  );
+  const res = await requestRaw({
+    path: `/api/mobile/reports/${encodeURIComponent(reportId)}/typing`,
+    method: "GET",
+    headers: { Accept: "application/json" },
+    signal,
+    auth: true,
+  });
   const data = await parseJsonSafe(res);
   if (!res.ok) throw new Error(data?.message || `Failed (${res.status})`);
 
@@ -210,22 +231,18 @@ export async function setReportTyping(
   isTyping: boolean,
   signal?: AbortSignal
 ): Promise<void> {
-  const token = await getAccessToken();
   const headers: Record<string, string> = {
     Accept: "application/json",
     "Content-Type": "application/json",
   };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await fetch(
-    `${API_URL}/api/mobile/reports/${encodeURIComponent(reportId)}/typing`,
-    {
+  const res = await requestRaw({
+      path: `/api/mobile/reports/${encodeURIComponent(reportId)}/typing`,
       method: "POST",
       headers,
       body: JSON.stringify({ isTyping }),
       signal,
-    }
-  );
+      auth: true,
+    });
   const data = await parseJsonSafe(res);
   if (!res.ok) throw new Error(data?.message || `Failed (${res.status})`);
 }
@@ -240,11 +257,9 @@ export async function sendReportThreadMessage(
   message: string | SendReportThreadMessagePayload,
   signal?: AbortSignal
 ) {
-  const token = await getAccessToken();
   const payload: SendReportThreadMessagePayload =
     typeof message === "string" ? { text: message } : message;
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
 
   let body: FormData | string;
   if (payload.attachment) {
@@ -275,15 +290,14 @@ export async function sendReportThreadMessage(
     });
   }
 
-  const res = await fetch(
-    `${API_URL}/api/mobile/reports/${encodeURIComponent(reportId)}/threads`,
-    {
+  const res = await requestRaw({
+      path: `/api/mobile/reports/${encodeURIComponent(reportId)}/threads`,
       method: "POST",
       headers,
       body,
       signal,
-    }
-  );
+      auth: true,
+    });
 
   const data = await parseJsonSafe(res);
 
@@ -312,21 +326,16 @@ export async function deleteReportThreadMessage(
   threadId: string,
   signal?: AbortSignal
 ) {
-  const token = await getAccessToken();
-
   const headers: Record<string, string> = {
     Accept: "application/json",
   };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await fetch(
-    `${API_URL}/api/mobile/reports/${encodeURIComponent(reportId)}/threads/${encodeURIComponent(threadId)}`,
-    {
+  const res = await requestRaw({
+      path: `/api/mobile/reports/${encodeURIComponent(reportId)}/threads/${encodeURIComponent(threadId)}`,
       method: "DELETE",
       headers,
       signal,
-    }
-  );
+      auth: true,
+    });
 
   const data = await parseJsonSafe(res);
 
@@ -343,23 +352,18 @@ export async function updateReportThreadMessage(
   message: string,
   signal?: AbortSignal
 ) {
-  const token = await getAccessToken();
-
   const headers: Record<string, string> = {
     Accept: "application/json",
     "Content-Type": "application/json",
   };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await fetch(
-    `${API_URL}/api/mobile/reports/${encodeURIComponent(reportId)}/threads/${encodeURIComponent(threadId)}`,
-    {
+  const res = await requestRaw({
+      path: `/api/mobile/reports/${encodeURIComponent(reportId)}/threads/${encodeURIComponent(threadId)}`,
       method: "PUT",
       headers,
       body: JSON.stringify({ text: message }),
       signal,
-    }
-  );
+      auth: true,
+    });
 
   const data = await parseJsonSafe(res);
 
@@ -403,7 +407,7 @@ export function buildReportPhotoUrl(reportId: string, photo: any): string | null
     }
 
     // assume it's a fileId
-    return `${API_URL}/api/web/v1/evidence/id/${encodeURIComponent(s)}`;
+    return `${API_URL}/api/mobile/v1/reports/${encodeURIComponent(reportId)}/photos/${encodeURIComponent(s)}`;
   }
 
   // 2) object form (your case)
@@ -413,7 +417,7 @@ export function buildReportPhotoUrl(reportId: string, photo: any): string | null
     if (rawFileId) {
       const fileIdStr = String(rawFileId).trim();
       if (fileIdStr) {
-        return `${API_URL}/api/web/v1/evidence/id/${encodeURIComponent(fileIdStr)}`;
+        return `${API_URL}/api/mobile/v1/reports/${encodeURIComponent(reportId)}/photos/${encodeURIComponent(fileIdStr)}`;
       }
     }
 
@@ -440,7 +444,7 @@ export function buildReportPhotoUrl(reportId: string, photo: any): string | null
 
     // Fallback to filename endpoint (optional)
     if (typeof (photo as any).fileName === "string" && (photo as any).fileName.trim()) {
-      return `${API_URL}/api/web/v1/evidence/file/${encodeURIComponent(
+      return `${API_URL}/api/mobile/v1/reports/${encodeURIComponent(reportId)}/photos/file/${encodeURIComponent(
         (photo as any).fileName.trim()
       )}`;
     }

@@ -7,6 +7,79 @@ export type ReportStatus =
   | "CERTIFICATION_ISSUED"
   | "ARCHIVED";
 
+export type CaseStatus =
+  | "SUBMITTED"
+  | "ACTIVE"
+  | "COMPLETED"
+  | "ARCHIVED";
+
+export type CaseStatusMeta = {
+  label: "Submitted" | "Active" | "Completed" | "Archived";
+  color: string;
+  bg: string;
+};
+
+export const CASE_STATUS_META: Record<CaseStatus, CaseStatusMeta> = {
+  SUBMITTED: {
+    label: "Submitted",
+    color: "#94A3B8",
+    bg: "#F1F5F9",
+  },
+  ACTIVE: {
+    label: "Active",
+    color: "#16A34A",
+    bg: "#DCFCE7",
+  },
+  COMPLETED: {
+    label: "Completed",
+    color: "#2563EB",
+    bg: "#DBEAFE",
+  },
+  ARCHIVED: {
+    label: "Archived",
+    color: "#64748B",
+    bg: "#E2E8F0",
+  },
+};
+
+export function normalizeCaseStatus(raw?: string, processStage?: string): CaseStatus {
+  const explicit = String(raw ?? "").trim().toLowerCase().replace(/[_-]+/g, " ");
+
+  if (explicit === "active") return "ACTIVE";
+  if (explicit === "completed" || explicit === "complete") return "COMPLETED";
+  if (explicit === "archived" || explicit === "archive") return "ARCHIVED";
+  if (explicit === "submitted" || explicit === "pending") return "SUBMITTED";
+
+  const stage = String(processStage ?? "").trim().toLowerCase().replace(/[_-]+/g, " ");
+
+  if (stage === "archived" || stage === "archive" || stage === "closed") {
+    return "ARCHIVED";
+  }
+
+  if (
+    stage === "resolved" ||
+    stage === "completed" ||
+    stage === "barangay processing completed" ||
+    stage === "barangay processing completed no settlement" ||
+    stage === "certification issued" ||
+    stage === "failed" ||
+    stage === "cancelled" ||
+    stage === "canceled"
+  ) {
+    return "COMPLETED";
+  }
+
+  if (!stage || stage === "submitted" || stage === "pending") {
+    return "SUBMITTED";
+  }
+
+  return "ACTIVE";
+}
+
+export function getCaseStatusMeta(raw?: string, processStage?: string): CaseStatusMeta {
+  return CASE_STATUS_META[normalizeCaseStatus(raw, processStage)];
+}
+
 export type ReportStatusMeta = {
   label: string;
   shortLabel: string;
@@ -68,8 +141,18 @@ export function normalizeReportStatus(raw?: string): ReportStatus {
   if (!s) return "SUBMITTED";
 
   if (s === "submitted" || s === "pending") return "SUBMITTED";
-  if (s === "under review" || s === "in review" || s === "reviewing") return "UNDER_REVIEW";
-  if (s === "mediation scheduled" || s === "mediation") return "MEDIATION_SCHEDULED";
+  if (
+    s === "under review" ||
+    s === "in review" ||
+    s === "reviewing" ||
+    s === "for official review"
+  ) return "UNDER_REVIEW";
+  if (
+    s === "mediation scheduled" ||
+    s === "mediation scheduling" ||
+    s === "mediation conducted" ||
+    s === "mediation"
+  ) return "MEDIATION_SCHEDULED";
   if (
     s === "ongoing assistance" ||
     s === "ongoing" ||
@@ -79,7 +162,13 @@ export function normalizeReportStatus(raw?: string): ReportStatus {
   ) {
     return "ONGOING_ASSISTANCE";
   }
-  if (s === "resolved" || s === "done" || s === "completed") return "RESOLVED";
+  if (
+    s === "resolved" ||
+    s === "done" ||
+    s === "completed" ||
+    s === "barangay processing completed" ||
+    s === "barangay processing completed no settlement"
+  ) return "RESOLVED";
   if (
     s === "certification issued" ||
     s === "certificate issued" ||

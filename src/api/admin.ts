@@ -1,12 +1,10 @@
-// src/api/admin.ts
-import { getAccessToken } from "../auth/session";
-import { apiUrl } from "../config/api";
+import { requestJson } from "./http";
 
 export type AdminIncident = {
   _id: string;
-  user:
-    | string
-    | { _id: string; firstName?: string; lastName?: string; email?: string };
+  id?: string;
+  complainId?: string;
+  user: string | { _id: string; firstName?: string; lastName?: string; email?: string };
   mode?: "complain" | "emergency";
   incidentType?: string;
   details?: string;
@@ -52,94 +50,56 @@ export type AdminStats = {
   verifiedUsers: number;
 };
 
-async function authHeaders(): Promise<Record<string, string>> {
-  const token = await getAccessToken();
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  return headers;
-}
-
-async function parseJson(res: Response) {
-  const text = await res.text().catch(() => "");
-  try {
-    return text ? JSON.parse(text) : {};
-  } catch {
-    return { message: text };
-  }
-}
-
-export async function fetchAdminIncidents(
-  signal?: AbortSignal
-): Promise<AdminIncident[]> {
-  const headers = await authHeaders();
-  const res = await fetch(apiUrl("/api/web/v1/incidents"), { headers, signal });
-  const data = await parseJson(res);
-  if (!res.ok) throw new Error(data?.message || `Failed (${res.status})`);
-  return Array.isArray(data?.incidents)
-    ? data.incidents
-    : Array.isArray(data)
-    ? data
-    : [];
+export async function fetchAdminIncidents(signal?: AbortSignal): Promise<AdminIncident[]> {
+  const data = await requestJson<any>({
+    path: "/api/web/v1/incidents",
+    signal,
+    auth: true,
+  });
+  return Array.isArray(data?.incidents) ? data.incidents : Array.isArray(data) ? data : [];
 }
 
 export async function fetchAdminIncidentById(
   id: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<AdminIncident> {
-  const headers = await authHeaders();
-  const res = await fetch(
-    apiUrl(`/api/web/v1/incidents/${encodeURIComponent(id)}`),
-    { headers, signal }
-  );
-  const data = await parseJson(res);
-  if (!res.ok) throw new Error(data?.message || `Failed (${res.status})`);
+  const data = await requestJson<any>({
+    path: `/api/web/v1/incidents/${encodeURIComponent(id)}`,
+    signal,
+    auth: true,
+  });
   return (data?.incident || data) as AdminIncident;
 }
 
 export async function updateIncidentStatus(
   incidentId: string,
   status: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<void> {
-  const headers = {
-    ...(await authHeaders()),
-    "Content-Type": "application/json",
-  };
-  const res = await fetch(
-    apiUrl(`/api/web/v1/incidents/${encodeURIComponent(incidentId)}/status`),
-    {
-      method: "PUT",
-      headers,
-      body: JSON.stringify({ status }),
-      signal,
-    }
-  );
-  const data = await parseJson(res);
-  if (!res.ok) throw new Error(data?.message || `Failed (${res.status})`);
+  await requestJson({
+    method: "PUT",
+    path: `/api/web/v1/incidents/${encodeURIComponent(incidentId)}/status`,
+    body: { status },
+    signal,
+    auth: true,
+  });
 }
 
-export async function fetchAdminUsers(
-  signal?: AbortSignal
-): Promise<AdminUser[]> {
-  const headers = await authHeaders();
-  const res = await fetch(apiUrl("/api/web/v1/users"), { headers, signal });
-  const data = await parseJson(res);
-  if (!res.ok) throw new Error(data?.message || `Failed (${res.status})`);
-  return Array.isArray(data?.users)
-    ? data.users
-    : Array.isArray(data)
-    ? data
-    : [];
+export async function fetchAdminUsers(signal?: AbortSignal): Promise<AdminUser[]> {
+  const data = await requestJson<any>({
+    path: "/api/web/v1/users",
+    signal,
+    auth: true,
+  });
+  return Array.isArray(data?.users) ? data.users : Array.isArray(data) ? data : [];
 }
 
-export async function fetchAdminStats(
-  signal?: AbortSignal
-): Promise<AdminStats> {
-  const headers = await authHeaders();
-  const res = await fetch(apiUrl("/api/web/v1/statistics"), { headers, signal });
-  const data = await parseJson(res);
-  if (!res.ok) throw new Error(data?.message || `Failed (${res.status})`);
-  // Map backend statistics shape to AdminStats
+export async function fetchAdminStats(signal?: AbortSignal): Promise<AdminStats> {
+  const data = await requestJson<any>({
+    path: "/api/web/v1/statistics",
+    signal,
+    auth: true,
+  });
   return {
     totalIncidents: data?.totalCases ?? 0,
     pending: data?.pending ?? 0,
@@ -149,5 +109,5 @@ export async function fetchAdminStats(
     highRisk: data?.riskHigh ?? 0,
     totalUsers: data?.totalUsers ?? 0,
     verifiedUsers: data?.verifiedUsers ?? 0,
-  } as AdminStats;
+  };
 }

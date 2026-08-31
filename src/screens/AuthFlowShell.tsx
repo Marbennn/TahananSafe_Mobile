@@ -141,7 +141,6 @@ export default function AuthFlowShell({
                   <CreatePinScreen
                     onBack={handleBack}
                     onContinue={(pin) => goToVerifyPin(pin)}
-                    onSkip={() => finishAuth()}
                     progressActiveCount={3}
                   />
                 )}
@@ -152,7 +151,6 @@ export default function AuthFlowShell({
                   <VerifyPinScreen
                     expectedPin={route.params.pin}
                     onContinue={() => finishAuth()}
-                    onSkip={() => finishAuth()}
                     progressActiveCount={4}
                   />
                 )}

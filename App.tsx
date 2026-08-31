@@ -2,7 +2,6 @@
 import "react-native-gesture-handler";
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
 import { enableScreens } from "react-native-screens";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
@@ -10,11 +9,11 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 // ✅ Auth
-import { AuthProvider, useAuth } from "./src/auth/AuthContext";
+import { useAuth } from "./src/auth/AuthContext";
 
 // ✅ Theme
-import { ThemeProvider } from "./src/theme/ThemeContext";
 import { Typography } from "./src/theme/typography";
+import AppProviders from "./src/app/AppProviders";
 
 // ✅ SecureStore (for local PIN enable/disable toggle)
 import * as SecureStore from "expo-secure-store";
@@ -36,8 +35,8 @@ import ReportDetailScreen from "./src/screens/ReportDetailScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
 import AdminNotificationsScreen from "./src/screens/admin_mobile/AdminNotificationsScreen";
-import AppAlertProvider from "./src/components/AppAlertProvider";
 import GlobalReportMessaging from "./src/components/GlobalReportMessaging";
+import IdleTimerWrapper from "./src/components/IdleTimerWrapper";
 
 import IncidentLogScreen from "./src/screens/IncidentLogScreen";
 import IncidentLogConfirmedScreen from "./src/screens/IncidentLogConfirmedScreen";
@@ -161,12 +160,59 @@ async function clearInvalidSession(auth: any) {
 }
 
 function AuthenticatedIdleBoundary({
+  navigation,
+  enabled,
   children,
 }: {
   navigation: any;
+  enabled: boolean;
   children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  const auth = useAuth();
+
+  const handleTimeout = useCallback(async () => {
+    const hasPin = await getHasPin().catch(() => false);
+    resetPinUnlockedThisRun();
+
+    if (hasPin) {
+      await setAppLockRequired(true).catch(() => {});
+      navigation.reset({ index: 0, routes: [{ name: "Pin" }] });
+      return;
+    }
+
+    await auth.logout().catch(() => {});
+    navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
+  }, [auth, navigation]);
+
+  return (
+    <IdleTimerWrapper enabled={enabled} onTimeout={handleTimeout}>
+      {children}
+    </IdleTimerWrapper>
+  );
+}
+
+function RootAuthenticatedIdleBoundary({
+  navigation,
+  routeName,
+  children,
+}: {
+  navigation: any;
+  routeName: string;
+  children: React.ReactNode;
+}) {
+  const auth = useAuth();
+  const isProtectedRoute = ["Main", "AdminHomeScreen", "Notifications"].includes(
+    routeName
+  );
+
+  return (
+    <AuthenticatedIdleBoundary
+      navigation={navigation}
+      enabled={!!auth.accessToken && isProtectedRoute}
+    >
+      {children}
+    </AuthenticatedIdleBoundary>
+  );
 }
 
 /* ===================== ROLE HELPERS ===================== */
@@ -222,7 +268,7 @@ function MainShell({
   clearIncomingReport,
   onGlobalMessagingHiddenChange,
 }: {
-  onLogout: () => void;
+  onLogout: () => Promise<void> | void;
   onOpenNotifications: () => void;
   incomingReport?: ReportItem | null;
   clearIncomingReport: () => void;
@@ -335,6 +381,7 @@ function MainShell({
           initialTab="Home"
           isActive={activeTab === "Home"}
           onQuickExit={handleQuickExit}
+          onLogout={onLogout}
           onTabChange={handleTabChange}
           onOpenNotifications={onOpenNotifications}
           onOpenReport={openReportDetail}
@@ -453,15 +500,17 @@ function MainScreenWrapper({
 
   const handleLogout = async () => {
     resetPinUnlockedThisRun();
-    try { await auth.logout(); } catch { /* ignore */ }
-    await setLoggedIn(false);
-    await setHasPin(false);
-    navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
+    try {
+      await auth.logout();
+    } catch {
+      // Local cleanup is best-effort, but navigation must always leave protected UI.
+    } finally {
+      navigation.reset({ index: 0, routes: [{ name: "AuthFlow" }] });
+    }
   };
 
   // PIN stays unlocked while this app process is alive; a fresh launch after process kill shows PinScreen.
   return (
-    <AuthenticatedIdleBoundary navigation={navigation}>
       <MainShell
         onLogout={handleLogout}
         onOpenNotifications={() => navigation.navigate("Notifications")}
@@ -471,7 +520,6 @@ function MainScreenWrapper({
         }}
         onGlobalMessagingHiddenChange={onGlobalMessagingHiddenChange}
       />
-    </AuthenticatedIdleBoundary>
   );
 }
 
@@ -490,30 +538,20 @@ function AdminHomeWrapper({ navigation }: { navigation: any }) {
 
   // PIN stays unlocked while this app process is alive; a fresh launch after process kill shows PinScreen.
   return (
-    <AuthenticatedIdleBoundary navigation={navigation}>
       <AdminShell
         onOpenNotifications={() => navigation.navigate("Notifications")}
         onLogout={handleLogout}
       />
-    </AuthenticatedIdleBoundary>
   );
 }
 
 function NotificationsWrapper({ navigation }: { navigation: any }) {
   const auth = useAuth() as any;
   if (isBarangayOfficial(auth?.user?.role)) {
-    return (
-      <AuthenticatedIdleBoundary navigation={navigation}>
-        <AdminNotificationsScreen onBack={() => navigation.goBack()} />
-      </AuthenticatedIdleBoundary>
-    );
+    return <AdminNotificationsScreen onBack={() => navigation.goBack()} />;
   }
 
-  return (
-    <AuthenticatedIdleBoundary navigation={navigation}>
-      <NotificationsScreen onBack={() => navigation.goBack()} />
-    </AuthenticatedIdleBoundary>
-  );
+  return <NotificationsScreen onBack={() => navigation.goBack()} />;
 }
 
 function ResidentMessagingHost({
@@ -699,7 +737,6 @@ function CreatePinWrapper({ navigation }: { navigation: any }) {
       <VerifyPinScreen
         expectedPin={draftPin}
         onContinue={finishPinFlow}
-        onSkip={finishPinFlow}
       />
     );
   }
@@ -707,7 +744,6 @@ function CreatePinWrapper({ navigation }: { navigation: any }) {
   return (
     <CreatePinScreen
       onContinue={(pin) => setDraftPin(pin)}
-      onSkip={finishPinFlow}
     />
   );
 }
@@ -918,15 +954,16 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <ThemeProvider>
-          <AuthProvider>
-            <AppAlertProvider>
+      <AppProviders>
               <NavigationContainer
                 ref={navigationRef}
                 onReady={syncActiveRootRoute}
                 onStateChange={syncActiveRootRoute}
               >
+                <RootAuthenticatedIdleBoundary
+                  navigation={navigationRef.current}
+                  routeName={activeRootRoute}
+                >
                 <View style={styles.navigationRoot}>
                   <Stack.Navigator
                     id="root-stack"
@@ -999,11 +1036,9 @@ export default function App() {
                     mainScreenHidden={mainScreenMessagingHidden}
                   />
                 </View>
+                </RootAuthenticatedIdleBoundary>
               </NavigationContainer>
-            </AppAlertProvider>
-          </AuthProvider>
-        </ThemeProvider>
-      </SafeAreaProvider>
+      </AppProviders>
     </GestureHandlerRootView>
   );
 }
