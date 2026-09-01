@@ -72,7 +72,7 @@ import {
 
 // âœ… FIX: Use requestJson with auth for auto token refresh
 import { requestJson } from "../api/http";
-import { normalizeReportStatus } from "../utils/reportStatus";
+import { normalizeCaseStatus, normalizeReportStatus } from "../utils/reportStatus";
 
 // âœ… Location for SOS
 import * as Location from "expo-location";
@@ -425,7 +425,10 @@ export default function HomeScreen({
         rawList.map((doc: any) => ({
           id: String(doc?._id ?? doc?.id ?? "").trim(),
           title: String(doc?.incidentType ?? "Incident Report"),
-          status: normalizeReportStatus(doc?.status),
+          status: normalizeCaseStatus(
+            doc?.caseStatus,
+            doc?.currentProcessStage || doc?.status
+          ),
           createdAt: doc?.createdAt ? String(doc.createdAt) : undefined,
           updatedAt: doc?.updatedAt ? String(doc.updatedAt) : undefined,
         }))
@@ -585,7 +588,11 @@ export default function HomeScreen({
 
         const detailLine = details || offenderName || "No details provided.";
 
-        const statusNorm = normalizeReportStatus(doc?.status);
+        const statusNorm = normalizeReportStatus(doc?.currentProcessStage || doc?.status);
+        const caseStatusNorm = normalizeCaseStatus(
+          doc?.caseStatus,
+          doc?.currentProcessStage || doc?.status
+        );
 
         const photos: string[] = Array.isArray(doc?.photos)
           ? doc.photos.map((p: any) => normalizePhoto(p)).filter(Boolean)
@@ -601,6 +608,8 @@ export default function HomeScreen({
           dateRight: rightDate,
           timeRight: rightTime,
           status: statusNorm,
+          caseStatus: caseStatusNorm,
+          currentProcessStage: String(doc?.currentProcessStage || doc?.status || "submitted"),
           witnessName: doc?.witnessName ? String(doc.witnessName) : "",
           witnessType: doc?.witnessType ? String(doc.witnessType) : "",
           location: doc?.locationStr ? String(doc.locationStr) : "",
@@ -663,6 +672,8 @@ export default function HomeScreen({
       timeRight: r.timeRight,
       updatedAt: r.updatedAt,
       status: r.status,
+      caseStatus: r.caseStatus,
+      currentProcessStage: r.currentProcessStage,
       alertNo: r.alertNo,
     }));
   }, [recentReports]);

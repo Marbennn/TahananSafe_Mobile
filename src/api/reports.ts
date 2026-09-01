@@ -20,6 +20,7 @@ export type ThreadDto = {
   _id: string;
   reportId: string;
   senderRole: "resident" | "staff";
+  senderOfficialRole?: "captain" | "secretary" | null;
   senderName: string;
   text: string;
   createdAt: string;
@@ -31,6 +32,7 @@ export type ThreadDto = {
     threadId?: string | null;
     senderName?: string;
     senderRole?: "resident" | "staff";
+    senderOfficialRole?: "captain" | "secretary" | null;
     text?: string;
   } | null;
 };
@@ -73,12 +75,25 @@ export type ReportDetailDto = {
     scheduledAt?: string;
     venue?: string;
     rescheduleCount?: number;
+    confirmedAt?: string | null;
+    completedAt?: string | null;
+    rescheduledAt?: string | null;
+    history?: Array<{
+      scheduledAt?: string;
+      venue?: string;
+      changedAt?: string;
+    }>;
   } | null;
   mediationRecord?: {
     outcome?: "settlement-reached" | "no-settlement" | "rescheduled" | "did-not-proceed" | string;
     status?: "confirmed" | string;
     confirmedAt?: string | null;
     captainRemarks?: string;
+    complainantAttendance?: "present" | "absent" | string;
+    respondentAttendance?: "present" | "absent" | string;
+    otherAttendees?: string;
+    remarks?: string;
+    recordedAt?: string | null;
   } | null;
   caseDocuments?: Array<{
     _id?: string;

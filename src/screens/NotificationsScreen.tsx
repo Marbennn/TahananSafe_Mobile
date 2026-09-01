@@ -37,7 +37,7 @@ import {
 import { requestJson } from "../api/http";
 
 import type { ReportItem } from "./ReportScreen";
-import { normalizeReportStatus } from "../utils/reportStatus";
+import { normalizeCaseStatus, normalizeReportStatus } from "../utils/reportStatus";
 
 type Props = {
   onBack: () => void;
@@ -175,6 +175,11 @@ async function fetchMyReportDetailAsReportItem(incidentId: string): Promise<Repo
     dateRight: "-",
     timeRight: "-",
     status: normalizeStatus(doc?.status),
+    caseStatus: normalizeCaseStatus(
+      doc?.caseStatus,
+      doc?.currentProcessStage || doc?.status
+    ),
+    currentProcessStage: String(doc?.currentProcessStage || doc?.status || "submitted"),
     witnessName: doc?.witnessName ? String(doc.witnessName) : "",
     witnessType: doc?.witnessType ? String(doc.witnessType) : "",
     location: doc?.locationStr ? String(doc.locationStr) : "",
@@ -292,7 +297,10 @@ export default function NotificationsScreen({ onBack }: Props) {
       return rawList.map((doc: any) => ({
         id: String(doc?._id ?? doc?.id ?? "").trim(),
         title: String(doc?.incidentType ?? "Incident Report"),
-        status: normalizeStatus(doc?.status),
+        status: normalizeCaseStatus(
+          doc?.caseStatus,
+          doc?.currentProcessStage || doc?.status
+        ),
         createdAt: doc?.createdAt ? String(doc.createdAt) : undefined,
         updatedAt: doc?.updatedAt ? String(doc.updatedAt) : undefined,
       }));

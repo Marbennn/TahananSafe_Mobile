@@ -13,6 +13,17 @@ export type CaseStatus =
   | "COMPLETED"
   | "ARCHIVED";
 
+export type ProcessStage =
+  | "REPORT_SUBMITTED"
+  | "FOR_OFFICIAL_REVIEW"
+  | "MEDIATION_SCHEDULING"
+  | "MEDIATION_SCHEDULED"
+  | "MEDIATION_CONDUCTED"
+  | "SETTLEMENT_DOCUMENTATION"
+  | "BARANGAY_PROCESSING_COMPLETED"
+  | "BARANGAY_PROCESSING_COMPLETED_NO_SETTLEMENT"
+  | "ARCHIVED";
+
 export type CaseStatusMeta = {
   label: "Submitted" | "Active" | "Completed" | "Archived";
   color: string;
@@ -78,6 +89,153 @@ export function normalizeCaseStatus(raw?: string, processStage?: string): CaseSt
 
 export function getCaseStatusMeta(raw?: string, processStage?: string): CaseStatusMeta {
   return CASE_STATUS_META[normalizeCaseStatus(raw, processStage)];
+}
+
+export type ProcessStageMeta = {
+  label: string;
+  shortLabel: string;
+  color: string;
+  bg: string;
+};
+
+export const PROCESS_STAGE_META: Record<ProcessStage, ProcessStageMeta> = {
+  REPORT_SUBMITTED: {
+    label: "Report Submitted",
+    shortLabel: "Submitted",
+    color: "#64748B",
+    bg: "#F1F5F9",
+  },
+  FOR_OFFICIAL_REVIEW: {
+    label: "For Official Review",
+    shortLabel: "Official Review",
+    color: "#D97706",
+    bg: "#FEF3C7",
+  },
+  MEDIATION_SCHEDULING: {
+    label: "Mediation Scheduling",
+    shortLabel: "Scheduling",
+    color: "#7C3AED",
+    bg: "#EDE9FE",
+  },
+  MEDIATION_SCHEDULED: {
+    label: "Mediation Scheduled",
+    shortLabel: "Scheduled",
+    color: "#6D28D9",
+    bg: "#EDE9FE",
+  },
+  MEDIATION_CONDUCTED: {
+    label: "Mediation Conducted",
+    shortLabel: "Conducted",
+    color: "#2563EB",
+    bg: "#DBEAFE",
+  },
+  SETTLEMENT_DOCUMENTATION: {
+    label: "Settlement Documentation",
+    shortLabel: "Documentation",
+    color: "#0369A1",
+    bg: "#E0F2FE",
+  },
+  BARANGAY_PROCESSING_COMPLETED: {
+    label: "Barangay Processing Completed",
+    shortLabel: "Completed",
+    color: "#15803D",
+    bg: "#DCFCE7",
+  },
+  BARANGAY_PROCESSING_COMPLETED_NO_SETTLEMENT: {
+    label: "Barangay Processing Completed — No Settlement",
+    shortLabel: "No Settlement",
+    color: "#B45309",
+    bg: "#FEF3C7",
+  },
+  ARCHIVED: {
+    label: "Archived",
+    shortLabel: "Archived",
+    color: "#64748B",
+    bg: "#E2E8F0",
+  },
+};
+
+function normalizeKey(raw?: string) {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-")
+    .replace(/-+/g, "-");
+}
+
+export function normalizeProcessStage(raw?: string): ProcessStage {
+  const stage = normalizeKey(raw);
+
+  if (!stage || stage === "submitted" || stage === "pending" || stage === "report-submitted") {
+    return "REPORT_SUBMITTED";
+  }
+  if (
+    stage === "for-official-review" ||
+    stage === "under-review" ||
+    stage === "in-review" ||
+    stage === "reviewing"
+  ) {
+    return "FOR_OFFICIAL_REVIEW";
+  }
+  if (stage === "mediation-scheduling" || stage === "initial-mediation") {
+    return "MEDIATION_SCHEDULING";
+  }
+  if (stage === "mediation-scheduled" || stage === "mediation") {
+    return "MEDIATION_SCHEDULED";
+  }
+  if (
+    stage === "mediation-conducted" ||
+    stage === "ongoing-assistance" ||
+    stage === "ongoing" ||
+    stage === "on-going" ||
+    stage === "in-progress" ||
+    stage === "processing"
+  ) {
+    return "MEDIATION_CONDUCTED";
+  }
+  if (stage === "settlement-documentation") {
+    return "SETTLEMENT_DOCUMENTATION";
+  }
+  if (
+    stage === "barangay-processing-completed-no-settlement" ||
+    stage === "failed" ||
+    stage === "failure" ||
+    stage === "unsuccessful"
+  ) {
+    return "BARANGAY_PROCESSING_COMPLETED_NO_SETTLEMENT";
+  }
+  if (
+    stage === "barangay-processing-completed" ||
+    stage === "resolved" ||
+    stage === "completed" ||
+    stage === "complete" ||
+    stage === "done" ||
+    stage === "certification-issued" ||
+    stage === "certificate-issued" ||
+    stage === "cfa-issued" ||
+    stage === "cancelled" ||
+    stage === "canceled"
+  ) {
+    return "BARANGAY_PROCESSING_COMPLETED";
+  }
+  if (stage === "archived" || stage === "archive" || stage === "closed") {
+    return "ARCHIVED";
+  }
+
+  return "FOR_OFFICIAL_REVIEW";
+}
+
+export function getProcessStageMeta(raw?: string): ProcessStageMeta {
+  return PROCESS_STAGE_META[normalizeProcessStage(raw)];
+}
+
+export function isOpenProcessStage(raw?: string) {
+  const stage = normalizeProcessStage(raw);
+  return ![
+    "BARANGAY_PROCESSING_COMPLETED",
+    "BARANGAY_PROCESSING_COMPLETED_NO_SETTLEMENT",
+    "ARCHIVED",
+  ].includes(stage);
 }
 
 export type ReportStatusMeta = {

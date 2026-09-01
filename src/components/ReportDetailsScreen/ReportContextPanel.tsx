@@ -17,6 +17,7 @@ export type ReportContextData = {
   statusLabel: string;
   statusColor?: string;
   statusBackgroundColor?: string;
+  processStageLabel?: string;
   incidentDate?: string;
   incidentTime?: string;
   location?: string;
@@ -172,6 +173,17 @@ export default function ReportContextPanel({
                 </Text>
               </View>
             </View>
+
+            {cleanValue(context.processStageLabel) ? (
+              <View style={styles.processStageRow}>
+                <Text style={styles.processStageLabel} allowFontScaling={false}>
+                  Current process stage
+                </Text>
+                <Text style={styles.processStageValue} allowFontScaling={false}>
+                  {context.processStageLabel}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.sectionDivider} />
@@ -419,6 +431,21 @@ function makeStyles(
     statusText: {
       ...type.badge,
       flexShrink: 1,
+    },
+
+    processStageRow: {
+      marginTop: size(12),
+      gap: size(4),
+    },
+
+    processStageLabel: {
+      ...type.overline,
+      color: colors.muted,
+    },
+
+    processStageValue: {
+      ...type.captionStrong,
+      color: colors.textDark,
     },
 
     /* SECTIONS */

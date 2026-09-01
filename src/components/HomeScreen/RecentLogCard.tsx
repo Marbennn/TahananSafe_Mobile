@@ -3,7 +3,11 @@ import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useColors } from "../../theme/colors";
-import { getReportStatusMeta, type ReportStatus } from "../../utils/reportStatus";
+import {
+  getCaseStatusMeta,
+  type CaseStatus,
+  type ReportStatus,
+} from "../../utils/reportStatus";
 import { FontFamily, FontSize, FontWeight } from "../../theme/typography";
 
 export type LogItem = {
@@ -16,6 +20,8 @@ export type LogItem = {
   timeRight: string;
   updatedAt?: string;
   status?: ReportStatus;
+  caseStatus?: CaseStatus;
+  currentProcessStage?: string;
   alertNo?: string;
 };
 
@@ -50,7 +56,10 @@ export default function RecentLogCard({ item, onPress }: Props) {
   const { width, height } = useWindowDimensions();
   const { s, fs } = useMemo(() => makeScale(width, height), [width, height]);
   const styles = useMemo(() => makeStyles(s, fs, TC), [s, fs, TC]);
-  const status = getReportStatusMeta(item.status);
+  const status = getCaseStatusMeta(
+    item.caseStatus,
+    item.currentProcessStage || item.status
+  );
   const dateLine = `${compactDate(item.dateLeft)}${item.timeLeft && item.timeLeft !== "-" ? ` • ${item.timeLeft}` : ""}`;
 
   return (
@@ -71,7 +80,7 @@ export default function RecentLogCard({ item, onPress }: Props) {
 
           <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
             <Text style={[styles.statusText, { color: status.color }]} numberOfLines={1} allowFontScaling={false}>
-              {status.shortLabel}
+              {status.label}
             </Text>
           </View>
         </View>

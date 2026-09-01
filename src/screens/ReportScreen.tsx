@@ -24,6 +24,7 @@ import { createTypography } from "../theme/typography";
 import { useAuth } from "../auth/AuthContext";
 import {
   getCaseStatusMeta,
+  getProcessStageMeta,
   normalizeCaseStatus,
   normalizeReportStatus,
   type CaseStatus,
@@ -192,6 +193,7 @@ function ReportCard({
     item.caseStatus,
     item.currentProcessStage || item.status
   );
+  const processStage = getProcessStageMeta(item.currentProcessStage || item.status);
   const cardDate = parseDateSmart(item.dateLeft) ? formatGroupDate(parseDateSmart(item.dateLeft)!) : item.dateLeft || "-";
   const dateLine = `${cardDate}${item.timeLeft && item.timeLeft !== "—" && item.timeLeft !== "-" ? ` • ${item.timeLeft}` : ""}`;
 
@@ -214,6 +216,10 @@ function ReportCard({
 
         <Text style={[styles.cardDetail, { color: TC.muted }]} numberOfLines={2}>
           {item.detail}
+        </Text>
+
+        <Text style={[styles.processStageText, { color: TC.muted }]} numberOfLines={1}>
+          Current stage: {processStage.label}
         </Text>
 
         <View style={styles.cardBottomRow}>
@@ -915,6 +921,11 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       statusPillText: {
         ...type.badge,
         color: "#374151",
+      },
+
+      processStageText: {
+        ...type.bodySmall,
+        marginTop: vscale(8),
       },
 
       metaText: {

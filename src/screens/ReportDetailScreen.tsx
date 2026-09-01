@@ -33,7 +33,11 @@ import {
 } from "../api/reports";
 import { mobileQueryClient } from "../app/queryClient";
 import { reportDetailQuery, reportKeys } from "../features/reports/queries";
-import { getCaseStatusMeta } from "../utils/reportStatus";
+import {
+  getCaseStatusMeta,
+  getProcessStageMeta,
+  normalizeProcessStage,
+} from "../utils/reportStatus";
 
 // ✅ token + base url for cancel action
 import { getAccessToken } from "../auth/session";
@@ -56,36 +60,6 @@ function prettyStatus(s?: string) {
   return String(s).toUpperCase();
 }
 
-function formatStatusLabel(s?: string) {
-  const raw = String(s || "").trim();
-  if (!raw) return "Submitted";
-
-  const normalized = raw.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
-  if (normalized === "for official review") return "For Official Review";
-  if (normalized === "mediation scheduling") return "Mediation Scheduling";
-  if (normalized === "mediation scheduled") return "Mediation Scheduled";
-  if (normalized === "mediation conducted") return "Mediation Conducted";
-  if (normalized === "settlement documentation") return "Settlement Documentation";
-  if (normalized === "barangay processing completed") return "Barangay Processing Completed";
-  if (normalized === "barangay processing completed no settlement") {
-    return "Barangay Processing Completed — No Settlement";
-  }
-  if (normalized.includes("mediation")) return "Mediation";
-  if (normalized.includes("review")) return "For Official Review";
-  if (normalized.includes("assist") || normalized.includes("ongoing") || normalized.includes("progress")) {
-    return "Ongoing";
-  }
-  if (normalized.includes("resolve") || normalized.includes("complete")) return "Resolved";
-  if (normalized.includes("cancel")) return "Cancelled";
-  if (normalized.includes("submit") || normalized.includes("pending")) return "Submitted";
-
-  return normalized
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function formatTimelineStamp(value?: string | Date | null) {
   if (!value) return "";
   const d = value instanceof Date ? value : new Date(value);
@@ -97,6 +71,25 @@ function formatTimelineStamp(value?: string | Date | null) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function formatMediationOutcome(value?: string) {
+  const outcome = String(value || "").trim().toLowerCase();
+  if (outcome === "settlement-reached") return "Settlement Reached";
+  if (outcome === "no-settlement") return "No Settlement";
+  if (outcome === "rescheduled") return "Rescheduled";
+  if (outcome === "did-not-proceed") return "Did Not Proceed";
+  return outcome
+    ? outcome
+        .replace(/[_-]+/g, " ")
+        .replace(/\b\w/g, (character) => character.toUpperCase())
+    : "Not Yet Confirmed";
+}
+
+function formatAttendance(value?: string) {
+  const attendance = String(value || "").trim().toLowerCase();
+  if (!attendance) return "Not recorded";
+  return attendance.charAt(0).toUpperCase() + attendance.slice(1);
 }
 
 function isAbortError(err: any) {
@@ -176,22 +169,6 @@ const TEXT_DARK = "#0B2B45";
 const TEXT_MUTED = "#6E7D90";
 
 // ✅ API base url helper (same pattern as your other screens)
-function statusColor(statusUpper: string, primary: string) {
-  const s = String(statusUpper || "").toUpperCase();
-  if (s === "RESOLVED") return "#16A34A";
-  if (s === "CANCELLED") return "#DC2626";
-  if (s === "ONGOING" || s === "ON GOING") return "#2563EB";
-  return primary;
-}
-
-function statusIconName(statusUpper: string) {
-  const s = String(statusUpper || "").toUpperCase();
-  if (s === "RESOLVED") return "checkmark-circle-outline" as const;
-  if (s === "CANCELLED") return "close-circle-outline" as const;
-  if (s === "ONGOING" || s === "ON GOING") return "sync-circle-outline" as const;
-  return "time-outline" as const;
-}
-
 function isObjectId24(v: string) {
   return /^[a-fA-F0-9]{24}$/.test(String(v || "").trim());
 }
@@ -503,13 +480,12 @@ export default function ReportDetailScreen({
     (report as any)?.currentProcessStage ||
     (report as any)?.status;
   const statusUpper = prettyStatus(processStage);
-  const statusLabel = formatStatusLabel(processStage);
+  const processStageMeta = getProcessStageMeta(processStage);
+  const statusLabel = processStageMeta.label;
   const caseStatusMeta = getCaseStatusMeta(
     detail?.caseStatus || (report as any)?.caseStatus,
     processStage
   );
-  const accent = useMemo(() => statusColor(statusUpper, PRIMARY), [statusUpper, PRIMARY]);
-  const sIcon = useMemo(() => statusIconName(statusUpper), [statusUpper]);
 
   const dateValue = firstReportFieldValue([
     detail?.dateStr,
@@ -562,9 +538,10 @@ export default function ReportDetailScreen({
       reference: messageReference || reportRef,
       title: incidentTitle,
       description: incidentNarrative,
-      statusLabel,
-      statusColor: accent,
-      statusBackgroundColor: `${accent}1A`,
+      statusLabel: caseStatusMeta.label,
+      statusColor: caseStatusMeta.color,
+      statusBackgroundColor: caseStatusMeta.bg,
+      processStageLabel: statusLabel,
       incidentDate: dateLabel,
       incidentTime: timeLabel,
       location: locationLabel,
@@ -574,7 +551,9 @@ export default function ReportDetailScreen({
       evidenceCount,
     }),
     [
-      accent,
+      caseStatusMeta.bg,
+      caseStatusMeta.color,
+      caseStatusMeta.label,
       complaintValue,
       dateLabel,
       evidenceCount,
@@ -630,17 +609,21 @@ export default function ReportDetailScreen({
 
   const currentTimelineStatus = statusLabel;
   const caseProgressIndex = useMemo(() => {
-    const s = String(processStage || "").toLowerCase().replace(/[_\s]+/g, "-");
-    if (s.includes("archived") || s.includes("barangay-processing-completed") || s.includes("resolved")) return 6;
-    if (s.includes("settlement-documentation")) return 5;
-    if (s.includes("mediation-conducted")) return 4;
-    if (s.includes("mediation-scheduled")) return 3;
-    if (s.includes("mediation-scheduling") || s.includes("initial-mediation")) return 2;
-    if (s.includes("official-review") || s.includes("under-review") || s.includes("reviewing")) return 1;
+    const stage = normalizeProcessStage(processStage);
+    if (["ARCHIVED", "BARANGAY_PROCESSING_COMPLETED", "BARANGAY_PROCESSING_COMPLETED_NO_SETTLEMENT"].includes(stage)) return 6;
+    if (stage === "SETTLEMENT_DOCUMENTATION") return 5;
+    if (stage === "MEDIATION_CONDUCTED") return 4;
+    if (stage === "MEDIATION_SCHEDULED") return 3;
+    if (stage === "MEDIATION_SCHEDULING") return 2;
+    if (stage === "FOR_OFFICIAL_REVIEW") return 1;
     return 0;
   }, [processStage]);
 
   const caseProgressSteps = useMemo(() => {
+    const finalStageTitle =
+      normalizeProcessStage(processStage) === "BARANGAY_PROCESSING_COMPLETED_NO_SETTLEMENT"
+        ? "Barangay Processing Completed — No Settlement"
+        : "Barangay Processing Completed";
     const titles = [
       "Report Submitted",
       "For Official Review",
@@ -648,7 +631,7 @@ export default function ReportDetailScreen({
       "Mediation Scheduled",
       "Mediation Conducted",
       "Settlement Documentation",
-      "Barangay Processing Completed",
+      finalStageTitle,
     ];
     return titles.map((title, index) => {
       const matchingEvent = workflowEvents.find((event) => {
@@ -671,7 +654,7 @@ export default function ReportDetailScreen({
             : "Pending",
       };
     });
-  }, [caseProgressIndex, latestTimelineMeta, submittedTimelineMeta, workflowEvents]);
+  }, [caseProgressIndex, latestTimelineMeta, processStage, submittedTimelineMeta, workflowEvents]);
 
   const mediationSchedule = detail?.mediationSchedule;
   const mediationDate = mediationSchedule?.scheduledAt
@@ -681,6 +664,9 @@ export default function ReportDetailScreen({
   const releasedDocuments = Array.isArray(detail?.caseDocuments)
     ? detail.caseDocuments.filter((document) => document.status === "released")
     : [];
+  const mediationRecord =
+    detail?.mediationRecord?.status === "confirmed" ? detail.mediationRecord : null;
+  const mediationOutcomeLabel = formatMediationOutcome(mediationRecord?.outcome);
 
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
@@ -1162,6 +1148,54 @@ export default function ReportDetailScreen({
                 <View style={styles.emptyEvidence}>
                   <Ionicons name="calendar-clear-outline" size={styles._emptyIcon} color="#94A3B8" />
                   <Text style={styles.emptyEvidenceText}>No mediation has been scheduled.</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.timelineInfoCard}>
+              <View style={styles.timelineCardHeaderRow}>
+                <Ionicons name="checkmark-done-outline" size={styles._iconSize} color="#718093" />
+                <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Mediation Outcome</Text>
+              </View>
+              {mediationRecord ? (
+                <View style={styles.outcomeBox}>
+                  <View style={styles.outcomeTitleRow}>
+                    <Text style={styles.outcomeTitle} allowFontScaling={false}>
+                      {mediationOutcomeLabel}
+                    </Text>
+                    <View style={styles.outcomeConfirmedBadge}>
+                      <Text style={styles.outcomeConfirmedText} allowFontScaling={false}>Confirmed</Text>
+                    </View>
+                  </View>
+                  <View style={styles.outcomeAttendanceRow}>
+                    <View style={styles.outcomeAttendanceCell}>
+                      <Text style={styles.outcomeMetaLabel} allowFontScaling={false}>Complainant</Text>
+                      <Text style={styles.outcomeMetaValue} allowFontScaling={false}>
+                        {formatAttendance(mediationRecord.complainantAttendance)}
+                      </Text>
+                    </View>
+                    <View style={styles.outcomeAttendanceCell}>
+                      <Text style={styles.outcomeMetaLabel} allowFontScaling={false}>Respondent</Text>
+                      <Text style={styles.outcomeMetaValue} allowFontScaling={false}>
+                        {formatAttendance(mediationRecord.respondentAttendance)}
+                      </Text>
+                    </View>
+                  </View>
+                  {mediationRecord.captainRemarks ? (
+                    <Text style={styles.outcomeRemarks} allowFontScaling={false}>
+                      Captain's remarks: {mediationRecord.captainRemarks}
+                    </Text>
+                  ) : null}
+                  {mediationRecord.confirmedAt ? (
+                    <Text style={styles.certSubtitle} allowFontScaling={false}>
+                      Confirmed {formatTimelineStamp(mediationRecord.confirmedAt)}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : (
+                <View style={styles.emptyEvidence}>
+                  <Ionicons name="hourglass-outline" size={styles._emptyIcon} color="#94A3B8" />
+                  <Text style={styles.emptyEvidenceText}>No mediation outcome has been confirmed.</Text>
                 </View>
               )}
             </View>
@@ -1787,6 +1821,60 @@ function makeStyles(args: {
       mediationPlace: {
         ...type.bodyLarge,
         marginTop: vscale(4),
+        color: TEXT_MUTED,
+      },
+      outcomeBox: {
+        borderRadius: scale(10),
+        borderWidth: 1,
+        borderColor: "#DDE7E1",
+        backgroundColor: "#F7FCF9",
+        paddingHorizontal: scale(13),
+        paddingVertical: vscale(13),
+        gap: vscale(10),
+      },
+      outcomeTitleRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: scale(10),
+      },
+      outcomeTitle: {
+        ...type.sectionTitle,
+        color: TEXT_DARK,
+        flex: 1,
+      },
+      outcomeConfirmedBadge: {
+        borderRadius: scale(999),
+        backgroundColor: "#DCFCE7",
+        paddingHorizontal: scale(9),
+        paddingVertical: vscale(5),
+      },
+      outcomeConfirmedText: {
+        ...type.microStrong,
+        color: "#15803D",
+      },
+      outcomeAttendanceRow: {
+        flexDirection: "row",
+        gap: scale(10),
+      },
+      outcomeAttendanceCell: {
+        flex: 1,
+        borderRadius: scale(8),
+        backgroundColor: "#FFFFFF",
+        paddingHorizontal: scale(10),
+        paddingVertical: vscale(9),
+      },
+      outcomeMetaLabel: {
+        ...type.overline,
+        color: TEXT_MUTED,
+      },
+      outcomeMetaValue: {
+        ...type.bodyLarge,
+        color: TEXT_DARK,
+        marginTop: vscale(3),
+      },
+      outcomeRemarks: {
+        ...type.bodySmall,
         color: TEXT_MUTED,
       },
       updateList: {

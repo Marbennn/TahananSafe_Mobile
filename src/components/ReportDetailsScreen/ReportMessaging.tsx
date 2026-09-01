@@ -51,7 +51,7 @@ import ReportContextPanel, {
   type ReportContextData,
 } from "./ReportContextPanel";
 
-const RESPONDER_LABEL = "Barangay Admin";
+const RESPONDER_LABEL = "Barangay Staff";
 const POLL_MS = 4000;
 const BUBBLE_MEASUREMENT_VERSION = 3;
 const BALANCED_MESSAGE_MIN_LENGTH = 33;
@@ -180,6 +180,23 @@ function formatChatDayPill(message?: ThreadMessage) {
     : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
   return `${day}, ${formatChatTime(message)}`;
+}
+
+function getOfficialSenderLabel(
+  officialRole?: "captain" | "secretary" | null,
+  senderName?: string
+) {
+  const roleLabel =
+    officialRole === "captain"
+      ? "Barangay Captain"
+      : officialRole === "secretary"
+        ? "Barangay Secretary"
+        : "Barangay Staff";
+  const name = String(senderName || "").trim();
+  if (!name || /barangay\s+(captain|secretary|staff|admin)/i.test(name)) {
+    return roleLabel;
+  }
+  return `${roleLabel} - ${name}`;
 }
 
 function getThreadSenderLabel(message?: ThreadMessage | null) {
@@ -313,6 +330,7 @@ function getPickerAssetSize(asset: ImagePicker.ImagePickerAsset) {
 
 function dtoToMessage(dto: ThreadDto, reportId: string): ThreadMessage {
   const isResident = dto.senderRole === "resident";
+  const senderLabel = getOfficialSenderLabel(dto.senderOfficialRole, dto.senderName);
   const createdAtMs = dto.createdAt ? new Date(dto.createdAt).getTime() : undefined;
   const rawAttachment = dto.attachment || null;
   const attachmentUri = rawAttachment
@@ -323,7 +341,7 @@ function dtoToMessage(dto: ThreadDto, reportId: string): ThreadMessage {
   return {
     id: dto._id,
     side: isResident ? "right" : "left",
-    sender: isResident ? undefined : RESPONDER_LABEL,
+    sender: isResident ? undefined : senderLabel,
     text: String(dto.text || ""),
     time: dto.createdAt ? formatStamp(new Date(dto.createdAt)) : "",
     createdAtMs,
@@ -348,7 +366,13 @@ function dtoToMessage(dto: ThreadDto, reportId: string): ThreadMessage {
     replyTo: dto.replyTo
       ? {
           threadId: dto.replyTo.threadId || null,
-          sender: dto.replyTo.senderRole === "resident" ? "You" : RESPONDER_LABEL,
+          sender:
+            dto.replyTo.senderRole === "resident"
+              ? "You"
+              : getOfficialSenderLabel(
+                  dto.replyTo.senderOfficialRole,
+                  dto.replyTo.senderName
+                ),
           side: dto.replyTo.senderRole === "resident" ? "right" : "left",
           text: dto.replyTo.text || "",
         }

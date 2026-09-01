@@ -26,8 +26,10 @@ import {
   type NotificationItem,
 } from "../api/notifications";
 import {
-  getReportStatusMeta,
+  getCaseStatusMeta,
+  normalizeCaseStatus,
   normalizeReportStatus,
+  type CaseStatus,
   type ReportStatus,
 } from "../utils/reportStatus";
 import { useColors } from "../theme/colors";
@@ -41,6 +43,8 @@ type MessagingReport = {
   alertNo: string;
   rawStatus: string;
   status: ReportStatus;
+  caseStatus: CaseStatus;
+  currentProcessStage: string;
   incidentDate: string;
   incidentTime: string;
   location: string;
@@ -66,22 +70,6 @@ const FLOATING_TOOLTIP_WIDTH = 168;
 const FLOATING_TOOLTIP_HEIGHT = 38;
 const FLOATING_RETURN_DELAY_MS = 5_000;
 
-const REPORT_CARD_STATUS_COLORS: Record<
-  ReportStatus,
-  { backgroundColor: string; textColor: string }
-> = {
-  SUBMITTED: { backgroundColor: "#AFCDF8", textColor: "#40536B" },
-  UNDER_REVIEW: { backgroundColor: "#FDE7A6", textColor: "#72551C" },
-  MEDIATION_SCHEDULED: { backgroundColor: "#DDC7F7", textColor: "#7652C8" },
-  ONGOING_ASSISTANCE: { backgroundColor: "#F8BB96", textColor: "#4B5563" },
-  RESOLVED: { backgroundColor: "#C7F2D8", textColor: "#18723A" },
-  CERTIFICATION_ISSUED: {
-    backgroundColor: "#F2B0B6",
-    textColor: "#70414C",
-  },
-  ARCHIVED: { backgroundColor: "#DDE2E8", textColor: "#4B5563" },
-};
-
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value));
 }
@@ -98,6 +86,8 @@ function toMessagingReport(doc: any): MessagingReport | null {
   if (!id) return null;
 
   const rawStatus = String(doc?.status || "SUBMITTED").trim();
+  const currentProcessStage = String(doc?.currentProcessStage || rawStatus || "submitted").trim();
+  const caseStatus = normalizeCaseStatus(doc?.caseStatus, currentProcessStage);
   const statusKey = rawStatus.toUpperCase().replace(/[\s-]+/g, "_");
   const incidentType = String(doc?.incidentType || "").trim();
   const mode = String(doc?.mode || "").trim().toLowerCase();
@@ -116,7 +106,9 @@ function toMessagingReport(doc: any): MessagingReport | null {
     detail,
     alertNo: complainId ? `#${complainId}` : `#${id.slice(-6).toUpperCase()}`,
     rawStatus: rawStatus || "SUBMITTED",
-    status: normalizeReportStatus(rawStatus),
+    status: normalizeReportStatus(currentProcessStage),
+    caseStatus,
+    currentProcessStage,
     incidentDate: String(doc?.dateStr || "").trim(),
     incidentTime: String(doc?.timeStr || "").trim(),
     location: String(doc?.locationStr || "").trim(),
@@ -126,9 +118,9 @@ function toMessagingReport(doc: any): MessagingReport | null {
     updatedAt: String(doc?.updatedAt || doc?.createdAt || ""),
     evidenceCount: photos.length + videos.length,
     canChat:
+      !["COMPLETED", "ARCHIVED"].includes(caseStatus) &&
       statusKey !== "CANCELLED" &&
-      statusKey !== "CANCELED" &&
-      statusKey !== "RESOLVED",
+      statusKey !== "CANCELED",
   };
 }
 
@@ -143,20 +135,11 @@ function formatReportDate(value: string) {
 }
 
 function getMessagingStatusMeta(report: MessagingReport) {
-  const raw = report.rawStatus.trim().toLowerCase();
-  if (raw === "cancelled" || raw === "canceled") {
-    return {
-      shortLabel: "Cancelled",
-      color: "#B91C1C",
-      bg: "#FEE2E2",
-    };
-  }
-  const statusMeta = getReportStatusMeta(report.status);
-  const statusColors = REPORT_CARD_STATUS_COLORS[report.status];
+  const statusMeta = getCaseStatusMeta(report.caseStatus, report.currentProcessStage);
   return {
-    ...statusMeta,
-    color: statusColors.textColor,
-    bg: statusColors.backgroundColor,
+    shortLabel: statusMeta.label,
+    color: statusMeta.color,
+    bg: statusMeta.bg,
   };
 }
 
