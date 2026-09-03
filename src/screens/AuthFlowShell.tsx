@@ -53,6 +53,9 @@ export default function AuthFlowShell({
   const navRef = useNavigationContainerRef<AuthStackParamList>();
   const [routeName, setRouteName] =
     useState<keyof AuthStackParamList>("Signup");
+  const [registrationToken, setRegistrationToken] = useState<string | null>(
+    null,
+  );
 
   const progressActiveCount = useMemo<1 | 2 | 3 | 4>(() => {
     if (routeName === "Signup") return 1;
@@ -85,6 +88,14 @@ export default function AuthFlowShell({
       if (navRef.isReady()) navRef.navigate("VerifyPin", { pin });
     },
     [navRef]
+  );
+
+  const handleSignupSuccess = useCallback(
+    (token: string) => {
+      setRegistrationToken(token);
+      goTo("PersonalDetails");
+    },
+    [goTo],
   );
 
   // ✅ helper: finish auth and unlock for this run
@@ -120,7 +131,7 @@ export default function AuthFlowShell({
                 {() => (
                   <SignupScreen
                     onGoLogin={onGoLogin}
-                    onSignupSuccess={() => goTo("PersonalDetails")}
+                    onSignupSuccess={handleSignupSuccess}
                     progressActiveCount={1}
                   />
                 )}
@@ -129,6 +140,7 @@ export default function AuthFlowShell({
               <Stack.Screen name="PersonalDetails">
                 {() => (
                   <PersonalDetailsScreen
+                    registrationToken={registrationToken ?? ""}
                     onBack={handleBack}
                     onSubmit={() => goTo("CreatePin")}
                     progressActiveCount={2}

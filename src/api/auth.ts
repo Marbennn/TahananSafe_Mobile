@@ -1,5 +1,6 @@
-import { setStoredUser, saveTokens } from "../auth/session";
+import { setLoggedIn, setStoredUser, saveTokens } from "../auth/session";
 import { requestJson } from "./http";
+import type { PersonalDetailsPayload } from "./user";
 
 export type RegisterResponse = {
   message?: string;
@@ -7,7 +8,20 @@ export type RegisterResponse = {
 
 export type VerifyRegistrationResponse = {
   message?: string;
-  user?: { id: string; email: string; profileImage?: string };
+  registrationToken: string;
+  expiresIn?: number;
+};
+
+export type CompleteRegistrationResponse = {
+  message?: string;
+  user?: {
+    id: string;
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    profileImage?: string;
+    role?: string;
+  };
   accessToken?: string;
   refreshToken?: string;
 };
@@ -33,8 +47,27 @@ export async function verifyRegistrationOtp(
     body: { email, otp },
   });
 
+  if (!data.registrationToken) {
+    throw new Error(
+      "Signup verified but registration token is missing. Please try again.",
+    );
+  }
+
+  return data;
+}
+
+export async function completeRegistration(
+  registrationToken: string,
+  personalDetails: PersonalDetailsPayload,
+): Promise<CompleteRegistrationResponse> {
+  const data = await requestJson<CompleteRegistrationResponse>({
+    method: "POST",
+    path: "/api/mobile/v1/complete-registration",
+    body: { registrationToken, ...personalDetails },
+  });
+
   if (!data.accessToken) {
-    throw new Error("Signup verified but access token is missing. Please try again.");
+    throw new Error("Account created but access token is missing. Please log in.");
   }
 
   await saveTokens({
@@ -42,6 +75,7 @@ export async function verifyRegistrationOtp(
     refreshToken: data.refreshToken,
   });
   if (data.user) await setStoredUser(data.user);
+  await setLoggedIn(true);
 
   return data;
 }

@@ -555,7 +555,21 @@ export default function HotlinesScreen({
 
       <View style={[styles.page, { backgroundColor: TC.screenBg }]}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: TC.heading }]}>Hotlines</Text>
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, { color: TC.heading }]}>Hotlines</Text>
+            <Pressable
+              onPress={openAddContact}
+              accessibilityRole="button"
+              accessibilityLabel="Add emergency contact"
+              style={({ pressed }) => [
+                styles.addHeaderButton,
+                { backgroundColor: TC.actionPrimary },
+                pressed && { opacity: 0.78, transform: [{ scale: 0.96 }] },
+              ]}
+            >
+              <Ionicons name="add" size={compactScale(25)} color="#FFFFFF" />
+            </Pressable>
+          </View>
 
           <View style={styles.searchRow}>
             <View style={[styles.searchBox, { backgroundColor: TC.surface, borderColor: TC.divider }]}>
@@ -585,7 +599,7 @@ export default function HotlinesScreen({
             <Pressable
               onPress={() => setShowFilterModal(true)}
               accessibilityRole="button"
-              accessibilityLabel="Filter hotlines and manage emergency contacts"
+              accessibilityLabel="Filter hotlines"
               style={({ pressed }) => [
                 styles.filterButton,
                 { backgroundColor: TC.surface, borderColor: TC.divider },
@@ -669,7 +683,7 @@ export default function HotlinesScreen({
             <View style={[styles.filterModalCard, { backgroundColor: TC.surface }]}>
               <View style={styles.modalHeader}>
                 <View style={styles.modalTitleWrap}>
-                  <Text style={[styles.modalTitle, { color: TC.textDark }]}>Hotline options</Text>
+                  <Text style={[styles.modalTitle, { color: TC.textDark }]}>Filter hotlines</Text>
                   <Text style={[styles.modalSubtitle, { color: TC.muted }]}>Choose which contacts to show.</Text>
                 </View>
                 <Pressable onPress={() => setShowFilterModal(false)} hitSlop={10} accessibilityLabel="Close hotline options">
@@ -704,20 +718,6 @@ export default function HotlinesScreen({
                   );
                 })}
               </ScrollView>
-
-              <Pressable
-                onPress={openAddContact}
-                style={({ pressed }) => [
-                  styles.addContactOption,
-                  { backgroundColor: TC.actionPrimary },
-                  pressed && { opacity: 0.85 },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Add emergency contact"
-              >
-                <Ionicons name="add" size={compactScale(20)} color="#FFFFFF" />
-                <Text style={styles.addContactOptionText}>Add emergency contact</Text>
-              </Pressable>
             </View>
           </View>
         </Modal>
@@ -747,6 +747,7 @@ export default function HotlinesScreen({
                   onChangeText={setContactLabel}
                   placeholder="e.g. Mom, Barangay Office"
                   placeholderTextColor={TC.placeholder}
+                  underlineColorAndroid="transparent"
                   style={[styles.modalInput, { color: TC.textDark, borderColor: TC.divider }]}
                   maxLength={50}
                 />
@@ -756,6 +757,7 @@ export default function HotlinesScreen({
                   onChangeText={setContactNumber}
                   placeholder="e.g. 09171234567"
                   placeholderTextColor={TC.placeholder}
+                  underlineColorAndroid="transparent"
                   style={[styles.modalInput, { color: TC.textDark, borderColor: TC.divider }]}
                   keyboardType="phone-pad"
                   maxLength={24}
@@ -816,10 +818,31 @@ function makeStyles(
       paddingTop: vscale(compactHeight ? 10 : 18),
       paddingBottom: vscale(compactHeight ? 7 : 10),
     },
+    titleRow: {
+      minHeight: SEARCH_H,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: scale(12),
+      marginBottom: vscale(compactHeight ? 12 : 16),
+    },
     title: {
       ...type.screenTitle,
-      marginBottom: vscale(compactHeight ? 12 : 16),
+      flex: 1,
       color: TEXT,
+    },
+    addHeaderButton: {
+      width: SEARCH_H,
+      height: SEARCH_H,
+      flexShrink: 0,
+      borderRadius: SEARCH_H / 2,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: "#07519C",
+      shadowOpacity: 0.2,
+      shadowRadius: scale(6),
+      shadowOffset: { width: 0, height: vscale(3) },
+      elevation: 3,
     },
     // ✅ unbold regular text
     searchRow: {
@@ -1025,20 +1048,6 @@ function makeStyles(
       ...type.label,
       flex: 1,
       minWidth: 0,
-    },
-    addContactOption: {
-      minHeight: compactScale(44),
-      borderRadius: compactScale(11),
-      marginTop: vscale(4),
-      paddingHorizontal: scale(14),
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: scale(7),
-    },
-    addContactOptionText: {
-      ...type.label,
-      color: "#FFFFFF",
     },
     inputLabel: {
       ...type.captionStrong,

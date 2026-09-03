@@ -21,6 +21,7 @@ import { WebView } from "react-native-webview";
 import type { TabKey } from "../components/BottomNavBar";
 import LogoutModal from "../components/LogoutModal";
 import IncidentVideoPreviewModal from "../components/IncidentVideoPreviewModal";
+import OfficialCaseDocumentModal from "../components/ReportDetailsScreen/OfficialCaseDocumentModal";
 import ReportMessaging from "../components/ReportDetailsScreen/ReportMessaging";
 import type { ReportContextData } from "../components/ReportDetailsScreen/ReportContextPanel";
 import { Colors, useColors } from "../theme/colors";
@@ -28,6 +29,7 @@ import { createTypography } from "../theme/typography";
 
 import type { ReportItem } from "./ReportScreen";
 import {
+  CaseDocumentDto,
   ReportDetailDto,
   buildReportPhotoUrl,
 } from "../api/reports";
@@ -662,7 +664,9 @@ export default function ReportDetailScreen({
     : null;
   const validMediationDate = Boolean(mediationDate && !Number.isNaN(mediationDate.getTime()));
   const releasedDocuments = Array.isArray(detail?.caseDocuments)
-    ? detail.caseDocuments.filter((document) => document.status === "released")
+    ? detail.caseDocuments.filter(
+        (document) => String(document.status || "").toLowerCase() === "released"
+      )
     : [];
   const mediationRecord =
     detail?.mediationRecord?.status === "confirmed" ? detail.mediationRecord : null;
@@ -671,6 +675,7 @@ export default function ReportDetailScreen({
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [previewVideoUri, setPreviewVideoUri] = useState<string | null>(null);
+  const [selectedCaseDocument, setSelectedCaseDocument] = useState<CaseDocumentDto | null>(null);
 
   const openViewer = useCallback(
     (idx: number) => {
@@ -735,6 +740,13 @@ export default function ReportDetailScreen({
         confirmColor="#DC2626"
         onCancel={closeCancelReportModal}
         onConfirm={confirmCancelReport}
+      />
+
+      <OfficialCaseDocumentModal
+        visible={Boolean(selectedCaseDocument)}
+        document={selectedCaseDocument}
+        fallbackReference={messageReference || reportRef}
+        onClose={() => setSelectedCaseDocument(null)}
       />
 
       {/* Image Viewer Modal */}
@@ -1239,14 +1251,7 @@ export default function ReportDetailScreen({
               {releasedDocuments.map((document, index) => (
                 <Pressable
                   key={String(document._id || index)}
-                  onPress={() =>
-                    Alert.alert(
-                      document.title || "Case Document",
-                      Object.entries(document.fields || {})
-                        .map(([key, value]) => `${key}: ${String(value ?? "-")}`)
-                        .join("\n") || "This document has been released for your case.",
-                    )
-                  }
+                  onPress={() => setSelectedCaseDocument(document)}
                   style={({ pressed }) => [styles.certActionButton, pressed && { opacity: 0.82 }]}
                 >
                   <Ionicons name="document-text-outline" size={styles._miniIcon} color={PRIMARY} />

@@ -21,6 +21,7 @@ import PersonalDetailsForm from "../components/PersonalDetailsScreen/PersonalDet
 import SavedModal from "../components/SavedModal";
 
 // ✅ API (separated)
+import { completeRegistration } from "../api/auth";
 import { savePersonalDetails } from "../api/user";
 
 type SubmitPayload = {
@@ -32,6 +33,7 @@ type SubmitPayload = {
 };
 
 type Props = {
+  registrationToken: string;
   initialValues?: Partial<SubmitPayload>;
   onBack?: () => void;
   onSubmit?: (payload: SubmitPayload) => void;
@@ -87,7 +89,11 @@ function calcAge(dob: Date) {
   return age;
 }
 
-export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props) {
+export default function PersonalDetailsScreen({
+  registrationToken,
+  initialValues,
+  onSubmit,
+}: Props) {
   const TC = useColors();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -106,6 +112,7 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
   const [gender, setGender] = useState<"male" | "female" | null>(initialValues?.gender ?? null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [registrationCompleted, setRegistrationCompleted] = useState(false);
   const [savedVisible, setSavedVisible] = useState(false);
   const [pendingPayload, setPendingPayload] = useState<SubmitPayload | null>(null);
 
@@ -167,9 +174,22 @@ export default function PersonalDetailsScreen({ initialValues, onSubmit }: Props
       gender: gender as "male" | "female",
     };
 
+    if (!registrationToken && !registrationCompleted) {
+      Alert.alert(
+        "Registration Expired",
+        "Please return to signup and verify your email again.",
+      );
+      return;
+    }
+
     try {
       setIsSubmitting(true);
-      await savePersonalDetails(payload);
+      if (registrationCompleted) {
+        await savePersonalDetails(payload);
+      } else {
+        await completeRegistration(registrationToken, payload);
+        setRegistrationCompleted(true);
+      }
 
       setPendingPayload(payload);
       setSavedVisible(true);

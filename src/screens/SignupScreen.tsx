@@ -26,7 +26,7 @@ import { registerSendOtp } from "../api/auth";
 
 type Props = {
   onGoLogin: () => void;
-  onSignupSuccess: () => void;
+  onSignupSuccess: (registrationToken: string) => void;
   progressActiveCount?: 1 | 2 | 3 | 4;
 };
 
@@ -189,10 +189,13 @@ export default function SignupScreen({ onGoLogin, onSignupSuccess }: Props) {
     }
   };
 
-  const handleVerified = (code: string) => {
-    log("[SIGNUP] OTP verified in modal. codeLen:", code?.length);
+  const handleVerified = (registrationToken: string) => {
+    log(
+      "[SIGNUP] OTP verified. Registration token received:",
+      Boolean(registrationToken),
+    );
     setVerifyOpen(false);
-    onSignupSuccess();
+    onSignupSuccess(registrationToken);
   };
 
   const handleResend = async () => {

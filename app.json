@@ -16,7 +16,9 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSFaceIDUsageDescription": "Use Face ID to login securely.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true
       },
       "bundleIdentifier": "com.angelgeloo0918.firstproject"
     },

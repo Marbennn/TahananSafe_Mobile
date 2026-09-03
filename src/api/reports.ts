@@ -50,6 +50,15 @@ export type SendReportThreadMessagePayload = {
   attachment?: ReportThreadAttachmentInput | null;
 };
 
+export type CaseDocumentDto = {
+  _id?: string;
+  type?: string;
+  title?: string;
+  status?: string;
+  fields?: Record<string, unknown>;
+  releasedAt?: string | null;
+};
+
 // ✅ matches your Mongo incident document fields
 export type ReportDetailDto = {
   _id: string;
@@ -95,14 +104,7 @@ export type ReportDetailDto = {
     remarks?: string;
     recordedAt?: string | null;
   } | null;
-  caseDocuments?: Array<{
-    _id?: string;
-    type?: string;
-    title?: string;
-    status?: string;
-    fields?: Record<string, unknown>;
-    releasedAt?: string | null;
-  }>;
+  caseDocuments?: CaseDocumentDto[];
   actionLog?: Array<{
     status?: string;
     action?: string;

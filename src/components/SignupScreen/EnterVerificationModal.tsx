@@ -21,8 +21,6 @@ import { createTypography } from "../../theme/typography";
 // ✅ separated badge component
 import ChecklistBadge from "../ChecklistBadge";
 
-// ✅ IMPORTANT: use the SAME storage keys your app uses everywhere
-import { setLoggedIn } from "../../auth/session";
 import { verifyRegistrationOtp } from "../../api/auth";
 
 type Props = {
@@ -32,7 +30,7 @@ type Props = {
   onClose: () => void;
 
   // Parent decides next step after successful verification
-  onVerified: (code: string) => void;
+  onVerified: (registrationToken: string) => void;
 
   // Parent resend handler (SignupScreen already calls registerSendOtp)
   onResend?: () => void;
@@ -167,16 +165,11 @@ export default function EnterVerificationModal({
 
       const data = await verifyRegistrationOtp(e, otp);
 
-      // ✅ Mark logged in so Splash won't send you back to onboarding
-      await setLoggedIn(true);
-
-      console.log(`${TAG} tokens saved via session.ts`, {
-        access: Boolean(data?.accessToken),
-        refresh: Boolean(data?.refreshToken),
+      console.log(`${TAG} email verified`, {
+        registrationToken: Boolean(data?.registrationToken),
       });
 
-      closeWithAnim();
-      onVerified(otp);
+      onVerified(data.registrationToken);
     } catch (err: any) {
       console.log(`${TAG} verify ERROR:`, err?.message || err);
       setOtpError("Invalid OTP. Please try again.");

@@ -65,10 +65,11 @@ export default function IncidentLogConfirmedScreen({
 
       <View style={styles.page}>
         <ScrollView
+          style={styles.contentScroll}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.content,
-            { paddingBottom: Math.max(insets.bottom, 14) + 24 },
+            { paddingBottom: 24 },
           ]}
         >
           <View style={styles.successHeader}>
@@ -138,6 +139,14 @@ export default function IncidentLogConfirmedScreen({
             </View>
           </View>
 
+        </ScrollView>
+
+        <View
+          style={[
+            styles.actionsFooter,
+            { paddingBottom: Math.max(insets.bottom, 14) + 8 },
+          ]}
+        >
           <View style={styles.actions}>
             <Pressable
               onPress={() => setShowAiAnalysis(true)}
@@ -157,7 +166,7 @@ export default function IncidentLogConfirmedScreen({
               </Text>
             </Pressable>
           </View>
-        </ScrollView>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -309,6 +318,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: BG,
   },
+  contentScroll: {
+    flex: 1,
+  },
   content: {
     width: "100%",
     maxWidth: 680,
@@ -450,8 +462,16 @@ const styles = StyleSheet.create({
     color: "#333333",
   },
   actions: {
-    marginTop: 44,
+    width: "100%",
+    maxWidth: 680,
     gap: 13,
+  },
+  actionsFooter: {
+    width: "100%",
+    alignItems: "center",
+    backgroundColor: BG,
+    paddingHorizontal: 24,
+    paddingTop: 12,
   },
   aiBtn: {
     height: 46,
