@@ -226,6 +226,7 @@ export default function NotificationsScreen({ onBack }: Props) {
   const [showCaughtUp, setShowCaughtUp] = useState(false);
 
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [filterOpen, setFilterOpen] = useState(false);
 
   // Top-right menu (quick actions for all)
   const [menuOpen, setMenuOpen] = useState(false);
@@ -679,19 +680,23 @@ export default function NotificationsScreen({ onBack }: Props) {
               </Pressable>
             ) : null}
           </View>
-        </View>
-
-        {/* Filters */}
-        <View style={styles.filtersRow}>
-          {filterPills.map((p) => (
-            <Pressable
-              key={p.key}
-              onPress={() => setFilter(p.key)}
-              style={({ pressed }) => [styles.pill, p.active && styles.pillActive, pressed && { opacity: 0.9 }]}
-            >
-              <Text style={[styles.pillText, p.active && styles.pillTextActive]}>{p.label}</Text>
-            </Pressable>
-          ))}
+          <Pressable
+            onPress={() => setFilterOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Filter notifications"
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.filterBtn,
+              filter !== "all" && styles.filterBtnActive,
+              pressed && { opacity: 0.75 },
+            ]}
+          >
+            <Ionicons
+              name="filter-outline"
+              size={scale(19)}
+              color={filter === "all" ? TC.muted : "#FFFFFF"}
+            />
+          </Pressable>
         </View>
 
         {/* Body */}
@@ -822,27 +827,41 @@ export default function NotificationsScreen({ onBack }: Props) {
           </Animated.View>
         ) : null}
 
-        {/* Global Menu Modal */}
-        <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
-          <Pressable style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
+        {/* Notification Filter Modal */}
+        <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={() => setFilterOpen(false)}>
+          <Pressable style={styles.menuOverlay} onPress={() => setFilterOpen(false)}>
             <Pressable style={styles.menuSheet} onPress={() => {}}>
               <View style={styles.menuHandle} />
-              <Text style={styles.menuTitle}>Quick actions</Text>
+              <Text style={styles.menuTitle}>Filter notifications</Text>
 
-              <Pressable onPress={markAllRead} style={({ pressed }) => [styles.menuItem, pressed && { opacity: 0.8 }]}>
-                <Ionicons name="checkmark-done-outline" size={scale(18)} color={TC.primary} />
-                <Text style={styles.menuItemText}>Mark all as read</Text>
-              </Pressable>
-
-              <Pressable onPress={clearAll} style={({ pressed }) => [styles.menuItem, pressed && { opacity: 0.8 }]}>
-                <Ionicons name="trash-outline" size={scale(18)} color="#DC2626" />
-                <Text style={[styles.menuItemText, { color: "#DC2626" }]}>Clear all</Text>
-              </Pressable>
-
-              <View style={{ height: vscale(8) }} />
+              {filterPills.map((option) => (
+                <Pressable
+                  key={option.key}
+                  onPress={() => {
+                    setFilter(option.key);
+                    setFilterOpen(false);
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: option.active }}
+                  style={({ pressed }) => [
+                    styles.filterOption,
+                    option.active && styles.filterOptionActive,
+                    pressed && { opacity: 0.8 },
+                  ]}
+                >
+                  <Text style={[styles.filterOptionText, option.active && styles.filterOptionTextActive]}>
+                    {option.label}
+                  </Text>
+                  <Ionicons
+                    name={option.active ? "radio-button-on" : "radio-button-off"}
+                    size={scale(20)}
+                    color={option.active ? TC.primary : TC.muted}
+                  />
+                </Pressable>
+              ))}
 
               <Pressable
-                onPress={() => setMenuOpen(false)}
+                onPress={() => setFilterOpen(false)}
                 style={({ pressed }) => [styles.menuCancel, pressed && { opacity: 0.85 }]}
               >
                 <Text style={styles.menuCancelText}>Close</Text>
@@ -851,6 +870,64 @@ export default function NotificationsScreen({ onBack }: Props) {
               <View style={{ height: Math.max(insets.bottom, vscale(10)) }} />
             </Pressable>
           </Pressable>
+        </Modal>
+
+        {/* Global Menu Modal */}
+        <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+          <View style={styles.quickModalRoot}>
+            <Pressable
+              style={StyleSheet.absoluteFillObject}
+              onPress={() => setMenuOpen(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Close quick actions"
+            />
+
+            <View style={styles.quickModalCard}>
+              <View style={styles.quickModalHeader}>
+                <View style={styles.quickModalHeading}>
+                  <Text style={styles.quickModalTitle}>Quick actions</Text>
+                  <Text style={styles.quickModalSubtitle}>Manage all of your notifications.</Text>
+                </View>
+                <Pressable
+                  onPress={() => setMenuOpen(false)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close quick actions"
+                  style={({ pressed }) => [styles.quickModalClose, pressed && { opacity: 0.7 }]}
+                >
+                  <Ionicons name="close" size={scale(22)} color={TC.muted} />
+                </Pressable>
+              </View>
+
+              <Pressable
+                onPress={markAllRead}
+                style={({ pressed }) => [styles.quickActionItem, pressed && { opacity: 0.8 }]}
+              >
+                <View style={styles.quickActionIcon}>
+                  <Ionicons name="checkmark-done-outline" size={scale(19)} color={TC.primary} />
+                </View>
+                <View style={styles.quickActionTextWrap}>
+                  <Text style={styles.quickActionTitle}>Mark all as read</Text>
+                  <Text style={styles.quickActionDescription}>Remove the unread status from every notification.</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={scale(18)} color={TC.muted} />
+              </Pressable>
+
+              <Pressable
+                onPress={clearAll}
+                style={({ pressed }) => [styles.quickActionItem, pressed && { opacity: 0.8 }]}
+              >
+                <View style={[styles.quickActionIcon, styles.quickActionIconDanger]}>
+                  <Ionicons name="trash-outline" size={scale(19)} color="#DC2626" />
+                </View>
+                <View style={styles.quickActionTextWrap}>
+                  <Text style={[styles.quickActionTitle, { color: "#DC2626" }]}>Clear all</Text>
+                  <Text style={styles.quickActionDescription}>Delete all notifications from this list.</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={scale(18)} color={TC.muted} />
+              </Pressable>
+            </View>
+          </View>
         </Modal>
 
         {/* Per-item Menu Modal (Long press) */}
@@ -1020,9 +1097,13 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       alignSelf: "center",
       paddingHorizontal: scale(16),
       paddingTop: vscale(12),
-      paddingBottom: vscale(0),
+      paddingBottom: vscale(10),
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(10),
     },
     searchBox: {
+      flex: 1,
       height: vscale(44),
       backgroundColor: TC.isDark ? TC.surface : "#F8FBFF",
       borderRadius: scale(16),
@@ -1043,37 +1124,19 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       alignItems: "center",
       justifyContent: "center",
     },
-
-    filtersRow: {
-      width: "100%",
-      maxWidth: 720,
-      alignSelf: "center",
-      paddingHorizontal: scale(16),
-      paddingTop: vscale(12),
-      paddingBottom: vscale(10),
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: scale(10),
-    },
-    pill: {
-      minHeight: vscale(42),
-      paddingHorizontal: scale(16),
-      paddingVertical: vscale(8),
-      borderRadius: scale(999),
+    filterBtn: {
+      width: vscale(44),
+      height: vscale(44),
+      borderRadius: scale(16),
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: TC.isDark ? TC.surface : "#E5E9EF",
-      borderWidth: 0,
+      backgroundColor: TC.isDark ? TC.surface : "#F8FBFF",
+      borderWidth: 1,
+      borderColor: TC.isDark ? TC.divider : "#E1E8F0",
     },
-    pillActive: {
-      backgroundColor: TC.isDark ? TC.primaryDark : "#06223F",
-    },
-    pillText: {
-      ...type.captionStrong,
-      color: TC.isDark ? TC.muted : "#4B5563",
-    },
-    pillTextActive: {
-      color: "#FFFFFF",
+    filterBtnActive: {
+      backgroundColor: TC.primary,
+      borderColor: TC.primary,
     },
 
     content: {
@@ -1250,6 +1313,100 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
       color: "#FFFFFF",
     },
 
+    quickModalRoot: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: scale(22),
+      backgroundColor: TC.overlay,
+    },
+    quickModalCard: {
+      width: "100%",
+      maxWidth: scale(360),
+      borderRadius: scale(20),
+      borderWidth: 1,
+      borderColor: TC.divider,
+      backgroundColor: TC.surface,
+      paddingHorizontal: scale(18),
+      paddingTop: vscale(18),
+      paddingBottom: vscale(10),
+      ...Platform.select({
+        ios: {
+          shadowColor: "#000000",
+          shadowOpacity: 0.18,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: 10 },
+        },
+        android: { elevation: 10 },
+      }),
+    },
+    quickModalHeader: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: scale(12),
+      marginBottom: vscale(16),
+    },
+    quickModalHeading: {
+      flex: 1,
+      minWidth: 0,
+    },
+    quickModalTitle: {
+      ...type.sectionTitle,
+      color: TC.textDark,
+    },
+    quickModalSubtitle: {
+      ...type.caption,
+      color: TC.muted,
+      marginTop: vscale(4),
+    },
+    quickModalClose: {
+      width: scale(34),
+      height: scale(34),
+      borderRadius: scale(11),
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: TC.screenBg,
+      borderWidth: 1,
+      borderColor: TC.divider,
+    },
+    quickActionItem: {
+      minHeight: vscale(62),
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(10),
+      paddingHorizontal: scale(11),
+      paddingVertical: vscale(10),
+      borderRadius: scale(14),
+      borderWidth: 1,
+      borderColor: TC.divider,
+      backgroundColor: TC.surface,
+      marginBottom: vscale(10),
+    },
+    quickActionIcon: {
+      width: scale(36),
+      height: scale(36),
+      borderRadius: scale(11),
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: TC.chipBg,
+    },
+    quickActionIconDanger: {
+      backgroundColor: TC.isDark ? "#3F1D24" : "#FEF2F2",
+    },
+    quickActionTextWrap: {
+      flex: 1,
+      minWidth: 0,
+    },
+    quickActionTitle: {
+      ...type.captionStrong,
+      color: TC.textDark,
+    },
+    quickActionDescription: {
+      ...type.micro,
+      color: TC.muted,
+      marginTop: vscale(2),
+    },
+
     // Menu modal shared
     menuOverlay: {
       flex: 1,
@@ -1296,6 +1453,29 @@ function makeStyles(scale: (n: number) => number, vscale: (n: number) => number,
     menuItemText: {
       ...type.captionStrong,
       color: TC.textDark,
+    },
+    filterOption: {
+      minHeight: vscale(48),
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: scale(14),
+      borderRadius: scale(12),
+      borderWidth: 1,
+      borderColor: TC.divider,
+      backgroundColor: TC.surface,
+      marginBottom: vscale(8),
+    },
+    filterOptionActive: {
+      borderColor: TC.primary,
+      backgroundColor: TC.chipBg,
+    },
+    filterOptionText: {
+      ...type.captionStrong,
+      color: TC.textDark,
+    },
+    filterOptionTextActive: {
+      color: TC.primary,
     },
     menuCancel: {
       alignItems: "center",

@@ -1087,7 +1087,7 @@ export default function ReportDetailScreen({
             <View style={styles.timelineProgressCard}>
               <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Case Progress</Text>
               <View style={styles.caseProgressList}>
-                {caseProgressSteps.map((step) => (
+                {caseProgressSteps.filter((step) => step.complete).map((step) => (
                   <View key={step.title} style={styles.caseProgressRow}>
                     <View style={[styles.caseProgressDot, step.complete ? styles.caseProgressDotDone : styles.caseProgressDotPending]}>
                       {step.complete ? (

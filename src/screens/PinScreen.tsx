@@ -103,7 +103,6 @@ export async function resetPinAttempts(email: string) {
 export default function PinScreen({
   onVerified,
   onForgotPin,
-  onBack,
   onBypass,
   onUserActivity,
   accountEmail,
@@ -256,22 +255,6 @@ export default function PinScreen({
         bounces={false}
         showsVerticalScrollIndicator={false}
       >
-        {/* Top Bar */}
-        <View style={styles.topBar}>
-          <Pressable
-            onPress={() => {
-              onUserActivity?.();
-              onBack?.();
-            }}
-            hitSlop={12}
-            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
-          >
-            <Ionicons name="chevron-back" size={scale(22)} color={TC.textDark} />
-          </Pressable>
-
-          <View style={styles.headerSpacer} />
-        </View>
-
         {/* Logo */}
         <View style={styles.logoWrap}>
           <NewLogo width={scale(210)} height={scale(78)} />
@@ -467,21 +450,6 @@ function createStyles(
       alignItems: "center",
       backgroundColor: "#F0F4F8",
     },
-
-    topBar: {
-      width: "100%",
-      flexDirection: "row",
-      justifyContent: "space-between",
-      marginTop: vscale(4),
-    },
-
-    backBtn: {
-      width: scale(36),
-      height: scale(36),
-      justifyContent: "center",
-    },
-
-    headerSpacer: { width: scale(36), height: scale(36) },
 
     logoWrap: {
       marginTop: vscale(height < 700 ? 8 : 22),
