@@ -78,6 +78,10 @@ export type ReportDetailDto = {
   caseStatus?: "Submitted" | "Active" | "Completed" | "Archived" | string;
   currentProcessStage?: string;
   firstViewedByOfficialAt?: string | null;
+  handling?: {
+    type?: "initial-mediation" | "other-barangay-action" | string;
+    selectedAt?: string | null;
+  } | null;
   mediationSchedule?: {
     type?: string;
     status?: string;
@@ -103,6 +107,9 @@ export type ReportDetailDto = {
     otherAttendees?: string;
     remarks?: string;
     recordedAt?: string | null;
+    conductedAt?: string | null;
+    reviewedAt?: string | null;
+    finalizedAt?: string | null;
   } | null;
   caseDocuments?: CaseDocumentDto[];
   actionLog?: Array<{

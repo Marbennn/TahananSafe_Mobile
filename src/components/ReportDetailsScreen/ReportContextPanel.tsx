@@ -114,24 +114,15 @@ export default function ReportContextPanel({
               REPORT CONTEXT
             </Text>
 
-            <Text
-              style={styles.contextTitle}
-              numberOfLines={2}
-            >
-              {cleanValue(context.title) ||
-                "Incident Report"}
-            </Text>
+            <View style={styles.contextTitleRow}>
+              <Text
+                style={styles.contextTitle}
+                numberOfLines={2}
+              >
+                {cleanValue(context.title) ||
+                  "Incident Report"}
+              </Text>
 
-            <Text
-              style={styles.contextReference}
-              allowFontScaling={false}
-            >
-              Reference{" "}
-              {cleanValue(context.reference) ||
-                "unavailable"}
-            </Text>
-
-            <View style={styles.statusRow}>
               <View
                 style={[
                   styles.statusPill,
@@ -173,6 +164,15 @@ export default function ReportContextPanel({
                 </Text>
               </View>
             </View>
+
+            <Text
+              style={styles.contextReference}
+              allowFontScaling={false}
+            >
+              Reference{" "}
+              {cleanValue(context.reference) ||
+                "unavailable"}
+            </Text>
 
             {cleanValue(context.processStageLabel) ? (
               <View style={styles.processStageRow}>
@@ -397,6 +397,14 @@ function makeStyles(
     contextTitle: {
       ...type.modalTitle,
       color: colors.textDark,
+      flex: 1,
+    },
+
+    contextTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: size(10),
     },
 
     contextReference: {
@@ -405,15 +413,9 @@ function makeStyles(
       marginTop: size(4),
     },
 
-    statusRow: {
-      marginTop: size(14),
-      flexDirection: "row",
-      alignItems: "center",
-    },
-
     statusPill: {
       minHeight: size(28),
-      maxWidth: "75%",
+      maxWidth: "45%",
       borderRadius: size(14),
       paddingHorizontal: size(10),
 

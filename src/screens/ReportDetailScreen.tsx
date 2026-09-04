@@ -85,7 +85,7 @@ function formatMediationOutcome(value?: string) {
     ? outcome
         .replace(/[_-]+/g, " ")
         .replace(/\b\w/g, (character) => character.toUpperCase())
-    : "Not Yet Confirmed";
+    : "Not Yet Recorded";
 }
 
 function formatAttendance(value?: string) {
@@ -577,6 +577,8 @@ export default function ReportDetailScreen({
           .filter((entry) => entry?.status)
           .map((entry) => ({
             title: String(entry.status || "Case updated"),
+            action: String(entry.action || "").trim().toLowerCase(),
+            result: String(entry.result || "").trim().toLowerCase(),
             meta: formatTimelineStamp(entry.date) || "Time unavailable",
             body:
               String(entry.result || "").trim() ||
@@ -590,6 +592,8 @@ export default function ReportDetailScreen({
     if (!events.some((entry) => entry.title.toLowerCase().includes("submitted"))) {
       events.push({
         title: "Report Submitted",
+        action: "report_submitted",
+        result: "",
         meta:
           formatTimelineStamp(detail?.createdAt || (report as any)?.createdAt) ||
           [dateValue, timeValue].filter(Boolean).join(" • ") ||
@@ -610,53 +614,237 @@ export default function ReportDetailScreen({
     formatTimelineStamp(detail?.updatedAt || (report as any)?.updatedAt) || submittedTimelineMeta;
 
   const currentTimelineStatus = statusLabel;
-  const caseProgressIndex = useMemo(() => {
-    const stage = normalizeProcessStage(processStage);
-    if (["ARCHIVED", "BARANGAY_PROCESSING_COMPLETED", "BARANGAY_PROCESSING_COMPLETED_NO_SETTLEMENT"].includes(stage)) return 6;
-    if (stage === "SETTLEMENT_DOCUMENTATION") return 5;
-    if (stage === "MEDIATION_CONDUCTED") return 4;
-    if (stage === "MEDIATION_SCHEDULED") return 3;
-    if (stage === "MEDIATION_SCHEDULING") return 2;
-    if (stage === "FOR_OFFICIAL_REVIEW") return 1;
-    return 0;
-  }, [processStage]);
+  const reportHandlingType = String(
+    detail?.handling?.type || (report as any)?.handling?.type || ""
+  ).trim().toLowerCase();
+  const hasMediationWorkflow = Boolean(
+    detail?.mediationSchedule?.scheduledAt ||
+    detail?.mediationRecord ||
+    detail?.caseDocuments?.some((document) =>
+      String(document.type || "").toLowerCase().includes("mediation")
+    ) ||
+    workflowEvents.some((event) =>
+      `${event.action} ${event.title}`.toLowerCase().includes("mediation")
+    )
+  );
+  const hasDirectBarangayActionEvent = workflowEvents.some(
+    (event) =>
+      event.result === "other-barangay-action" ||
+      (event.action === "case_completed" &&
+        event.title.toLowerCase().includes("barangay action"))
+  );
+  const isDirectBarangayAction =
+    reportHandlingType === "other-barangay-action" ||
+    (!hasMediationWorkflow && hasDirectBarangayActionEvent);
+  const isMediationWorkflow =
+    reportHandlingType === "initial-mediation" ||
+    (!isDirectBarangayAction && hasMediationWorkflow);
 
   const caseProgressSteps = useMemo(() => {
-    const finalStageTitle =
-      normalizeProcessStage(processStage) === "BARANGAY_PROCESSING_COMPLETED_NO_SETTLEMENT"
-        ? "Barangay Processing Completed — No Settlement"
-        : "Barangay Processing Completed";
-    const titles = [
-      "Report Submitted",
-      "For Official Review",
-      "Mediation Scheduling",
-      "Mediation Scheduled",
-      "Mediation Conducted",
-      "Settlement Documentation",
-      finalStageTitle,
-    ];
-    return titles.map((title, index) => {
-      const matchingEvent = workflowEvents.find((event) => {
-        const eventTitle = event.title.toLowerCase();
-        const target = title.toLowerCase();
-        if (index === 1) return eventTitle.includes("viewed") || eventTitle.includes("official review");
-        if (index === 2) return eventTitle.includes("mediation selected") || eventTitle.includes("scheduling");
-        if (index === 3) return eventTitle.includes("mediation scheduled");
-        if (index === 4) return eventTitle.includes("mediation record") || eventTitle.includes("mediation conducted");
-        if (index === 5) return eventTitle.includes("outcome confirmed") || eventTitle.includes("settlement");
-        if (index === 6) return eventTitle.includes("processing completed") || eventTitle.includes("archived");
-        return eventTitle.includes(target);
-      });
-      return {
-        title,
-        complete: index <= caseProgressIndex,
-        meta:
-          index <= caseProgressIndex
-            ? matchingEvent?.meta || (index === 0 ? submittedTimelineMeta : latestTimelineMeta)
-            : "Pending",
-      };
+    const stage = normalizeProcessStage(processStage);
+    const recordOutcome = String(detail?.mediationRecord?.outcome || "")
+      .trim()
+      .toLowerCase();
+    const isCompleted =
+      caseStatusMeta.label === "Completed" ||
+      [
+        "BARANGAY_PROCESSING_COMPLETED",
+        "BARANGAY_PROCESSING_COMPLETED_NO_SETTLEMENT",
+      ].includes(stage);
+    const isArchived =
+      caseStatusMeta.label === "Archived" || stage === "ARCHIVED";
+
+    const eventMeta = (
+      predicate: (event: (typeof workflowEvents)[number]) => boolean,
+      fallback = latestTimelineMeta
+    ) => [...workflowEvents].reverse().find(predicate)?.meta || fallback;
+    const step = (title: string, meta: string) => ({
+      title,
+      complete: true,
+      meta,
     });
-  }, [caseProgressIndex, latestTimelineMeta, processStage, submittedTimelineMeta, workflowEvents]);
+    const steps = [
+      step(
+        "Report Submitted",
+        eventMeta(
+          (event) =>
+            event.action === "report_submitted" ||
+            event.title.toLowerCase().includes("submitted"),
+          submittedTimelineMeta
+        )
+      ),
+    ];
+
+    if (isDirectBarangayAction) {
+      if (stage === "UNDER_BARANGAY_HANDLING" || isCompleted || isArchived) {
+        steps.push(
+          step(
+            "Under Barangay Handling",
+            eventMeta(
+              (event) =>
+                event.action === "handling_selected" ||
+                event.title.toLowerCase().includes("barangay handling")
+            )
+          )
+        );
+      }
+    } else if (isMediationWorkflow) {
+      const scheduleHistory = Array.isArray(detail?.mediationSchedule?.history)
+        ? detail.mediationSchedule.history
+        : [];
+      const latestScheduleHistory = scheduleHistory[scheduleHistory.length - 1];
+      const rescheduleEvent = [...workflowEvents]
+        .reverse()
+        .find(
+          (event) =>
+            event.action === "mediation_rescheduled" ||
+            event.title.toLowerCase().includes("mediation rescheduled")
+        );
+      const wasRescheduled = Boolean(
+        Number(detail?.mediationSchedule?.rescheduleCount || 0) > 0 ||
+        detail?.mediationSchedule?.rescheduledAt ||
+        scheduleHistory.length > 1 ||
+        rescheduleEvent
+      );
+      const mediationWasScheduled = Boolean(
+        detail?.mediationSchedule?.scheduledAt ||
+        [
+          "MEDIATION_SCHEDULED",
+          "MEDIATION_CONDUCTED",
+          "SETTLEMENT_PROCESSING",
+          "FOR_FURTHER_BARANGAY_PROCESSING",
+          "REFERRED_FOR_OUTSIDE_ASSISTANCE",
+          "BARANGAY_PROCESSING_COMPLETED",
+          "BARANGAY_PROCESSING_COMPLETED_NO_SETTLEMENT",
+          "ARCHIVED",
+        ].includes(stage)
+      );
+      if (mediationWasScheduled) {
+        steps.push(
+          step(
+            "Mediation Scheduled",
+            eventMeta(
+              (event) =>
+                event.action === "mediation_scheduled" ||
+                (event.action !== "mediation_rescheduled" &&
+                  event.title.toLowerCase().includes("mediation scheduled")),
+              formatTimelineStamp(
+                scheduleHistory[0]?.changedAt ||
+                  detail?.mediationSchedule?.confirmedAt
+              ) || latestTimelineMeta
+            )
+          )
+        );
+      } else if (stage === "MEDIATION_SCHEDULING") {
+        steps.push(step("Under Barangay Handling", latestTimelineMeta));
+      }
+
+      if (wasRescheduled) {
+        steps.push(
+          step(
+            "Mediation Rescheduled",
+            rescheduleEvent?.meta ||
+              formatTimelineStamp(
+                detail?.mediationSchedule?.rescheduledAt ||
+                  latestScheduleHistory?.changedAt
+              ) ||
+              latestTimelineMeta
+          )
+        );
+      }
+
+      const settlementReached =
+        recordOutcome === "settlement-reached" ||
+        stage === "SETTLEMENT_PROCESSING" ||
+        (isCompleted &&
+          workflowEvents.some((event) =>
+            event.title.toLowerCase().includes("settlement")
+          ));
+      const needsFurtherProcessing =
+        ["no-settlement", "did-not-proceed"].includes(recordOutcome) ||
+        stage === "FOR_FURTHER_BARANGAY_PROCESSING" ||
+        stage === "BARANGAY_PROCESSING_COMPLETED_NO_SETTLEMENT";
+
+      if (settlementReached) {
+        steps.push(
+          step(
+            "Settlement Processing",
+            eventMeta(
+              (event) =>
+                event.action === "mediation_record_reviewed" ||
+                event.title.toLowerCase().includes("settlement")
+            )
+          )
+        );
+      } else if (needsFurtherProcessing) {
+        steps.push(
+          step(
+            "For Further Barangay Processing",
+            eventMeta(
+              (event) =>
+                event.action === "mediation_record_reviewed" ||
+                event.title.toLowerCase().includes("further barangay")
+            )
+          )
+        );
+      } else if (stage === "MEDIATION_CONDUCTED") {
+        steps.push(step("Under Barangay Handling", latestTimelineMeta));
+      }
+
+      if (stage === "REFERRED_FOR_OUTSIDE_ASSISTANCE") {
+        steps.push(
+          step(
+            "Referred for Outside Assistance",
+            eventMeta(
+              (event) =>
+                event.title.toLowerCase().includes("referred") ||
+                event.action.includes("referral")
+            )
+          )
+        );
+      }
+    } else if (stage === "UNDER_BARANGAY_HANDLING") {
+      steps.push(step("Under Barangay Handling", latestTimelineMeta));
+    }
+
+    if (isCompleted || isArchived) {
+      steps.push(
+        step(
+          "Completed",
+          eventMeta(
+            (event) =>
+              event.action === "case_completed" ||
+              event.title.toLowerCase().includes("completed")
+          )
+        )
+      );
+    }
+    if (isArchived) {
+      steps.push(
+        step(
+          "Archived",
+          eventMeta(
+            (event) =>
+              event.action === "case_archived" ||
+              event.title.toLowerCase().includes("archived")
+          )
+        )
+      );
+    }
+
+    return steps;
+  }, [
+    caseStatusMeta.label,
+    detail?.caseDocuments,
+    detail?.mediationRecord,
+    detail?.mediationSchedule,
+    isDirectBarangayAction,
+    isMediationWorkflow,
+    latestTimelineMeta,
+    processStage,
+    submittedTimelineMeta,
+    workflowEvents,
+  ]);
 
   const mediationSchedule = detail?.mediationSchedule;
   const mediationDate = mediationSchedule?.scheduledAt
@@ -669,7 +857,11 @@ export default function ReportDetailScreen({
       )
     : [];
   const mediationRecord =
-    detail?.mediationRecord?.status === "confirmed" ? detail.mediationRecord : null;
+    ["reviewed", "finalized", "confirmed"].includes(
+      String(detail?.mediationRecord?.status || "").toLowerCase()
+    )
+      ? detail?.mediationRecord
+      : null;
   const mediationOutcomeLabel = formatMediationOutcome(mediationRecord?.outcome);
 
   const [viewerVisible, setViewerVisible] = useState(false);
@@ -1129,6 +1321,7 @@ export default function ReportDetailScreen({
               </View>
             </View>
 
+            {isMediationWorkflow ? <>
             <View style={styles.timelineInfoCard}>
               <View style={styles.timelineCardHeaderRow}>
                 <Ionicons name="calendar-outline" size={styles._iconSize} color="#718093" />
@@ -1176,7 +1369,7 @@ export default function ReportDetailScreen({
                       {mediationOutcomeLabel}
                     </Text>
                     <View style={styles.outcomeConfirmedBadge}>
-                      <Text style={styles.outcomeConfirmedText} allowFontScaling={false}>Confirmed</Text>
+                      <Text style={styles.outcomeConfirmedText} allowFontScaling={false}>Reviewed</Text>
                     </View>
                   </View>
                   <View style={styles.outcomeAttendanceRow}>
@@ -1198,19 +1391,20 @@ export default function ReportDetailScreen({
                       Captain's remarks: {mediationRecord.captainRemarks}
                     </Text>
                   ) : null}
-                  {mediationRecord.confirmedAt ? (
+                  {mediationRecord.reviewedAt || mediationRecord.confirmedAt ? (
                     <Text style={styles.certSubtitle} allowFontScaling={false}>
-                      Confirmed {formatTimelineStamp(mediationRecord.confirmedAt)}
+                      Reviewed {formatTimelineStamp(mediationRecord.reviewedAt || mediationRecord.confirmedAt)}
                     </Text>
                   ) : null}
                 </View>
               ) : (
                 <View style={styles.emptyEvidence}>
                   <Ionicons name="hourglass-outline" size={styles._emptyIcon} color="#94A3B8" />
-                  <Text style={styles.emptyEvidenceText}>No mediation outcome has been confirmed.</Text>
+                  <Text style={styles.emptyEvidenceText}>No reviewed mediation result is available yet.</Text>
                 </View>
               )}
             </View>
+            </> : null}
 
             <View style={styles.timelineInfoCard}>
               <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Case Updates</Text>

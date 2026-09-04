@@ -16,10 +16,14 @@ export type CaseStatus =
 export type ProcessStage =
   | "REPORT_SUBMITTED"
   | "FOR_OFFICIAL_REVIEW"
+  | "UNDER_BARANGAY_HANDLING"
   | "MEDIATION_SCHEDULING"
   | "MEDIATION_SCHEDULED"
   | "MEDIATION_CONDUCTED"
   | "SETTLEMENT_DOCUMENTATION"
+  | "SETTLEMENT_PROCESSING"
+  | "FOR_FURTHER_BARANGAY_PROCESSING"
+  | "REFERRED_FOR_OUTSIDE_ASSISTANCE"
   | "BARANGAY_PROCESSING_COMPLETED"
   | "BARANGAY_PROCESSING_COMPLETED_NO_SETTLEMENT"
   | "ARCHIVED";
@@ -106,14 +110,20 @@ export const PROCESS_STAGE_META: Record<ProcessStage, ProcessStageMeta> = {
     bg: "#F1F5F9",
   },
   FOR_OFFICIAL_REVIEW: {
-    label: "For Official Review",
-    shortLabel: "Official Review",
+    label: "Submitted",
+    shortLabel: "Submitted",
+    color: "#D97706",
+    bg: "#FEF3C7",
+  },
+  UNDER_BARANGAY_HANDLING: {
+    label: "Under Barangay Handling",
+    shortLabel: "Barangay Handling",
     color: "#D97706",
     bg: "#FEF3C7",
   },
   MEDIATION_SCHEDULING: {
-    label: "Mediation Scheduling",
-    shortLabel: "Scheduling",
+    label: "Under Barangay Handling",
+    shortLabel: "Barangay Handling",
     color: "#7C3AED",
     bg: "#EDE9FE",
   },
@@ -124,26 +134,44 @@ export const PROCESS_STAGE_META: Record<ProcessStage, ProcessStageMeta> = {
     bg: "#EDE9FE",
   },
   MEDIATION_CONDUCTED: {
-    label: "Mediation Conducted",
-    shortLabel: "Conducted",
+    label: "Under Barangay Handling",
+    shortLabel: "Barangay Handling",
     color: "#2563EB",
     bg: "#DBEAFE",
   },
   SETTLEMENT_DOCUMENTATION: {
-    label: "Settlement Documentation",
-    shortLabel: "Documentation",
+    label: "Settlement Processing",
+    shortLabel: "Settlement",
     color: "#0369A1",
     bg: "#E0F2FE",
   },
+  SETTLEMENT_PROCESSING: {
+    label: "Settlement Processing",
+    shortLabel: "Settlement",
+    color: "#0369A1",
+    bg: "#E0F2FE",
+  },
+  FOR_FURTHER_BARANGAY_PROCESSING: {
+    label: "For Further Barangay Processing",
+    shortLabel: "Further Processing",
+    color: "#B45309",
+    bg: "#FEF3C7",
+  },
+  REFERRED_FOR_OUTSIDE_ASSISTANCE: {
+    label: "Referred for Outside Assistance",
+    shortLabel: "Referred",
+    color: "#7C3AED",
+    bg: "#EDE9FE",
+  },
   BARANGAY_PROCESSING_COMPLETED: {
-    label: "Barangay Processing Completed",
+    label: "Completed",
     shortLabel: "Completed",
     color: "#15803D",
     bg: "#DCFCE7",
   },
   BARANGAY_PROCESSING_COMPLETED_NO_SETTLEMENT: {
-    label: "Barangay Processing Completed — No Settlement",
-    shortLabel: "No Settlement",
+    label: "Completed",
+    shortLabel: "Completed",
     color: "#B45309",
     bg: "#FEF3C7",
   },
@@ -177,6 +205,9 @@ export function normalizeProcessStage(raw?: string): ProcessStage {
   ) {
     return "FOR_OFFICIAL_REVIEW";
   }
+  if (stage === "under-barangay-handling" || stage === "barangay-action-in-progress") {
+    return "UNDER_BARANGAY_HANDLING";
+  }
   if (stage === "mediation-scheduling" || stage === "initial-mediation") {
     return "MEDIATION_SCHEDULING";
   }
@@ -193,8 +224,14 @@ export function normalizeProcessStage(raw?: string): ProcessStage {
   ) {
     return "MEDIATION_CONDUCTED";
   }
-  if (stage === "settlement-documentation") {
-    return "SETTLEMENT_DOCUMENTATION";
+  if (stage === "settlement-documentation" || stage === "settlement-processing") {
+    return "SETTLEMENT_PROCESSING";
+  }
+  if (stage === "for-further-barangay-processing") {
+    return "FOR_FURTHER_BARANGAY_PROCESSING";
+  }
+  if (stage === "referred-for-outside-assistance") {
+    return "REFERRED_FOR_OUTSIDE_ASSISTANCE";
   }
   if (
     stage === "barangay-processing-completed-no-settlement" ||
@@ -313,6 +350,12 @@ export function normalizeReportStatus(raw?: string): ReportStatus {
   ) return "MEDIATION_SCHEDULED";
   if (
     s === "ongoing assistance" ||
+    s === "under barangay handling" ||
+    s === "barangay action in progress" ||
+    s === "settlement processing" ||
+    s === "settlement documentation" ||
+    s === "for further barangay processing" ||
+    s === "referred for outside assistance" ||
     s === "ongoing" ||
     s === "on going" ||
     s === "in progress" ||
