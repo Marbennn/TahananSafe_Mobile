@@ -37,16 +37,6 @@ export type IncidentPreviewData = {
   videos?: string[];
   mode?: "complain" | "emergency";
 
-  aiResult?: {
-    confidence_score?: number;
-    incident_tip?: string;
-    submission_decision?: string;
-    allow_submission?: boolean;
-    validation_reason?: string;
-    risk_level?: string;
-    risk_percentage?: number;
-    [key: string]: any;
-  } | null;
 };
 
 type Props = { data: IncidentPreviewData };

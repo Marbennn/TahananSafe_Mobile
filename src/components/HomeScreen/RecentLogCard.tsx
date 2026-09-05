@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, Pressable, useWindowDimensions } from "react-na
 import { Ionicons } from "@expo/vector-icons";
 import { useColors } from "../../theme/colors";
 import {
-  getCaseStatusMeta,
+  getProcessStageMeta,
   type CaseStatus,
   type ReportStatus,
 } from "../../utils/reportStatus";
@@ -56,10 +56,7 @@ export default function RecentLogCard({ item, onPress }: Props) {
   const { width, height } = useWindowDimensions();
   const { s, fs } = useMemo(() => makeScale(width, height), [width, height]);
   const styles = useMemo(() => makeStyles(s, fs, TC), [s, fs, TC]);
-  const status = getCaseStatusMeta(
-    item.caseStatus,
-    item.currentProcessStage || item.status
-  );
+  const status = getProcessStageMeta(item.currentProcessStage || item.status);
   const dateLine = `${compactDate(item.dateLeft)}${item.timeLeft && item.timeLeft !== "-" ? ` • ${item.timeLeft}` : ""}`;
 
   return (
@@ -80,7 +77,7 @@ export default function RecentLogCard({ item, onPress }: Props) {
 
           <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
             <Text style={[styles.statusText, { color: status.color }]} numberOfLines={1} allowFontScaling={false}>
-              {status.label}
+              {status.shortLabel}
             </Text>
           </View>
         </View>

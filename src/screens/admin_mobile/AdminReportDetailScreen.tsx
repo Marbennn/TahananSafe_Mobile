@@ -50,7 +50,7 @@ const gradColors = (Colors.gradient ??
 ];
 
 const STATUS_STEPS: { key: StatusKey; label: string; icon: React.ComponentProps<typeof Ionicons>["name"] }[] = [
-  { key: "submitted",  label: "Pending",   icon: "time-outline"             },
+  { key: "submitted",  label: "Official Review", icon: "time-outline"       },
   { key: "reviewing",  label: "On Going",  icon: "sync-outline"             },
   { key: "resolved",   label: "Resolved",  icon: "checkmark-circle-outline" },
   { key: "cancelled",  label: "Cancelled", icon: "close-circle-outline"     },
@@ -70,11 +70,11 @@ function getStatusColor(status?: string) {
 
 function getStatusLabel(status?: string): string {
   switch (String(status || "").toLowerCase()) {
-    case "submitted": return "Pending";
+    case "submitted": return "Submitted / For Official Review";
     case "reviewing": return "On Going";
     case "resolved":  return "Resolved";
     case "cancelled": return "Cancelled";
-    default:          return "Pending";
+    default:          return "Submitted / For Official Review";
   }
 }
 
@@ -84,23 +84,6 @@ function statusIconName(status?: string) {
   if (s === "cancelled") return "close-circle-outline" as const;
   if (s === "reviewing") return "sync-circle-outline" as const;
   return "time-outline" as const;
-}
-
-function getRiskColor(level?: string): string {
-  const l = String(level || "").toLowerCase();
-  if (l.includes("high")) return "#EF4444";
-  if (l.includes("mod"))  return "#F59E0B";
-  return "#22C55E";
-}
-
-function getRiskLabel(incident: AdminIncident): string {
-  if (incident.ai_risk_level) {
-    const r = incident.ai_risk_level.toLowerCase();
-    if (r.includes("high")) return "High";
-    if (r.includes("mod"))  return "Moderate";
-    return "Low";
-  }
-  return incident.mode === "emergency" ? "High" : "Low";
 }
 
 function formatDate(dateStr?: string): string {
@@ -200,8 +183,6 @@ export default function AdminReportDetailScreen({ reportId, onBack }: Props) {
   }, [load]);
 
   const shortId       = reportId.slice(-6).toUpperCase();
-  const riskLabel     = incident ? getRiskLabel(incident) : null;
-  const riskColor     = riskLabel ? getRiskColor(riskLabel) : "#9AA4B2";
   const statusColor   = incident ? getStatusColor(incident.status) : "#9AA4B2";
   const statusLabel   = incident ? getStatusLabel(incident.status) : "—";
   const sIcon         = incident ? statusIconName(incident.status) : "time-outline";
@@ -209,6 +190,33 @@ export default function AdminReportDetailScreen({ reportId, onBack }: Props) {
   const currentStep   = isCancelled
     ? STATUS_STEPS.length - 1
     : STATUS_STEPS.findIndex(step => step.key === (incident?.status ?? "submitted"));
+  const aiCategories = incident
+    ? Array.from(
+        new Set(
+          [
+            ...(Array.isArray(incident.ai_incident_types)
+              ? incident.ai_incident_types
+              : []),
+            incident.ai_incident_type,
+          ].filter((value): value is string => Boolean(String(value || "").trim())),
+        ),
+      )
+    : [];
+  const aiIndicators = Array.isArray(incident?.ai_indicators)
+    ? incident.ai_indicators.filter((value) => String(value || "").trim())
+    : [];
+  const aiLegalReferences = Array.isArray(incident?.ai_legal_references)
+    ? incident.ai_legal_references.filter(
+        (reference) => Boolean(reference?.title || reference?.reference),
+      )
+    : [];
+  const hasAiAnalysis = Boolean(
+    aiCategories.length ||
+      incident?.ai_summary ||
+      aiIndicators.length ||
+      aiLegalReferences.length ||
+      incident?.ai_confidence_score != null,
+  );
 
   return (
     <SafeAreaView style={s.safe} edges={["top"]}>
@@ -230,14 +238,7 @@ export default function AdminReportDetailScreen({ reportId, onBack }: Props) {
               Report #{shortId}
             </Text>
 
-            {riskLabel ? (
-              <View style={[s.riskBadge, { borderColor: `${riskColor}40` }]}>
-                <Ionicons name="shield" size={13} color={riskColor} />
-                <Text style={[s.riskBadgeText, { color: riskColor }]}>{riskLabel}</Text>
-              </View>
-            ) : (
-              <View style={{ width: 36, height: 36 }} />
-            )}
+            <View style={{ width: 36, height: 36 }} />
           </View>
 
           {incident && (
@@ -470,39 +471,50 @@ export default function AdminReportDetailScreen({ reportId, onBack }: Props) {
             ) : null}
 
             {/* ── AI Analysis ──────────────────────────────────── */}
-            {(incident.ai_risk_level || incident.ai_priority_level || incident.ai_confidence_score !== undefined) ? (
+            {hasAiAnalysis ? (
               <View style={s.sectionCard}>
                 <View style={s.sectionHeaderRow}>
                   <Ionicons name="sparkles-outline" size={18} color={TEXT_DARK} />
-                  <Text style={s.sectionTitle}>AI Analysis</Text>
+                  <Text style={s.sectionTitle}>AI-Assisted Analysis</Text>
                 </View>
 
-                {/* Chip row */}
-                <View style={s.aiChipsRow}>
-                  {incident.ai_risk_level ? (
-                    <View style={[s.aiChip, { borderColor: `${getRiskColor(incident.ai_risk_level)}30` }]}>
-                      <Ionicons name="shield-outline" size={14} color={getRiskColor(incident.ai_risk_level)} />
-                      <View>
-                        <Text style={s.aiChipLabel}>Risk Level</Text>
-                        <Text style={[s.aiChipValue, { color: getRiskColor(incident.ai_risk_level) }]}>
-                          {incident.ai_risk_level}
-                        </Text>
-                      </View>
-                    </View>
-                  ) : null}
+                {aiCategories.length ? (
+                  <View style={s.aiTextBlock}>
+                    <Text style={s.aiBlockLabel}>Possible Categories</Text>
+                    <Text style={s.aiBlockText}>{aiCategories.join(", ")}</Text>
+                  </View>
+                ) : null}
 
-                  {incident.ai_priority_level ? (
-                    <View style={[s.aiChip, { borderColor: `${PRIMARY}20` }]}>
-                      <Ionicons name="flag-outline" size={14} color={PRIMARY} />
-                      <View>
-                        <Text style={s.aiChipLabel}>Priority</Text>
-                        <Text style={[s.aiChipValue, { color: PRIMARY }]}>
-                          {incident.ai_priority_level}
-                        </Text>
-                      </View>
-                    </View>
-                  ) : null}
-                </View>
+                {incident.ai_summary ? (
+                  <View style={s.aiTextBlock}>
+                    <Text style={s.aiBlockLabel}>Factual Summary</Text>
+                    <Text style={s.aiBlockText}>{incident.ai_summary}</Text>
+                  </View>
+                ) : null}
+
+                {(aiIndicators.length || incident.ai_children_involved || incident.ai_weapon_mentioned) ? (
+                  <View style={s.aiTextBlock}>
+                    <Text style={s.aiBlockLabel}>Stated Indicators</Text>
+                    {[
+                      ...aiIndicators,
+                      ...(incident.ai_children_involved ? ["Children mentioned or involved"] : []),
+                      ...(incident.ai_weapon_mentioned ? ["Weapon mentioned"] : []),
+                    ].map((indicator, index) => (
+                      <Text key={`${indicator}-${index}`} style={s.aiListItem}>• {indicator}</Text>
+                    ))}
+                  </View>
+                ) : null}
+
+                {aiLegalReferences.length ? (
+                  <View style={s.aiTextBlock}>
+                    <Text style={s.aiBlockLabel}>Verified Legal-Reference Suggestions</Text>
+                    {aiLegalReferences.map((reference, index) => (
+                      <Text key={`${reference.title || reference.reference}-${index}`} style={s.aiListItem}>
+                        • {[reference.title, reference.reference].filter(Boolean).join(" — ")}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
 
                 {/* Confidence bar */}
                 {incident.ai_confidence_score !== undefined ? (
@@ -528,23 +540,9 @@ export default function AdminReportDetailScreen({ reportId, onBack }: Props) {
                   </View>
                 ) : null}
 
-                {/* Flags */}
-                {(incident.ai_children_involved || incident.ai_weapon_mentioned) ? (
-                  <View style={s.flagsRow}>
-                    {incident.ai_children_involved && (
-                      <View style={s.flagChip}>
-                        <Ionicons name="people" size={12} color="#EF4444" />
-                        <Text style={s.flagText}>Children Involved</Text>
-                      </View>
-                    )}
-                    {incident.ai_weapon_mentioned && (
-                      <View style={s.flagChip}>
-                        <Ionicons name="warning" size={12} color="#EF4444" />
-                        <Text style={s.flagText}>Weapon Mentioned</Text>
-                      </View>
-                    )}
-                  </View>
-                ) : null}
+                <Text style={s.aiDisclaimer}>
+                  Assistive only. Barangay officials must verify the information and make every official decision.
+                </Text>
               </View>
             ) : null}
 
@@ -725,16 +723,6 @@ function makeStyles(width: number, height: number, compact: boolean) {
     color: TEXT_DARK,
     textAlign: "left",
   },
-  riskBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  riskBadgeText: { ...Typography.badge },
   heroStatusCenterRow: {
     marginTop: 8,
     flexDirection: "row",
@@ -917,44 +905,33 @@ function makeStyles(width: number, height: number, compact: boolean) {
   stepLine: { height: 2, borderRadius: 2 },
 
   // AI Analysis
-  aiChipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 10 },
-  aiChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 14,
+  aiTextBlock: {
+    gap: 5,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
     borderWidth: 1,
-    flex: 1,
-    minWidth: 130,
-    backgroundColor: SURFACE,
+    borderColor: BORDER,
+    backgroundColor: "#F8FAFC",
   },
-  aiChipLabel: {
-    ...Typography.overline,
-    color: "#94A3B8",
-    textTransform: "uppercase",
+  aiBlockLabel: { ...Typography.overline, color: TEXT_MUTED, textTransform: "uppercase" },
+  aiBlockText: { ...Typography.bodySmall, color: TEXT_DARK, lineHeight: 20 },
+  aiListItem: { ...Typography.bodySmall, color: TEXT_DARK, lineHeight: 20 },
+  aiDisclaimer: {
+    ...Typography.micro,
+    color: PRIMARY,
+    lineHeight: 17,
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: "#EFF6FF",
   },
-  aiChipValue: { ...Typography.label, marginTop: 1 },
   confidenceWrap: { gap: 8 },
   confidenceHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
   confidenceLabel: { ...Typography.bodySmall, flex: 1, color: TEXT_MUTED },
   confidencePct: { ...Typography.label, color: PRIMARY },
   confTrack: { height: 6, backgroundColor: "#F1F5F9", borderRadius: 999, overflow: "hidden" },
   confFill: { height: 6, borderRadius: 999 },
-  flagsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
-  flagChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "#FEF2F2",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#FECACA",
-  },
-  flagText: { ...Typography.microStrong, color: "#DC2626" },
 
   // Photos (matching ReportDetailScreen gallery)
   galleryRow: { gap: 10, paddingRight: 6 },

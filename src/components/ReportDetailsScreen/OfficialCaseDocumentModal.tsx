@@ -62,6 +62,17 @@ const DOCUMENT_FIELD_DEFINITIONS: Record<string, DocumentFieldDefinition[]> = {
     { key: "certificationDetails", label: "Certification Details" },
     { key: "issuedAt", label: "Date Issued" },
   ],
+  "referral-endorsement": [
+    { key: "caseId", label: "Case ID" },
+    { key: "complainant", label: "Complainant" },
+    { key: "respondent", label: "Respondent" },
+    { key: "incidentType", label: "Incident Type" },
+    { key: "referredTo", label: "Receiving Office or Service" },
+    { key: "referralReason", label: "Reason for Referral" },
+    { key: "referralRemarks", label: "Referral Remarks" },
+    { key: "referredAt", label: "Date Referred" },
+    { key: "referredBy", label: "Referred By" },
+  ],
 };
 
 function getDocumentStatement(type?: string) {
@@ -73,7 +84,36 @@ function getDocumentStatement(type?: string) {
     return "This document records the factual outcome entered for the barangay mediation session. It must be checked against the official case record before release.";
   }
 
+  if (type === "referral-endorsement") {
+    return "This document records the Barangay Captain's decision to refer or endorse the report to the named office or service for the appropriate process.";
+  }
+
   return "This certification records the mediation outcome reflected in the official barangay case file. It does not replace any certification required by applicable law.";
+}
+
+function getSignatureLabels(document: CaseDocumentDto) {
+  if (document.type === "mediation-notice") {
+    return ["System-issued from the Captain-confirmed schedule"];
+  }
+  if (document.type === "referral-endorsement") {
+    return [
+      document.requiresCaptainAuthorization
+        ? "Authorized by Barangay Captain"
+        : "Issued from the Captain-recorded referral",
+    ];
+  }
+  if (document.type === "settlement-outcome") {
+    return [
+      "Prepared / Verified by Barangay Secretary",
+      ...(document.partySignaturesRequired
+        ? ["Complainant signature", "Respondent signature"]
+        : []),
+      ...(document.captainAttestationRequired
+        ? ["Punong Barangay / Chairman attestation"]
+        : []),
+    ];
+  }
+  return ["Prepared / Verified by Barangay Secretary"];
 }
 
 function titleFromKey(key: string) {
@@ -293,13 +333,18 @@ function buildOfficialDocumentPdfBase64({
   });
   addLine(left, cursorTop, right, cursorTop);
 
-  ensureSpace(120);
-  cursorTop += 54;
-  addLine(left, cursorTop, left + 205, cursorTop, 0.8, [0.278, 0.333, 0.412]);
-  addLine(right - 205, cursorTop, right, cursorTop, 0.8, [0.278, 0.333, 0.412]);
-  addText("Prepared / Verified by Barangay Secretary", left + 15, cursorTop + 14, 8, false, [0.392, 0.455, 0.545]);
-  addText("Authorized by Barangay Captain", right - 174, cursorTop + 14, 8, false, [0.392, 0.455, 0.545]);
-  cursorTop += 48;
+  const signatureLabels = getSignatureLabels(document);
+  ensureSpace(80 + Math.ceil(signatureLabels.length / 2) * 42);
+  cursorTop += 42;
+  signatureLabels.forEach((label, index) => {
+    const column = index % 2;
+    const row = Math.floor(index / 2);
+    const startX = column === 0 ? left : right - 205;
+    const lineTop = cursorTop + row * 42;
+    addLine(startX, lineTop, startX + 205, lineTop, 0.8, [0.278, 0.333, 0.412]);
+    addText(label, startX + 12, lineTop + 14, 8, false, [0.392, 0.455, 0.545]);
+  });
+  cursorTop += Math.ceil(signatureLabels.length / 2) * 42;
   addLine(left, cursorTop, right, cursorTop, 0.6, [0.886, 0.91, 0.941]);
   const footerLines = wrapPdfText(
     "Generated through TahananSafe. Verify every factual entry against the official barangay case record before use or release.",
@@ -532,14 +577,12 @@ export default function OfficialCaseDocumentModal({
                 </View>
 
                 <View style={styles.signatures}>
-                  <View style={styles.signatureBlock}>
-                    <View style={styles.signatureLine} />
-                    <Text style={styles.signatureText}>Prepared / Verified by Barangay Secretary</Text>
-                  </View>
-                  <View style={styles.signatureBlock}>
-                    <View style={styles.signatureLine} />
-                    <Text style={styles.signatureText}>Authorized by Barangay Captain</Text>
-                  </View>
+                  {getSignatureLabels(document).map((label) => (
+                    <View key={label} style={styles.signatureBlock}>
+                      <View style={styles.signatureLine} />
+                      <Text style={styles.signatureText}>{label}</Text>
+                    </View>
+                  ))}
                 </View>
 
                 <Text style={styles.footerText}>

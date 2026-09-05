@@ -18,9 +18,11 @@ export type AdminIncident = {
   photos?: any[];
   createdAt?: string;
   updatedAt?: string;
-  ai_risk_level?: string;
-  ai_priority_level?: string;
   ai_incident_type?: string;
+  ai_incident_types?: string[];
+  ai_summary?: string;
+  ai_indicators?: string[];
+  ai_legal_references?: Array<{ title?: string; reference?: string; url?: string }>;
   ai_children_involved?: boolean;
   ai_weapon_mentioned?: boolean;
   ai_confidence_score?: number;
@@ -45,7 +47,7 @@ export type AdminStats = {
   reviewing: number;
   resolved: number;
   cancelled: number;
-  highRisk: number;
+  emergencyReports: number;
   totalUsers: number;
   verifiedUsers: number;
 };
@@ -106,7 +108,7 @@ export async function fetchAdminStats(signal?: AbortSignal): Promise<AdminStats>
     reviewing: data?.ongoing ?? 0,
     resolved: data?.resolved ?? 0,
     cancelled: data?.cancelled ?? 0,
-    highRisk: data?.riskHigh ?? 0,
+    emergencyReports: data?.emergencyReports ?? data?.emergency ?? 0,
     totalUsers: data?.totalUsers ?? 0,
     verifiedUsers: data?.verifiedUsers ?? 0,
   };

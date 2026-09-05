@@ -6,7 +6,6 @@ export type MapOverviewReportDto = {
   id: string;
   caseId: string;
   incidentType: string;
-  risk: string;
   status: string;
   mode: string;
   location: string;

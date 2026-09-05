@@ -90,14 +90,6 @@ function BarChart({
   );
 }
 
-function getRiskLabel(incident: AdminIncident): "High" | "Moderate" | "Low" {
-  const r = String(incident.ai_risk_level || "").toLowerCase();
-  if (r.includes("high")) return "High";
-  if (r.includes("mod")) return "Moderate";
-  if (incident.mode === "emergency") return "High";
-  return "Low";
-}
-
 function deriveStatsFromIncidents(
   incidents: AdminIncident[]
 ): AdminStats {
@@ -107,7 +99,7 @@ function deriveStatsFromIncidents(
   const reviewing = incidents.filter((i) => i.status === "reviewing").length;
   const resolved = incidents.filter((i) => i.status === "resolved").length;
   const cancelled = incidents.filter((i) => i.status === "cancelled").length;
-  const highRisk = incidents.filter((i) => getRiskLabel(i) === "High").length;
+  const emergencyReports = incidents.filter((i) => i.mode === "emergency").length;
 
   return {
     totalIncidents: incidents.length,
@@ -115,7 +107,7 @@ function deriveStatsFromIncidents(
     reviewing,
     resolved,
     cancelled,
-    highRisk,
+    emergencyReports,
     totalUsers: 0,
     verifiedUsers: 0,
   };
@@ -189,7 +181,15 @@ export default function AdminAnalyticsScreen({ onBack }: Props) {
   }, [load]);
 
   const derivedStats = useMemo(
-    () => (stats ? stats : deriveStatsFromIncidents(incidents)),
+    () =>
+      stats
+        ? {
+            ...stats,
+            emergencyReports: incidents.filter(
+              (incident) => incident.mode === "emergency",
+            ).length,
+          }
+        : deriveStatsFromIncidents(incidents),
     [stats, incidents]
   );
 
@@ -213,18 +213,6 @@ export default function AdminAnalyticsScreen({ onBack }: Props) {
           "#0E5AA7", "#7C3AED", "#F04452", "#F5B301", "#35B56A", "#0891B2",
         ][idx] || "#9AA4B2",
       }));
-  }, [incidents]);
-
-  // --- Risk distribution
-  const riskBreakdown = useMemo(() => {
-    const high = incidents.filter((i) => getRiskLabel(i) === "High").length;
-    const moderate = incidents.filter((i) => getRiskLabel(i) === "Moderate").length;
-    const low = incidents.filter((i) => getRiskLabel(i) === "Low").length;
-    return [
-      { label: "High Risk", value: high, color: "#F04452" },
-      { label: "Moderate", value: moderate, color: "#F5B301" },
-      { label: "Low Risk", value: low, color: "#35B56A" },
-    ];
   }, [incidents]);
 
   // --- Status distribution
@@ -314,7 +302,7 @@ export default function AdminAnalyticsScreen({ onBack }: Props) {
               <View style={styles.heroMetaChip}>
                 <Ionicons name="warning-outline" size={13} color="#FFFFFF" />
                 <Text style={styles.heroMetaText}>
-                  {derivedStats.highRisk} high risk
+                  {derivedStats.emergencyReports} emergency reports
                 </Text>
               </View>
             </View>
@@ -345,9 +333,9 @@ export default function AdminAnalyticsScreen({ onBack }: Props) {
               width={statCardWidth}
             />
             <StatCard
-              label="High Risk"
-              value={derivedStats.highRisk}
-              icon="warning-outline"
+              label="Emergency Reports"
+              value={derivedStats.emergencyReports}
+              icon="alert-circle-outline"
               color="#F04452"
               width={statCardWidth}
             />
@@ -376,14 +364,6 @@ export default function AdminAnalyticsScreen({ onBack }: Props) {
             <Text style={styles.sectionTitle}>Status Breakdown</Text>
             <View style={styles.chartCard}>
               <BarChart data={statusBreakdown} compact={compact} />
-            </View>
-          </View>
-
-          {/* Risk distribution */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Risk Distribution</Text>
-            <View style={styles.chartCard}>
-              <BarChart data={riskBreakdown} compact={compact} />
             </View>
           </View>
 

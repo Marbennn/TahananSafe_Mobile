@@ -91,12 +91,11 @@ function getAlertWeight(alert: MapOverviewAlertDto): number {
 }
 
 function getReportWeight(report: MapOverviewReportDto): number {
-  const risk = String(report.risk || "").trim().toLowerCase();
-  if (risk === "high") return 0.95;
-  if (risk === "medium") return 0.62;
-  if (risk === "low") return 0.35;
   if (String(report.mode || "").trim().toLowerCase() === "emergency") return 0.9;
-  return 0.45;
+  const status = String(report.status || "").trim().toLowerCase();
+  if (status === "submitted") return 0.65;
+  if (status === "reviewing" || status === "active") return 0.55;
+  return 0.4;
 }
 
 function isCoordinate(value: unknown, min: number, max: number): boolean {
@@ -291,7 +290,7 @@ function buildMapHtml({
           var entry = document.createElement("div");
           entry.className = "report-entry";
           addText(entry, (report.caseId || "Report") + " • " + (report.incidentType || "Incident"), "popup-subtitle");
-          addText(entry, (report.risk || "Unknown risk") + " • " + (report.status || "Unknown status"), "popup-meta");
+          addText(entry, report.status || "Unknown status", "popup-meta");
           root.appendChild(entry);
         });
         return root;

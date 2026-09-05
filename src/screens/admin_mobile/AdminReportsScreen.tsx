@@ -30,7 +30,7 @@ const MUTED     = "#64748B";
 const PRIMARY: string = String((Colors as any).primary ?? "#1E63D0");
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-type FilterKey = "All" | "Pending" | "On Going" | "Resolved" | "High Risk";
+type FilterKey = "All" | "Official Review" | "On Going" | "Resolved";
 
 type Props = {
   onBack: () => void;
@@ -39,31 +39,13 @@ type Props = {
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-function getRiskColor(level?: string) {
-  const l = String(level || "").toLowerCase();
-  if (l === "high") return "#EF4444";
-  if (l === "moderate" || l === "medium") return "#F59E0B";
-  return "#22C55E";
-}
-
-function getRiskLabel(incident: AdminIncident): string {
-  if (incident.ai_risk_level) {
-    const r = incident.ai_risk_level.toLowerCase();
-    if (r.includes("high")) return "High";
-    if (r.includes("mod") || r.includes("med")) return "Moderate";
-    return "Low";
-  }
-  if (incident.mode === "emergency") return "High";
-  return "Low";
-}
-
 function getStatusLabel(status?: string): string {
   switch (String(status || "").toLowerCase()) {
-    case "submitted": return "Pending";
+    case "submitted": return "Submitted / For Official Review";
     case "reviewing": return "On Going";
     case "resolved":  return "Resolved";
     case "cancelled": return "Cancelled";
-    default:          return "Pending";
+    default:          return "Submitted / For Official Review";
   }
 }
 
@@ -119,13 +101,12 @@ function getInitials(user: AdminIncident["user"]): string {
   return (f + l).toUpperCase() || (user.email?.[0] ?? "?").toUpperCase();
 }
 
-const FILTERS: FilterKey[] = ["All", "Pending", "On Going", "Resolved", "High Risk"];
+const FILTERS: FilterKey[] = ["All", "Official Review", "On Going", "Resolved"];
 
 function filterAccent(f: FilterKey): string {
-  if (f === "Pending")   return "#EAB308";
+  if (f === "Official Review") return "#EAB308";
   if (f === "On Going")  return "#2563EB";
   if (f === "Resolved")  return "#16A34A";
-  if (f === "High Risk") return "#EF4444";
   return PRIMARY;
 }
 
@@ -196,15 +177,13 @@ export default function AdminReportsScreen({ onBack, onOpenReportDetail, onTabCh
     pending: incidents.filter((i) => !i.status || i.status === "submitted").length,
     ongoing: incidents.filter((i) => i.status === "reviewing").length,
     resolved:incidents.filter((i) => i.status === "resolved").length,
-    high:    incidents.filter((i) => getRiskLabel(i) === "High").length,
   }), [incidents]);
 
   const filtered = useMemo(() => {
     let list = incidents;
-    if (filter === "Pending")   list = list.filter((i) => !i.status || i.status === "submitted");
+    if (filter === "Official Review") list = list.filter((i) => !i.status || i.status === "submitted");
     else if (filter === "On Going")  list = list.filter((i) => i.status === "reviewing");
     else if (filter === "Resolved")  list = list.filter((i) => i.status === "resolved");
-    else if (filter === "High Risk") list = list.filter((i) => getRiskLabel(i) === "High");
 
     const q = search.trim().toLowerCase();
     if (q) {
@@ -239,11 +218,9 @@ export default function AdminReportsScreen({ onBack, onOpenReportDetail, onTabCh
 
   // ── Render card ───────────────────────────────────────────────────────────
   const renderCard: ListRenderItem<AdminIncident> = ({ item }) => {
-    const riskLabel  = getRiskLabel(item);
-    const riskColor  = getRiskColor(riskLabel);
     const statusColor = getStatusColor(item.status);
     const statusIcon  = getStatusIcon(item.status);
-    const accentColor = riskColor;
+    const accentColor = statusColor;
 
     const incidentTitle = item.ai_incident_type || item.incidentType ||
       (item.mode === "emergency" ? "Emergency" : "Complaint");
@@ -252,7 +229,14 @@ export default function AdminReportsScreen({ onBack, onOpenReportDetail, onTabCh
     const timeStr  = formatTime(item.createdAt);
     const userName = getUserName(item.user);
     const initials = getInitials(item.user);
-    const hasAI    = !!item.ai_risk_level;
+    const hasAI = Boolean(
+      item.ai_incident_type ||
+        item.ai_incident_types?.length ||
+        item.ai_summary ||
+        item.ai_indicators?.length ||
+        item.ai_legal_references?.length ||
+        item.ai_confidence_score != null,
+    );
     const confidenceValue = item.ai_confidence_score != null
       ? item.ai_confidence_score > 1
         ? Math.round(item.ai_confidence_score)
@@ -292,12 +276,6 @@ export default function AdminReportsScreen({ onBack, onOpenReportDetail, onTabCh
               )}
             </View>
 
-            <View style={[styles.riskPill, { backgroundColor: `${riskColor}16` }]}>
-              <View style={[styles.riskDot, { backgroundColor: riskColor }]} />
-              <Text style={[styles.riskText, { color: riskColor }]} allowFontScaling={false}>
-                {riskLabel}
-              </Text>
-            </View>
           </View>
 
           {/* User + location */}
@@ -685,19 +663,6 @@ function makeStyles(
         ...type.caption,
         color: MUTED,
       },
-
-      riskPill: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: scale(4),
-        paddingHorizontal: scale(8),
-        paddingVertical: vscale(4),
-        borderRadius: scale(999),
-        flexShrink: 0,
-      },
-
-      riskDot: { width: scale(6), height: scale(6), borderRadius: scale(99) },
-      riskText: { ...type.badge },
 
       metaGrid: { gap: vscale(5), marginTop: vscale(8) },
       metaRow:  { flexDirection: "row", alignItems: "center", gap: scale(6) },

@@ -20,6 +20,7 @@ export type ProcessStage =
   | "MEDIATION_SCHEDULING"
   | "MEDIATION_SCHEDULED"
   | "MEDIATION_CONDUCTED"
+  | "MEDIATION_FOLLOW_UP_DECISION"
   | "SETTLEMENT_DOCUMENTATION"
   | "SETTLEMENT_PROCESSING"
   | "FOR_FURTHER_BARANGAY_PROCESSING"
@@ -104,13 +105,13 @@ export type ProcessStageMeta = {
 
 export const PROCESS_STAGE_META: Record<ProcessStage, ProcessStageMeta> = {
   REPORT_SUBMITTED: {
-    label: "Report Submitted",
+    label: "Submitted / For Official Review",
     shortLabel: "Submitted",
     color: "#64748B",
     bg: "#F1F5F9",
   },
   FOR_OFFICIAL_REVIEW: {
-    label: "Submitted",
+    label: "Submitted / For Official Review",
     shortLabel: "Submitted",
     color: "#D97706",
     bg: "#FEF3C7",
@@ -139,6 +140,12 @@ export const PROCESS_STAGE_META: Record<ProcessStage, ProcessStageMeta> = {
     color: "#2563EB",
     bg: "#DBEAFE",
   },
+  MEDIATION_FOLLOW_UP_DECISION: {
+    label: "Awaiting Captain's Next Step",
+    shortLabel: "Awaiting Next Step",
+    color: "#B45309",
+    bg: "#FEF3C7",
+  },
   SETTLEMENT_DOCUMENTATION: {
     label: "Settlement Processing",
     shortLabel: "Settlement",
@@ -152,7 +159,7 @@ export const PROCESS_STAGE_META: Record<ProcessStage, ProcessStageMeta> = {
     bg: "#E0F2FE",
   },
   FOR_FURTHER_BARANGAY_PROCESSING: {
-    label: "For Further Barangay Processing",
+    label: "For Further Barangay Processing / Pangkat Handoff",
     shortLabel: "Further Processing",
     color: "#B45309",
     bg: "#FEF3C7",
@@ -199,6 +206,8 @@ export function normalizeProcessStage(raw?: string): ProcessStage {
   }
   if (
     stage === "for-official-review" ||
+    stage === "for-mediation-review" ||
+    stage === "mediation-review" ||
     stage === "under-review" ||
     stage === "in-review" ||
     stage === "reviewing"
@@ -223,6 +232,9 @@ export function normalizeProcessStage(raw?: string): ProcessStage {
     stage === "processing"
   ) {
     return "MEDIATION_CONDUCTED";
+  }
+  if (stage === "mediation-follow-up-decision") {
+    return "MEDIATION_FOLLOW_UP_DECISION";
   }
   if (stage === "settlement-documentation" || stage === "settlement-processing") {
     return "SETTLEMENT_PROCESSING";
@@ -284,7 +296,7 @@ export type ReportStatusMeta = {
 
 export const REPORT_STATUS_META: Record<ReportStatus, ReportStatusMeta> = {
   SUBMITTED: {
-    label: "Submitted",
+    label: "Submitted / For Official Review",
     shortLabel: "Submitted",
     color: "#2563EB",
     bg: "#DBEAFE",

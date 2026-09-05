@@ -23,7 +23,6 @@ import { Colors, useColors } from "../theme/colors";
 import { createTypography } from "../theme/typography";
 import { useAuth } from "../auth/AuthContext";
 import {
-  getCaseStatusMeta,
   getProcessStageMeta,
   normalizeCaseStatus,
   normalizeReportStatus,
@@ -38,7 +37,7 @@ import { myReportsQuery, reportKeys } from "../features/reports/queries";
 // ✅ NEW: local status-change notifications
 import { syncLocalReportStatusNotifications } from "../api/notifications";
 
-type FilterKey = "Submitted" | "Active" | "Completed" | "Archived";
+type FilterKey = "Submitted" | "In Progress" | "Completed" | "Archived";
 
 export type ReportItem = {
   id: string;
@@ -153,7 +152,7 @@ function ReportStatusSegment({
   styles: ReturnType<typeof makeStyles>;
   TC: ReturnType<typeof useColors>;
 }) {
-  const options: FilterKey[] = ["Submitted", "Active", "Completed", "Archived"];
+  const options: FilterKey[] = ["Submitted", "In Progress", "Completed", "Archived"];
   return (
     <View style={styles.segmentWrap}>
       {options.map((k) => {
@@ -189,10 +188,6 @@ function ReportCard({
   styles: ReturnType<typeof makeStyles>;
   TC: ReturnType<typeof useColors>;
 }) {
-  const status = getCaseStatusMeta(
-    item.caseStatus,
-    item.currentProcessStage || item.status
-  );
   const processStage = getProcessStageMeta(item.currentProcessStage || item.status);
   const cardDate = parseDateSmart(item.dateLeft) ? formatGroupDate(parseDateSmart(item.dateLeft)!) : item.dateLeft || "-";
   const dateLine = `${cardDate}${item.timeLeft && item.timeLeft !== "—" && item.timeLeft !== "-" ? ` • ${item.timeLeft}` : ""}`;
@@ -205,8 +200,8 @@ function ReportCard({
             REP {item.alertNo || `#${item.id.slice(-6).toUpperCase()}`}
           </Text>
 
-          <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
-            <Text style={[styles.statusPillText, { color: status.color }]} numberOfLines={1}>{status.label}</Text>
+          <View style={[styles.statusPill, { backgroundColor: processStage.bg }]}>
+            <Text style={[styles.statusPillText, { color: processStage.color }]} numberOfLines={1}>{processStage.shortLabel}</Text>
           </View>
         </View>
 
@@ -506,14 +501,15 @@ export default function ReportScreen({
   }, [fetchMyReports, userId]);
 
   const filtered = useMemo(() => {
-    const selectedStatus =
-      normalizeCaseStatus(filter);
     const base = items.filter((x) => {
       const status = normalizeCaseStatus(
         x.caseStatus,
         x.currentProcessStage || x.status
       );
-      return status === selectedStatus;
+      if (filter === "Submitted") return status === "SUBMITTED";
+      if (filter === "Completed") return status === "COMPLETED";
+      if (filter === "Archived") return status === "ARCHIVED";
+      return status === "ACTIVE";
     });
 
     const q = query.trim().toLowerCase();
@@ -565,7 +561,7 @@ export default function ReportScreen({
   const openFilterMenu = useCallback(() => {
     Alert.alert("Filter reports", "Choose which reports to display.", [
       { text: "Submitted", onPress: () => setFilterAnimated("Submitted") },
-      { text: "Active", onPress: () => setFilterAnimated("Active") },
+      { text: "In Progress", onPress: () => setFilterAnimated("In Progress") },
       { text: "Completed", onPress: () => setFilterAnimated("Completed") },
       { text: "Archived", onPress: () => setFilterAnimated("Archived") },
       { text: "Cancel", style: "cancel" },

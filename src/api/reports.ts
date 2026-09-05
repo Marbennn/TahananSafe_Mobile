@@ -56,6 +56,9 @@ export type CaseDocumentDto = {
   title?: string;
   status?: string;
   fields?: Record<string, unknown>;
+  requiresCaptainAuthorization?: boolean;
+  partySignaturesRequired?: boolean;
+  captainAttestationRequired?: boolean;
   releasedAt?: string | null;
 };
 
@@ -79,8 +82,16 @@ export type ReportDetailDto = {
   currentProcessStage?: string;
   firstViewedByOfficialAt?: string | null;
   handling?: {
-    type?: "initial-mediation" | "other-barangay-action" | string;
+    type?: "initial-mediation" | "other-barangay-action" | "outside-referral" | string;
     selectedAt?: string | null;
+  } | null;
+  referral?: {
+    reason?: string;
+    referredTo?: string;
+    remarks?: string;
+    referredAt?: string | null;
+    referredByName?: string;
+    requiresCaptainAuthorization?: boolean;
   } | null;
   mediationSchedule?: {
     type?: string;
@@ -98,6 +109,9 @@ export type ReportDetailDto = {
     }>;
   } | null;
   mediationRecord?: {
+    sessionCondition?: "conducted" | "rescheduled" | "did-not-proceed" | string;
+    mediationResult?: "settlement-reached" | "no-settlement" | string | null;
+    /** Legacy field retained for old case records. */
     outcome?: "settlement-reached" | "no-settlement" | "rescheduled" | "did-not-proceed" | string;
     status?: "confirmed" | string;
     confirmedAt?: string | null;

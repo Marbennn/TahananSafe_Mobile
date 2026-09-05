@@ -705,7 +705,7 @@ const AdminHomeScreen: React.FC<Props> = ({
     return () => { cancelled = true; };
   }, [selectedAlert]);
 
-  const getRiskColor = (level: ReportItem["level"]) => {
+  const getAlertColor = (level: ReportItem["level"]) => {
     if (level === "High") return "#F04452";
     if (level === "Moderate") return "#F5B301";
     return "#35B56A";
@@ -867,7 +867,7 @@ const AdminHomeScreen: React.FC<Props> = ({
           alignItems: "center",
           gap: 12,
         },
-        riskIndicator: { width: 4, alignSelf: "stretch", borderRadius: 10 },
+        alertIndicator: { width: 4, alignSelf: "stretch", borderRadius: 10 },
         reportMainContent: { flex: 1 },
         reportTopRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 4 },
         reportTitle: {
@@ -875,8 +875,8 @@ const AdminHomeScreen: React.FC<Props> = ({
           flex: 1,
           color: TEXT_DARK,
         },
-        riskPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
-        riskPillText: { ...type.badge },
+        alertPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+        alertPillText: { ...type.badge },
         reportSubtitle: {
           ...type.caption,
           color: "#657586",
@@ -1178,15 +1178,15 @@ const AdminHomeScreen: React.FC<Props> = ({
                   style={styles.reportCard}
                   onPress={() => setSelectedAlert(item)}
                 >
-                  <View style={[styles.riskIndicator, { backgroundColor: getRiskColor(item.level) }]} />
+                  <View style={[styles.alertIndicator, { backgroundColor: getAlertColor(item.level) }]} />
 
                   <View style={styles.reportMainContent}>
                     <View style={styles.reportTopRow}>
                       <Text style={styles.reportTitle} numberOfLines={1} allowFontScaling={false}>
                         {item.title}
                       </Text>
-                      <View style={[styles.riskPill, { backgroundColor: `${getRiskColor(item.level)}18` }]}>
-                        <Text style={[styles.riskPillText, { color: getRiskColor(item.level) }]} allowFontScaling={false}>
+                      <View style={[styles.alertPill, { backgroundColor: `${getAlertColor(item.level)}18` }]}>
+                        <Text style={[styles.alertPillText, { color: getAlertColor(item.level) }]} allowFontScaling={false}>
                           SOS
                         </Text>
                       </View>

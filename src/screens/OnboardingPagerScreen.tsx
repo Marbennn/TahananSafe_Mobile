@@ -66,9 +66,9 @@ export default function OnboardingPagerScreen({ onDone }: Props) {
       },
       {
         Svg: OB2,
-        title: "Early risk identification",
+        title: "Faster incident review",
         description:
-          "Spot warning signs early and act fast. Stay informed and reduce potential harm.",
+          "Your report is organized for barangay review while you receive clear progress updates.",
         primaryLabel: "Continue",
       },
       {

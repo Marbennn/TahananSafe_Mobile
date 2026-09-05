@@ -19,7 +19,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { WebView } from "react-native-webview";
 
 import type { TabKey } from "../components/BottomNavBar";
-import LogoutModal from "../components/LogoutModal";
 import IncidentVideoPreviewModal from "../components/IncidentVideoPreviewModal";
 import OfficialCaseDocumentModal from "../components/ReportDetailsScreen/OfficialCaseDocumentModal";
 import ReportMessaging from "../components/ReportDetailsScreen/ReportMessaging";
@@ -43,7 +42,6 @@ import {
 
 // ✅ token + base url for cancel action
 import { getAccessToken } from "../auth/session";
-import { requestJson } from "../api/http";
 
 type ViewKey = "details" | "timeline";
 
@@ -75,17 +73,19 @@ function formatTimelineStamp(value?: string | Date | null) {
   });
 }
 
-function formatMediationOutcome(value?: string) {
-  const outcome = String(value || "").trim().toLowerCase();
-  if (outcome === "settlement-reached") return "Settlement Reached";
-  if (outcome === "no-settlement") return "No Settlement";
-  if (outcome === "rescheduled") return "Rescheduled";
-  if (outcome === "did-not-proceed") return "Did Not Proceed";
-  return outcome
-    ? outcome
-        .replace(/[_-]+/g, " ")
-        .replace(/\b\w/g, (character) => character.toUpperCase())
-    : "Not Yet Recorded";
+function formatMediationSessionCondition(value?: string) {
+  const condition = String(value || "").trim().toLowerCase();
+  if (condition === "conducted") return "Conducted";
+  if (condition === "rescheduled") return "Rescheduled";
+  if (condition === "did-not-proceed") return "Did Not Proceed";
+  return "Not Yet Recorded";
+}
+
+function formatMediationResult(value?: string) {
+  const result = String(value || "").trim().toLowerCase();
+  if (result === "settlement-reached") return "Settlement Reached";
+  if (result === "no-settlement") return "No Settlement";
+  return "No Result Recorded";
 }
 
 function formatAttendance(value?: string) {
@@ -257,9 +257,6 @@ export default function ReportDetailScreen({
     };
   }, []);
 
-  const [cancelling, setCancelling] = useState(false);
-  const [cancelReportModalVisible, setCancelReportModalVisible] = useState(false);
-
   const reportId = useMemo(() => {
     const id = (report as any)?.id || (report as any)?._id || "";
     return String(id || "").trim();
@@ -356,65 +353,6 @@ export default function ReportDetailScreen({
 
     return () => clearInterval(timer);
   }, [loadDetail, reportId]);
-  const requestCancelReport = useCallback(() => {
-    if (!reportId) {
-      Alert.alert("Missing report id", "Cannot cancel because reportId is empty.");
-      return;
-    }
-    if (cancelling) return;
-
-    setCancelReportModalVisible(true);
-  }, [reportId, cancelling]);
-
-  const closeCancelReportModal = useCallback(() => {
-    if (cancelling) return;
-    setCancelReportModalVisible(false);
-  }, [cancelling]);
-
-  const confirmCancelReport = useCallback(async () => {
-    if (!reportId) {
-      Alert.alert("Missing report id", "Cannot cancel because reportId is empty.");
-      return;
-    }
-    if (cancelling) return;
-
-    setCancelReportModalVisible(false);
-    setCancelling(true);
-    try {
-      if (!isObjectId24(resolvedReportId)) {
-        throw new Error("Cannot cancel yet. Please wait for report details to load, then try again.");
-      }
-
-      await requestJson({
-        method: "POST",
-        path: `/api/mobile/v1/reports/${encodeURIComponent(resolvedReportId)}/cancel`,
-        body: { reason: "User cancelled" },
-        auth: true,
-      });
-      await mobileQueryClient.invalidateQueries({ queryKey: reportKeys.all });
-
-      setDetail((prev) => {
-        const base: any = prev ?? {};
-        return {
-          ...base,
-          status: "CANCELLED",
-          currentProcessStage: "CANCELLED",
-          caseStatus: "Completed",
-          updatedAt: new Date().toISOString(),
-        } as any;
-      });
-
-      lastDetailLoadedIdRef.current = "";
-      await loadDetail(true);
-
-      Alert.alert("Cancelled", "Your report has been cancelled.");
-    } catch (e: any) {
-      Alert.alert("Cancel failed", e?.message || "Could not cancel report.");
-    } finally {
-      if (mountedRef.current) setCancelling(false);
-    }
-  }, [reportId, resolvedReportId, cancelling, loadDetail]);
-
   const incidentTitle =
     detail?.incidentType ||
     (report as any)?.incidentTitle ||
@@ -540,9 +478,9 @@ export default function ReportDetailScreen({
       reference: messageReference || reportRef,
       title: incidentTitle,
       description: incidentNarrative,
-      statusLabel: caseStatusMeta.label,
-      statusColor: caseStatusMeta.color,
-      statusBackgroundColor: caseStatusMeta.bg,
+      statusLabel,
+      statusColor: processStageMeta.color,
+      statusBackgroundColor: processStageMeta.bg,
       processStageLabel: statusLabel,
       incidentDate: dateLabel,
       incidentTime: timeLabel,
@@ -553,9 +491,8 @@ export default function ReportDetailScreen({
       evidenceCount,
     }),
     [
-      caseStatusMeta.bg,
-      caseStatusMeta.color,
-      caseStatusMeta.label,
+      processStageMeta.bg,
+      processStageMeta.color,
       complaintValue,
       dateLabel,
       evidenceCount,
@@ -636,13 +573,33 @@ export default function ReportDetailScreen({
   const isDirectBarangayAction =
     reportHandlingType === "other-barangay-action" ||
     (!hasMediationWorkflow && hasDirectBarangayActionEvent);
+  const isReferralWorkflow =
+    reportHandlingType === "outside-referral" ||
+    normalizeProcessStage(processStage) === "REFERRED_FOR_OUTSIDE_ASSISTANCE";
   const isMediationWorkflow =
     reportHandlingType === "initial-mediation" ||
-    (!isDirectBarangayAction && hasMediationWorkflow);
+    (!isDirectBarangayAction && !isReferralWorkflow && hasMediationWorkflow);
 
   const caseProgressSteps = useMemo(() => {
     const stage = normalizeProcessStage(processStage);
-    const recordOutcome = String(detail?.mediationRecord?.outcome || "")
+    const recordSessionCondition = String(
+      detail?.mediationRecord?.sessionCondition ||
+        (["rescheduled", "did-not-proceed"].includes(
+          String(detail?.mediationRecord?.outcome || "").toLowerCase(),
+        )
+          ? detail?.mediationRecord?.outcome
+          : "conducted"),
+    )
+      .trim()
+      .toLowerCase();
+    const recordResult = String(
+      detail?.mediationRecord?.mediationResult ||
+        (["settlement-reached", "no-settlement"].includes(
+          String(detail?.mediationRecord?.outcome || "").toLowerCase(),
+        )
+          ? detail?.mediationRecord?.outcome
+          : ""),
+    )
       .trim()
       .toLowerCase();
     const isCompleted =
@@ -675,7 +632,18 @@ export default function ReportDetailScreen({
       ),
     ];
 
-    if (isDirectBarangayAction) {
+    if (isReferralWorkflow) {
+      steps.push(
+        step(
+          "Referred for Outside Assistance",
+          eventMeta(
+            (event) =>
+              event.title.toLowerCase().includes("referred") ||
+              event.action.includes("referral"),
+          ),
+        ),
+      );
+    } else if (isDirectBarangayAction) {
       if (stage === "UNDER_BARANGAY_HANDLING" || isCompleted || isArchived) {
         steps.push(
           step(
@@ -754,14 +722,14 @@ export default function ReportDetailScreen({
       }
 
       const settlementReached =
-        recordOutcome === "settlement-reached" ||
+        recordResult === "settlement-reached" ||
         stage === "SETTLEMENT_PROCESSING" ||
         (isCompleted &&
           workflowEvents.some((event) =>
             event.title.toLowerCase().includes("settlement")
           ));
       const needsFurtherProcessing =
-        ["no-settlement", "did-not-proceed"].includes(recordOutcome) ||
+        recordResult === "no-settlement" ||
         stage === "FOR_FURTHER_BARANGAY_PROCESSING" ||
         stage === "BARANGAY_PROCESSING_COMPLETED_NO_SETTLEMENT";
 
@@ -779,7 +747,7 @@ export default function ReportDetailScreen({
       } else if (needsFurtherProcessing) {
         steps.push(
           step(
-            "For Further Barangay Processing",
+            "For Further Barangay Processing / Pangkat Handoff",
             eventMeta(
               (event) =>
                 event.action === "mediation_record_reviewed" ||
@@ -787,22 +755,15 @@ export default function ReportDetailScreen({
             )
           )
         );
+      } else if (
+        recordSessionCondition === "did-not-proceed" &&
+        stage === "MEDIATION_FOLLOW_UP_DECISION"
+      ) {
+        steps.push(step("Awaiting Captain's Next Step", latestTimelineMeta));
       } else if (stage === "MEDIATION_CONDUCTED") {
         steps.push(step("Under Barangay Handling", latestTimelineMeta));
       }
 
-      if (stage === "REFERRED_FOR_OUTSIDE_ASSISTANCE") {
-        steps.push(
-          step(
-            "Referred for Outside Assistance",
-            eventMeta(
-              (event) =>
-                event.title.toLowerCase().includes("referred") ||
-                event.action.includes("referral")
-            )
-          )
-        );
-      }
     } else if (stage === "UNDER_BARANGAY_HANDLING") {
       steps.push(step("Under Barangay Handling", latestTimelineMeta));
     }
@@ -839,6 +800,7 @@ export default function ReportDetailScreen({
     detail?.mediationRecord,
     detail?.mediationSchedule,
     isDirectBarangayAction,
+    isReferralWorkflow,
     isMediationWorkflow,
     latestTimelineMeta,
     processStage,
@@ -862,7 +824,27 @@ export default function ReportDetailScreen({
     )
       ? detail?.mediationRecord
       : null;
-  const mediationOutcomeLabel = formatMediationOutcome(mediationRecord?.outcome);
+  const mediationSessionCondition = String(
+    mediationRecord?.sessionCondition ||
+      (["rescheduled", "did-not-proceed"].includes(
+        String(mediationRecord?.outcome || "").toLowerCase(),
+      )
+        ? mediationRecord?.outcome
+        : "conducted"),
+  ).toLowerCase();
+  const mediationResult =
+    mediationRecord?.mediationResult ||
+    (["settlement-reached", "no-settlement"].includes(
+      String(mediationRecord?.outcome || "").toLowerCase(),
+    )
+      ? mediationRecord?.outcome
+      : "");
+  const mediationSessionConditionLabel = formatMediationSessionCondition(
+    mediationSessionCondition,
+  );
+  const mediationResultLabel = mediationResult
+    ? formatMediationResult(mediationResult)
+    : "No result recorded";
 
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
@@ -883,56 +865,12 @@ export default function ReportDetailScreen({
   const goPrev = useCallback(() => setViewerIndex((i) => Math.max(0, i - 1)), []);
   const goNext = useCallback(() => setViewerIndex((i) => Math.min(photoUrls.length - 1, i + 1)), [photoUrls.length]);
 
-  const handleViewAiAnalysis = useCallback(() => {
-    const ai = (detail as any)?.ai || (report as any)?.ai;
-    if (!ai) {
-      Alert.alert("AI Analysis", "AI analysis is not available for this report yet.");
-      return;
-    }
-
-    const analysisStatus = String(ai.status || "").toLowerCase();
-    if (["pending", "processing", "retrying"].includes(analysisStatus)) {
-      Alert.alert(
-        "AI Analysis",
-        "Analysis is still processing. The report is already submitted and can be reviewed while this completes."
-      );
-      return;
-    }
-    if (["failed", "skipped"].includes(analysisStatus)) {
-      Alert.alert(
-        "AI Analysis",
-        "Automated analysis is currently unavailable. This does not affect the submitted report."
-      );
-      return;
-    }
-
-    const type = ai.incident_type || ai.incidentType || ai.category || "Not specified";
-    const risk = ai.risk_level || ai.riskLevel || ai.priority_level || "Not specified";
-    const summary = ai.summary || ai.recommendation || ai.explanation || "No AI summary provided.";
-    Alert.alert("AI Analysis", `Category: ${type}\nRisk: ${risk}\n\n${summary}`);
-  }, [detail, report]);
-
   const canPrev = viewerIndex > 0;
   const canNext = viewerIndex < photoUrls.length - 1;
 
-  const canCancel =
-    !!resolvedReportId &&
-    isObjectId24(resolvedReportId) &&
-    caseStatusMeta.label === "Submitted" &&
-    statusUpper !== "CANCELLED";
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: TC.screenBg }]} edges={["top"]}>
       <StatusBar barStyle={TC.statusBar} />
-
-      <LogoutModal
-        visible={cancelReportModalVisible}
-        title="Cancel this report?"
-        message="This will mark your incident report as CANCELLED. You can still view it in the Cancelled tab."
-        confirmLabel="Yes, Cancel"
-        confirmColor="#DC2626"
-        onCancel={closeCancelReportModal}
-        onConfirm={confirmCancelReport}
-      />
 
       <OfficialCaseDocumentModal
         visible={Boolean(selectedCaseDocument)}
@@ -1077,16 +1015,16 @@ export default function ReportDetailScreen({
                   {incidentTitle}
                 </Text>
               </View>
-              <View style={[styles.reportStatusChip, { backgroundColor: caseStatusMeta.bg }]}>
+              <View style={[styles.reportStatusChip, { backgroundColor: processStageMeta.bg }]}>
                 <View
                   accessibilityElementsHidden
-                  style={[styles.reportStatusDot, { backgroundColor: caseStatusMeta.color }]}
+                  style={[styles.reportStatusDot, { backgroundColor: processStageMeta.color }]}
                 />
                 <Text
-                  style={[styles.reportStatusText, { color: caseStatusMeta.color }]}
+                  style={[styles.reportStatusText, { color: processStageMeta.color }]}
                   numberOfLines={1}
                 >
-                  {caseStatusMeta.label}
+                  {statusLabel}
                 </Text>
               </View>
             </View>
@@ -1263,12 +1201,6 @@ export default function ReportDetailScreen({
               )}
             </View>
 
-            <Pressable
-              onPress={handleViewAiAnalysis}
-              style={({ pressed }) => [styles.reportAiButton, pressed && { opacity: 0.9 }]}
-            >
-              <Text style={styles.reportAiButtonText}>View AI Analysis</Text>
-            </Pressable>
           </ScrollView>
         ) : (
           <ScrollView
@@ -1360,18 +1292,22 @@ export default function ReportDetailScreen({
             <View style={styles.timelineInfoCard}>
               <View style={styles.timelineCardHeaderRow}>
                 <Ionicons name="checkmark-done-outline" size={styles._iconSize} color="#718093" />
-                <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Mediation Outcome</Text>
+                <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Mediation Session Record</Text>
               </View>
               {mediationRecord ? (
                 <View style={styles.outcomeBox}>
                   <View style={styles.outcomeTitleRow}>
                     <Text style={styles.outcomeTitle} allowFontScaling={false}>
-                      {mediationOutcomeLabel}
+                      {mediationSessionConditionLabel}
                     </Text>
                     <View style={styles.outcomeConfirmedBadge}>
                       <Text style={styles.outcomeConfirmedText} allowFontScaling={false}>Reviewed</Text>
                     </View>
                   </View>
+                  {mediationSessionCondition === "conducted" ? <>
+                    <Text style={styles.outcomeRemarks} allowFontScaling={false}>
+                      Result: {mediationResultLabel}
+                    </Text>
                   <View style={styles.outcomeAttendanceRow}>
                     <View style={styles.outcomeAttendanceCell}>
                       <Text style={styles.outcomeMetaLabel} allowFontScaling={false}>Complainant</Text>
@@ -1386,6 +1322,11 @@ export default function ReportDetailScreen({
                       </Text>
                     </View>
                   </View>
+                  </> : (
+                    <Text style={styles.outcomeRemarks} allowFontScaling={false}>
+                      No mediation result exists because the session was not conducted.
+                    </Text>
+                  )}
                   {mediationRecord.captainRemarks ? (
                     <Text style={styles.outcomeRemarks} allowFontScaling={false}>
                       Captain's remarks: {mediationRecord.captainRemarks}
@@ -1400,11 +1341,38 @@ export default function ReportDetailScreen({
               ) : (
                 <View style={styles.emptyEvidence}>
                   <Ionicons name="hourglass-outline" size={styles._emptyIcon} color="#94A3B8" />
-                  <Text style={styles.emptyEvidenceText}>No reviewed mediation result is available yet.</Text>
+                  <Text style={styles.emptyEvidenceText}>No reviewed mediation session record is available yet.</Text>
                 </View>
               )}
             </View>
             </> : null}
+
+            {isReferralWorkflow && detail?.referral ? (
+              <View style={styles.timelineInfoCard}>
+                <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Referral Details</Text>
+                <View style={styles.outcomeBox}>
+                  <Text style={styles.outcomeMetaLabel} allowFontScaling={false}>Receiving Office or Service</Text>
+                  <Text style={styles.outcomeMetaValue} allowFontScaling={false}>
+                    {detail.referral.referredTo || "Not provided"}
+                  </Text>
+                  <Text style={styles.outcomeMetaLabel} allowFontScaling={false}>Reason</Text>
+                  <Text style={styles.outcomeMetaValue} allowFontScaling={false}>
+                    {detail.referral.reason || "Not provided"}
+                  </Text>
+                  {detail.referral.remarks ? (
+                    <>
+                      <Text style={styles.outcomeMetaLabel} allowFontScaling={false}>Remarks</Text>
+                      <Text style={styles.outcomeMetaValue} allowFontScaling={false}>{detail.referral.remarks}</Text>
+                    </>
+                  ) : null}
+                  {detail.referral.referredAt ? (
+                    <Text style={styles.certSubtitle} allowFontScaling={false}>
+                      Referred {formatTimelineStamp(detail.referral.referredAt)}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
 
             <View style={styles.timelineInfoCard}>
               <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Case Updates</Text>
@@ -1431,7 +1399,7 @@ export default function ReportDetailScreen({
               <View style={styles.certHeaderRow}>
                 <View style={styles.certHeaderText}>
                   <Text style={styles.timelineSectionTitle} allowFontScaling={false}>Released Case Documents</Text>
-                  <Text style={styles.certSubtitle} allowFontScaling={false}>Documents released by the Barangay Secretary.</Text>
+                  <Text style={styles.certSubtitle} allowFontScaling={false}>Documents officially released by the Barangay.</Text>
                 </View>
                 <View style={[styles.certBadge, releasedDocuments.length > 0 && { backgroundColor: "#DCFCE7" }]}>
                   <Text
@@ -1505,7 +1473,6 @@ function makeStyles(args: {
   const _viewerIcon = scale(22);
   const _viewerPad = scale(40);
 
-  const _cancelIcon = scale(16);
   const _caseCheckIcon = scale(10);
 
   return Object.assign(
@@ -1864,20 +1831,6 @@ function makeStyles(args: {
       },
       reportVideoText: {
         ...type.badge,
-        color: "#FFFFFF",
-      },
-      reportAiButton: {
-        ...CONTENT_ALIGN,
-        minHeight: vscale(46),
-        borderRadius: scale(999),
-        backgroundColor: Colors.actionPrimary,
-        alignItems: "center",
-        justifyContent: "center",
-        paddingHorizontal: scale(16),
-        marginTop: vscale(16),
-      },
-      reportAiButtonText: {
-        ...type.button,
         color: "#FFFFFF",
       },
       timelineProgressCard: {
@@ -2319,24 +2272,6 @@ function makeStyles(args: {
       },
       emptyEvidenceText: { ...type.caption, color: "#94A3B8" },
 
-      cancelBottomWrap: { ...CONTENT_ALIGN, marginTop: vscale(2) },
-      cancelBottomBtn: {
-        width: "100%",
-        borderRadius: scale(14),
-        borderWidth: 1,
-        borderColor: "#FECACA",
-        backgroundColor: "#FFFFFF",
-        paddingVertical: vscale(12),
-        paddingHorizontal: scale(12),
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: scale(8),
-      },
-      cancelBottomText: {
-        ...type.captionStrong,
-        color: "#DC2626",
-      },
 
       viewerBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", justifyContent: "center" },
       viewerTopBar: {
@@ -2397,7 +2332,6 @@ function makeStyles(args: {
       _backIcon,
       _viewerIcon,
       _viewerPad,
-      _cancelIcon,
       _caseCheckIcon,
     }
   ) as any;
